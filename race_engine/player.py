@@ -8,6 +8,17 @@ import time
 import tty
 from typing import Any
 
+# ANSI colors — only used when output is a TTY.
+_GREEN = "\033[32m"
+_YELLOW = "\033[33m"
+_RESET = "\033[0m"
+
+
+def _color(text: str, code: str) -> str:
+    if sys.stdout.isatty():
+        return f"{code}{text}{_RESET}"
+    return text
+
 
 def _load_log(path: str) -> list[dict[str, Any]]:
     frames = []
@@ -94,25 +105,58 @@ def _render_frame(
     print(f"  {scale_display}")
     print()
 
-    # Rider progress
-    for r in riders:
+    # Rider progress — sorted by position (front first) so the gap column
+    # always refers to the row directly above.
+    name_w = 10
+    sorted_riders = sorted(riders, key=lambda r: r["pos"], reverse=True)
+
+    for k, r in enumerate(sorted_riders):
         name = r["name"]
         pos = r["pos"]
+        speed = r.get("speed", 0.0)
         energy = r["energy"]
         stamina = r["stamina"]
         finished = r["finished"]
+        drafting = r.get("drafting", False)
+        pulling = r.get("pulling", False)
+
+        # Truncate long names so columns stay aligned.
+        if len(name) > name_w:
+            name = name[:5] + ".." + name[-1]
 
         progress = pos / course_length if course_length > 0 else 0
         bar_filled = min(bar_width, int(progress * bar_width))
         bar = "\u2588" * bar_filled + "\u2591" * (bar_width - bar_filled)
 
-        status = "FIN" if finished else f"{progress * 100:.0f}%"
+        # Status at a fixed visible width (3 chars) + a fixed marker slot (2 chars)
+        # so appearing P/* markers don't shift the layout.
+        if finished:
+            status = "FIN"
+            marker = ""
+        else:
+            status = f"{progress * 100:.0f}%"
+            if pulling:
+                marker = _color("P ", _GREEN)
+            elif drafting:
+                marker = _color("* ", _YELLOW)
+            else:
+                marker = "  "
+
+        # Gap to the rider directly ahead (front rider has no one ahead).
+        if k == 0:
+            gap_disp = "+----   --"
+        else:
+            prev = sorted_riders[k - 1]
+            gap_m = prev["pos"] - pos
+            gap_t = gap_m / speed if speed > 0 else 0.0
+            gap_disp = f"+{gap_m:6.1f}m {int(gap_t):3d}s"
+
         e_bar = "\u2588" * int(energy / 10) + "\u2591" * (10 - int(energy / 10))
         s_bar = "\u2588" * int(stamina / 10) + "\u2591" * (10 - int(stamina / 10))
 
         print(
-            f"  {name:10s} {bar} {status:>4s}  "
-            f"E:{e_bar} {energy:5.1f}  S:{s_bar} {stamina:5.1f}"
+            f"  {name:<{name_w}s} {bar} {status:>3s}{marker} "
+            f"{gap_disp:>13s}  E:{e_bar} {energy:5.1f}  S:{s_bar} {stamina:5.1f}"
         )
 
     print()

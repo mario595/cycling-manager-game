@@ -46,6 +46,8 @@ class RiderState:
     position: float = 0.0  # meters from start
     energy: float = 100.0  # 0-100
     stamina: float = 100.0  # 0-100
+    drafting: bool = False  # currently drafting behind another rider
+    pulling: bool = False  # currently pulling (has riders drafting behind)
     finished: bool = False
     finish_time: int | None = None  # seconds
 
@@ -65,31 +67,65 @@ class RaceState:
 
     def tick(self) -> None:
         from .formulas import (
+            DRAFT_DISTANCE,
+            add_speed_jitter,
             apply_energy_modifier,
             compute_base_speed,
             compute_energy_drain,
             compute_stamina_drain,
+            draft_discount,
         )
 
-        for rs in self.rider_states:
+        # Phase 1: snapshot positions and compute deltas using pre-tick state.
+        positions = [rs.position for rs in self.rider_states]
+        # Indices ordered by position, descending (front first).
+        sorted_idx = sorted(
+            range(len(self.rider_states)),
+            key=lambda i: positions[i],
+            reverse=True,
+        )
+
+        deltas = [None] * len(self.rider_states)  # (speed, energy_delta, stamina, drafting, pulling)
+
+        for i, rs in enumerate(self.rider_states):
             if rs.finished:
                 continue
 
             segment = self._find_segment(rs.position)
             if segment is None:
-                rs.finished = True
-                rs.finish_time = self.current_time
+                # Past the finish line.
+                deltas[i] = (0.0, 0.0, 0.0, False, False)
                 continue
 
+            drafting = self._is_drafting(i, positions, sorted_idx, segment.gradient)
+            pulling = self._is_pulling(i, positions, sorted_idx, segment.gradient)
             base_speed = compute_base_speed(rs.rider.attributes, segment.gradient)
-            rs.speed = apply_energy_modifier(base_speed, rs.energy, rs.stamina)
+            speed = apply_energy_modifier(base_speed, rs.energy, rs.stamina)
+            speed = add_speed_jitter(speed)
 
-            rs.position += rs.speed  # 1 tick = 1 second
-
+            draft = draft_discount(segment.gradient) if drafting else 1.0
             energy_drain = compute_energy_drain(
-                rs.rider.attributes, segment.gradient, rs.speed
+                rs.rider.attributes, segment.gradient, speed, draft
             )
-            stamina_drain = compute_stamina_drain(segment.gradient, rs.speed)
+            stamina_drain = compute_stamina_drain(segment.gradient, speed)
+
+            deltas[i] = (speed, energy_drain, stamina_drain, drafting, pulling)
+
+        # Phase 2: apply all deltas consistently.
+        for i, rs in enumerate(self.rider_states):
+            if rs.finished:
+                continue
+
+            delta = deltas[i]
+            if delta is None:
+                continue
+
+            speed, energy_drain, stamina_drain, drafting, pulling = delta
+            rs.speed = speed
+            rs.drafting = drafting
+            rs.pulling = pulling
+
+            rs.position += speed  # 1 tick = 1 second
 
             rs.energy = max(0.0, rs.energy - energy_drain)
             rs.stamina = max(0.0, rs.stamina - stamina_drain)
@@ -100,6 +136,66 @@ class RaceState:
                 rs.finish_time = self.current_time
 
         self.current_time += 1
+
+    def _is_drafting(
+        self,
+        idx: int,
+        positions: list[float],
+        sorted_idx: list[int],
+        gradient: float,
+    ) -> bool:
+        """True if another rider is within DRAFT_DISTANCE ahead of this rider.
+
+        position (meters from start) is higher for the rider who is ahead,
+        i.e. the leader. sorted_idx is ordered by position descending.
+        """
+        from .formulas import DRAFT_DISTANCE, DRAFT_UPHILL_LIMIT
+
+        pos = positions[idx]
+
+        if gradient > DRAFT_UPHILL_LIMIT:
+            return False
+
+        for other in sorted_idx:
+            if other == idx:
+                continue
+            diff = positions[other] - pos
+            if diff >= 0 and diff <= DRAFT_DISTANCE:
+                return True
+        return False
+
+    def _is_pulling(
+        self,
+        idx: int,
+        positions: list[float],
+        sorted_idx: list[int],
+        gradient: float,
+    ) -> bool:
+        """True if this rider is on the front of a group (pulling the bunch).
+
+        A rider pulls only when they are NOT drafting (no one ahead within
+        DRAFT_DISTANCE) and there is someone behind them within DRAFT_DISTANCE.
+        Riders in the middle of a group are drafting, not pulling.
+        """
+        from .formulas import DRAFT_DISTANCE, DRAFT_UPHILL_LIMIT
+
+        pos = positions[idx]
+
+        if gradient > DRAFT_UPHILL_LIMIT:
+            return False
+
+        # Not on the front if someone is drafting ahead of this rider.
+        if self._is_drafting(idx, positions, sorted_idx, gradient):
+            return False
+
+        # On the front only if someone is within draft distance behind.
+        for other in sorted_idx:
+            if other == idx:
+                continue
+            diff = pos - positions[other]
+            if diff > 0 and diff <= DRAFT_DISTANCE:
+                return True
+        return False
 
     def is_finished(self) -> bool:
         return all(rs.finished for rs in self.rider_states)
@@ -129,10 +225,12 @@ def run_race(
     logger = RaceLogger(log_path) if log_path else None
 
     try:
-        logger.log(state)
+        if logger:
+            logger.log(state)
         while not state.is_finished():
             state.tick()
-            logger.log(state)
+            if logger:
+                logger.log(state)
     finally:
         if logger:
             logger.close()
