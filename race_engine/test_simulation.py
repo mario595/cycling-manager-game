@@ -1,32 +1,14 @@
 from __future__ import annotations
 
+import sys
+
 from race_engine import (
     Course,
-    RaceState,
     Rider,
     RiderAttributes,
     Segment,
+    run_race,
 )
-
-
-def run_race(name: str, riders: list[Rider], course: Course) -> None:
-    race = RaceState.create_initial_state(riders=riders, course=course)
-
-    print(f"=== {name} ===")
-    print(f"Course: {course.total_distance / 1000:.1f}km")
-    print(f"Segments: {[(f'{s.length/1000:.1f}km', f'{s.gradient}%') for s in course.segments]}")
-
-    while not race.is_finished():
-        race.tick()
-
-    print()
-    print("Results:")
-    for i, rs in enumerate(race.get_results(), 1):
-        print(
-            f"  {i}. {rs.rider.name:10s} - {rs.finish_time:>5d}s "
-            f"(energy={rs.energy:5.1f}, stamina={rs.stamina:5.1f})"
-        )
-    print()
 
 
 def main() -> None:
@@ -47,37 +29,29 @@ def main() -> None:
     )
     riders = [climber, sprinter, rouleur]
 
-    # Short race: 10km
-    short_course = Course(
-        segments=[
-            Segment(length=5000.0, gradient=0.0),
-            Segment(length=3000.0, gradient=6.0),
-            Segment(length=2000.0, gradient=-4.0),
-        ]
-    )
-    run_race("Short Race (10km)", riders, short_course)
+    log_path = "race.jsonl"
+    if len(sys.argv) > 1:
+        log_path = sys.argv[1]
 
-    # Mountain stage: 15km
-    mountain_course = Course(
+    course = Course(
         segments=[
-            Segment(length=3000.0, gradient=0.0),
-            Segment(length=5000.0, gradient=7.0),
-            Segment(length=2000.0, gradient=4.0),
-            Segment(length=2000.0, gradient=-5.0),
-            Segment(length=3000.0, gradient=0.0),
+            Segment(length=30000.0, gradient=0.0),
         ]
     )
-    run_race("Mountain Stage (15km)", riders, mountain_course)
 
-    # Long flat: 50km
-    flat_course = Course(
-        segments=[
-            Segment(length=25000.0, gradient=0.0),
-            Segment(length=5000.0, gradient=2.0),
-            Segment(length=20000.0, gradient=0.0),
-        ]
-    )
-    run_race("Long Flat (50km)", riders, flat_course)
+    print("Running race...")
+    results = run_race(riders, course, log_path=log_path)
+
+    print(f"Log saved to: {log_path}")
+    print()
+    print("Results:")
+    for i, rs in enumerate(results, 1):
+        print(
+            f"  {i}. {rs.rider.name:10s} - {rs.finish_time:>5d}s "
+            f"(energy={rs.energy:5.1f}, stamina={rs.stamina:5.1f})"
+        )
+    print()
+    print(f"To view: python -m race_engine.player {log_path}")
 
 
 if __name__ == "__main__":

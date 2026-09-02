@@ -5,6 +5,7 @@ from race_engine.models import (
     RiderAttributes,
     RiderState,
     Segment,
+    run_race,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "RiderAttributes",
     "RiderState",
     "Segment",
+    "run_race",
 ]

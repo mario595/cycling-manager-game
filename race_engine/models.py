@@ -116,3 +116,25 @@ class RaceState:
                 return segment
             offset += segment.length
         return None
+
+
+def run_race(
+    riders: list[Rider],
+    course: Course,
+    log_path: str | None = None,
+) -> list[RiderState]:
+    from .race_logger import RaceLogger
+
+    state = RaceState.create_initial_state(riders, course)
+    logger = RaceLogger(log_path) if log_path else None
+
+    try:
+        logger.log(state)
+        while not state.is_finished():
+            state.tick()
+            logger.log(state)
+    finally:
+        if logger:
+            logger.close()
+
+    return state.get_results()
