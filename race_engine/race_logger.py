@@ -29,6 +29,7 @@ class RaceLogger:
                     "stamina": round(rs.stamina, 2),
                     "drafting": rs.drafting,
                     "pulling": rs.pulling,
+                    "surging": rs.surging,
                     "finished": rs.finished,
                     "finish_time": rs.finish_time,
                 }

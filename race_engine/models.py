@@ -48,6 +48,9 @@ class RiderState:
     stamina: float = 100.0  # 0-100
     drafting: bool = False  # currently drafting behind another rider
     pulling: bool = False  # currently pulling (has riders drafting behind)
+    surging: bool = False  # currently in an energy-burst effort
+    surge_ticks: int = 0  # remaining ticks of the current surge
+    surge_cooldown: int = 0  # ticks before another surge may start
     finished: bool = False
     finish_time: int | None = None  # seconds
 
@@ -68,13 +71,14 @@ class RaceState:
     def tick(self) -> None:
         from .formulas import (
             DRAFT_DISTANCE,
+            SURGE_ENERGY_COST,
+            SURGE_SPEED_BOOST,
             add_speed_jitter,
-            apply_energy_modifier,
+            apply_energy_burst_modifier,
+            apply_stamina_cruise_modifier,
             compute_base_speed,
             compute_energy_drain,
-            compute_pacing_drain,
             compute_stamina_drain,
-            draft_discount,
         )
 
         # Phase 1: snapshot positions and compute deltas using pre-tick state.
@@ -101,20 +105,28 @@ class RaceState:
                 continue
 
             gradients[i] = segment.gradient
-            own_speeds[i] = add_speed_jitter(
-                apply_energy_modifier(
-                    compute_base_speed(rs.rider.attributes, segment.gradient),
-                    rs.energy,
-                    rs.stamina,
-                )
+            # Natural cruise pace — base speed throttled by stamina (cracking),
+            # before any energy/burst considerations.
+            cruise = apply_stamina_cruise_modifier(
+                compute_base_speed(rs.rider.attributes, segment.gradient), rs.stamina
             )
+            own_speeds[i] = add_speed_jitter(cruise)
+
+        # Decide this tick whether any rider starts an energy surge (attack a
+        # climb, chase a gap, or launch the finish sprint).
+        self._decide_surges(positions, sorted_idx, gradients)
 
         # Resolve drafting: a drafting rider rides at the group's pace, which is
         # the front rider's speed propagated down through the wheel chain.
+        # Riders currently surging break from the group and ride their own pace.
         effective_speeds = list(own_speeds)
         drafting_flags = [False] * len(self.rider_states)
         for i in sorted_idx:
             if deltas[i] is not None:
+                continue
+            if self.rider_states[i].surge_ticks > 0:
+                # A surging rider rides at their own boosted pace; no drafting
+                # behind a leader's wheel.
                 continue
             leader = self._drafting_leader(
                 i, positions, sorted_idx, gradients[i]
@@ -129,23 +141,33 @@ class RaceState:
 
             drafting = drafting_flags[i]
             pulling = self._is_pulling(i, positions, sorted_idx, gradients[i])
-            # Adopted group pace, with a small independent per-rider jitter so a
-            # compact group stays loosely coupled rather than perfectly locked
-            # (front rider visibly pulls, the rest draft, and riders micro-shift).
-            effective = add_speed_jitter(effective_speeds[i])
 
-            draft = draft_discount(gradients[i]) if drafting else 1.0
-            energy_drain = compute_energy_drain(
-                rs.rider.attributes, gradients[i], effective, draft
-            )
-            if drafting:
-                # Extra cost of being held at a pace above your natural speed,
-                # weighted by the rider's fatigue tolerance.
-                energy_drain += compute_pacing_drain(
-                    effective, own_speeds[i], rs.rider.attributes.resistance
+            if rs.surge_ticks > 0:
+                # Active surge: ride boosted own speed, burn extra energy.
+                surge_speed = own_speeds[i] * (1.0 + SURGE_SPEED_BOOST)
+                effective = add_speed_jitter(
+                    apply_energy_burst_modifier(surge_speed, rs.energy)
+                )
+                energy_drain = compute_energy_drain(
+                    gradients[i], effective, own_speeds[i], drafting
+                ) + SURGE_ENERGY_COST
+                rs.surge_ticks -= 1
+            else:
+                # Adopted group pace, with the rider's energy-burst throttle.
+                group_pace = effective_speeds[i]
+                effective = add_speed_jitter(
+                    apply_energy_burst_modifier(group_pace, rs.energy)
+                )
+                energy_drain = compute_energy_drain(
+                    gradients[i], effective, own_speeds[i], drafting
                 )
 
-            stamina_drain = compute_stamina_drain(gradients[i], effective)
+            stamina_drain = compute_stamina_drain(
+                gradients[i], effective, drafting, rs.rider.attributes.resistance
+            )
+
+            if rs.surge_cooldown > 0:
+                rs.surge_cooldown -= 1
 
             deltas[i] = (effective, energy_drain, stamina_drain, drafting, pulling)
 
@@ -162,11 +184,12 @@ class RaceState:
             rs.speed = speed
             rs.drafting = drafting
             rs.pulling = pulling
+            rs.surging = rs.surge_ticks > 0
 
             rs.position += speed  # 1 tick = 1 second
 
-            rs.energy = max(0.0, rs.energy - energy_drain)
-            rs.stamina = max(0.0, rs.stamina - stamina_drain)
+            rs.energy = max(0.0, min(100.0, rs.energy - energy_drain))
+            rs.stamina = max(0.0, min(100.0, rs.stamina - stamina_drain))
 
             if rs.position >= self.course.total_distance:
                 rs.position = self.course.total_distance
@@ -174,6 +197,75 @@ class RaceState:
                 rs.finish_time = self.current_time
 
         self.current_time += 1
+
+    def _decide_surges(
+        self,
+        positions: list[float],
+        sorted_idx: list[int],
+        gradients: list[float],
+    ) -> None:
+        """Trigger an energy-burst effort for riders facing a decisive moment.
+
+        Reflex-based (not a full tactic model): a rider launches a surge to
+        contest the finish, attack a climb to break away, or chase a leader.
+        Updates each rider's surge_ticks in place.
+        """
+        from .formulas import (
+            ATTACK_MIN_CLIMB,
+            ATTACK_MIN_GRADIENT,
+            CHASE_GAP_THRESHOLD,
+            DRAFT_DISTANCE,
+            SPRINT_DISTANCE,
+            SPRINT_MIN_SPRINT,
+            SURGE_COOLDOWN,
+            SURGE_DURATION,
+            SURGE_MIN_ENERGY,
+        )
+
+        course_length = self.course.total_distance
+
+        for i, rs in enumerate(self.rider_states):
+            if rs.finished or rs.surge_ticks > 0 or rs.surge_cooldown > 0:
+                continue
+            if rs.energy < SURGE_MIN_ENERGY:
+                continue
+
+            gradient = gradients[i]
+            remaining = course_length - positions[i]
+            attrs = rs.rider.attributes
+
+            surge = False
+
+            # 1. Finish sprint — inside the last stretch, strong sprinters kick.
+            if (
+                remaining <= SPRINT_DISTANCE
+                and attrs.sprint >= SPRINT_MIN_SPRINT
+            ):
+                surge = True
+
+            # 2. Attack a climb — a strong climber on a steep section tries to
+            # break away.
+            elif gradient >= ATTACK_MIN_GRADIENT and attrs.climb >= ATTACK_MIN_CLIMB:
+                surge = True
+
+            # 3. Chase a leader — close the draft to a clear break ahead.
+            else:
+                leader = self._drafting_leader(
+                    i, positions, sorted_idx, gradient
+                )
+                front = self._front_position(positions)
+                if leader is None and front > positions[i]:
+                    gap = front - positions[i]
+                    if gap > DRAFT_DISTANCE and gap <= CHASE_GAP_THRESHOLD:
+                        surge = True
+
+            if surge:
+                rs.surge_ticks = SURGE_DURATION
+                rs.surge_cooldown = SURGE_COOLDOWN
+
+    @staticmethod
+    def _front_position(positions: list[float]) -> float:
+        return max(positions) if positions else 0.0
 
     def _drafting_leader(
         self,

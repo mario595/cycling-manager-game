@@ -16,17 +16,23 @@ DOWNHILL_MAX_SPEED = 25.0
 
 # Drafting
 DRAFT_DISTANCE = 3.0  # meters behind a leader to benefit
-DRAFT_ENERGY_DISCOUNT = 0.35  # fraction of energy drain saved while drafting
 DRAFT_UPHILL_LIMIT = 5.0  # gradient % above which drafting is negligible
 
 # Speed variability — small per-tick jitter (m/s peak) breaks perfect ties so
 # groups form a realistic echelon (front rider pulls, rest draft).
 SPEED_JITTER = 0.3
 
-# Pacing cost — extra energy (per tick per m/s) a rider spends when forced to
-# hold a pace above their own natural speed (i.e. matching a faster group).
-# This models the physical cost of sitting on a wheel that's too fast for you.
-PACING_COST = 0.005
+# Surge / attack / sprint reflexes — discrete energy-burst efforts.
+SURGE_DURATION = 20  # ticks a single effort lasts (~20s)
+SURGE_COOLDOWN = 60  # ticks before a rider may surge again (~1min)
+SURGE_SPEED_BOOST = 0.25  # fraction above cruise while surging
+SURGE_ENERGY_COST = 0.05  # extra anaerobic energy burned per surge tick
+SURGE_MIN_ENERGY = 30.0  # minimum energy to consider starting a surge
+SPRINT_DISTANCE = 1000.0  # meters from the finish that triggers the final kick
+SPRINT_MIN_SPRINT = 70.0  # sprint attribute needed to launch a finish sprint
+ATTACK_MIN_GRADIENT = 6.0  # climb % at which a climber may attack
+ATTACK_MIN_CLIMB = 75.0  # climb attribute needed to consider attacking
+CHASE_GAP_THRESHOLD = 8.0  # meters behind a leader to trigger a chase surge
 
 
 def _lerp(min_val: float, max_val: float, t: float) -> float:
@@ -69,80 +75,92 @@ def compute_base_speed(attributes: RiderAttributes, gradient: float) -> float:
     return min(DOWNHILL_MAX_SPEED, base + boost)
 
 
-def apply_energy_modifier(base_speed: float, energy: float, stamina: float) -> float:
-    """Scale speed based on remaining energy and stamina."""
-    ENERGY_THRESHOLD = 40.0
-    STAMINA_THRESHOLD = 30.0
+def apply_stamina_cruise_modifier(base_speed: float, stamina: float) -> float:
+    """Scale base cruising speed by remaining stamina (progressive cracking).
 
-    energy_mod = 1.0
-    if energy < ENERGY_THRESHOLD:
-        energy_mod = 0.5 + 0.5 * (energy / ENERGY_THRESHOLD)
-
-    stamina_mod = 1.0
-    if stamina < STAMINA_THRESHOLD:
-        stamina_mod = 0.6 + 0.4 * (stamina / STAMINA_THRESHOLD)
-
-    return base_speed * energy_mod * stamina_mod
-
-
-def draft_discount(gradient: float) -> float:
-    """Energy-drain multiplier from drafting. 1.0 = no benefit (uphill)."""
-    if gradient > DRAFT_UPHILL_LIMIT:
-        return 1.0
-    return 1.0 - DRAFT_ENERGY_DISCOUNT
-
-
-def compute_pacing_drain(
-    effective_speed: float, own_speed: float, resistance: int
-) -> float:
-    """Extra energy per tick from being forced to match a pace above natural.
-
-    effective_speed is the group pace the rider is held at (>= own_speed when
-    they are forced to ride faster than comfortable). Returns 0 when the rider
-    is not overshooting their own pace.
-
-    Scaled by resistance so a rider with better fatigue tolerance holds a fast
-    wheel more cheaply than a fragile rider at the same overshoot.
+    A rider's sustainable cruise pace degrades smoothly as stamina depletes, so
+    tired riders crack progressively in the finale rather than only once below
+    a hard threshold.
     """
-    RESISTANCE_FACTOR = 0.5
-    overshoot = max(0.0, effective_speed - own_speed)
-    resistance_mod = 1.0 - (resistance / 100.0) * RESISTANCE_FACTOR
-    return PACING_COST * overshoot * resistance_mod
+    STAMINA_CRACK_ZONE = 60.0  # degradation begins below this
+    if stamina >= STAMINA_CRACK_ZONE:
+        return base_speed
+    frac = max(0.0, stamina / STAMINA_CRACK_ZONE)
+    return base_speed * (frac**0.7)
+
+
+def apply_energy_burst_modifier(base_speed: float, energy: float) -> float:
+    """Scale burst power by remaining energy (short-term anaerobic reserve).
+
+    Low energy caps how hard a rider can surge (climb/attack/sprint) without
+    throttling steady cruising, which is governed by stamina.
+    """
+    ENERGY_THRESHOLD = 40.0
+    if energy >= ENERGY_THRESHOLD:
+        return base_speed
+    return base_speed * (0.5 + 0.5 * (energy / ENERGY_THRESHOLD))
 
 
 def compute_energy_drain(
-    attributes: RiderAttributes,
+    gradient: float,
+    effective_speed: float,
+    own_speed: float,
+    drafting: bool,
+) -> float:
+    """Anaerobic energy consumed per tick — only spent under high intensity.
+
+    Energy is a short-term burst reserve. It drains only when a rider works
+    above their own sustainable cruise (the overshoot between the group/forced
+    pace and their natural pace), and recovers when cruising or descending.
+    Steady climbing stresses stamina, not energy, so sustained effort won't
+    empty the anaerobic reserve. Drafting conserves energy so a rider sitting
+    in the wheels preserves it for an attack or the finish.
+    """
+
+    BURST_FACTOR = 0.10  # energy cost per m/s held above your own cruise
+    RECOVERY = 0.008  # energy recovered per tick while cruising/descending
+    DRAFT_SAVING = 0.6  # fraction of burst cost retained while drafting
+
+    overshoot = max(0.0, effective_speed - own_speed)
+    intensity = overshoot * BURST_FACTOR
+
+    if drafting:
+        intensity *= DRAFT_SAVING
+
+    if intensity > 0:
+        return intensity
+    return -RECOVERY
+
+
+def compute_stamina_drain(
     gradient: float,
     speed: float,
-    draft: float = 1.0,
+    drafting: bool,
+    resistance: int,
 ) -> float:
-    """Energy consumed per tick. Higher on uphills, scales with speed.
+    """Aerobic stamina consumed per tick — cumulative long-distance endurance.
 
-    draft is the draft_discount multiplier (1.0 no drafting, <1.0 drafting).
-    Positive drain is reduced by drafting; downhill recovery is left unchanged.
+    Depletes steadily with total rolling workload: faster pace and steeper
+    climbs burn more, high resistance (fatigue tolerance) slows it, drafting
+    conserves it, and descents offer a small recovery. Stamina responds slowly
+    and is the meter that decides whether a rider cracks in the finale.
     """
-    BASE_DRAIN_FLAT = 0.012
-    CLIMB_MULTIPLIER = 3.0
-    RECOVERY_DOWNHILL = 0.008
-    RESISTANCE_FACTOR = 0.5
-    SPEED_FACTOR = 0.008
+    BASE = 0.012
+    SPEED_FACTOR = 0.010  # more aerobic load per m/s above 10 m/s cruise
+    RESISTANCE_FACTOR = 0.6  # fatigue tolerance's protection
+    GRADIENT_SCALE = 0.20  # extra load multiplier per % climb
+    DESCENT_RECOVERY = 0.006
+    DRAFT_FACTOR = 0.85  # conserve stamina in the wheels
 
-    resistance_mod = 1.0 - (attributes.resistance / 100.0) * RESISTANCE_FACTOR
-    speed_mod = 1.0 + (speed - 10.0) * SPEED_FACTOR
+    drain = BASE * (1.0 + (speed - 10.0) * SPEED_FACTOR)
+    drain *= 1.0 - (resistance / 100.0) * RESISTANCE_FACTOR
+
+    if drafting:
+        drain *= DRAFT_FACTOR
 
     if gradient > 0:
-        return BASE_DRAIN_FLAT * CLIMB_MULTIPLIER * resistance_mod * speed_mod * draft
+        drain *= 1.0 + gradient * GRADIENT_SCALE
     elif gradient < 0:
-        return -RECOVERY_DOWNHILL * (1.0 - resistance_mod * 0.5)
+        drain -= DESCENT_RECOVERY
 
-    return BASE_DRAIN_FLAT * resistance_mod * speed_mod * draft
-
-
-def compute_stamina_drain(gradient: float, speed: float) -> float:
-    """Stamina consumed per tick. Slow, steady drain. Faster uphill."""
-    BASE_STAMINA_DRAIN = 0.004
-    CLIMB_BONUS = 0.002
-
-    if gradient > 0:
-        return BASE_STAMINA_DRAIN + CLIMB_BONUS
-    return BASE_STAMINA_DRAIN
+    return drain
