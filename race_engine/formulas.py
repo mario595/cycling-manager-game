@@ -23,6 +23,11 @@ DRAFT_UPHILL_LIMIT = 5.0  # gradient % above which drafting is negligible
 # groups form a realistic echelon (front rider pulls, rest draft).
 SPEED_JITTER = 0.3
 
+# Pacing cost — extra energy (per tick per m/s) a rider spends when forced to
+# hold a pace above their own natural speed (i.e. matching a faster group).
+# This models the physical cost of sitting on a wheel that's too fast for you.
+PACING_COST = 0.005
+
 
 def _lerp(min_val: float, max_val: float, t: float) -> float:
     """Linear interpolation. t in [0, 1]."""
@@ -85,6 +90,24 @@ def draft_discount(gradient: float) -> float:
     if gradient > DRAFT_UPHILL_LIMIT:
         return 1.0
     return 1.0 - DRAFT_ENERGY_DISCOUNT
+
+
+def compute_pacing_drain(
+    effective_speed: float, own_speed: float, resistance: int
+) -> float:
+    """Extra energy per tick from being forced to match a pace above natural.
+
+    effective_speed is the group pace the rider is held at (>= own_speed when
+    they are forced to ride faster than comfortable). Returns 0 when the rider
+    is not overshooting their own pace.
+
+    Scaled by resistance so a rider with better fatigue tolerance holds a fast
+    wheel more cheaply than a fragile rider at the same overshoot.
+    """
+    RESISTANCE_FACTOR = 0.5
+    overshoot = max(0.0, effective_speed - own_speed)
+    resistance_mod = 1.0 - (resistance / 100.0) * RESISTANCE_FACTOR
+    return PACING_COST * overshoot * resistance_mod
 
 
 def compute_energy_drain(

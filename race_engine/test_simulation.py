@@ -12,35 +12,69 @@ from race_engine import (
 
 
 def main() -> None:
-    climber = Rider(
-        id="1",
-        name="Climber",
-        attributes=RiderAttributes(climb=90, sprint=40, flat=50, resistance=70),
-    )
-    rouleur = Rider(
-        id="3",
-        name="Rouleur",
-        attributes=RiderAttributes(climb=60, sprint=60, flat=75, resistance=85),
-    )
-
+    climbers = [
+        Rider(
+            id=f"c{i}",
+            name=f"Climber {i}",
+            attributes=RiderAttributes(climb=cp, sprint=40, flat=sp, resistance=rp),
+        )
+        for i, (cp, sp, rp) in enumerate(
+            [
+                (92, 45, 72),
+                (90, 42, 70),
+                (87, 38, 68),
+            ],
+            start=1,
+        )
+    ]
+    rouleurs = [
+        Rider(
+            id=f"r{i}",
+            name=f"Rouleur {i}",
+            attributes=RiderAttributes(climb=cp, sprint=sp, flat=fp, resistance=rp),
+        )
+        for i, (cp, sp, fp, rp) in enumerate(
+            [
+                (62, 63, 78, 86),
+                (60, 60, 75, 85),
+                (58, 57, 72, 84),
+            ],
+            start=1,
+        )
+    ]
     sprinters = [
         Rider(
             id=f"s{i}",
             name=f"Sprinter {i}",
-            attributes=RiderAttributes(climb=30, sprint=95, flat=78, resistance=60),
+            attributes=RiderAttributes(climb=cp, sprint=sp, flat=fp, resistance=rp),
         )
-        for i in range(1, 5)
+        for i, (cp, sp, fp, rp) in enumerate(
+            [
+                (33, 95, 80, 62),
+                (31, 93, 79, 60),
+                (29, 89, 77, 58),
+                (27, 85, 76, 56),
+            ],
+            start=1,
+        )
     ]
     doms = [
         Rider(
             id=f"d{i}",
             name=f"Domestique {i}",
-            attributes=RiderAttributes(climb=55, sprint=50, flat=72, resistance=75),
+            attributes=RiderAttributes(climb=cp, sprint=sp, flat=fp, resistance=rp),
         )
-        for i in range(1, 4)
+        for i, (cp, sp, fp, rp) in enumerate(
+            [
+                (57, 52, 74, 77),
+                (55, 50, 72, 75),
+                (53, 48, 70, 73),
+            ],
+            start=1,
+        )
     ]
 
-    riders = [climber, rouleur] + sprinters + doms
+    riders = climbers + rouleurs + sprinters + doms
 
     log_path = "race.jsonl"
     if len(sys.argv) > 1:

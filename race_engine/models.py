@@ -72,6 +72,7 @@ class RaceState:
             apply_energy_modifier,
             compute_base_speed,
             compute_energy_drain,
+            compute_pacing_drain,
             compute_stamina_drain,
             draft_discount,
         )
@@ -86,6 +87,8 @@ class RaceState:
         )
 
         deltas = [None] * len(self.rider_states)  # (speed, energy_delta, stamina, drafting, pulling)
+        gradients = [0.0] * len(self.rider_states)
+        own_speeds = [0.0] * len(self.rider_states)
 
         for i, rs in enumerate(self.rider_states):
             if rs.finished:
@@ -97,19 +100,54 @@ class RaceState:
                 deltas[i] = (0.0, 0.0, 0.0, False, False)
                 continue
 
-            drafting = self._is_drafting(i, positions, sorted_idx, segment.gradient)
-            pulling = self._is_pulling(i, positions, sorted_idx, segment.gradient)
-            base_speed = compute_base_speed(rs.rider.attributes, segment.gradient)
-            speed = apply_energy_modifier(base_speed, rs.energy, rs.stamina)
-            speed = add_speed_jitter(speed)
-
-            draft = draft_discount(segment.gradient) if drafting else 1.0
-            energy_drain = compute_energy_drain(
-                rs.rider.attributes, segment.gradient, speed, draft
+            gradients[i] = segment.gradient
+            own_speeds[i] = add_speed_jitter(
+                apply_energy_modifier(
+                    compute_base_speed(rs.rider.attributes, segment.gradient),
+                    rs.energy,
+                    rs.stamina,
+                )
             )
-            stamina_drain = compute_stamina_drain(segment.gradient, speed)
 
-            deltas[i] = (speed, energy_drain, stamina_drain, drafting, pulling)
+        # Resolve drafting: a drafting rider rides at the group's pace, which is
+        # the front rider's speed propagated down through the wheel chain.
+        effective_speeds = list(own_speeds)
+        drafting_flags = [False] * len(self.rider_states)
+        for i in sorted_idx:
+            if deltas[i] is not None:
+                continue
+            leader = self._drafting_leader(
+                i, positions, sorted_idx, gradients[i]
+            )
+            if leader is not None:
+                drafting_flags[i] = True
+                effective_speeds[i] = effective_speeds[leader]
+
+        for i, rs in enumerate(self.rider_states):
+            if rs.finished or deltas[i] is not None:
+                continue
+
+            drafting = drafting_flags[i]
+            pulling = self._is_pulling(i, positions, sorted_idx, gradients[i])
+            # Adopted group pace, with a small independent per-rider jitter so a
+            # compact group stays loosely coupled rather than perfectly locked
+            # (front rider visibly pulls, the rest draft, and riders micro-shift).
+            effective = add_speed_jitter(effective_speeds[i])
+
+            draft = draft_discount(gradients[i]) if drafting else 1.0
+            energy_drain = compute_energy_drain(
+                rs.rider.attributes, gradients[i], effective, draft
+            )
+            if drafting:
+                # Extra cost of being held at a pace above your natural speed,
+                # weighted by the rider's fatigue tolerance.
+                energy_drain += compute_pacing_drain(
+                    effective, own_speeds[i], rs.rider.attributes.resistance
+                )
+
+            stamina_drain = compute_stamina_drain(gradients[i], effective)
+
+            deltas[i] = (effective, energy_drain, stamina_drain, drafting, pulling)
 
         # Phase 2: apply all deltas consistently.
         for i, rs in enumerate(self.rider_states):
@@ -137,6 +175,37 @@ class RaceState:
 
         self.current_time += 1
 
+    def _drafting_leader(
+        self,
+        idx: int,
+        positions: list[float],
+        sorted_idx: list[int],
+        gradient: float,
+    ) -> int | None:
+        """Return the index of the nearest rider drafting ahead of `idx`.
+
+        Returns None when no rider is within DRAFT_DISTANCE ahead (or the rider
+        is not drafting due to the terrain).
+        """
+        from .formulas import DRAFT_DISTANCE, DRAFT_UPHILL_LIMIT
+
+        pos = positions[idx]
+
+        if gradient > DRAFT_UPHILL_LIMIT:
+            return None
+
+        # sorted_idx is front-to-back, so the first rider ahead within range
+        # is the nearest wheel in front. A finished rider provides no shelter.
+        for other in sorted_idx:
+            if other == idx:
+                continue
+            if self.rider_states[other].finished:
+                continue
+            diff = positions[other] - pos
+            if diff >= 0 and diff <= DRAFT_DISTANCE:
+                return other
+        return None
+
     def _is_drafting(
         self,
         idx: int,
@@ -158,6 +227,8 @@ class RaceState:
 
         for other in sorted_idx:
             if other == idx:
+                continue
+            if self.rider_states[other].finished:
                 continue
             diff = positions[other] - pos
             if diff >= 0 and diff <= DRAFT_DISTANCE:
