@@ -13,11 +13,59 @@ _GREEN = "\033[32m"
 _YELLOW = "\033[33m"
 _RESET = "\033[0m"
 
+# Terrain grade buckets (gradient %) mapped to a color. Blue-ish for downhill,
+# green/cyan around flat, orange and red for positive grades. Buckets are
+# inclusive at the lower bound: g in [lo, hi).
+_GRADE_COLORS: list[tuple[float, float, str]] = [
+    (-99.0, -15.0, "\033[34m"),    # very steep downhill -> dark blue
+    (-15.0, -10.0, "\033[38;5;33m"),  # steep downhill -> blue
+    (-10.0, -5.0, "\033[38;5;81m"),   # downhill -> light blue
+    (-5.0, 0.0, "\033[38;5;45m"),     # mild downhill / near flat -> cyan
+    (0.0, 5.0, _GREEN),              # flat -> green
+    (5.0, 10.0, _YELLOW),            # rolling uphill -> yellow
+    (10.0, 15.0, "\033[38;5;214m"),  # steep uphill -> orange
+    (15.0, 99.0, "\033[31m"),        # steepest uphill -> red
+]
+
+
+def _grade_color(gradient: float) -> str:
+    """Return the ANSI color code for a gradient bucket (always non-empty)."""
+    for lo, hi, code in _GRADE_COLORS:
+        if lo <= gradient < hi:
+            return code
+    return _GREEN
+
 
 def _color(text: str, code: str) -> str:
     if sys.stdout.isatty():
         return f"{code}{text}{_RESET}"
     return text
+
+
+def _is_tty() -> bool:
+    try:
+        return sys.stdout.isatty()
+    except Exception:
+        return False
+
+
+def _terrain_cells(
+    segments: list[dict[str, Any]], course_length: float, width: int
+) -> list[float]:
+    """Map the course onto `width` cells; each cell holds the gradient (%) of
+    the course segment covering that cell's position."""
+    if course_length <= 0:
+        return [0.0] * width
+    cells = []
+    for seg in segments:
+        seg_chars = max(1, int(seg["length"] / course_length * width))
+        cells.extend([seg["gradient"]] * seg_chars)
+    cells = cells[:width]
+    # Pad with flat (0.0) if the course doesn't fully cover `width` cells so the
+    # caller can always index terrain[0..width).
+    while len(cells) < width:
+        cells.append(0.0)
+    return cells
 
 
 def _load_log(path: str) -> list[dict[str, Any]]:
@@ -76,23 +124,27 @@ def _render_frame(
     print(f"Race Viewer — t={t}s / ~{max_time}s ({pct}%)")
     print()
 
-    # Course profile bar
+    # Shared layout: every bar (course profile, rider progress, scale) starts at
+    # the same column so a rider can be read against the terrain directly.
     bar_width = 60
+    name_w = 10
+    bar_indent = "  " + " " * (name_w + 1)  # 13 columns before the bar glyphs
+
+    # Course profile bar — colored by terrain grade. The "[" occupies column 12
+    # so the profile glyphs align exactly with rider progress bars.
+    terrain = _terrain_cells(segments, course_length, bar_width)
     profile_chars = []
-    for seg in segments:
-        seg_chars = max(1, int(seg["length"] / course_length * bar_width))
-        grad = seg["gradient"]
-        if grad > 0:
-            profile_chars.extend(["\u2207"] * seg_chars)
-        elif grad < 0:
-            profile_chars.extend(["\u2202"] * seg_chars)
+    for grad in terrain:
+        glyph = "\u2207" if grad > 0 else ("\u2202" if grad < 0 else "=")
+        if _is_tty():
+            profile_chars.append(f"{_grade_color(grad)}{glyph}")
         else:
-            profile_chars.extend(["="] * seg_chars)
-    profile = "".join(profile_chars[:bar_width])
+            profile_chars.append(glyph)
+    profile = "".join(profile_chars) + (_RESET if _is_tty() else "")
+    course_label = "  " + "Course".ljust(name_w)  # "[" lands on column 12
+    print(f"{course_label}[{profile}]")
 
-    print(f"  Course  [{profile}]")
-
-    # Distance scale
+    # Distance scale — aligned under the bar band.
     scale_positions = [0, 0.25, 0.5, 0.75, 1.0]
     scale_display = ""
     for i, frac in enumerate(scale_positions):
@@ -101,13 +153,12 @@ def _render_frame(
             scale_display = label
         else:
             char_pos = int(frac * bar_width)
-            scale_display += " " * (char_pos - len(scale_display)) + label
-    print(f"  {scale_display}")
+            scale_display += " " * max(0, char_pos - len(scale_display)) + label
+    print(f"{bar_indent}{scale_display}")
     print()
 
     # Rider progress — sorted by position (front first) so the gap column
     # always refers to the row directly above.
-    name_w = 10
     sorted_riders = sorted(riders, key=lambda r: r["pos"], reverse=True)
 
     for k, r in enumerate(sorted_riders):
@@ -126,7 +177,27 @@ def _render_frame(
 
         progress = pos / course_length if course_length > 0 else 0
         bar_filled = min(bar_width, int(progress * bar_width))
-        bar = "\u2588" * bar_filled + "\u2591" * (bar_width - bar_filled)
+
+        # Filled portion colored by the terrain each cell lies on; the rest is
+        # the neutral "unridden" filler.
+        bar = ""
+        tty = _is_tty()
+        current_code: str | None = None
+        for cell_i in range(bar_width):
+            if cell_i < bar_filled:
+                if tty:
+                    code = _grade_color(terrain[cell_i])
+                    if code != current_code:
+                        bar += code
+                        current_code = code
+                bar += "\u2588"
+            else:
+                if tty and current_code is not None:
+                    bar += _RESET
+                    current_code = None
+                bar += "\u2591"
+        if tty and current_code is not None:
+            bar += _RESET
 
         # Status at a fixed visible width (3 chars) + a fixed marker slot (2 chars)
         # so appearing P/* markers don't shift the layout.
