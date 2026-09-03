@@ -82,11 +82,11 @@ def main() -> None:
 
     course = Course(
         segments=[
-            Segment(length=15000.0, gradient=0.0),
+            Segment(length=7000.0, gradient=0.0),
             Segment(length=1000.0, gradient=5.0),
             Segment(length=3000.0, gradient=6.0),
             Segment(length=1000.0, gradient=8.0),
-            Segment(length=500.0, gradient=12.0),
+            Segment(length=500.0, gradient=16.0),
             Segment(length=5500.0, gradient=-5)
         ]
     )
