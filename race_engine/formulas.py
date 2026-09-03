@@ -17,18 +17,39 @@ DOWNHILL_MAX_SPEED = 25.0
 # Drafting
 DRAFT_DISTANCE = 3.0  # meters behind a leader to benefit
 DRAFT_UPHILL_LIMIT = 5.0  # gradient % above which drafting is negligible
+# Draft-shelter quality: bounded by positioning (skill) and how deep the rider
+# sits. DEPTH_SATURATION is the pack depth at which full shelter is reached
+# (rider ~10 wheels back is as sheltered as it gets). Bases keep a fixed
+# fraction of drain while sheltered; the bonus deepens that save toward the
+# floor for high-skill, deep-positioned riders.
+DRAFT_DEPTH_SATURATION = 10.0  # wheels back at which shelter saturates
+DRAFT_STAMINA_BASE = 0.85  # stamina keep-fraction while sheltered
+DRAFT_STAMINA_FLOOR = 0.70  # best-possible stamina keep-fraction
+DRAFT_ENERGY_BASE = 0.60  # energy cost keep-fraction while sheltered
+DRAFT_ENERGY_FLOOR = 0.40  # best-possible energy cost keep-fraction
 
 # Speed variability — small per-tick jitter (m/s peak) breaks perfect ties so
 # groups form a realistic echelon (front rider pulls, rest draft).
 SPEED_JITTER = 0.3
 
+# Group-effort pacing — a sheltered pack rolls at a controlled sustainable
+# tempo rather than each rider at their own maximal pace. Riders within
+# PACK_COHESION_DISTANCE of each other on draft-allowed terrain cohere into a
+# peloton and ride at the group tempo (a sustainable pace the able members can
+# hold). GROUP_DROP_FRACTION is how far below the group's best cruise a rider
+# may fall and still stay sheltered; below it the rider is dropped rather than
+# the whole pack slowing down.
+PACK_COHESION_DISTANCE = 60.0  # meters within which riders cohere into a pack
+GROUP_DROP_FRACTION = 0.90
+
 # Surge / attack / sprint reflexes — discrete energy-burst efforts.
-SURGE_DURATION = 20  # ticks a single effort lasts (~20s)
+SURGE_DURATION = 20  # ticks a single (non-sprint) effort lasts (~20s)
 SURGE_COOLDOWN = 60  # ticks before a rider may surge again (~1min)
 SURGE_SPEED_BOOST = 0.25  # fraction above cruise while surging
 SURGE_ENERGY_COST = 0.05  # extra anaerobic energy burned per surge tick
 SURGE_MIN_ENERGY = 30.0  # minimum energy to consider starting a surge
 SPRINT_DISTANCE = 1000.0  # meters from the finish that triggers the final kick
+SPRINT_DURATION = 40  # ticks a finish-sprint kick lasts (~40s), longer than a normal surge
 SPRINT_MIN_SPRINT = 70.0  # sprint attribute needed to launch a finish sprint
 ATTACK_MIN_GRADIENT = 6.0  # climb % at which a climber may attack
 ATTACK_MIN_CLIMB = 75.0  # climb attribute needed to consider attacking
@@ -101,11 +122,33 @@ def apply_energy_burst_modifier(base_speed: float, energy: float) -> float:
     return base_speed * (0.5 + 0.5 * (energy / ENERGY_THRESHOLD))
 
 
+def compute_draft_factors(
+    positioning: int, depth: float
+) -> tuple[float, float]:
+    """Draft keep-fractions for (stamina, energy) given shelter quality.
+
+    ``positioning`` is the rider's draft skill (1-100); ``depth`` is how many
+    riders shelter ahead of them in the pack (0 = pulling/exposed, no save).
+    Quality blends positioning skill and pack depth, then maps base keep-
+    fractions down toward their floors for fully sheltered, skilled riders.
+    Returns fractions of drain/cost actually kept (lower = better shelter).
+    """
+    skill = (positioning - 1) / 99.0
+    depth_factor = min(float(depth), DRAFT_DEPTH_SATURATION) / DRAFT_DEPTH_SATURATION
+    quality = 0.6 * skill + 0.4 * depth_factor
+    quality = max(0.0, min(1.0, quality))
+    if depth < 1.0:
+        return (1.0, 1.0)
+    stamina = DRAFT_STAMINA_BASE - (DRAFT_STAMINA_BASE - DRAFT_STAMINA_FLOOR) * quality
+    energy = DRAFT_ENERGY_BASE - (DRAFT_ENERGY_BASE - DRAFT_ENERGY_FLOOR) * quality
+    return (stamina, energy)
+
+
 def compute_energy_drain(
     gradient: float,
     effective_speed: float,
     own_speed: float,
-    drafting: bool,
+    draft_energy_factor: float = 1.0,
 ) -> float:
     """Anaerobic energy consumed per tick — only spent under high intensity.
 
@@ -119,13 +162,12 @@ def compute_energy_drain(
 
     BURST_FACTOR = 0.10  # energy cost per m/s held above your own cruise
     RECOVERY = 0.008  # energy recovered per tick while cruising/descending
-    DRAFT_SAVING = 0.6  # fraction of burst cost retained while drafting
 
     overshoot = max(0.0, effective_speed - own_speed)
     intensity = overshoot * BURST_FACTOR
 
-    if drafting:
-        intensity *= DRAFT_SAVING
+    if draft_energy_factor < 1.0:
+        intensity *= draft_energy_factor
 
     if intensity > 0:
         return intensity
@@ -135,8 +177,8 @@ def compute_energy_drain(
 def compute_stamina_drain(
     gradient: float,
     speed: float,
-    drafting: bool,
-    resistance: int,
+    draft_stamina_factor: float = 1.0,
+    resistance: int = 50,
 ) -> float:
     """Aerobic stamina consumed per tick — cumulative long-distance endurance.
 
@@ -150,13 +192,12 @@ def compute_stamina_drain(
     RESISTANCE_FACTOR = 0.6  # fatigue tolerance's protection
     GRADIENT_SCALE = 0.20  # extra load multiplier per % climb
     DESCENT_RECOVERY = 0.006
-    DRAFT_FACTOR = 0.85  # conserve stamina in the wheels
 
     drain = BASE * (1.0 + (speed - 10.0) * SPEED_FACTOR)
     drain *= 1.0 - (resistance / 100.0) * RESISTANCE_FACTOR
 
-    if drafting:
-        drain *= DRAFT_FACTOR
+    if draft_stamina_factor < 1.0:
+        drain *= draft_stamina_factor
 
     if gradient > 0:
         drain *= 1.0 + gradient * GRADIENT_SCALE

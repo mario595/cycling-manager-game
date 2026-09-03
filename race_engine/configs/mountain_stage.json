@@ -43,7 +43,8 @@
           "climb": 94,
           "sprint": 30,
           "flat": 40,
-          "resistance": 80
+          "resistance": 80,
+          "positioning": 52
         }
       },
       {
@@ -53,7 +54,8 @@
           "climb": 91,
           "sprint": 28,
           "flat": 38,
-          "resistance": 78
+          "resistance": 78,
+          "positioning": 50
         }
       },
       {
@@ -63,7 +65,8 @@
           "climb": 84,
           "sprint": 25,
           "flat": 45,
-          "resistance": 84
+          "resistance": 84,
+          "positioning": 56
         }
       },
       {
@@ -73,7 +76,8 @@
           "climb": 76,
           "sprint": 85,
           "flat": 60,
-          "resistance": 68
+          "resistance": 68,
+          "positioning": 72
         }
       },
       {
@@ -83,7 +87,8 @@
           "climb": 73,
           "sprint": 82,
           "flat": 58,
-          "resistance": 66
+          "resistance": 66,
+          "positioning": 70
         }
       },
       {
@@ -93,7 +98,8 @@
           "climb": 60,
           "sprint": 60,
           "flat": 80,
-          "resistance": 86
+          "resistance": 86,
+          "positioning": 62
         }
       },
       {
@@ -103,7 +109,8 @@
           "climb": 57,
           "sprint": 55,
           "flat": 77,
-          "resistance": 84
+          "resistance": 84,
+          "positioning": 58
         }
       },
       {
@@ -113,7 +120,8 @@
           "climb": 30,
           "sprint": 97,
           "flat": 82,
-          "resistance": 62
+          "resistance": 62,
+          "positioning": 88
         }
       },
       {
@@ -123,7 +131,8 @@
           "climb": 26,
           "sprint": 93,
           "flat": 79,
-          "resistance": 58
+          "resistance": 58,
+          "positioning": 85
         }
       },
       {
@@ -133,7 +142,8 @@
           "climb": 55,
           "sprint": 48,
           "flat": 70,
-          "resistance": 76
+          "resistance": 76,
+          "positioning": 82
         }
       },
       {
@@ -143,7 +153,8 @@
           "climb": 52,
           "sprint": 45,
           "flat": 68,
-          "resistance": 74
+          "resistance": 74,
+          "positioning": 80
         }
       }
     ]

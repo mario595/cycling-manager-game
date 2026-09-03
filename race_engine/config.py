@@ -23,12 +23,14 @@ def _parse_attributes(raw: Any, path: str) -> RiderAttributes:
     sprint = _require(raw, "sprint", path)
     flat = _require(raw, "flat", path)
     resistance = _require(raw, "resistance", path)
+    positioning = _require(raw, "positioning", path)
     try:
         return RiderAttributes(
             climb=int(climb),
             sprint=int(sprint),
             flat=int(flat),
             resistance=int(resistance),
+            positioning=int(positioning),
         )
     except ValueError as exc:
         raise ConfigError(f"{path}: {exc}") from exc

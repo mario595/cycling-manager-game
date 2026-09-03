@@ -1,15 +1,125 @@
 {
   "roster": [
-    {"id": "gc1", "name": "GC Climber 1", "attributes": {"climb": 94, "sprint": 30, "flat": 40, "resistance": 80}},
-    {"id": "gc2", "name": "GC Climber 2", "attributes": {"climb": 91, "sprint": 28, "flat": 38, "resistance": 78}},
-    {"id": "gc3", "name": "Superdom", "attributes": {"climb": 84, "sprint": 25, "flat": 45, "resistance": 84}},
-    {"id": "pu1", "name": "Puncheur 1", "attributes": {"climb": 76, "sprint": 85, "flat": 60, "resistance": 68}},
-    {"id": "pu2", "name": "Puncheur 2", "attributes": {"climb": 73, "sprint": 82, "flat": 58, "resistance": 66}},
-    {"id": "ru1", "name": "Rouleur 1", "attributes": {"climb": 60, "sprint": 60, "flat": 80, "resistance": 86}},
-    {"id": "ru2", "name": "Rouleur 2", "attributes": {"climb": 57, "sprint": 55, "flat": 77, "resistance": 84}},
-    {"id": "sp1", "name": "Sprinter 1", "attributes": {"climb": 30, "sprint": 97, "flat": 82, "resistance": 62}},
-    {"id": "sp2", "name": "Sprinter 2", "attributes": {"climb": 26, "sprint": 93, "flat": 79, "resistance": 58}},
-    {"id": "do1", "name": "Domestique 1", "attributes": {"climb": 55, "sprint": 48, "flat": 70, "resistance": 76}},
-    {"id": "do2", "name": "Domestique 2", "attributes": {"climb": 52, "sprint": 45, "flat": 68, "resistance": 74}}
+    {
+      "id": "gc1",
+      "name": "GC Climber 1",
+      "attributes": {
+        "climb": 94,
+        "sprint": 30,
+        "flat": 40,
+        "resistance": 80,
+        "positioning": 52
+      }
+    },
+    {
+      "id": "gc2",
+      "name": "GC Climber 2",
+      "attributes": {
+        "climb": 91,
+        "sprint": 28,
+        "flat": 38,
+        "resistance": 78,
+        "positioning": 50
+      }
+    },
+    {
+      "id": "gc3",
+      "name": "Superdom",
+      "attributes": {
+        "climb": 84,
+        "sprint": 25,
+        "flat": 45,
+        "resistance": 84,
+        "positioning": 56
+      }
+    },
+    {
+      "id": "pu1",
+      "name": "Puncheur 1",
+      "attributes": {
+        "climb": 76,
+        "sprint": 85,
+        "flat": 60,
+        "resistance": 68,
+        "positioning": 72
+      }
+    },
+    {
+      "id": "pu2",
+      "name": "Puncheur 2",
+      "attributes": {
+        "climb": 73,
+        "sprint": 82,
+        "flat": 58,
+        "resistance": 66,
+        "positioning": 70
+      }
+    },
+    {
+      "id": "ru1",
+      "name": "Rouleur 1",
+      "attributes": {
+        "climb": 60,
+        "sprint": 60,
+        "flat": 80,
+        "resistance": 86,
+        "positioning": 62
+      }
+    },
+    {
+      "id": "ru2",
+      "name": "Rouleur 2",
+      "attributes": {
+        "climb": 57,
+        "sprint": 55,
+        "flat": 77,
+        "resistance": 84,
+        "positioning": 58
+      }
+    },
+    {
+      "id": "sp1",
+      "name": "Sprinter 1",
+      "attributes": {
+        "climb": 30,
+        "sprint": 97,
+        "flat": 82,
+        "resistance": 62,
+        "positioning": 88
+      }
+    },
+    {
+      "id": "sp2",
+      "name": "Sprinter 2",
+      "attributes": {
+        "climb": 26,
+        "sprint": 93,
+        "flat": 79,
+        "resistance": 58,
+        "positioning": 85
+      }
+    },
+    {
+      "id": "do1",
+      "name": "Domestique 1",
+      "attributes": {
+        "climb": 55,
+        "sprint": 48,
+        "flat": 70,
+        "resistance": 76,
+        "positioning": 82
+      }
+    },
+    {
+      "id": "do2",
+      "name": "Domestique 2",
+      "attributes": {
+        "climb": 52,
+        "sprint": 45,
+        "flat": 68,
+        "resistance": 74,
+        "positioning": 80
+      }
+    }
   ]
 }

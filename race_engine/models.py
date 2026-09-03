@@ -9,9 +9,10 @@ class RiderAttributes:
     sprint: int  # 1-100
     flat: int  # 1-100
     resistance: int  # 1-100, fatigue tolerance
+    positioning: int  # 1-100, draft/shelter skill
 
     def __post_init__(self) -> None:
-        for attr_name in ("climb", "sprint", "flat", "resistance"):
+        for attr_name in ("climb", "sprint", "flat", "resistance", "positioning"):
             val = getattr(self, attr_name)
             if not 1 <= val <= 100:
                 raise ValueError(f"{attr_name} must be between 1 and 100, got {val}")
@@ -71,12 +72,14 @@ class RaceState:
     def tick(self) -> None:
         from .formulas import (
             DRAFT_DISTANCE,
+            DRAFT_UPHILL_LIMIT,
             SURGE_ENERGY_COST,
             SURGE_SPEED_BOOST,
             add_speed_jitter,
             apply_energy_burst_modifier,
             apply_stamina_cruise_modifier,
             compute_base_speed,
+            compute_draft_factors,
             compute_energy_drain,
             compute_stamina_drain,
         )
@@ -116,24 +119,84 @@ class RaceState:
         # climb, chase a gap, or launch the finish sprint).
         self._decide_surges(positions, sorted_idx, gradients)
 
-        # Resolve drafting: a drafting rider rides at the group's pace, which is
-        # the front rider's speed propagated down through the wheel chain.
-        # Riders currently surging break from the group and ride their own pace.
+        # Resolve pack cohesion: riders within PACK_COHESION_DISTANCE of each other on
+        # draft-allowed terrain cohere into a peloton that rolls at a shared,
+        # controlled sustainable tempo rather than each at their own maximal
+        # pace. A rider whose own cruise falls below the tempo is DROPPED
+        # (cannot stay sheltered), so a fatigued rider doesn't drag the pack.
+        # Riders currently surging break from the pack and ride their own pace.
+        #
+        # Packs are connected components over (undirected) proximity within
+        # PACK_COHESION_DISTANCE. Found via BFS to avoid cycle risk.
+        from .formulas import GROUP_DROP_FRACTION, PACK_COHESION_DISTANCE
+
+        active = [
+            i
+            for i in range(len(self.rider_states))
+            if deltas[i] is None and self.rider_states[i].surge_ticks == 0
+        ]
+
+        # adjacency: rider i is adjacent to any rider within PACK_COHESION_DISTANCE
+        # ahead on a draft-allowed gradient (propagated pairwise, not via the
+        # strict 3m wheel-to-wheel drafting distance).
+        adj: dict[int, list[int]] = {i: [] for i in active}
+        sorted_ahead: dict[int, list[int]] = {}
+        for i in active:
+            gradient = gradients[i]
+            if gradient > DRAFT_UPHILL_LIMIT:
+                continue
+            pos = positions[i]
+            near = [
+                j
+                for j in sorted_idx
+                if j in adj
+                and j != i
+                and not self.rider_states[j].finished
+                and 0 <= positions[j] - pos <= PACK_COHESION_DISTANCE
+            ]
+            for j in near:
+                adj[i].append(j)
+                adj[j].append(i)
+
+        # union active riders into packs via BFS over undirected adjacency
+        packs: list[list[int]] = []
+        seen: set[int] = set()
+        for start in active:
+            if start in seen:
+                continue
+            comp: list[int] = []
+            stack = [start]
+            seen.add(start)
+            while stack:
+                cur = stack.pop()
+                comp.append(cur)
+                for nb in adj.get(cur, []):
+                    if nb in active and nb not in seen:
+                        seen.add(nb)
+                        stack.append(nb)
+            packs.append(comp)
+
         effective_speeds = list(own_speeds)
         drafting_flags = [False] * len(self.rider_states)
-        for i in sorted_idx:
-            if deltas[i] is not None:
+        pack_depth = [0.0] * len(self.rider_states)
+
+        # A pack of a single rider rides alone at their own cruise.
+        for pack in packs:
+            if len(pack) < 2:
                 continue
-            if self.rider_states[i].surge_ticks > 0:
-                # A surging rider rides at their own boosted pace; no drafting
-                # behind a leader's wheel.
-                continue
-            leader = self._drafting_leader(
-                i, positions, sorted_idx, gradients[i]
-            )
-            if leader is not None:
-                drafting_flags[i] = True
-                effective_speeds[i] = effective_speeds[leader]
+            member_speeds = [own_speeds[m] for m in pack]
+            best = max(member_speeds)
+            pace = best * GROUP_DROP_FRACTION
+            coherent = [m for m in pack if own_speeds[m] >= pace]
+            # depth = how many coherent riders sit ahead (sheltering this rider)
+            coherent_by_pos = sorted(coherent, key=lambda m: positions[m], reverse=True)
+            depth_of: dict[int, int] = {}
+            for d, m in enumerate(coherent_by_pos):
+                depth_of[m] = d  # 0 = pulling front, 1 = first wheel, ...
+            for m in coherent:
+                drafting_flags[m] = True
+                effective_speeds[m] = pace
+                pack_depth[m] = float(depth_of[m])
 
         for i, rs in enumerate(self.rider_states):
             if rs.finished or deltas[i] is not None:
@@ -141,6 +204,9 @@ class RaceState:
 
             drafting = drafting_flags[i]
             pulling = self._is_pulling(i, positions, sorted_idx, gradients[i])
+            draft_stamina_factor, draft_energy_factor = compute_draft_factors(
+                rs.rider.attributes.positioning, pack_depth[i]
+            )
 
             if rs.surge_ticks > 0:
                 # Active surge: ride boosted own speed, burn extra energy.
@@ -149,7 +215,7 @@ class RaceState:
                     apply_energy_burst_modifier(surge_speed, rs.energy)
                 )
                 energy_drain = compute_energy_drain(
-                    gradients[i], effective, own_speeds[i], drafting
+                    gradients[i], effective, own_speeds[i], draft_energy_factor
                 ) + SURGE_ENERGY_COST
                 rs.surge_ticks -= 1
             else:
@@ -159,11 +225,12 @@ class RaceState:
                     apply_energy_burst_modifier(group_pace, rs.energy)
                 )
                 energy_drain = compute_energy_drain(
-                    gradients[i], effective, own_speeds[i], drafting
+                    gradients[i], effective, own_speeds[i], draft_energy_factor
                 )
 
             stamina_drain = compute_stamina_drain(
-                gradients[i], effective, drafting, rs.rider.attributes.resistance
+                gradients[i], effective, draft_stamina_factor,
+                rs.rider.attributes.resistance,
             )
 
             if rs.surge_cooldown > 0:
@@ -216,6 +283,7 @@ class RaceState:
             CHASE_GAP_THRESHOLD,
             DRAFT_DISTANCE,
             SPRINT_DISTANCE,
+            SPRINT_DURATION,
             SPRINT_MIN_SPRINT,
             SURGE_COOLDOWN,
             SURGE_DURATION,
@@ -235,6 +303,7 @@ class RaceState:
             attrs = rs.rider.attributes
 
             surge = False
+            duration = SURGE_DURATION
 
             # 1. Finish sprint — inside the last stretch, strong sprinters kick.
             if (
@@ -242,6 +311,7 @@ class RaceState:
                 and attrs.sprint >= SPRINT_MIN_SPRINT
             ):
                 surge = True
+                duration = SPRINT_DURATION
 
             # 2. Attack a climb — a strong climber on a steep section tries to
             # break away.
@@ -260,7 +330,7 @@ class RaceState:
                         surge = True
 
             if surge:
-                rs.surge_ticks = SURGE_DURATION
+                rs.surge_ticks = duration
                 rs.surge_cooldown = SURGE_COOLDOWN
 
     @staticmethod

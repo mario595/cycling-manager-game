@@ -16,7 +16,7 @@ def main() -> None:
         Rider(
             id=f"c{i}",
             name=f"Climber {i}",
-            attributes=RiderAttributes(climb=cp, sprint=40, flat=sp, resistance=rp),
+            attributes=RiderAttributes(climb=cp, sprint=40, flat=sp, resistance=rp, positioning=50),
         )
         for i, (cp, sp, rp) in enumerate(
             [
@@ -31,7 +31,7 @@ def main() -> None:
         Rider(
             id=f"r{i}",
             name=f"Rouleur {i}",
-            attributes=RiderAttributes(climb=cp, sprint=sp, flat=fp, resistance=rp),
+            attributes=RiderAttributes(climb=cp, sprint=sp, flat=fp, resistance=rp, positioning=65),
         )
         for i, (cp, sp, fp, rp) in enumerate(
             [
@@ -46,7 +46,7 @@ def main() -> None:
         Rider(
             id=f"s{i}",
             name=f"Sprinter {i}",
-            attributes=RiderAttributes(climb=cp, sprint=sp, flat=fp, resistance=rp),
+            attributes=RiderAttributes(climb=cp, sprint=sp, flat=fp, resistance=rp, positioning=65),
         )
         for i, (cp, sp, fp, rp) in enumerate(
             [
@@ -62,7 +62,7 @@ def main() -> None:
         Rider(
             id=f"d{i}",
             name=f"Domestique {i}",
-            attributes=RiderAttributes(climb=cp, sprint=sp, flat=fp, resistance=rp),
+            attributes=RiderAttributes(climb=cp, sprint=sp, flat=fp, resistance=rp, positioning=65),
         )
         for i, (cp, sp, fp, rp) in enumerate(
             [

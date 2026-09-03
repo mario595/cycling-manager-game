@@ -48,6 +48,8 @@ The engine separates two forms of effort:
 - `sprint` — top-end finishing power (finish kick) and descending speed blend.
 - `flat` — speed on flat terrain.
 - `resistance` — fatigue tolerance; slows stamina drain.
+- `positioning` — draft/shelter skill; deepens the energy/stamina saving a
+  rider gets while sheltering in the wheels.
 
 ### Position / course
 - `Segment` = `length` (meters) + `gradient` (percent, `+` = uphill).
@@ -84,7 +86,7 @@ makes it easy to keep multiple reusable race configurations side by side.
       {
         "id": "c1",
         "name": "Climber 1",
-        "attributes": {"climb": 92, "sprint": 40, "flat": 45, "resistance": 72}
+        "attributes": {"climb": 92, "sprint": 40, "flat": 45, "resistance": 72, "positioning": 60}
       }
     ]
   }
@@ -92,7 +94,7 @@ makes it easy to keep multiple reusable race configurations side by side.
 ```
 - `course` — non-empty list of `{"length": m, "gradient": %}`, positive lengths.
 - `riders` — non-empty list; each has a unique `id`, a display `name`, and
-  `attributes` (all four ints in `[1, 100]`, validated as in `RiderAttributes`).
+  `attributes` (all five ints in `[1, 100]`, validated as in `RiderAttributes`).
 - `name` — optional display name for the race (informational).
 - Starting `energy`/`stamina` are always 100 (engine-internal, not configurable).
   Engine constants (draft distance, surge thresholds, etc.) are not exported to
@@ -126,9 +128,12 @@ engine; the roster is embedded in each config).
 ### Known discrepancies (`ENGINE_FINDINGS.md`)
 `ENGINE_FINDINGS.md` documents, per course, the real-world expected winner vs.
 what the engine actually produces (seeded runs) and the mechanism behind each
-discrepancy. As of writing, climber courses match reality; flat/hilly courses
-have a **rouleur bias** because the engine lacks an effort-management/bunch
-pacing model (see the doc). Update this file when the engine's behavior changes.
+discrepancy. Climber-leaning courses match reality; long flat courses
+(`sprinters_classic`, `san_remo`) still have a **rouleur bias**: the rouleur
+presses away from the pack and solos to the win while the sprinter keeps
+sheltering — the reflex set lacks a flat-attack/press and a follow-the-move
+response (a tactics concern, see the doc). Update this file when the engine's
+behavior changes.
 
 ## Simulation tick (`RaceState.tick`)
 
@@ -141,10 +146,13 @@ The tick runs in phases so all riders see a consistent snapshot.
    riders and riders past the line are skipped (speed 0).
 3. **Decide surges**: for each rider that could surge, apply the reflex rules
    (see Surge reflexes) using the snapshot positions.
-4. **Resolve drafting**: group riders whose led rider is within `DRAFT_DISTANCE`
-   adopt that leader's pace, propagated wheel-to-wheel down the group. A rider
-   currently surging always rides their own pace. No drafting above
-   `DRAFT_UPHILL_LIMIT` gradient.
+4. **Resolve pack cohesion**: riders within `PACK_COHESION_DISTANCE` of each
+   other on a draft-allowed gradient cohere into a pack that rolls at a shared
+   sustainable tempo (`GROUP_DROP_FRACTION ×` the pack's best cruise). A rider
+   whose own cruise falls below that pace is DROPPED (not sheltered). A rider
+   currently surging always rides their own pace. No cohesion above
+   `DRAFT_UPHILL_LIMIT` gradient. The pack's front rider pulls; each coherent
+   rider's pack **depth** (wheels back) is recorded to scale drafting savings.
 5. **Compute deltas** (per rider): final effective speed, energy drain, stamina
    drain, drafting/pulling flags — using the shared snapshot, not the mutated
    state.
@@ -178,11 +186,12 @@ Per tick:
 ```
 drain = 0.012 × (1 + (speed − 10.0) × 0.010)          # rolling workload
 drain *= 1 − (resistance / 100) × 0.6                 # fatigue tolerance
-if drafting: drain *= 0.85                            # conserve in the wheels
+drain *= draft_stamina_factor                         # shelter conservation (below)
 if gradient > 0: drain *= 1 + gradient × 0.20         # climbs cost more
 if gradient < 0: drain −= 0.006                       # descents recover a little
 ```
-Stamina is clamped to `[0, 100]`.
+Stamina is clamped to `[0, 100]`. `draft_stamina_factor` ∈ `[0.70, 1.0]` is the
+fraction of drain kept while sheltered — lower = better shelter (see Drafting).
 
 ## Energy
 
@@ -191,38 +200,61 @@ above their own cruise, or a negative value (recovery) when under their own pace
 ```
 overshoot = max(0, effective_speed − own_speed)       # excess over natural pace
 intensity = overshoot × 0.10
-if drafting: intensity ×= 0.60                        # conserve in the wheels
+intensity *= draft_energy_factor                      # shelter conservation (below)
 if intensity > 0: return intensity                     # drained
 return −0.008                                          # recovered while cruising/descending
 ```
+`draft_energy_factor` ∈ `[0.40, 1.0]` is the fraction of burst cost kept while
+sheltered (see Drafting).
 `apply_energy_burst_modifier` throttles burst speed when energy is low: unchanged
 while `energy >= 40`, else `speed × (0.5 + 0.5 × (energy / 40))`. This caps
 surges without throttling steady cruising (which stamina governs). Energy is
 clamped to `[0, 100]`.
 
-## Drafting
+## Drafting & pack cohesion
 
-- `DRAFT_DISTANCE = 3.0` m — a rider drafts when another is ahead within this
-  range.
-- `DRAFT_UPHILL_LIMIT = 5.0` % — no drafting on steeper climbs.
-- **Finished riders provide no shelter** — they are excluded when finding a
-  drafting leader (this prevents a frozen finish-line bunch from sheltering
-  riders).
-- A drafting rider adopts the group's pace: the front rider's speed propagated
-  down the wheel chain.
-- **Pulling**: a rider pulls only when (a) not drafting themselves and (b) at
-  least one rider is within `DRAFT_DISTANCE` behind them. Only the group front
-  rider pulls.
+Riders cluster into **packs** and share a sustainable tempo rather than each
+riding at maximum. Shelter within a pack is set by the rider's position (depth)
+and their `positioning` skill, so a skilled deep rider conserves more than an
+exposed or socially-sheltered one.
 
-`_drafting_leader(idx, …)` returns the nearest rider ahead within
-`DRAFT_DISTANCE` and on a draft-allowed gradient, or `None`.
+- `PACK_COHESION_DISTANCE = 60.0` m — riders within this of each other on a
+  draft-allowed gradient cohere into a single pack (connected-component BFS).
+- `DRAFT_UPHILL_LIMIT = 5.0` % — no cohesion/drafting on steeper climbs.
+- **Group tempo** — a pack rolls at `GROUP_DROP_FRACTION (0.90) ×` the pack's best
+  cruise. A rider whose own cruise is below that tempo is DROPPED (rides alone,
+  not sheltered).
+- **Finished riders provide no shelter** — excluded when finding pack neighbours,
+  so a frozen finish-line bunch cannot shelter riders.
+- **Pack depth** — within a coherent pack, the rider with the front position is
+  the puller (depth 0, exposed); each wheel behind gains a deeper shelter
+  (depth 1, 2, …). Draft savings scale with depth up to
+  `DRAFT_DEPTH_SATURATION (10)`.
+
+### Draft factors (`compute_draft_factors`)
+A rider's hold-on-to-cost fractions are derived from `positioning` (skill) and
+pack `depth`:
+```
+skill = (positioning − 1) / 99                       # 0..1
+depth_factor = min(depth, 10) / 10                   # 0..1
+quality = 0.6 × skill + 0.4 × depth_factor           # 0..1
+stamina_factor = 0.85 − (0.85 − 0.70) × quality      # 1.0 if not sheltering
+energy_factor  = 0.60 − (0.60 − 0.40) × quality      # 1.0 if not sheltering
+```
+A rider at depth 0 (pulling or solo) uses factor 1.0 (no save).
+
+### Pulling
+A rider pulls only when (a) not drafting themselves and (b) at least one rider
+is within `DRAFT_DISTANCE (3.0 m)` behind them. Only the group front rider pulls.
 
 ## Surge reflexes
 
 A surge is a discrete ~20s energy-burst effort (`SURGE_DURATION = 20` ticks),
 granting a `SURGE_SPEED_BOOST = 0.25` fraction above the rider's natural cruise
 while burning `SURGE_ENERGY_COST = 0.05` extra energy per tick. A surging rider
-breaks from drafting and rides their own pace.
+breaks from drafting and rides their own pace. A finish sprint is a **longer
+kick** (`SPRINT_DURATION = 40` ticks) — the sprinter sustains the burst further
+to the line.
 
 ### Refusal conditions
 A rider does **not** start a surge if they are finished, already surging
