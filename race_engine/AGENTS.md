@@ -64,6 +64,72 @@ The engine separates two forms of effort:
   (see Surge reflexes).
 - `finished` (bool), `finish_time` (seconds or None).
 
+## Race configuration (input)
+
+A race can be built in code (constructing `Course`/`Rider` objects) or loaded
+from a **config JSON file** via `race_engine.config.build_race`. The file
+declares the riders and the course; the engine derives everything else. This
+makes it easy to keep multiple reusable race configurations side by side.
+
+### Schema
+```json
+{
+  "race": {
+    "name": "Hilly Classic",
+    "course": [
+      {"length": 7000.0, "gradient": 0.0},
+      {"length": 1000.0, "gradient": 5.0}
+    ],
+    "riders": [
+      {
+        "id": "c1",
+        "name": "Climber 1",
+        "attributes": {"climb": 92, "sprint": 40, "flat": 45, "resistance": 72}
+      }
+    ]
+  }
+}
+```
+- `course` — non-empty list of `{"length": m, "gradient": %}`, positive lengths.
+- `riders` — non-empty list; each has a unique `id`, a display `name`, and
+  `attributes` (all four ints in `[1, 100]`, validated as in `RiderAttributes`).
+- `name` — optional display name for the race (informational).
+- Starting `energy`/`stamina` are always 100 (engine-internal, not configurable).
+  Engine constants (draft distance, surge thresholds, etc.) are not exported to
+  config; they remain fixed in `formulas.py`.
+
+### CLI
+`python -m race_engine <config.json> [log.jsonl] [--seed N]` runs a race from a
+config and writes the JSONL log (default `race.jsonl`), printing the results
+table. `--seed N` makes the run reproducible. `race_engine.config.load_config`
+returns `{"riders", "course", "name"}` after validation (`ConfigError` on
+malformed input).
+
+### Bundled configs (`configs/`)
+The `configs/` directory holds reusable race definitions modeled on real
+single-day races. They use a **shared 11-rider archetype roster** (GC climbers,
+puncheurs, rouleurs, sprinters, domestiques) embedded in each file, so terrain
+alone determines the winner. Courses are **scaled down** (roughly 90–140 km
+instead of the 250–300 km of real Monuments) for fast iteration; the profile
+character (climb ratios, late steep sections) is preserved.
+
+- `sprinters_classic.json` — flat bunch-sprint style race.
+- `san_remo.json` — flat-first + Cipressa/Poggio-style late climbs.
+- `lombardia.json` — rolling opener, big climbs late, downhill finish.
+- `classics_hilly.json` — long shallow climbs + short steep finale.
+- `summit_finish.json` — flat/downhill approach to a summit climb.
+- `mountain_stage.json` — sustained climbs with descents between.
+
+`_roster.json` is a reference copy of the shared roster (not loaded by the
+engine; the roster is embedded in each config).
+
+### Known discrepancies (`ENGINE_FINDINGS.md`)
+`ENGINE_FINDINGS.md` documents, per course, the real-world expected winner vs.
+what the engine actually produces (seeded runs) and the mechanism behind each
+discrepancy. As of writing, climber courses match reality; flat/hilly courses
+have a **rouleur bias** because the engine lacks an effort-management/bunch
+pacing model (see the doc). Update this file when the engine's behavior changes.
+
 ## Simulation tick (`RaceState.tick`)
 
 The tick runs in phases so all riders see a consistent snapshot.

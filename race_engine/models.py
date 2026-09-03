@@ -381,8 +381,14 @@ def run_race(
     riders: list[Rider],
     course: Course,
     log_path: str | None = None,
+    seed: int | None = None,
 ) -> list[RiderState]:
     from .race_logger import RaceLogger
+
+    if seed is not None:
+        import random
+
+        random.seed(seed)
 
     state = RaceState.create_initial_state(riders, course)
     logger = RaceLogger(log_path) if log_path else None
