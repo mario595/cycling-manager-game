@@ -125,6 +125,70 @@ character (climb ratios, late steep sections) is preserved.
 `_roster.json` is a reference copy of the shared roster (not loaded by the
 engine; the roster is embedded in each config).
 
+### Rider archetypes
+
+Each archetype occupies a distinct niche defined by attribute trade-offs.
+Typical attribute ranges are shown; exact values vary per rider.
+
+**GC Climber** — the mountain specialist. Excels on long, steep climbs where
+`climb` dominates speed. Weak on flats and has a negligible sprint. Wins by
+attacking on climbs and riding away from the group under sustained aerobic
+effort. High `resistance` keeps them fresher late in the race.
+
+| climb | sprint | flat | resistance | positioning |
+|---|---|---|---|---|
+| 88–94 | 28–30 | 38–40 | 78–80 | 50–52 |
+
+**Superdom** — the mountain domestique. Strong climber who can follow attacks
+on steep terrain but lacks the top-end to contest the summit finish. Highest
+`resistance` of any archetype, so they burn slowly and can set a grinding pace
+for teammates. Terrible sprint and weak on flats.
+
+| climb | sprint | flat | resistance | positioning |
+|---|---|---|---|---|
+| 84 | 25 | 45 | 84 | 56 |
+
+**Puncheur** — the short-climb puncher. Combines solid climbing (`climb`
+73–76) with a strong finishing kick (`sprint` 82–85). Thrives on hilly
+courses with repeated short ascents where a burst of speed at the crest
+matters more than sustained climbing. Moderate endurance; not a pure sprinter
+or pure climber.
+
+| climb | sprint | flat | resistance | positioning |
+|---|---|---|---|---|
+| 73–76 | 82–85 | 58–60 | 66–68 | 70–72 |
+
+**Rouleur** — the flat-road engine. Dominates on flat and rolling terrain
+(`flat` 77–80) with the highest `resistance` (84–86) in the roster — barely
+tires over long distances. Moderate sprint and weak climbing; struggles on
+steep gradients but is devastating on flats where sustained power wins.
+Tends to press clear of the pack on flat courses.
+
+| climb | sprint | flat | resistance | positioning |
+|---|---|---|---|---|
+| 57–60 | 55–60 | 77–80 | 84–86 | 58–62 |
+
+**Sprinter** — the bunch finish specialist. Highest `sprint` (93–97) and
+excellent `positioning` (85–88) to stay sheltered in the wheels until the
+final kick. Very weak climbing (`climb` 26–30) — gets dropped on any
+meaningful ascent. Low `resistance` means they fatigue faster, but their
+energy reserve is preserved by draft skill. Wins flat bunch sprints
+decisively; useless in the mountains.
+
+| climb | sprint | flat | resistance | positioning |
+|---|---|---|---|---|
+| 26–30 | 93–97 | 79–82 | 58–62 | 85–88 |
+
+**Domestique** — the team worker. Well-rounded with no standout strength but
+no fatal weakness. High `positioning` (80–82) lets them shelter efficiently,
+and solid `resistance` (74–76) means they stay in the group longer than
+their speed alone would suggest. Provides draft for teammates and covers
+moderate terrain. Cannot win from a breakaway but rarely gets dropped.
+
+| climb | sprint | flat | resistance | positioning |
+|---|---|---|---|---|
+| 52–55 | 45–48 | 68–70 | 74–76 | 80–82 |
+
 ### Known discrepancies (`ENGINE_FINDINGS.md`)
 `ENGINE_FINDINGS.md` documents, per course, the real-world expected winner vs.
 what the engine actually produces (seeded runs) and the mechanism behind each
@@ -151,8 +215,10 @@ The tick runs in phases so all riders see a consistent snapshot.
    sustainable tempo (`GROUP_DROP_FRACTION ×` the pack's best cruise). A rider
    whose own cruise falls below that pace is DROPPED (not sheltered). A rider
    currently surging always rides their own pace. No cohesion above
-   `DRAFT_UPHILL_LIMIT` gradient. The pack's front rider pulls; each coherent
-   rider's pack **depth** (wheels back) is recorded to scale drafting savings.
+   `DRAFT_UPHILL_LIMIT` gradient. Each coherent rider's pack **depth** (wheels
+   back) is recorded to scale draft savings. The `drafting` flag is set only
+   for riders who have a wheel within `DRAFT_DISTANCE` (3 m) directly ahead
+   — pack membership alone does not imply `drafting`.
 5. **Compute deltas** (per rider): final effective speed, energy drain, stamina
    drain, drafting/pulling flags — using the shared snapshot, not the mutated
    state.
@@ -220,7 +286,11 @@ exposed or socially-sheltered one.
 
 - `PACK_COHESION_DISTANCE = 60.0` m — riders within this of each other on a
   draft-allowed gradient cohere into a single pack (connected-component BFS).
+  This governs pace-sharing / dropping, not the physical drafting label.
 - `DRAFT_UPHILL_LIMIT = 5.0` % — no cohesion/drafting on steeper climbs.
+- **Drafting flag** — `drafting=True` only when a rider has a wheel within
+  `DRAFT_DISTANCE (3.0 m)` directly ahead. Pack membership (cohesion) does
+  NOT set the flag; only physical proximity to a wheel does.
 - **Group tempo** — a pack rolls at `GROUP_DROP_FRACTION (0.90) ×` the pack's best
   cruise. A rider whose own cruise is below that tempo is DROPPED (rides alone,
   not sheltered).
@@ -327,7 +397,7 @@ Field reference (rider entries):
 | `speed` | effective speed this tick, m/s, rounded to 2 dp |
 | `energy` | anaerobic reserve 0–100, rounded to 2 dp |
 | `stamina` | aerobic endurance 0–100, rounded to 2 dp |
-| `drafting` | sheltered behind a leader this tick |
+| `drafting` | has a wheel within DRAFT_DISTANCE (3 m) directly ahead |
 | `pulling` | working on the front of the group this tick |
 | `surging` | in a surge effort this tick |
 | `finished` | crossed the line |

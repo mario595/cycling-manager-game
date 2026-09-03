@@ -194,7 +194,9 @@ class RaceState:
             for d, m in enumerate(coherent_by_pos):
                 depth_of[m] = d  # 0 = pulling front, 1 = first wheel, ...
             for m in coherent:
-                drafting_flags[m] = True
+                drafting_flags[m] = self._is_drafting(
+                    m, positions, sorted_idx, gradients[m]
+                )
                 effective_speeds[m] = pace
                 pack_depth[m] = float(depth_of[m])
 
@@ -452,6 +454,7 @@ def run_race(
     course: Course,
     log_path: str | None = None,
     seed: int | None = None,
+    verbose: bool = False,
 ) -> list[RiderState]:
     from .race_logger import RaceLogger
 
@@ -463,6 +466,13 @@ def run_race(
     state = RaceState.create_initial_state(riders, course)
     logger = RaceLogger(log_path) if log_path else None
 
+    import sys
+    import time as _time
+
+    total_distance = course.total_distance
+    progress_interval = 500  # ticks between progress lines
+    start_wall = _time.monotonic() if verbose else 0.0
+
     try:
         if logger:
             logger.log(state)
@@ -470,8 +480,28 @@ def run_race(
             state.tick()
             if logger:
                 logger.log(state)
+            if verbose and state.current_time % progress_interval == 0:
+                last_pos = min(rs.position for rs in state.rider_states)
+                pct = last_pos / total_distance * 100
+                elapsed = _time.monotonic() - start_wall
+                print(
+                    f"\r  {pct:5.1f}%  tick {state.current_time:>6d}  "
+                    f"wall {elapsed:6.1f}s",
+                    end="",
+                    file=sys.stderr,
+                    flush=True,
+                )
     finally:
         if logger:
             logger.close()
+
+    if verbose:
+        elapsed = _time.monotonic() - start_wall
+        print(
+            f"\r  100.0%  tick {state.current_time:>6d}  "
+            f"wall {elapsed:6.1f}s",
+            file=sys.stderr,
+            flush=True,
+        )
 
     return state.get_results()

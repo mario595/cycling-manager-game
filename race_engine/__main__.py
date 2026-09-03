@@ -53,7 +53,7 @@ def main(argv: list[str]) -> int:
         print(f"error: {exc}")
         return 1
 
-    results = run_race(riders, course, log_path=log_path, seed=seed)
+    results = run_race(riders, course, log_path=log_path, seed=seed, verbose=True)
     print(f"Log saved to: {log_path}")
     print()
     print("Results:")
