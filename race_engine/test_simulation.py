@@ -102,8 +102,6 @@ def main() -> None:
             f"  {i}. {rs.rider.name:13s} - {rs.finish_time:>5d}s "
             f"(energy={rs.energy:5.1f}, stamina={rs.stamina:5.1f})"
         )
-    print()
-    print(f"To view: python -m race_engine.player {log_path}")
 
 
 if __name__ == "__main__":

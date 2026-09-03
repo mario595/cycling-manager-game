@@ -9,24 +9,17 @@ from race_engine.models import run_race
 def main(argv: list[str]) -> int:
     """Entry point.
 
-    - `python -m race_engine config.json [log.jsonl] [--seed N]` runs a race
-      from a config file, writing the JSONL log (defaults to `race.jsonl`).
-      `--seed N` makes the run reproducible.
-    - `python -m race_engine path/to.log.jsonl` opens a log in the viewer
-      (requires a TTY; falls back gracefully otherwise).
+    `python -m race_engine config.json [log.jsonl] [--seed N]` runs a race
+    from a config file, writing the JSONL log (defaults to `race.jsonl`).
+    `--seed N` makes the run reproducible.
     """
     if not argv:
         print("usage: python -m race_engine <config.json> [log.jsonl] [--seed N]")
-        print("   or: python -m race_engine <race.jsonl>")
         return 2
 
     arg = argv[0]
-    if arg.endswith(".jsonl"):
-        from race_engine.player import main as player_main
-
-        return player_main()
     if not arg.endswith(".json"):
-        print(f"error: unsupported argument {arg!r} (expected .json config or .jsonl log)")
+        print(f"error: unsupported argument {arg!r} (expected .json config)")
         return 2
 
     log_path = "race.jsonl"
@@ -62,8 +55,6 @@ def main(argv: list[str]) -> int:
             f"  {i}. {rs.rider.name:13s} - {rs.finish_time:>5d}s "
             f"(energy={rs.energy:5.1f}, stamina={rs.stamina:5.1f})"
         )
-    print()
-    print(f"To view: python -m race_engine.player {log_path}")
     return 0
 
 

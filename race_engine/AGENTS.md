@@ -7,9 +7,6 @@ model, the physics/formulas, and the per-tick simulation logic in enough detail
 that a coding agent could reproduce the engine exactly. Changes to the engine
 **must** be reflected here (see "Commit procedure" below).
 
-A textual viewer/player is included for visualizing races, but it is **not** part
-of the engine and is deliberately out of scope for this document.
-
 ## Overview
 
 The engine simulates a bicycle race as a set of riders moving along a fixed
