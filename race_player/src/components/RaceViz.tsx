@@ -1,0 +1,97 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { ParsedRace } from '../types/race'
+import ElevationProfile from './ElevationProfile'
+import PlaybackControls from './PlaybackControls'
+import RiderList from './RiderList'
+
+interface RaceVizProps {
+  raceData: ParsedRace
+}
+
+export default function RaceViz({ raceData }: RaceVizProps) {
+  const { snapshots, profile, maxTicks } = raceData
+  const [tick, setTick] = useState(0)
+  const [playing, setPlaying] = useState(false)
+  const [speed, setSpeed] = useState(1)
+  const [selectedRider, setSelectedRider] = useState<string | null>(null)
+
+  const tickRef = useRef(tick)
+  tickRef.current = tick
+
+  const snapshot = snapshots[tick]
+  const riders = snapshot?.riders ?? []
+
+  // Playback loop
+  useEffect(() => {
+    if (!playing) return
+    const interval = setInterval(() => {
+      setTick((t) => {
+        if (t >= maxTicks) {
+          setPlaying(false)
+          return t
+        }
+        return t + 1
+      })
+    }, 1000 / speed)
+    return () => clearInterval(interval)
+  }, [playing, speed, maxTicks])
+
+  const handleTogglePlay = useCallback(() => {
+    if (tick >= maxTicks) setTick(0)
+    setPlaying((p) => !p)
+  }, [tick, maxTicks])
+
+  const handleTickChange = useCallback((t: number) => {
+    setTick(Math.max(0, Math.min(maxTicks, t)))
+  }, [maxTicks])
+
+  const handleStep = useCallback(
+    (dir: -1 | 1) => {
+      handleTickChange(tickRef.current + dir)
+    },
+    [handleTickChange],
+  )
+
+  const handleSelectRider = useCallback((id: string) => {
+    setSelectedRider(id)
+  }, [])
+
+  // Determine the currently active rider object for highlighting
+  const activeRider = useMemo(
+    () => riders.find((r) => r.id === selectedRider) ?? null,
+    [riders, selectedRider],
+  )
+
+  return (
+    <div className="flex flex-col gap-4 p-4 max-w-5xl mx-auto">
+      <h1 className="text-xl font-semibold text-slate-800">Race Viewer</h1>
+
+      <PlaybackControls
+        playing={playing}
+        onTogglePlay={handleTogglePlay}
+        tick={tick}
+        maxTicks={maxTicks}
+        speed={speed}
+        onSpeedChange={setSpeed}
+        onTickChange={handleTickChange}
+        onStep={handleStep}
+      />
+
+      <div className="bg-white rounded-lg border border-slate-200 p-2">
+        <ElevationProfile
+          profile={profile}
+          riders={riders}
+          onSelectRider={handleSelectRider}
+        />
+      </div>
+
+      <RiderList riders={riders} onSelectRider={handleSelectRider} />
+
+      {activeRider && (
+        <div className="text-xs text-slate-500">
+          Selected: <span className="font-medium">{activeRider.name}</span>
+        </div>
+      )}
+    </div>
+  )
+}
