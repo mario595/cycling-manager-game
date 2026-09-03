@@ -98,9 +98,10 @@ makes it easy to keep multiple reusable race configurations side by side.
   config; they remain fixed in `formulas.py`.
 
 ### CLI
-`python -m race_engine <config.json> [log.jsonl] [--seed N]` runs a race from a
-config and writes the JSONL log (default `race.jsonl`), printing the results
-table. `--seed N` makes the run reproducible. `race_engine.config.load_config`
+`python -m race_engine <config.json> [--seed N]` runs a race from a config
+file, writing the JSONL log to `race_player/public/<name>.jsonl` (overwriting
+if it exists). `--seed N` makes the run reproducible. Progress (percentage,
+tick, wall-clock time) is printed to stderr. `race_engine.config.load_config`
 returns `{"riders", "course", "name"}` after validation (`ConfigError` on
 malformed input).
 
