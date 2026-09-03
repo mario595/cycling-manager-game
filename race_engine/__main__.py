@@ -1,20 +1,23 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 from race_engine.config import ConfigError, build_race
 from race_engine.models import run_race
+
+_PUBLIC_DIR = Path("race_player/public")
 
 
 def main(argv: list[str]) -> int:
     """Entry point.
 
-    `python -m race_engine config.json [log.jsonl] [--seed N]` runs a race
-    from a config file, writing the JSONL log (defaults to `race.jsonl`).
+    `python -m race_engine config.json [--seed N]` runs a race from a config
+    file, writing the JSONL log to `race_player/public/<name>.jsonl`.
     `--seed N` makes the run reproducible.
     """
     if not argv:
-        print("usage: python -m race_engine <config.json> [log.jsonl] [--seed N]")
+        print("usage: python -m race_engine <config.json> [--seed N]")
         return 2
 
     arg = argv[0]
@@ -22,7 +25,6 @@ def main(argv: list[str]) -> int:
         print(f"error: unsupported argument {arg!r} (expected .json config)")
         return 2
 
-    log_path = "race.jsonl"
     seed: int | None = None
     rest = argv[1:]
     if rest and "--seed" in rest:
@@ -37,8 +39,9 @@ def main(argv: list[str]) -> int:
         else:
             print("error: --seed requires an integer", file=sys.stderr)
             return 2
-    if rest:
-        log_path = rest[0]
+
+    log_path = str(_PUBLIC_DIR / (Path(arg).stem + ".jsonl"))
+    _PUBLIC_DIR.mkdir(parents=True, exist_ok=True)
 
     try:
         riders, course = build_race(arg)
