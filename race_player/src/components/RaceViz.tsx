@@ -3,6 +3,7 @@ import type { ParsedRace } from '../types/race'
 import ElevationProfile from './ElevationProfile'
 import PlaybackControls from './PlaybackControls'
 import RiderList from './RiderList'
+import { computePacks } from '../utils/computePacks'
 
 interface RaceVizProps {
   raceData: ParsedRace
@@ -56,11 +57,36 @@ export default function RaceViz({ raceData }: RaceVizProps) {
     setSelectedRider(id)
   }, [])
 
-  // Determine the currently active rider object for highlighting
+  // Stable refs so the key listener never needs re-subscribing.
+  const stepRef = useRef(handleStep)
+  stepRef.current = handleStep
+  const togglePlayRef = useRef(handleTogglePlay)
+  togglePlayRef.current = handleTogglePlay
+
+  // Keyboard controls: ← / → step, Space toggles play/pause
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        stepRef.current(-1)
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault()
+        stepRef.current(1)
+      } else if (e.key === ' ') {
+        e.preventDefault()
+        togglePlayRef.current()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   const activeRider = useMemo(
     () => riders.find((r) => r.id === selectedRider) ?? null,
     [riders, selectedRider],
   )
+
+  const packs = useMemo(() => computePacks(riders, profile), [riders, profile])
 
   return (
     <div className="flex flex-col gap-4 p-4 max-w-5xl mx-auto">
@@ -85,7 +111,7 @@ export default function RaceViz({ raceData }: RaceVizProps) {
         />
       </div>
 
-      <RiderList riders={riders} onSelectRider={handleSelectRider} />
+      <RiderList packs={packs} onSelectRider={handleSelectRider} />
 
       {activeRider && (
         <div className="text-xs text-slate-500">

@@ -19,7 +19,7 @@ export function useProfileScale(
   minElevation: number,
   maxElevation: number,
 ): ProfileScale {
-  const margin = { top: 20, right: 20, bottom: 40, left: 55 }
+  const margin = { top: 20, right: 20, bottom: 40, left: 85 }
 
   return useMemo(() => {
     const plotWidth = width - margin.left - margin.right

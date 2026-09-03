@@ -16,6 +16,7 @@ interface ElevationProfileProps {
 interface SegmentDef {
   d: string
   color: string
+  gradient: number
   midX: number
   midY: number
 }
@@ -64,7 +65,8 @@ export default function ElevationProfile({
       const bottom = scale.y(minElevation)
       segs.push({
         d: `M ${x1} ${y1} L ${x2} ${y2} L ${x2} ${bottom} L ${x1} ${bottom} Z`,
-        color: gradientColorForPoint(p1.gradient),
+        color: gradientColorForPoint(p2.gradient),
+        gradient: p2.gradient,
         midX: (x1 + x2) / 2,
         midY: (y1 + y2) / 2,
       })
@@ -121,6 +123,24 @@ export default function ElevationProfile({
             strokeLinejoin="round"
           />
         ))}
+
+        {profile.slice(0, -1).map((_, i) => {
+          const x1 = scale.x(profile[i].distance)
+          const x2 = scale.x(profile[i + 1].distance)
+          if (x2 - x1 < 40) return null
+          return (
+            <text
+              key={`grad-${i}`}
+              x={(x1 + x2) / 2}
+              y={scale.y(minElevation) + 14}
+              textAnchor="middle"
+              fontSize={10}
+              fill="#64748b"
+            >
+              {`${Math.round(profile[i + 1].gradient)}%`}
+            </text>
+          )
+        })}
       </g>
 
       {/* Axes */}

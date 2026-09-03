@@ -4,10 +4,10 @@ import {
   TeamOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons'
-import type { Rider } from '../types/race'
+import type { Pack, Rider } from '../types/race'
 
 interface RiderListProps {
-  riders: Rider[]
+  packs: Pack[]
   onSelectRider?: (id: string) => void
 }
 
@@ -46,11 +46,54 @@ function RiderStateIcons({ rider }: { rider: Rider }) {
   )
 }
 
-export default function RiderList({ riders, onSelectRider }: RiderListProps) {
-  const sorted = useMemo(
-    () => [...riders].sort((a, b) => b.pos - a.pos),
-    [riders],
+function RiderRow({ rider, rank, onSelect }: { rider: Rider; rank: number; onSelect?: (id: string) => void }) {
+  return (
+    <tr
+      className="border-b border-slate-100 last:border-0 hover:bg-slate-50 cursor-pointer"
+      onClick={() => onSelect?.(rider.id)}
+    >
+      <td className="px-3 py-2 text-slate-500">
+        {rank < 3 ? MEDALS[rank] : rank + 1}
+      </td>
+      <td className="px-3 py-2 font-medium text-slate-800">
+        {rider.name}
+        <RiderStateIcons rider={rider} />
+      </td>
+      <td className="px-3 py-2 text-right tabular-nums text-slate-600">
+        {Math.round(rider.pos).toLocaleString()}
+      </td>
+      <td className="px-3 py-2 text-right tabular-nums text-slate-600">
+        {rider.finished ? '✓' : `${(rider.speed * 3.6).toFixed(0)} km/h`}
+      </td>
+      <td className="px-3 py-2 w-40">
+        <EnergyBar value={rider.stamina} label="S" color="#3b82f6" />
+      </td>
+      <td className="px-3 py-2 w-40">
+        <EnergyBar value={rider.energy} label="E" color="#ef4444" />
+      </td>
+    </tr>
   )
+}
+
+export default function RiderList({ packs, onSelectRider }: RiderListProps) {
+  const gaps = useMemo(() => {
+    const list: (string | null)[] = []
+    for (let i = 0; i < packs.length; i++) {
+      if (i === 0) {
+        list.push(null)
+        continue
+      }
+      const prev = packs[i - 1]
+      const cur = packs[i]
+      const prevBack = prev.riders[prev.riders.length - 1].pos
+      const gapM = Math.max(0, prevBack - cur.frontPos)
+      const gapT = cur.speed > 0 ? gapM / cur.speed : 0
+      list.push(gapT >= 1 ? `+${Math.round(gapT)}s` : `+${gapM.toFixed(0)}m`)
+    }
+    return list
+  }, [packs])
+
+  let rank = 0
 
   return (
     <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
@@ -65,35 +108,31 @@ export default function RiderList({ riders, onSelectRider }: RiderListProps) {
             <th className="px-3 py-2">Energy</th>
           </tr>
         </thead>
-        <tbody>
-          {sorted.map((rider, i) => (
+        {packs.map((pack, pi) => (
+          <tbody key={pi} className="align-top">
+            {gaps[pi] !== null && (
+              <tr>
+                <td colSpan={6} className="px-3 py-1.5 bg-slate-100/80 text-center text-xs font-semibold text-slate-600 border-y border-slate-300/60">
+                  {gaps[pi]}
+                </td>
+              </tr>
+            )}
             <tr
-              key={rider.id}
-              className="border-b border-slate-100 last:border-0 hover:bg-slate-50 cursor-pointer"
-              onClick={() => onSelectRider?.(rider.id)}
+              aria-hidden
+              className="h-0"
             >
-              <td className="px-3 py-2 text-slate-500">
-                {i < 3 ? MEDALS[i] : i + 1}
-              </td>
-              <td className="px-3 py-2 font-medium text-slate-800">
-                {rider.name}
-                <RiderStateIcons rider={rider} />
-              </td>
-              <td className="px-3 py-2 text-right tabular-nums text-slate-600">
-                {Math.round(rider.pos).toLocaleString()}
-              </td>
-              <td className="px-3 py-2 text-right tabular-nums text-slate-600">
-                {rider.finished ? '✓' : `${(rider.speed * 3.6).toFixed(0)} km/h`}
-              </td>
-              <td className="px-3 py-2 w-40">
-                <EnergyBar value={rider.stamina} label="S" color="#3b82f6" />
-              </td>
-              <td className="px-3 py-2 w-40">
-                <EnergyBar value={rider.energy} label="E" color="#ef4444" />
-              </td>
+              <td colSpan={6} className="border-b-2 border-slate-300" />
             </tr>
-          ))}
-        </tbody>
+            {pack.riders.map((rider) => {
+              const r = rank
+              rank += 1
+              return <RiderRow key={rider.id} rider={rider} rank={r} onSelect={onSelectRider} />
+            })}
+            <tr aria-hidden className="h-0">
+              <td colSpan={6} className="border-b border-slate-200" />
+            </tr>
+          </tbody>
+        ))}
       </table>
       <div className="flex items-center gap-4 px-3 py-2 text-xs text-slate-500 border-t border-slate-200 bg-slate-50">
         <span className="inline-flex items-center gap-1">

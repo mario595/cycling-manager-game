@@ -30,6 +30,12 @@ export interface ProfilePoint {
   gradient: number
 }
 
+export interface Pack {
+  riders: Rider[]
+  frontPos: number
+  speed: number
+}
+
 export interface ParsedRace {
   snapshots: RaceSnapshot[]
   profile: ProfilePoint[]

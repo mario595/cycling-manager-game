@@ -11,6 +11,8 @@ const SPEEDS = [
   { label: 'x2', value: 2 },
   { label: 'x5', value: 5 },
   { label: 'x10', value: 10 },
+  { label: 'x25', value: 25 },
+  { label: 'x50', value: 50 },
 ]
 
 interface PlaybackControlsProps {
