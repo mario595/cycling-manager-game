@@ -99,7 +99,6 @@ export default function RaceViz({ raceData }: RaceVizProps) {
         maxTicks={maxTicks}
         speed={speed}
         onSpeedChange={setSpeed}
-        onTickChange={handleTickChange}
         onStep={handleStep}
       />
 
