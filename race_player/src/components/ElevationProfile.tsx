@@ -169,6 +169,27 @@ export default function ElevationProfile({
       >
         elevation (m)
       </text>
+
+      {/* Km markers every 5km */}
+      {Array.from({ length: Math.floor(maxDistance / 5000) + 1 }, (_, i) => i * 5000).map((km) => {
+        const x = scale.x(km)
+        const y = scale.y(minElevation)
+        return (
+          <g key={`km-${km}`}>
+            <line x1={x} y1={y} x2={x} y2={y + 6} stroke="#94a3b8" strokeWidth={1} />
+            <text
+              x={x}
+              y={y + 16}
+              textAnchor="middle"
+              fontSize={9}
+              fill="#94a3b8"
+            >
+              {km === 0 ? '0' : `${km / 1000}`}
+            </text>
+          </g>
+        )
+      })}
+
       <text
         x={width / 2}
         y={height - 10}
@@ -176,7 +197,7 @@ export default function ElevationProfile({
         fontSize={11}
         fill="#64748b"
       >
-        distance (m)
+        distance (km)
       </text>
 
       {/* Rider markers */}
