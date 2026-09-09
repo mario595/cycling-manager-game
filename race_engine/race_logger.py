@@ -23,6 +23,8 @@ class RaceLogger:
                 {
                     "id": rs.rider.id,
                     "name": rs.rider.name,
+                    "team": rs.rider.team_id,
+                    "role": rs.rider.role,
                     "pos": round(rs.position, 2),
                     "speed": round(rs.speed, 2),
                     "energy": round(rs.energy, 2),

@@ -36,12 +36,23 @@ def _parse_attributes(raw: Any, path: str) -> RiderAttributes:
         raise ConfigError(f"{path}: {exc}") from exc
 
 
+_VALID_ROLES = {"leader", "support"}
+
+
 def _parse_rider(raw: Any, default_index: int) -> Rider:
     path = f"race.riders[{default_index}]"
     rid = _require(raw, "id", path)
     name = _require(raw, "name", path)
     attrs = _parse_attributes(_require(raw, "attributes", path), f"{path}.attributes")
-    return Rider(id=str(rid), name=str(name), attributes=attrs)
+
+    team_id = raw.get("team")
+    team_id = str(team_id) if team_id is not None else None
+
+    role = raw.get("role", "leader")
+    if role not in _VALID_ROLES:
+        raise ConfigError(f"{path}.role must be one of {sorted(_VALID_ROLES)}, got {role!r}")
+
+    return Rider(id=str(rid), name=str(name), attributes=attrs, team_id=team_id, role=role)
 
 
 def _parse_course(raw: Any) -> Course:
@@ -92,7 +103,37 @@ def load_config(path: str) -> dict[str, Any]:
     if len(set(ids)) != len(ids):
         raise ConfigError("race.riders contains duplicate ids")
 
+    _validate_team_leaders(riders)
+
     return {"riders": riders, "course": course, "name": race.get("name")}
+
+
+def _validate_team_leaders(riders: list[Rider]) -> None:
+    """Exactly one leader per team — zero or two+ is a config error.
+
+    Silent acceptance here would produce races that are confusing to debug:
+    a team with no leader has nobody to protect, and a team with two has an
+    undefined "the" leader for role-scaled tactics.
+    """
+    leaders_by_team: dict[str, list[str]] = {}
+    for r in riders:
+        if r.role == "leader":
+            leaders_by_team.setdefault(r.team_id, []).append(r.id)
+
+    for team_id, leader_ids in leaders_by_team.items():
+        if len(leader_ids) > 1:
+            raise ConfigError(
+                f"team {team_id!r} has {len(leader_ids)} leaders {leader_ids}; "
+                "exactly one leader is required per team"
+            )
+
+    all_teams = {r.team_id for r in riders}
+    teams_without_leader = sorted(all_teams - leaders_by_team.keys())
+    if teams_without_leader:
+        raise ConfigError(
+            f"team(s) {teams_without_leader} have no leader; "
+            "exactly one leader is required per team"
+        )
 
 
 def build_race(config_path: str) -> tuple[list[Rider], Course]:

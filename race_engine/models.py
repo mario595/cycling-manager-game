@@ -24,6 +24,12 @@ class Rider:
     id: str
     name: str
     attributes: RiderAttributes
+    team_id: str | None = None  # defaults to own id (a team of one) in __post_init__
+    role: str = "leader"  # "leader" or "support"
+
+    def __post_init__(self) -> None:
+        if self.team_id is None:
+            self.team_id = self.id
 
 
 @dataclass
