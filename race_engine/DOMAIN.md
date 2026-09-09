@@ -708,6 +708,75 @@ Bytes are exact (no line wrapping). Consumers may aggregate frames by `time`.
 Note there is currently **no** per-tick event/commentary stream; a visualizer
 derives narrative purely from these snapshots.
 
+## Future work / possible improvements
+
+Backlog items — not planned, not scheduled, just recorded so a future
+decision to implement (or not) is informed rather than a re-discovery. Size
+is a rough shirt-size estimate (small/medium/large), not a scoped plan.
+
+### Broom wagon (time-cut DNF)
+
+**Problem it solves:** the "Known limitation" above (dropped riders decay
+without limit) currently manifests as absurd finish times in the tail of the
+field — a cracked rider can take hours longer than the winner instead of
+abandoning, which is what would actually happen. A broom wagon rule doesn't
+fix the underlying death-spiral (see below), it just stops the engine from
+reporting a nonsense result: once a rider falls more than some threshold gap
+behind the leader (real racing uses a time cut, e.g. a % of the winner's
+time, or an absolute distance/time gap), they're marked DNF instead of
+crawling to an eventual, meaningless finish.
+
+**Size: small.** A single check in `RaceState.tick()` (or the results
+step) — no new mechanic, just a threshold and a `finished`-like DNF state on
+`RiderState`. The audit harness already has a `--tick-cap` escape hatch
+(`race_engine/audit.py`) that approximates this for regression-testing
+purposes; a real broom wagon would need a home in the engine itself, plus a
+decision on where DNF riders show up in `get_results()` and the JSONL output
+(a new `dnf: bool` field, most likely).
+
+**Caveat:** a broom wagon alone treats the symptom, not the cause. It should
+probably ship together with (or after) the autobus below — otherwise a
+courageous but genuinely mid-pack rider who has a bad patch gets the same
+DNF treatment as one who's catastrophically cracked, since nothing lets a
+dropped rider recover before the cutoff.
+
+### Autobus (dropped riders group up)
+
+**Problem it solves:** the same death-spiral, addressed at the mechanism
+rather than papered over. Real dropped riders don't time-trial alone to
+exhaustion — they find each other and ride a shared, survivable tempo
+(literally called the "autobus" or "grupetto" in pro cycling). The engine's
+existing pack-cohesion machinery (`PACK_COHESION_DISTANCE` BFS, shared
+tempo, gap-decayed shelter) already does almost everything needed; the gap
+is that a rider whose credited cruise can't hold the *main* pack's tempo is
+simply dropped, with no fallback second-tier grouping among similarly-paced
+stragglers.
+
+**Size: medium.** Plausible shape: once one or more riders are dropped from
+the main pack, run the same cohesion/tempo logic over just the dropped
+riders as a second, slower peloton (its own `pace_setter_speed`, its own
+`break_ahead`, at a survival-oriented tempo fraction below `PACK_TEMPO_EASY`)
+rather than leaving them all fully isolated. Needs care around: riders
+dropped at different times/positions re-cohering into the bus without a
+teleport, whether a strong rider can bridge back to the main pack from the
+bus, and whether the bus itself can further shed its weakest riders (to the
+broom wagon, if that's implemented) rather than being a floor everyone
+sinks to. Should be audited the same way as the Finding-1 work (baseline
+before, `race_engine/audit.py` after, watch for regressions on the six
+bundled configs) since it touches the same pack-cohesion code path every
+other course result depends on.
+
+### Shelter-quality retune (small, deferred)
+
+`shelter_quality`'s skill/depth blend (`0.6 × skill + 0.4 × depth_factor`)
+and `DRAFT_DEPTH_SATURATION` (10) were flagged as worth retuning in an
+earlier investigation — reweighting toward depth and lowering the
+saturation point (3-4 wheels back should already be ~full shelter, not 10)
+— but never implemented, and the resistance-model speed rewrite changed
+enough of the surrounding math that the specific old numbers aren't
+trustworthy without re-deriving them against the current model. **Size:
+small**, but needs fresh calibration work, not a drop-in constant change.
+
 ## Submission / commit procedure
 
 The engine, its module layout, and this spec are under active development.
