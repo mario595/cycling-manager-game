@@ -2,6 +2,26 @@
 
 An online multiplayer cycling management game where users build and manage fictional cycling teams, compete in leagues, stage races, and classics. Think Sokker but for cycling.
 
+## Domain docs — read on demand
+
+This file is the **only** always-loaded context document. It is deliberately
+short: an index, not a manual.
+
+Every domain folder that has been built out carries its own **`DOMAIN.md`** — the
+authoritative spec, design notes, conventions and gotchas for that domain. Those
+files are detailed and long, and they are **not** meant to be read up front.
+
+**The rule:** before working in a domain folder, read that folder's `DOMAIN.md`.
+Do not read the others. Engine internals are irrelevant when styling the player,
+and vice versa — pulling them all in just crowds out the work.
+
+`DOMAIN.md` is the entry point for its folder, and links to any further docs
+alongside it (audits, plans, findings). Follow those links only when the task
+actually needs them.
+
+When a new domain folder gets real work in it, give it a `DOMAIN.md` and mark it
+in the table below.
+
 ## Tech Stack
 
 - **Backend:** Python, Django, Django REST Framework
@@ -11,31 +31,35 @@ An online multiplayer cycling management game where users build and manage ficti
 
 ## Game Domains
 
-Each domain lives in its own folder within this project:
+Each domain lives in its own folder within this project.
 
-| Folder | Domain | Description |
-|--------|--------|-------------|
-| `race_engine/` | Race Engine | Core simulation: rider attributes, tactics, terrain, weather, fatigue. Determines race outcomes. |
-| `riders/` | Riders | Procedural generation, attributes (climbing, sprint, etc.), aging, form, injury, career progression. |
-| `teams/` | Teams | User-managed squads: roster, staff, tactics selection, training assignments. |
-| `transfers/` | Transfers | Market for buying/selling riders, contracts, free agents, youth academy. |
-| `competitions/` | Competitions | League tiers, promotion/relegation, seasons, cup races, championships. |
-| `calendar/` | Race Calendar | Race types (classics, stage races, TTs), scheduling, race-specific rules. |
-| `economy/` | Economy | Budgets, sponsorships, prize money, revenue streams. |
-| `world/` | World Simulation | Background ticks: time progression, AI team decisions, rider development, transfer windows. |
-| `multiplayer/` | Multiplayer/Auth | User accounts, authentication, real-time or async race execution. |
-| `frontend/` | Frontend/UI | React app: dashboards, team management, race viewer, transfer market UI. |
-| `data/` | Data/DB | Persistent storage, seasonal snapshots, historical records, migrations. |
+| Folder | Domain | Docs | Description |
+|--------|--------|------|-------------|
+| `race_engine/` | Race Engine | **`DOMAIN.md`** | Core simulation: rider attributes, tactics, terrain, weather, fatigue. Determines race outcomes. |
+| `race_player/` | Race Player | **`DOMAIN.md`** | React visualizer for race logs: elevation profile, rider markers, playback. |
+| `riders/` | Riders | *planned* | Procedural generation, attributes (climbing, sprint, etc.), aging, form, injury, career progression. |
+| `teams/` | Teams | *planned* | User-managed squads: roster, staff, tactics selection, training assignments. |
+| `transfers/` | Transfers | *planned* | Market for buying/selling riders, contracts, free agents, youth academy. |
+| `competitions/` | Competitions | *planned* | League tiers, promotion/relegation, seasons, cup races, championships. |
+| `calendar/` | Race Calendar | *planned* | Race types (classics, stage races, TTs), scheduling, race-specific rules. |
+| `economy/` | Economy | *planned* | Budgets, sponsorships, prize money, revenue streams. |
+| `world/` | World Simulation | *planned* | Background ticks: time progression, AI team decisions, rider development, transfer windows. |
+| `multiplayer/` | Multiplayer/Auth | *planned* | User accounts, authentication, real-time or async race execution. |
+| `frontend/` | Frontend/UI | *planned* | React app: dashboards, team management, transfer market UI. |
+| `data/` | Data/DB | *planned* | Persistent storage, seasonal snapshots, historical records, migrations. |
 
 ## Project Structure
 
 ```
 cycling-manager/
-├── AGENTS.md              # This file
+├── AGENTS.md              # This file — the index (CLAUDE.md symlinks to it)
 ├── manage.py
 ├── requirements.txt
 ├── pyproject.toml
 ├── race_engine/
+│   └── DOMAIN.md          # engine spec + its own linked docs
+├── race_player/
+│   └── DOMAIN.md          # visualizer design notes
 ├── riders/
 ├── teams/
 ├── transfers/
@@ -54,3 +78,8 @@ cycling-manager/
 2. **Domain-Driven:** Each folder is a Django app with its own models, services, and tests.
 3. **Separation of Concerns:** Race engine logic stays decoupled from Django ORM where possible.
 4. **Testable:** Each domain should be independently testable.
+
+## Generated files
+
+Race logs (`*.jsonl`) are build output, not source. They are gitignored and
+regenerated by `python -m race_engine <config.json>`; never commit them.

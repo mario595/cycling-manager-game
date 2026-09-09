@@ -248,6 +248,6 @@ the two halves of the same inconsistency (what does shelter buy you?) and
 fixing only one leaves the other visible. Re-run and re-audit before touching
 Steps 3–5. Step 6 is a separate project.
 
-Per `race_engine/AGENTS.md`: update the spec's "Drafting & pack cohesion",
+Per `race_engine/DOMAIN.md`: update the spec's "Drafting & pack cohesion",
 "Energy" and constants sections alongside the code, and refresh
 `ENGINE_FINDINGS.md` with the new per-course table before asking for review.

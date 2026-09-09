@@ -523,11 +523,11 @@ derives narrative purely from these snapshots.
 
 The engine, its module layout, and this spec are under active development.
 
-- **Keep AGENTS.md current**: after any change to the engine's data model,
-  formulas, constants, tick logic, or output format, update this document
+- **Keep this file current**: after any change to the engine's data model,
+  formulas, constants, tick logic, or output format, update `DOMAIN.md`
   to match before committing.
-- **Review ask**: before committing, re-read AGENTS.md; if the pending changes
-  alter anything described here, apply the needed edits to AGENTS.md, then ask
+- **Review ask**: before committing, re-read `DOMAIN.md`; if the pending changes
+  alter anything described here, apply the needed edits to it, then ask
   the user to review the diff and explicitly approve before committing. Do not
   commit until the user confirms.
 - **Scope of commits**: commit only intentional work (exclude stray/unrelated
