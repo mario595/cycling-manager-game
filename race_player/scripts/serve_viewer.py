@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from datetime import datetime, timezone
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -28,7 +29,15 @@ class RaceHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         if self.path.split("?", 1)[0] == "/api/races":
-            files = sorted(p.name for p in DIST.glob("*.jsonl"))
+            files = [
+                {
+                    "name": p.name,
+                    "mtime": datetime.fromtimestamp(
+                        p.stat().st_mtime, tz=timezone.utc
+                    ).isoformat(),
+                }
+                for p in sorted(DIST.glob("*.jsonl"))
+            ]
             body = json.dumps({"files": files}).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")

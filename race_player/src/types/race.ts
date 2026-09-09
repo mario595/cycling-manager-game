@@ -42,3 +42,8 @@ export interface ParsedRace {
   courseLength: number
   maxTicks: number
 }
+
+export interface RaceFile {
+  name: string
+  mtime: string
+}

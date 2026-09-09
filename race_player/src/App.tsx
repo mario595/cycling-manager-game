@@ -5,12 +5,18 @@ import type { ParsedRace } from './types/race'
 import { parseRaceLog } from './utils/parseRaceLog'
 
 export default function App() {
-  const [selectedFile, setSelectedFile] = useState<string>('race.jsonl')
+  const [selectedFile, setSelectedFile] = useState<string | null>(null)
   const [raceData, setRaceData] = useState<ParsedRace | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
+    if (!selectedFile) {
+      setRaceData(null)
+      setError(null)
+      setLoading(false)
+      return
+    }
     let cancelled = false
     setLoading(true)
     setError(null)
@@ -53,6 +59,12 @@ export default function App() {
               <br />
               <span className="text-slate-400 text-sm">{error}</span>
             </p>
+          </div>
+        )}
+
+        {!loading && !error && !selectedFile && (
+          <div className="min-h-screen flex items-center justify-center text-slate-400">
+            Select a race to play
           </div>
         )}
 

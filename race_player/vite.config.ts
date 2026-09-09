@@ -1,5 +1,5 @@
-import { readdirSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { readdirSync, statSync } from 'node:fs'
+import { resolve, join } from 'node:path'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { defineConfig, type Plugin } from 'vite'
@@ -12,11 +12,15 @@ function raceListing(): Plugin {
     configureServer(server) {
       server.middlewares.use('/api/races', (_req, res) => {
         const dir = resolve(process.cwd(), 'public')
-        let files: string[] = []
+        let files: { name: string; mtime: string }[] = []
         try {
           files = readdirSync(dir)
             .filter((f) => f.endsWith('.jsonl'))
             .sort()
+            .map((name) => ({
+              name,
+              mtime: statSync(join(dir, name)).mtime.toISOString(),
+            }))
         } catch {
           // public dir missing -> empty list
         }

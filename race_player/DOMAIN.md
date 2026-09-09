@@ -65,7 +65,7 @@ Since absolute altitude is not stored in the engine logs, it must be derived fro
 
 ### 4. File Explorer (Sidebar)
 - **Location:** `FileExplorer.tsx` — standalone dev tool, decoupled from player logic.
-- **Endpoint:** `GET /api/races` returns `{ files: ["race.jsonl", ...] }` listing all `.jsonl` in `public/`.
+- **Endpoint:** `GET /api/races` returns `{ files: [{ name, mtime }, ...] }` listing all `.jsonl` in `public/`, `mtime` as an ISO timestamp; the sidebar shows each file's last-modified date/time below its name.
   - Dev: Vite plugin in `vite.config.ts` (middleware, not built into the app).
   - Prod: custom `RaceHandler` in `serve_viewer.py` + copies all `.jsonl` into `dist/`.
 - **Refresh button:** Re-fetches the file list without page reload.
