@@ -74,16 +74,22 @@ def test_close_gap_grants_more_shelter_than_distant_gap():
     depending on physical gap to the wheel ahead — the actual mechanic fix,
     not just the display flags. Compare stamina drain (a function of the
     sustainable/shelter-credited reference) between a tight and a loose
-    chain of the same length."""
+    chain of the same length, over many ticks so the (per-tick tiny) effect
+    isn't swamped by speed jitter, with a fixed seed for determinism."""
+    import random
+
+    random.seed(1)
     tight = _make_state(3, [100_000.0, 99_997.0, 99_994.0])  # 3m gaps
+    random.seed(1)
     loose = _make_state(3, [100_000.0, 99_970.0, 99_940.0])  # 30m gaps
-    tight.tick()
-    loose.tick()
+    for _ in range(100):
+        tight.tick()
+        loose.tick()
 
     tight_last, loose_last = tight.rider_states[2], loose.rider_states[2]
     # Both start at stamina 100; less shelter -> more drain -> lower stamina
-    # after one tick for the loosely-spaced rider at the same ordinal depth.
-    assert loose_last.stamina <= tight_last.stamina
+    # for the loosely-spaced rider at the same ordinal depth.
+    assert loose_last.stamina < tight_last.stamina
 
 
 def test_gap_factor_shape_via_effective_speed():
