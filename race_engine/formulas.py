@@ -2,17 +2,25 @@ from __future__ import annotations
 
 from race_engine.models import RiderAttributes, Terrain
 
-# Speed ranges (m/s) per terrain, mapped from attribute 1-100
-# Flat:  8-16 m/s (29-58 km/h)
-# Uphill: 2-11 m/s (7-40 km/h)
-# Downhill: 12-25 m/s (43-90 km/h)
-
-FLAT_MIN_SPEED = 8.0
-FLAT_MAX_SPEED = 16.0
-UPHILL_MIN_SPEED = 4.0
-UPHILL_MAX_SPEED = 14.0
-DOWNHILL_MIN_SPEED = 12.0
-DOWNHILL_MAX_SPEED = 25.0
+# Terrain speed is a per-rider power balance rather than three disjoint
+# lookup tables: K_aero*v**3 + (K_roll + K_grav*s)*v = 1, where s is gradient
+# as a fraction. `flat` decides K_aero/K_roll (power-to-drag), `climb` decides
+# K_grav (power-to-weight) via a second anchor at CLIMB_REF_GRADIENT, and the
+# blend between them falls out of the equation rather than being a tuning
+# curve — see `compute_base_speed` and DOMAIN.md's "Terrain speed" section.
+#
+# Solo speeds at the two calibration anchors, mapped from attribute 1-100:
+# flat (gradient 0): 12.0-14.2 m/s (43.2-51.1 km/h)
+# climb (gradient 8%): 3.5-6.1 m/s (12.6-22.0 km/h)
+# downhill handling cap: 17.0-21.0 m/s (61-76 km/h)
+FLAT_MIN_SPEED = 12.0
+FLAT_MAX_SPEED = 14.2
+CLIMB_MIN_SPEED = 3.5
+CLIMB_MAX_SPEED = 6.1
+DOWNHILL_MIN_SPEED = 17.0
+DOWNHILL_MAX_SPEED = 21.0
+AERO_SHARE = 0.85  # fraction of flat resistance that is aero drag (vs. rolling)
+CLIMB_REF_GRADIENT = 0.08  # gradient (fraction) the climb anchor is calibrated at
 
 # Drafting
 DRAFT_DISTANCE = 3.0  # meters behind a leader to benefit
@@ -31,6 +39,17 @@ DRAFT_DEPTH_SATURATION = 10.0  # wheels back at which shelter saturates
 # (depth 0) holds 1.0x their solo cruise and may be dropped.
 DRAFT_HOLD_MAX = 1.30  # best-possible hold multiplier while fully sheltered
 DRAFT_HOLD_MIN = 1.0  # exposed / no shelter
+
+# Rotation-averaged shelter — for the pack-cohesion drop test and the fatigue
+# reference ONLY (not the `pulling` display flag, which is exactly "at the
+# front of a pack this tick" and needs no averaging). Real bunches
+# rotate, so nobody rides a whole race at their instantaneous depth; using raw
+# instantaneous depth charges whoever is a half-wheel ahead this tick as fully
+# exposed and lets a jitter tick shed them. ROTATION_SHARE floors effective
+# depth at this fraction of (pack_size - 1), i.e. every rider is credited with
+# at least "sometimes near the front, sometimes not" shelter rather than only
+# their current position.
+ROTATION_SHARE = 0.5
 
 # Speed variability — small per-tick jitter (m/s peak) breaks perfect ties so
 # groups form a realistic echelon (front rider pulls, rest draft).
@@ -51,8 +70,15 @@ PACK_COHESION_DISTANCE = 60.0  # meters within which riders cohere into a pack
 PACK_TEMPO_EASY = 0.75  # early + flat + nobody up the road — rolling tempo
 PACK_TEMPO_STEADY = 0.82  # transition phase, or early on climbing terrain
 PACK_TEMPO_HARD = 0.90  # finale, or chasing a rider who is clear
+# A rotating, drafting bunch shares the wind and so is faster than any solo
+# rider on the flat — real breaks get caught for exactly this reason. Above
+# DRAFT_UPHILL_LIMIT there's no wind to share, so the chase falls back to
+# PACK_TEMPO_HARD. Depends on rotation-averaged shelter (see ROTATION_SHARE)
+# so the pack doesn't shed riders one at a time from the front while chasing
+# above 1.0x the pace-setter reference.
+PACK_TEMPO_CHASE = 1.08
 # How far ahead of a pack's front rider someone must be to count as "clear up
-# the road", which makes the pack chase at PACK_TEMPO_HARD.
+# the road", which makes the pack chase at PACK_TEMPO_HARD/PACK_TEMPO_CHASE.
 BREAK_CLEAR_DISTANCE = 60.0
 
 # Terrain classification — gradients are bucketed for the tactics engine.
@@ -68,22 +94,29 @@ TRANSITION_PHASE_THRESHOLD = 0.10  # 10–25% remaining → transition
 # Surge / attack / sprint reflexes — discrete energy-burst efforts.
 SURGE_DURATION = 20  # ticks a single (non-sprint) effort lasts (~20s)
 SURGE_COOLDOWN = 60  # ticks before a rider may surge again (~1min)
-SURGE_SPEED_BOOST = 0.25  # fraction above cruise while surging
+SURGE_SPEED_BOOST = 0.25  # fraction above cruise while surging (attack/chase)
 SURGE_ENERGY_COST = 0.05  # extra anaerobic energy burned per surge tick
 SURGE_MIN_ENERGY = 30.0  # minimum energy to consider starting a surge
 SPRINT_DISTANCE = 1000.0  # meters from the finish that triggers the final kick
 SPRINT_DURATION = 40  # ticks a finish-sprint kick lasts (~40s), longer than a normal surge
-SPRINT_MIN_SPRINT = 70.0  # sprint attribute needed to launch a finish sprint
 SPRINT_MIN_ENERGY = 35.0  # minimum energy to launch a finish sprint (costs more)
+# Finish-sprint boost scales with `sprint` rather than gating eligibility at a
+# threshold — everyone kicks in the last km, a weak sprinter's kick is just
+# worth less. Replaces the old flat SURGE_SPEED_BOOST for sprints specifically.
+SPRINT_BOOST_MIN = 0.05  # kick size for the weakest possible sprint attribute
+SPRINT_BOOST_MAX = 0.35  # kick size for the strongest possible sprint attribute
 
 # Attack reflex — phase-gated, terrain-gated (steep terrain = the STEEP bucket).
 ATTACK_MIN_CLIMB = 75.0  # climb attribute needed to consider attacking
-ATTACK_PHASE_THRESHOLD = 0.25  # only attack in transition + finale (< 25% remaining)
+ATTACK_PHASE_THRESHOLD = 0.25  # only attack/bridge in transition + finale (< 25% remaining)
 
-# Chase reflex — wider gap threshold than before, phase-gated.
-CHASE_GAP_MAX = 30.0  # meters behind a leader to trigger a chase surge
-CHASE_DISTANCE_MAX = 0.15  # only chase in final 15% of race
-CHASE_MIN_ENERGY = 25.0  # minimum energy to initiate a chase
+# Bridge (chase) reflex — a rider joins a genuinely clear move, not any gap.
+# "Clear" reuses BREAK_CLEAR_DISTANCE (above), the same test pack tempo uses
+# to decide whether the bunch is chasing something real, so a strung-out pack
+# doesn't read as eleven simultaneous breakaways.
+BRIDGE_GAP_MAX = 150.0  # meters to a clear break still worth bridging to
+BRIDGE_MAX_DEPTH = 2  # only the front of a group considers bridging
+CHASE_MIN_ENERGY = 25.0  # minimum energy to initiate a bridge/chase
 CHASE_MIN_CLIMB_ADVANTAGE = -10.0  # don't chase on steep if leader is 10+ climb points stronger
 
 
@@ -100,31 +133,91 @@ def add_speed_jitter(speed: float) -> float:
     return max(1.0, speed + jitter)
 
 
+def _rider_resistance_coeffs(attributes: RiderAttributes) -> tuple[float, float, float]:
+    """Derive (K_aero, K_roll, K_grav) for a rider from two calibration anchors.
+
+    v_flat is the rider's solo speed on the flat (from `flat`); v_climb8 is
+    their solo speed at CLIMB_REF_GRADIENT (from `climb`). Aero drag is
+    AERO_SHARE of flat resistance, rolling resistance the rest; the gravity
+    coefficient is whatever makes the same equation solve to v_climb8 at the
+    reference gradient.
+    """
+    t_flat = (attributes.flat - 1) / 99.0
+    t_climb = (attributes.climb - 1) / 99.0
+    v_flat = _lerp(FLAT_MIN_SPEED, FLAT_MAX_SPEED, t_flat)
+    v_climb8 = _lerp(CLIMB_MIN_SPEED, CLIMB_MAX_SPEED, t_climb)
+
+    k_aero = AERO_SHARE / v_flat**3
+    k_roll = (1.0 - AERO_SHARE) / v_flat
+    k_grav = (1.0 - k_roll * v_climb8 - k_aero * v_climb8**3) / (
+        CLIMB_REF_GRADIENT * v_climb8
+    )
+    return k_aero, k_roll, k_grav
+
+
+def _solve_power_balance(k_aero: float, k_roll: float, k_grav: float, s: float) -> float:
+    """Solve K_aero*v**3 + (K_roll + K_grav*s)*v = 1 for v by bisection.
+
+    Monotone increasing in v whenever K_roll + K_grav*s > 0 (true for every
+    gradient a rider can face on these courses), so bisection converges
+    reliably without needing a closed-form cubic solution.
+    """
+    lo, hi = 0.1, 40.0
+    for _ in range(60):
+        mid = (lo + hi) / 2.0
+        value = k_aero * mid**3 + (k_roll + k_grav * s) * mid - 1.0
+        if value < 0:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2.0
+
+
+_RESISTANCE_COEFF_CACHE: dict[tuple[int, int], tuple[float, float, float]] = {}
+_POWER_BALANCE_CACHE: dict[tuple[int, int, float], float] = {}
+
+
+def _attributes_key(attributes: RiderAttributes) -> tuple[int, int]:
+    # Only flat/climb feed the coefficients; keying on those two (rather than
+    # id(attributes)) is both sufficient and safe against attribute objects
+    # being garbage-collected and their id() reused across separate races
+    # (e.g. the audit harness running many races in one process).
+    return (attributes.flat, attributes.climb)
+
+
 def compute_base_speed(attributes: RiderAttributes, gradient: float) -> float:
     """Base speed in m/s from rider attributes and terrain gradient.
 
-    Flat: flat attribute maps to [FLAT_MIN, FLAT_MAX] m/s.
-    Uphill: climb attribute maps to [UPHILL_MIN, UPHILL_MAX], reduced by gradient.
-    Downhill: sprint+flat blend maps to [DOWNHILL_MIN, DOWNHILL_MAX], boosted by gradient.
+    A single power-balance model (see the module docstring above) replaces
+    the old three disjoint speed tables: `flat` and `climb` become
+    power-to-drag and power-to-weight, and everything in between (including
+    the crossover right at gradient 0) falls out of the equation. Downhill
+    speed uses the same equation, then applies a handling cap (cornering and
+    braking, not power, limit a real descent).
+
+    Memoised per (flat, climb, gradient): gradients are per-segment
+    constants, so this is a few dozen solves per race.
     """
-    GRADIENT_PENALTY = 0.25  # speed loss per % gradient on uphills
-    DESCENT_BOOST = 0.3  # speed gain per % gradient on downhills
+    attrs_key = _attributes_key(attributes)
+    coeffs = _RESISTANCE_COEFF_CACHE.get(attrs_key)
+    if coeffs is None:
+        coeffs = _rider_resistance_coeffs(attributes)
+        _RESISTANCE_COEFF_CACHE[attrs_key] = coeffs
+    k_aero, k_roll, k_grav = coeffs
 
-    if gradient == 0:
-        t = (attributes.flat - 1) / 99.0
-        return _lerp(FLAT_MIN_SPEED, FLAT_MAX_SPEED, t)
+    s = gradient / 100.0
+    cache_key = (attrs_key[0], attrs_key[1], gradient)
+    v = _POWER_BALANCE_CACHE.get(cache_key)
+    if v is None:
+        v = _solve_power_balance(k_aero, k_roll, k_grav, s)
+        _POWER_BALANCE_CACHE[cache_key] = v
 
-    if gradient > 0:
-        t = (attributes.climb - 1) / 99.0
-        base = _lerp(UPHILL_MIN_SPEED, UPHILL_MAX_SPEED, t)
-        penalty = gradient * GRADIENT_PENALTY
-        return max(1.0, base - penalty)
+    if gradient >= 0:
+        return v
 
-    # gradient < 0
-    t = ((attributes.sprint + attributes.flat) / 2.0 - 1) / 99.0
-    base = _lerp(DOWNHILL_MIN_SPEED, DOWNHILL_MAX_SPEED, t)
-    boost = abs(gradient) * DESCENT_BOOST
-    return min(DOWNHILL_MAX_SPEED, base + boost)
+    t_blend = ((attributes.sprint + attributes.flat) / 2.0 - 1) / 99.0
+    cap = _lerp(DOWNHILL_MIN_SPEED, DOWNHILL_MAX_SPEED, t_blend)
+    return min(v, cap)
 
 
 def apply_stamina_cruise_modifier(base_speed: float, stamina: float) -> float:
@@ -169,14 +262,22 @@ def pace_setter_speed(member_speeds: list[float]) -> float:
 
 
 def pack_tempo_fraction(
-    remaining_fraction: float, terrain: Terrain, break_ahead: bool
+    remaining_fraction: float, terrain: Terrain, break_ahead: bool, gradient: float
 ) -> float:
     """Fraction of the pace-setter's cruise the pack chooses to ride at.
 
-    Full gas when it matters (finale, or chasing someone who is clear), a
-    steady tempo through the transition phase and on early climbing terrain,
-    and a rolling pace on an early flat road where nobody is pushing.
+    A rotating, drafting bunch shares the wind and so outruns any solo rider
+    on the flat — that is why flat breaks get caught — so a genuinely clear
+    break on draftable terrain pushes the chase above even the finale's
+    PACK_TEMPO_HARD. Above DRAFT_UPHILL_LIMIT there is no wind to share
+    (power-to-weight dominates, not drag), so the chase falls back to
+    PACK_TEMPO_HARD and a climber who goes clear on a real climb stays away.
+    Otherwise: full gas in the finale, a steady tempo through the transition
+    phase and on early climbing terrain, and a rolling pace on an early flat
+    road where nobody is pushing.
     """
+    if break_ahead and gradient <= DRAFT_UPHILL_LIMIT:
+        return PACK_TEMPO_CHASE
     if break_ahead or remaining_fraction < TRANSITION_PHASE_THRESHOLD:
         return PACK_TEMPO_HARD
     if remaining_fraction < EARLY_PHASE_THRESHOLD:
@@ -191,10 +292,11 @@ def compute_pack_tempo(
     remaining_fraction: float,
     terrain: Terrain,
     break_ahead: bool,
+    gradient: float,
 ) -> float:
     """The shared speed a coherent pack rolls at this tick."""
     return pace_setter_speed(member_speeds) * pack_tempo_fraction(
-        remaining_fraction, terrain, break_ahead
+        remaining_fraction, terrain, break_ahead, gradient
     )
 
 
@@ -203,6 +305,12 @@ def shelter_quality(positioning: int, depth: float) -> float:
 
     ``positioning`` is the rider's draft skill (1-100); ``depth`` is how many
     riders shelter ahead of them in the pack (0 = pulling/exposed, no save).
+    ``depth`` here is not necessarily the raw ordinal rank — the caller
+    (`RaceState.tick`) folds in rotation-averaging and gap-decay (physical
+    distance to the wheel ahead: real drafting benefit falls off sharply past
+    a few meters) before calling this, so a rider two wheels back on paper
+    but far off the wheel ahead is credited with much less than a full two
+    wheels of shelter.
     """
     skill = (positioning - 1) / 99.0
     depth_factor = min(float(depth), DRAFT_DEPTH_SATURATION) / DRAFT_DEPTH_SATURATION
@@ -213,13 +321,14 @@ def draft_hold_multiplier(positioning: int, depth: float, gradient: float) -> fl
     """How much faster than solo cruise a sheltered rider can hold the tempo.
 
     ``positioning`` is draft skill (1-100), ``depth`` how many riders shelter
-    ahead in the pack (0 = front/exposed, no save), ``gradient`` the climb %.
-    Reuses the same skill/depth quality blend as `shelter_quality` but maps it
-    to a **speed multiplier** a rider can sustain in the wheels instead of a
-    drain keep-fraction. Used by the pack-cohesion drop test so a weaker
-    rider who is sheltering behind a strong group (e.g. a climber in the bunch
-    on the flat) is not dropped just because their solo cruise is below the
-    group tempo.
+    ahead in the pack (0 = front/exposed, no save; see `shelter_quality`'s
+    docstring — this is gap-decayed and rotation-averaged, not raw ordinal
+    rank), ``gradient`` the climb %. Reuses the same skill/depth quality blend
+    as `shelter_quality` but maps it to a **speed multiplier** a rider can
+    sustain in the wheels instead of a drain keep-fraction. Used by the
+    pack-cohesion drop test so a weaker rider who is sheltering behind a
+    strong group (e.g. a climber in the bunch on the flat) is not dropped
+    just because their solo cruise is below the group tempo.
 
     The credit fades with gradient: drafting is hugely effective on flats (a
     sheltered rider holds far above their solo speed) but nearly useless on a
@@ -292,16 +401,30 @@ def compute_stamina_drain(
     High `resistance` (fatigue tolerance) slows the drain, climbs multiply it,
     and descents offer a small recovery. Stamina responds slowly and is the
     meter that decides whether a rider cracks in the finale.
+
+    Drain is scaled by ``speed / DRAIN_REFERENCE_SPEED``: fatigue is
+    fundamentally a cost of *distance covered* at a given relative effort, not
+    of wall-clock ticks. Without this, `compute_base_speed`'s resistance model
+    (see its docstring) — which correctly makes climbing roughly half as fast
+    as the old disjoint speed tables — would double a climb's tick count and
+    therefore double its stamina cost even at intensity 1.0 (a rider riding
+    exactly their own sustainable climbing pace, no overshoot at all), cracking
+    riders who are doing nothing wrong. DRAIN_REFERENCE_SPEED is the old
+    model's mid-flat speed, which the new model's mid-flat speed still matches
+    closely, so flat-terrain drain is essentially unchanged and only climbs
+    (where speed drops sharply) scale down.
     """
-    BASE = 0.012  # drain per tick at intensity 1.0 (riding at your limit)
+    BASE = 0.012  # drain per tick at intensity 1.0, reference speed, riding at your limit
     INTENSITY_EXPONENT = 3.0  # aerobic cost rises steeply with relative effort
     RESISTANCE_FACTOR = 0.6  # fatigue tolerance's protection
     GRADIENT_SCALE = 0.20  # extra load multiplier per % climb
     DESCENT_RECOVERY = 0.006
+    DRAIN_REFERENCE_SPEED = 13.4  # m/s — old mid-flat speed BASE was calibrated against
 
     intensity = speed / max(1.0, sustainable_speed)
     drain = BASE * (intensity ** INTENSITY_EXPONENT)
     drain *= 1.0 - (resistance / 100.0) * RESISTANCE_FACTOR
+    drain *= speed / DRAIN_REFERENCE_SPEED
 
     if gradient > 0:
         drain *= 1.0 + gradient * GRADIENT_SCALE

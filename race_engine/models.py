@@ -111,9 +111,9 @@ class RiderState:
     position: float = 0.0  # meters from start
     energy: float = 100.0  # 0-100
     stamina: float = 100.0  # 0-100
-    drafting: bool = False  # currently drafting behind another rider
-    pulling: bool = False  # currently pulling (has riders drafting behind)
+    pulling: bool = False  # currently setting the pace at the front of a pack
     surging: bool = False  # currently in an energy-burst effort
+    sprinting: bool = False  # current surge is a finish-sprint kick (sized by `sprint`)
     surge_ticks: int = 0  # remaining ticks of the current surge
     surge_cooldown: int = 0  # ticks before another surge may start
     finished: bool = False
@@ -167,8 +167,11 @@ class RaceState:
         from .formulas import (
             DRAFT_DISTANCE,
             DRAFT_UPHILL_LIMIT,
+            SPRINT_BOOST_MAX,
+            SPRINT_BOOST_MIN,
             SURGE_ENERGY_COST,
             SURGE_SPEED_BOOST,
+            _lerp,
             add_speed_jitter,
             apply_energy_burst_modifier,
             apply_stamina_cruise_modifier,
@@ -186,7 +189,7 @@ class RaceState:
             reverse=True,
         )
 
-        deltas = [None] * len(self.rider_states)  # (speed, energy_delta, stamina, drafting, pulling)
+        deltas = [None] * len(self.rider_states)  # (speed, energy_delta, stamina, pulling)
         gradients = [0.0] * len(self.rider_states)
         own_speeds = [0.0] * len(self.rider_states)
 
@@ -197,7 +200,7 @@ class RaceState:
             segment = self._find_segment(rs.position)
             if segment is None:
                 # Past the finish line.
-                deltas[i] = (0.0, 0.0, 0.0, False, False)
+                deltas[i] = (0.0, 0.0, 0.0, False)
                 continue
 
             gradients[i] = segment.gradient
@@ -225,6 +228,7 @@ class RaceState:
         from .formulas import (
             BREAK_CLEAR_DISTANCE,
             PACK_COHESION_DISTANCE,
+            ROTATION_SHARE,
             compute_pack_tempo,
             draft_hold_multiplier,
         )
@@ -276,7 +280,7 @@ class RaceState:
             packs.append(comp)
 
         effective_speeds = list(own_speeds)
-        drafting_flags = [False] * len(self.rider_states)
+        pulling_flags = [False] * len(self.rider_states)
         pack_depth = [0.0] * len(self.rider_states)
 
         # A pack of a single rider rides alone at their own cruise.
@@ -288,7 +292,8 @@ class RaceState:
             # riding a fixed fraction of its strongest rider's ceiling: it
             # rolls on an early flat road, and only goes full gas in the finale
             # or when someone is clear up the road and worth chasing.
-            pack_front = max(positions[m] for m in pack)
+            front_member = max(pack, key=lambda m: positions[m])
+            pack_front = positions[front_member]
             break_ahead = any(
                 not other.finished
                 and positions[o] - pack_front > BREAK_CLEAR_DISTANCE
@@ -299,6 +304,7 @@ class RaceState:
                 self.profile.remaining_fraction(pack_front),
                 self.profile.terrain_at(pack_front),
                 break_ahead,
+                gradients[front_member],
             )
             # Shelter is credited to both the tempo-hold test and the depth
             # bookkeeping, so a weaker rider sheltering deep in the group (e.g.
@@ -309,30 +315,71 @@ class RaceState:
             depth_of: dict[int, int] = {}
             for d, m in enumerate(by_pos):
                 depth_of[m] = d  # 0 = front/pulling, 1 = first wheel, ...
+            # Gap to the wheel immediately ahead in the chain, for depth 0
+            # (front) this is irrelevant — draft_hold_multiplier special-cases
+            # depth < 1 to no credit regardless.
+            gap_ahead: dict[int, float] = {}
+            for d, m in enumerate(by_pos):
+                gap_ahead[m] = (
+                    positions[by_pos[d - 1]] - positions[m] if d >= 1 else 0.0
+                )
+            # Real drafting benefit falls off sharply with physical distance —
+            # a rider two wheels back on paper but 13 m off the wheel ahead
+            # isn't meaningfully sheltered. gap_factor is 1.0 at DRAFT_DISTANCE
+            # and decays linearly to 0 by PACK_COHESION_DISTANCE (the edge of
+            # the pack itself).
+            gap_factor_of = {
+                m: max(
+                    0.0,
+                    min(
+                        1.0,
+                        1.0
+                        - max(0.0, gap_ahead[m] - DRAFT_DISTANCE)
+                        / (PACK_COHESION_DISTANCE - DRAFT_DISTANCE),
+                    ),
+                )
+                for m in pack
+            }
+            # The drop test and fatigue reference use rotation-averaged depth
+            # (real bunches rotate — nobody is on the front the whole race),
+            # scaled by the same gap_factor so the rotation floor still
+            # protects against one noisy tick's ordinal position without
+            # overriding a genuinely large, sustained physical gap — that
+            # combination is what keeps this from reintroducing the coin-flip
+            # drops rotation-averaging was built to remove.
+            rotation_floor = ROTATION_SHARE * (len(pack) - 1)
+            eff_depth_of = {
+                m: max(float(d) * gap_factor_of[m], rotation_floor * gap_factor_of[m])
+                for m, d in depth_of.items()
+            }
             coherent = [
                 m
                 for m in pack
                 if own_speeds[m]
                 * draft_hold_multiplier(
                     self.rider_states[m].rider.attributes.positioning,
-                    float(depth_of[m]),
+                    eff_depth_of[m],
                     gradients[m],
                 )
                 >= pace
             ]
             for m in coherent:
-                drafting_flags[m] = self._is_drafting(
-                    m, positions, sorted_idx, gradients[m]
-                )
+                # Pulling is exactly the rider setting the pace (depth 0) in
+                # a real multi-member pack — everyone else in the pack is
+                # sheltering to some degree (see gap_factor above), which
+                # doesn't compress into a meaningful boolean, so there is no
+                # separate "drafting" flag: assume the front rider is doing
+                # the work and everyone else is benefiting, unevenly.
+                if depth_of[m] == 0:
+                    pulling_flags[m] = True
                 effective_speeds[m] = pace
-                pack_depth[m] = float(depth_of[m])
+                pack_depth[m] = eff_depth_of[m]
 
         for i, rs in enumerate(self.rider_states):
             if rs.finished or deltas[i] is not None:
                 continue
 
-            drafting = drafting_flags[i]
-            pulling = self._is_pulling(i, positions, sorted_idx, gradients[i])
+            pulling = pulling_flags[i]
             # The speed this rider can hold for free in the position they are
             # actually riding: their own cruise when exposed or alone, more
             # when sheltered. Same reference the cohesion drop test uses, so
@@ -344,7 +391,15 @@ class RaceState:
 
             if rs.surge_ticks > 0:
                 # Active surge: ride boosted own speed, burn extra energy.
-                surge_speed = own_speeds[i] * (1.0 + SURGE_SPEED_BOOST)
+                # A finish-sprint kick is sized by the `sprint` attribute
+                # rather than the flat SURGE_SPEED_BOOST every other surge
+                # uses — see `_decide_actions` rule 1.
+                if rs.sprinting:
+                    t_sprint = (rs.rider.attributes.sprint - 1) / 99.0
+                    boost = _lerp(SPRINT_BOOST_MIN, SPRINT_BOOST_MAX, t_sprint)
+                else:
+                    boost = SURGE_SPEED_BOOST
+                surge_speed = own_speeds[i] * (1.0 + boost)
                 effective = add_speed_jitter(
                     apply_energy_burst_modifier(surge_speed, rs.energy)
                 )
@@ -369,7 +424,7 @@ class RaceState:
             if rs.surge_cooldown > 0:
                 rs.surge_cooldown -= 1
 
-            deltas[i] = (effective, energy_drain, stamina_drain, drafting, pulling)
+            deltas[i] = (effective, energy_drain, stamina_drain, pulling)
 
         # Phase 2: apply all deltas consistently.
         for i, rs in enumerate(self.rider_states):
@@ -380,11 +435,12 @@ class RaceState:
             if delta is None:
                 continue
 
-            speed, energy_drain, stamina_drain, drafting, pulling = delta
+            speed, energy_drain, stamina_drain, pulling = delta
             rs.speed = speed
-            rs.drafting = drafting
             rs.pulling = pulling
             rs.surging = rs.surge_ticks > 0
+            if not rs.surging:
+                rs.sprinting = False
 
             rs.position += speed  # 1 tick = 1 second
 
@@ -411,26 +467,30 @@ class RaceState:
         their own energy budget) before choosing to surge, so they only make
         efforts they can plausibly sustain — mimicking how a real pro manages
         their race. First matching rule wins:
-          1. Finish sprint — inside the final kilometer, strong sprinters kick.
+          1. Finish sprint — inside the final kilometer, everyone kicks; the
+             `sprint` attribute sizes the boost (see `sprinting` handling in
+             `tick`), it no longer gates eligibility.
           2. Climb attack — in the finale/transition, on a steep gradient.
-          3. Chase a leader — a clear, chasable break in the final stretch.
+          3. Bridge to a break — a genuinely clear move (not just "no wheel
+             within 3m"), only from the front of one's own group.
         Otherwise the rider rides the pack tempo.
         """
         from .formulas import (
             ATTACK_MIN_CLIMB,
             ATTACK_PHASE_THRESHOLD,
-            CHASE_DISTANCE_MAX,
-            CHASE_GAP_MAX,
-            CHASE_MIN_CLIMB_ADVANTAGE,
+            BREAK_CLEAR_DISTANCE,
+            BRIDGE_GAP_MAX,
+            BRIDGE_MAX_DEPTH,
             CHASE_MIN_ENERGY,
-            DRAFT_DISTANCE,
+            SPRINT_BOOST_MAX,
+            SPRINT_BOOST_MIN,
             SPRINT_DISTANCE,
             SPRINT_DURATION,
             SPRINT_MIN_ENERGY,
-            SPRINT_MIN_SPRINT,
             SURGE_COOLDOWN,
             SURGE_DURATION,
             SURGE_MIN_ENERGY,
+            _lerp,
         )
 
         profile = self.profile
@@ -445,16 +505,16 @@ class RaceState:
             remaining_frac = profile.remaining_fraction(pos)
 
             surge = False
+            sprinting = False
             duration = SURGE_DURATION
-            surge_min_energy = SURGE_MIN_ENERGY
 
-            # 1. Finish sprint — inside the last stretch, strong sprinters kick.
-            if (
-                pos >= self.course.total_distance - SPRINT_DISTANCE
-                and attrs.sprint >= SPRINT_MIN_SPRINT
-            ):
+            # 1. Finish sprint — inside the last stretch, everyone kicks; the
+            # `sprint` attribute sizes the boost (applied in `tick`), not
+            # whether the kick happens at all.
+            if pos >= self.course.total_distance - SPRINT_DISTANCE:
                 if rs.energy >= SPRINT_MIN_ENERGY:
                     surge = True
+                    sprinting = True
                     duration = SPRINT_DURATION
             # 2. Attack a climb — in the finale/transition, on a steep gradient,
             # only within a viable distance of the finish.
@@ -463,30 +523,34 @@ class RaceState:
                 and profile.terrain_at(pos) is Terrain.STEEP
                 and attrs.climb >= ATTACK_MIN_CLIMB
             ):
-                if rs.energy >= surge_min_energy:
+                if rs.energy >= SURGE_MIN_ENERGY:
                     surge = True
 
-            # 3. Chase a leader — close the draft to a clear break ahead, only
-            # in the final stretch and only if the leader isn't clearly stronger
-            # on the current terrain (chasing is wasted effort otherwise).
+            # 3. Bridge to a break — only riders at the front of their own
+            # group (depth <= BRIDGE_MAX_DEPTH) consider it, and only when
+            # someone is genuinely clear (break_ahead, the same test pack
+            # tempo uses — not just "no wheel within 3m", which every rider
+            # in a strung-out bunch satisfies every tick).
             else:
-                leader = self._drafting_leader(i, positions, sorted_idx, gradient)
-                front = self._front_position(positions)
-                if (
-                    leader is None
-                    and front > pos
-                    and remaining_frac < CHASE_DISTANCE_MAX
-                ):
-                    gap = front - pos
-                    if DRAFT_DISTANCE < gap <= CHASE_GAP_MAX:
-                        if rs.energy >= CHASE_MIN_ENERGY and self._can_chase(
-                            i, positions, sorted_idx, gradient
-                        ):
-                            surge = True
+                group_front, depth = self._group_front_and_depth(
+                    i, positions, sorted_idx, gradients
+                )
+                if depth <= BRIDGE_MAX_DEPTH:
+                    leader_pos = self._nearest_clear_leader(
+                        pos, group_front, positions
+                    )
+                    if leader_pos is not None:
+                        gap = leader_pos - pos
+                        if gap <= BRIDGE_GAP_MAX:
+                            if rs.energy >= CHASE_MIN_ENERGY and self._can_chase(
+                                i, positions, sorted_idx, gradient
+                            ):
+                                surge = True
 
             if surge:
                 rs.surge_ticks = duration
                 rs.surge_cooldown = SURGE_COOLDOWN
+                rs.sprinting = sprinting
 
     def _can_chase(
         self,
@@ -521,102 +585,69 @@ class RaceState:
         # lead we will accept (i.e. don't chase a leader clearly stronger).
         return (leader_climb - my_climb) <= -CHASE_MIN_CLIMB_ADVANTAGE
 
+    def _group_front_and_depth(
+        self,
+        idx: int,
+        positions: list[float],
+        sorted_idx: list[int],
+        gradients: list[float],
+    ) -> tuple[float, int]:
+        """The front-most position of `idx`'s own contiguous group, and depth.
+
+        Walks the chain of riders within PACK_COHESION_DISTANCE of each other
+        ahead of `idx` (same coherence distance the pack-cohesion BFS uses),
+        so a rider deep in a strung-out bunch sees their own group's front —
+        not the absolute race leader — as the reference for "is a break
+        ahead". Depth is how many riders are in that chain ahead of `idx`.
+        Finished riders and gradients above DRAFT_UPHILL_LIMIT break the
+        chain (no cohesion there), same as pack cohesion in `tick`.
+        """
+        from .formulas import DRAFT_UPHILL_LIMIT, PACK_COHESION_DISTANCE
+
+        pos = positions[idx]
+        if gradients[idx] > DRAFT_UPHILL_LIMIT:
+            return pos, 0
+
+        # sorted_idx is front-to-back; walk it back-to-front starting from
+        # idx's own position, so each step considers the nearest rider ahead
+        # of the chain built so far — this is the chain reachable from idx by
+        # PACK_COHESION_DISTANCE hops toward the front, not the whole field.
+        front = pos
+        depth = 0
+        cursor = pos
+        for other in reversed(sorted_idx):
+            if self.rider_states[other].finished:
+                continue
+            other_pos = positions[other]
+            if other_pos <= cursor:
+                continue
+            if other_pos - cursor <= PACK_COHESION_DISTANCE:
+                front = other_pos
+                cursor = other_pos
+                depth += 1
+            else:
+                break
+        return front, depth
+
     @staticmethod
-    def _front_position(positions: list[float]) -> float:
-        return max(positions) if positions else 0.0
+    def _nearest_clear_leader(
+        pos: float, group_front: float, positions: list[float]
+    ) -> float | None:
+        """Nearest rider genuinely clear of `idx`'s group (a real break).
 
-    def _drafting_leader(
-        self,
-        idx: int,
-        positions: list[float],
-        sorted_idx: list[int],
-        gradient: float,
-    ) -> int | None:
-        """Return the index of the nearest rider drafting ahead of `idx`.
-
-        Returns None when no rider is within DRAFT_DISTANCE ahead (or the rider
-        is not drafting due to the terrain).
+        "Clear" mirrors `break_ahead` in pack tempo: more than
+        BREAK_CLEAR_DISTANCE ahead of the group's front rider — not merely
+        outside DRAFT_DISTANCE, which every rider in a strung-out bunch
+        satisfies every tick. Returns the nearest such rider's position, or
+        None if nobody is clear.
         """
-        from .formulas import DRAFT_DISTANCE, DRAFT_UPHILL_LIMIT
+        from .formulas import BREAK_CLEAR_DISTANCE
 
-        pos = positions[idx]
-
-        if gradient > DRAFT_UPHILL_LIMIT:
+        threshold = group_front + BREAK_CLEAR_DISTANCE
+        clear_ahead = [p for p in positions if p > threshold]
+        if not clear_ahead:
             return None
-
-        # sorted_idx is front-to-back, so the first rider ahead within range
-        # is the nearest wheel in front. A finished rider provides no shelter.
-        for other in sorted_idx:
-            if other == idx:
-                continue
-            if self.rider_states[other].finished:
-                continue
-            diff = positions[other] - pos
-            if diff >= 0 and diff <= DRAFT_DISTANCE:
-                return other
-        return None
-
-    def _is_drafting(
-        self,
-        idx: int,
-        positions: list[float],
-        sorted_idx: list[int],
-        gradient: float,
-    ) -> bool:
-        """True if another rider is within DRAFT_DISTANCE ahead of this rider.
-
-        position (meters from start) is higher for the rider who is ahead,
-        i.e. the leader. sorted_idx is ordered by position descending.
-        """
-        from .formulas import DRAFT_DISTANCE, DRAFT_UPHILL_LIMIT
-
-        pos = positions[idx]
-
-        if gradient > DRAFT_UPHILL_LIMIT:
-            return False
-
-        for other in sorted_idx:
-            if other == idx:
-                continue
-            if self.rider_states[other].finished:
-                continue
-            diff = positions[other] - pos
-            if diff >= 0 and diff <= DRAFT_DISTANCE:
-                return True
-        return False
-
-    def _is_pulling(
-        self,
-        idx: int,
-        positions: list[float],
-        sorted_idx: list[int],
-        gradient: float,
-    ) -> bool:
-        """True if this rider is on the front of a group (pulling the bunch).
-
-        A rider pulls only when they are NOT drafting (no one ahead within
-        DRAFT_DISTANCE) and there is someone behind them within DRAFT_DISTANCE.
-        Riders in the middle of a group are drafting, not pulling.
-        """
-        from .formulas import DRAFT_DISTANCE, DRAFT_UPHILL_LIMIT
-
-        pos = positions[idx]
-
-        if gradient > DRAFT_UPHILL_LIMIT:
-            return False
-
-        # Not on the front if someone is drafting ahead of this rider.
-        if self._is_drafting(idx, positions, sorted_idx, gradient):
-            return False
-
-        # On the front only if someone is within draft distance behind.
-        for other in sorted_idx:
-            if other == idx:
-                continue
-            diff = pos - positions[other]
-            if diff > 0 and diff <= DRAFT_DISTANCE:
-                return True
-        return False
+        return min(clear_ahead)
 
     def is_finished(self) -> bool:
         return all(rs.finished for rs in self.rider_states)

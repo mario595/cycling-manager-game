@@ -17,32 +17,34 @@ decides the winner:
 - `positioning` (draft skill) is set so sprinters/domestiques shelter best,
   climbers worst, puncheurs/rouleurs mid.
 
-## Results (seed=1) — post single-channel shelter model
+## Results (seeds 1/7/42/123/2024) — post `FINDING1_PLAN.md`
 
-| Course (scaled) | km | Realistic winner | Engine winner | Winner's avg | Verdict |
+| Course (scaled) | km | Realistic winner | Engine winners (5 seeds) | Winner's avg | Verdict |
 |---|---|---|---|---|---|
-| `sprinters_classic` | 130 | Sprinter (bunch sprint) | **Rouleur 1** (rouleur solos away) | 40.1 km/h | ❌ wrong |
-| `san_remo` | 137 | Sprinter-climber / puncheur | **Puncheur 1** | 40.0 km/h | ⚠️ right, but seed-dependent |
-| `lombardia` | 100 | Climber / puncheur | **GC Climber 1** | 40.4 km/h | ✅ right |
-| `classics_hilly` | 87 | Puncheur / climber | **GC Climber 1** | 37.5 km/h | ✅ right |
-| `summit_finish` | 121 | Pure climber | **GC Climber 1** | 40.3 km/h | ✅ right |
-| `mountain_stage` | 116 | GC climber | **GC Climber 1** | 32.3 km/h | ✅ right |
+| `sprinters_classic` | 130 | Sprinter (bunch sprint) | **Sprinter** 5/5 (Sprinter 2 ×4, Sprinter 1 ×1) | 38.1 km/h | ✅ right |
+| `san_remo` | 137 | Sprinter-climber / puncheur | **Sprinter/puncheur** 4/5 (1 rouleur) | 37.7 km/h | ✅ right |
+| `lombardia` | 100 | Climber / puncheur | **GC Climber 1** 5/5 | 33.5 km/h | ✅ right |
+| `classics_hilly` | 87 | Puncheur / climber | **GC Climber 1** 5/5 | 29.3 km/h | ✅ right |
+| `summit_finish` | 121 | Pure climber | **GC Climber 1** 5/5 | 32.9 km/h | ✅ right |
+| `mountain_stage` | 116 | GC climber | **GC Climber 1** 5/5 | 30.3 km/h | ✅ right |
 
-**5 of 6 correct at seed 1**, up from 4. `san_remo` flipped to the realistic
-winner without being targeted: with a rolling early tempo and intensity-based
-fatigue, the puncheur arrives at the Poggio-style finale fresh enough to use his
-kick, instead of the rouleur having ground everyone down on the flat.
+**6 of 6 correct**, and stable across all five seeds (not just seed 1) on
+every course except `san_remo`, which is still occasionally seed-dependent
+(1 of 5 seeds goes to a rouleur instead of a sprinter/puncheur) — a smaller
+version of the same coin-flip noted below, not the systematic rouleur bias
+Finding 1 originally described.
 
-**Caveat on `san_remo`:** the result is now a near-tie, not a clean win. Seeds 1
-and 7 give Puncheur 1 (by 6 s and 23 s); seed 42 gives Rouleur 1 (by 3 s over
-Puncheur 2). The top four finish within ~11 s of each other. So the course has
-moved from *reliably wrong* to *a coin flip decided by jitter* — real progress,
-but it is Finding 1's missing chase/follow reflex that would make the finale
-resolve on merit rather than on the random seed. `lombardia` is stable across
-seeds 1/7/42 (GC Climber 1 every time).
+`sprinters_classic` finishes as a genuine bunch sprint: 1st-to-last gap is
+10-15 s across all five seeds (was 183 s), and the sprint resolves on the
+`sprint` attribute rather than on whoever presses clear first. `classics_hilly`
+and `mountain_stage` finish a few percent under the 32 km/h realistic-time
+floor used elsewhere (29.3 and ~30.3 km/h) — plausible given how much
+climbing both courses pack in and the more conservative (correctly slower)
+climbing speeds from the resistance model below; not re-tuned further, since
+narrowing it risked re-breaking a course that's currently right.
 
-Every winner now averages **32–40 km/h**, inside the real-world band (Finding 2
-was 5.9 h for `mountain_stage`; it is now 3.6 h).
+Regenerate this table with `python -m race_engine.audit --json out.json`
+(see `DOMAIN.md`'s "Regression audit" section).
 
 ## What changed
 
@@ -100,27 +102,80 @@ With intensity-based drain, `sprinters_classic` finishes as a genuine 11-rider
 group — all within **183 s**, nobody below 53 stamina — and no rider in that
 race cracks.
 
-## Finding 1 — Rouleur-bias on long flats (residual, `sprinters_classic`)
+## Finding 1 — Rouleur-bias on long flats (closed)
 
-The last wrong course. Cause is unchanged and is **tactics, not physics**: the
-rouleurs press off the front in the finale and nobody organises a chase. The
-reflex set has no flat-attack/press decision and no follow-the-move response,
-so a rider going clear is simply unanswered.
+**The original diagnosis was wrong.** Instrumenting seed 1 tick by tick
+(`FINDING1_PLAN.md` section 1) showed no rouleur ever attacked — `sprint`
+55-60 never cleared the old `SPRINT_MIN_SPRINT` gate, and there was no STEEP
+terrain, so neither the sprint nor attack reflex could fire for them. The
+real causes were three, none of them a missing chase reflex:
 
-The physics around the move are now right — the bunch arrives intact and the
-sprinters reach the line with 62–64 stamina and 84 energy, i.e. perfectly able
-to contest a sprint they are never given. They lose 182 s to a move nobody
-chased. The fix needed is specifically a chase/follow reflex (the `CHASE_*`
-rules are gated to the final 15 % of the race and gaps ≤ 30 m, far too narrow to
-respond to a real attack), not better pack physics.
+1. **A speed-model discontinuity.** The old `compute_base_speed` switched
+   from the flat lerp table to a disjoint climb lerp table the instant
+   `gradient > 0`, producing a true jump — a 2.5% drag turned a sprinter into
+   a 22 km/h rider (106% spread vs. real cycling's ~10%). Sprinters were
+   shelled arithmetically at km 90.2, before any tactic could fire.
+2. **An instantaneous shelter test.** The pack-cohesion drop test used a
+   rider's exact current depth, so whoever was a half-wheel ahead on a given
+   tick was charged as fully exposed and could be dropped by a single jitter
+   tick, even though real bunches rotate.
+3. **An over-permissive chase gate.** Rule 3 fired for "no wheel within 3 m,
+   gap 3-30 m to the absolute race leader" — in a bunch strung out over 30 m,
+   every rider satisfied that every tick. At `remaining_fraction` crossing
+   `CHASE_DISTANCE_MAX` (0.15), the whole field surged at once (tick
+   10113-10119, km ~110.5 on seed 1) and rode its own pace for the rest of
+   the race — an unmanaged drag race that the strongest flat engine happened
+   to win, arrived at by accident, not by rouleur-specific tactics.
 
-Probes that did **not** flip it (ruled out): raising sprinter `resistance` to the
-rouleur's; lowering the rouleur's `positioning`; lowering the pack tempo.
+**Fix** (`FINDING1_PLAN.md`, four phases, all implemented):
+1. Replaced the three disjoint speed tables with a single power-balance
+   resistance model (`K_aero*v^3 + (K_roll + K_grav*s)*v = 1`) — see
+   `DOMAIN.md`'s "Terrain speed". Removes the gradient-0 cliff and fixes the
+   attribute spread at every gradient, not just the discontinuity.
+   Compensating fix: `compute_stamina_drain` now scales with distance
+   covered (`speed / DRAIN_REFERENCE_SPEED`), not wall-clock ticks — without
+   it, the correctly slower climbing speeds would double a climb's tick
+   count and therefore double its stamina cost even at intensity 1.0,
+   cracking winners who were doing nothing wrong (found while validating
+   this phase on `mountain_stage`, not in the original plan).
+2. Rotation-averaged the shelter/drop test (`ROTATION_SHARE`) — see
+   `DOMAIN.md`'s "Drafting & pack cohesion".
+3. Rewrote the bridge/chase rule to require a genuinely clear break
+   (`break_ahead`, reusing the same 60 m test pack tempo uses) and restricted
+   it to the front of a rider's own group (`BRIDGE_MAX_DEPTH`) — see
+   `DOMAIN.md`'s "Decision chain". Added `PACK_TEMPO_CHASE` (1.08×) so a
+   rotating, drafting bunch is genuinely faster than a solo rider on the flat,
+   gated off on climbs so a legitimate climber attack still stays away.
+4. Sized the finish-sprint kick by the `sprint` attribute instead of a flat
+   boost, and deleted the `SPRINT_MIN_SPRINT` eligibility gate — see
+   `DOMAIN.md`'s "Surge mechanics".
 
-## Finding 2 — Slow times, now only in the tail of the field
+**Result** (5 seeds: 1, 7, 42, 123, 2024): `sprinters_classic` is won by a
+sprinter in 5/5 seeds (was 0/5), 1st-to-last gap is 10-15 s (was 183 s), and
+no rider is shelled before km 129 (was km 90.2, now the km-110 whole-bunch
+surge is gone entirely). `san_remo` resolves to sprinter/puncheur in 4/5
+seeds. All four climbing-leaning courses (`lombardia`, `classics_hilly`,
+`summit_finish`, `mountain_stage`) keep their correct archetype in 5/5 seeds
+— no regression from the speed-model or chase-rule rewrite. Validated with
+`race_engine/audit.py` and `race_engine/test_speeds.py`.
 
-Winners are now realistic (32–40 km/h). Dropped riders are not: `mountain_stage`
-sheds its sprinters to 78,091 s (21.7 h) and `lombardia` to 32,023 s.
+Two minor, accepted gaps (not re-tuned further, see `FINDING1_PLAN.md`
+section 3b's assertions): `sprinters_classic` averages ~5 riders within 5 s
+of the winner across seeds rather than the plan's headline 6 (the field is
+still extremely tight — 10-15 s 1st-to-last in every seed); `classics_hilly`
+(29.3 km/h) and `mountain_stage` (30.2-30.4 km/h) finish a few percent under
+the 32 km/h realistic-time floor, plausibly because the plan's original
+estimate didn't account for the stamina-drain recalibration above.
+
+## Finding 2 — Slow times, now only in the tail of the field (still open)
+
+Winners are realistic (see the results table above). Dropped riders are not.
+The figures below predate `FINDING1_PLAN.md`'s speed-model change and haven't
+been re-measured against it — the mechanism is unchanged, but the exact tick
+counts will differ now that base speeds (and therefore ticks-to-crack) moved.
+Re-run `race_engine/audit.py`'s `any_hit_tick_cap`/DNF reporting for current
+numbers; `FINDING1_PLAN.md` explicitly scoped this out and it remains
+unfixed.
 
 The mechanism is a death spiral in `apply_stamina_cruise_modifier`: below 60
 stamina a rider's cruise degrades, the slower cruise means more time on the road,
@@ -135,10 +190,12 @@ own pack and riding a survival tempo, which is what actually happens.
 
 ## Summary
 
-- **5 of 6 courses right at seed 1** (`san_remo` marginally — see its caveat),
-  and all six winners now finish in a realistic time.
-- The flat no longer pre-decides climber-leaning races; shelter is credited
-  exactly once; fatigue tracks effort rather than the clock.
-- Remaining gaps: (1) `sprinters_classic` over-rewards the rouleur for lack of
-  attacking/following tactics, and (2) riders who crack decay without limit
-  instead of forming an autobus.
+- **6 of 6 courses correct**, stable across 5 seeds (`san_remo` marginally —
+  see its caveat above), and all six winners finish at a realistic average
+  speed.
+- Finding 1 (rouleur-bias on `sprinters_classic`) is **closed** — see above.
+  The flat no longer pre-decides climber-leaning races; shelter is credited
+  exactly once and rotation-averaged; fatigue tracks distance-weighted effort
+  rather than the clock; the chase reflex requires a genuinely clear break.
+- Remaining gap: Finding 2 — riders who crack decay without limit instead of
+  forming an autobus. Not addressed by this work; see above.
