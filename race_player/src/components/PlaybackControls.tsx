@@ -75,8 +75,9 @@ export default function PlaybackControls({
           onChange={(v) => onSpeedChange(Number(String(v).replace('x', '')))}
         />
 
-        <div className="ml-auto text-sm text-slate-500 tabular-nums">
-          {formatDuration(tick)} / {formatDuration(maxTicks)}
+        <div className="ml-auto flex flex-col items-end text-sm text-slate-500 tabular-nums">
+          <span>{formatDuration(tick)} / {formatDuration(maxTicks)}</span>
+          <span className="text-xs text-slate-400">tick {tick} / {maxTicks}</span>
         </div>
       </div>
 
