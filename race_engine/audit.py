@@ -2,10 +2,9 @@
 
 Runs the bundled configs across a fixed set of seeds and reports the metrics
 that decide whether a course produces the expected archetype and a realistic
-finish, without a person re-running six configs by hand. See
-`race_engine/FINDING1_PLAN.md` for the metrics this was built to track and
-`DOMAIN.md`'s "Known discrepancies" section for how it's used to validate
-engine changes.
+finish, without a person re-running six configs by hand. See DOMAIN.md's
+"Regression audit" and "Realism status" sections for how this is used to
+validate engine changes.
 
 Usage:
     python -m race_engine.audit

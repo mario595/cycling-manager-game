@@ -220,16 +220,33 @@ moderate terrain. Cannot win from a breakaway but rarely gets dropped.
 |---|---|---|---|---|
 | 52–55 | 45–48 | 68–70 | 74–76 | 80–82 |
 
-### Known discrepancies (`ENGINE_FINDINGS.md`)
-`ENGINE_FINDINGS.md` documents, per course, the real-world expected winner vs.
-what the engine actually produces (seeded runs) and the mechanism behind each
-discrepancy. Climber-leaning courses match reality; `sprinters_classic` and
-`san_remo` now resolve as genuine bunch sprints — see `FINDING1_PLAN.md` for
-the full diagnosis and fix (a speed-model discontinuity, an instantaneous
-shelter test, and an over-permissive chase rule; not the tactics gap
-originally suspected) and `race_engine/audit.py` for the regression harness
-that validates it. Finding 2 (unbounded decay of dropped riders) remains
-open. Update this file when the engine's behavior changes.
+### Realism status
+
+Verified with `race_engine/audit.py` (5 seeds) against the real-world
+expected winner per course:
+
+| Course (scaled) | Realistic winner | Engine winner |
+|---|---|---|
+| `sprinters_classic` | Sprinter (bunch sprint) | Sprinter, 5/5 seeds |
+| `san_remo` | Sprinter-climber / puncheur | Sprinter/puncheur, 4/5 seeds |
+| `lombardia` | Climber / puncheur | GC Climber, 5/5 seeds |
+| `classics_hilly` | Puncheur / climber | GC Climber, 5/5 seeds |
+| `summit_finish` | Pure climber | GC Climber, 5/5 seeds |
+| `mountain_stage` | GC climber | GC Climber, 5/5 seeds |
+
+**Known limitation — dropped riders decay without limit.** A rider who
+cracks and falls off the back of every pack has no way back to equilibrium:
+isolated, their `sustainable` reference is their own cruise, so
+`compute_stamina_drain`'s intensity is pinned at ~1.0 regardless of how slow
+they go, and `apply_stamina_cruise_modifier`'s progressive-cracking curve
+compounds — stamina keeps falling, cruise keeps degrading, with nothing to
+break the loop. In practice this mostly shows up in the tail of the field on
+harder courses, not in who wins. Not yet fixed; candidate approaches are a
+recovery term for riding below one's own cruise, a stamina floor, or an
+"autobus" (dropped riders forming their own shelter-sharing group), possibly
+paired with a time-cut/broom-wagon DNF rule.
+
+Update this section (and re-run the audit) when engine behavior changes.
 
 ## Simulation tick (`RaceState.tick`)
 
@@ -610,7 +627,7 @@ terrain/phase/strength gate below.
    a strung-out bunch satisfied every tick — the gate wasn't "a break is
    clear", it was "I am not glued to a wheel", so a normally-spaced peloton
    read as eleven simultaneous breakaways the moment `remaining_fraction`
-   crossed its old threshold. See `FINDING1_PLAN.md` section 1b.
+   crossed its old threshold.
 
 ### Cooldown
 On starting a surge a rider sets `surge_ticks = SURGE_DURATION` (or
@@ -624,9 +641,10 @@ after the cooldown elapses).
 > through the early and middle race, and the decisive moves come on the late
 > steep climbs. Long flat courses used to be unaffected by the attack gate
 > (no STEEP terrain) and were decided by an unmanaged drag race once the old
-> chase rule's loose gap window fired for the whole bunch at once (the
-> "rouleur bias", see `ENGINE_FINDINGS.md`'s Finding 1 and `FINDING1_PLAN.md`).
-> The bridge rewrite above, together with the resistance-model speed fix
+> chase rule's loose gap window fired for the whole bunch at once (a
+> "rouleur bias" — the strongest flat engine won a drag race nobody
+> organized, not because rouleurs were tactically favored). The bridge
+> rewrite above, together with the resistance-model speed fix
 > (Terrain speed) and rotation-averaged shelter (Drafting & pack cohesion),
 > closed it: `sprinters_classic` now resolves as a genuine bunch sprint.
 

@@ -1,8 +1,7 @@
 """Tests for the resistance-model terrain speed and the chase/bridge reflex.
 
 The audit harness (`race_engine/audit.py`) answers "did the race come out
-right"; these answer "is the model right" and fail fast. See
-`FINDING1_PLAN.md` section 3c for the source of the assertions below.
+right"; these answer "is the model right" and fail fast.
 """
 
 from __future__ import annotations
@@ -13,8 +12,7 @@ from race_engine.formulas import (
 )
 from race_engine.models import Course, RaceState, Rider, RiderAttributes, Segment
 
-# Shared roster used throughout DOMAIN.md / ENGINE_FINDINGS.md, one rider per
-# archetype (attribute values from ENGINE_FINDINGS.md's shared roster).
+# Shared roster used throughout DOMAIN.md, one rider per archetype.
 GC1 = RiderAttributes(climb=94, sprint=30, flat=40, resistance=80, positioning=52)
 PU1 = RiderAttributes(climb=76, sprint=85, flat=60, resistance=68, positioning=72)
 RU1 = RiderAttributes(climb=60, sprint=60, flat=80, resistance=86, positioning=62)
@@ -24,11 +22,11 @@ ARCHETYPES = {"gc1": GC1, "pu1": PU1, "ru1": RU1, "sp1": SP1}
 
 
 # -- Continuity -----------------------------------------------------------
-# The bug this guards against (FINDING1_PLAN.md sec 1a): the old model
-# switched from a flat lerp table to a disjoint climb lerp table the instant
-# gradient > 0, producing a true jump discontinuity (a 106% speed swing on a
-# 2.5% drag). The new resistance model has no branch at gradient 0, so a tiny
-# gradient step should only ever produce a proportionally tiny speed change.
+# The bug this guards against: an earlier model switched from a flat lerp
+# table to a disjoint climb lerp table the instant gradient > 0, producing a
+# true jump discontinuity (a 106% speed swing on a 2.5% drag). The resistance
+# model has no branch at gradient 0, so a tiny gradient step should only ever
+# produce a proportionally tiny speed change.
 # 0.15 m/s is generous around a 0.05% gradient step given the steepest slope
 # in the roster (sp1, ~1.9 m/s per gradient %) — small next to the old
 # model's multi-m/s jump, but not so tight it flags the model's real slope.
