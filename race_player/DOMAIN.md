@@ -56,6 +56,7 @@ Since absolute altitude is not stored in the engine logs, it must be derived fro
 - **Keyboard:** `←` steps back, `→` steps forward, `Space` toggles play/pause.
 - **Speed Selector:** Options for x1, x2, x5, x10, x25, x50 playback speeds.
 - **Seek Slider:** Native `<input type="range">` (not antd `Slider`, see known issue below) spanning `0..maxTicks`; scrubs to any tick regardless of play state.
+- **Elapsed/Total Display:** Ticks (1 tick = 1s) formatted as `Hh Mm Ss / Hh Mm Ss` (hours/minutes omitted when zero).
 - **Logic:** `useEffect` with `setInterval` advances ticks based on selected speed.
 
 ### 3. Rider Leaderboard (Packs)

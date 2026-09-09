@@ -15,6 +15,16 @@ const SPEEDS = [
   { label: 'x50', value: 50 },
 ]
 
+// 1 tick = 1 second of race time.
+function formatDuration(ticks: number): string {
+  const hours = Math.floor(ticks / 3600)
+  const minutes = Math.floor((ticks % 3600) / 60)
+  const seconds = ticks % 60
+  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`
+  if (minutes > 0) return `${minutes}m ${seconds}s`
+  return `${seconds}s`
+}
+
 interface PlaybackControlsProps {
   playing: boolean
   onTogglePlay: () => void
@@ -65,8 +75,8 @@ export default function PlaybackControls({
           onChange={(v) => onSpeedChange(Number(String(v).replace('x', '')))}
         />
 
-        <div className="ml-auto text-sm text-slate-500">
-          tick {tick} / {maxTicks}
+        <div className="ml-auto text-sm text-slate-500 tabular-nums">
+          {formatDuration(tick)} / {formatDuration(maxTicks)}
         </div>
       </div>
 
