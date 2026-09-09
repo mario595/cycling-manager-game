@@ -59,9 +59,10 @@ Since absolute altitude is not stored in the engine logs, it must be derived fro
 - **Logic:** `useEffect` with `setInterval` advances ticks based on selected speed.
 
 ### 3. Rider Leaderboard (Packs)
-- **Pack Grouping:** Riders are grouped into packs mirroring the race engine's cohesion algorithm: BFS connected components over riders within `PACK_COHESION_DISTANCE (60m)` on draft-allowed terrain (gradient ≤ 5%). A single rider is its own pack.
-- **Gap Dividers:** Time gap displayed between adjacent packs (front-to-rear distance / trailing pack speed).
-- **Columns:** Rank, Name, Meters, Speed, Energy/Stamina bars.
+- **Pack Grouping:** Riders are grouped into packs mirroring the race engine's cohesion algorithm: BFS connected components over riders within `PACK_COHESION_DISTANCE (60m)` on draft-allowed terrain (gradient ≤ 5%). A single rider is its own pack. Finished riders are included (frozen at their finish `pos`), so they naturally separate into their own pack as the field behind them keeps moving.
+- **Gap Dividers:** Time gap displayed between adjacent packs (front-to-rear distance / trailing pack speed), formatted as `+Xm Ys (Zm)` — minutes/seconds with the raw meter gap in parentheses.
+- **Columns:** Rank, Name, Km, Speed, Energy/Stamina bars.
+- **Finished Riders:** Stay in the list (not removed) with a ✅ prefix on their name; speed cell shows `✓` instead of km/h.
 - **Leader Highlight:** Visual distinction for the current race leader (highest `pos`).
 
 ### 4. File Explorer (Sidebar)

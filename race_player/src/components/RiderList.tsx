@@ -64,11 +64,12 @@ function RiderRow({ rider, rank, onSelect }: { rider: Rider; rank: number; onSel
         {rank < 3 ? MEDALS[rank] : rank + 1}
       </td>
       <td className="px-3 py-2 font-medium text-slate-800">
+        {rider.finished && '✅ '}
         {rider.name}
         <RiderStateIcons rider={rider} />
       </td>
       <td className="px-3 py-2 text-right tabular-nums text-slate-600">
-        {Math.round(rider.pos).toLocaleString()}
+        {(rider.pos / 1000).toFixed(2)} km
       </td>
       <td className="px-3 py-2 text-right tabular-nums text-slate-600">
         {rider.finished ? '✓' : `${(rider.speed * 3.6).toFixed(0)} km/h`}
@@ -81,6 +82,13 @@ function RiderRow({ rider, rank, onSelect }: { rider: Rider; rank: number; onSel
       </td>
     </tr>
   )
+}
+
+function formatGapTime(gapSeconds: number): string {
+  const total = Math.round(gapSeconds)
+  const minutes = Math.floor(total / 60)
+  const seconds = total % 60
+  return minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`
 }
 
 export default function RiderList({ packs, onSelectRider }: RiderListProps) {
@@ -96,7 +104,7 @@ export default function RiderList({ packs, onSelectRider }: RiderListProps) {
       const prevBack = prev.riders[prev.riders.length - 1].pos
       const gapM = Math.max(0, prevBack - cur.frontPos)
       const gapT = cur.speed > 0 ? gapM / cur.speed : 0
-      list.push(gapT >= 1 ? `+${Math.round(gapT)}s` : `+${gapM.toFixed(0)}m`)
+      list.push(`+${formatGapTime(gapT)} (${gapM.toFixed(0)}m)`)
     }
     return list
   }, [packs])
@@ -110,7 +118,7 @@ export default function RiderList({ packs, onSelectRider }: RiderListProps) {
           <tr className="bg-slate-50 text-left text-xs text-slate-500 border-b border-slate-200">
             <th className="px-3 py-2">#</th>
             <th className="px-3 py-2">Rider</th>
-            <th className="px-3 py-2 text-right">Meters</th>
+            <th className="px-3 py-2 text-right">Km</th>
             <th className="px-3 py-2 text-right">Speed</th>
             <th className="px-3 py-2">Stamina</th>
             <th className="px-3 py-2">Energy</th>

@@ -36,11 +36,8 @@ export function computePacks(riders: Rider[], profile: ProfilePoint[]): Pack[] {
 
   const sorted = [...riders].sort((a, b) => b.pos - a.pos)
 
-  const active = sorted.filter(
-    (r) => !r.finished,
-  )
-  const idxOf = new Map(active.map((r, i) => [i, r]))
-  const n = active.length
+  const idxOf = new Map(sorted.map((r, i) => [i, r]))
+  const n = sorted.length
 
   const adj: number[][] = Array.from({ length: n }, () => [])
   for (let i = 0; i < n; i++) {
