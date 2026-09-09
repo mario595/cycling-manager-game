@@ -60,8 +60,11 @@ The engine separates two forms of effort:
 
 ### Per-rider runtime state (`RiderState`)
 - `speed` (m/s), `position` (m), `energy` (0–100), `stamina` (0–100).
-- `drafting` (bool) — sheltered behind another rider this tick.
-- `pulling` (bool) — on the front of a group, being drafted.
+- `pulling` (bool) — setting the pace at the front of a multi-member pack
+  this tick. There is no separate "drafting" flag — shelter degree varies
+  continuously across a pack (see Gap-decayed depth) and doesn't compress
+  into a meaningful boolean, so every non-pulling pack member is simply
+  assumed to be benefiting, unevenly.
 - `surging` (bool), `surge_ticks` (int), `surge_cooldown` (int) — surge bookkeeping
   (see Surge reflexes).
 - `finished` (bool), `finish_time` (seconds or None).
@@ -125,6 +128,33 @@ character (climb ratios, late steep sections) is preserved.
 
 `_roster.json` is a reference copy of the shared roster (not loaded by the
 engine; the roster is embedded in each config).
+
+### Regression audit (`race_engine/audit.py`)
+
+The way engine changes are validated: runs every bundled config across a
+fixed seed set (`1, 7, 42, 123, 2024` by default) and reports, per run, the
+winner and archetype, winner time/avg km/h, 1st-2nd and 1st-last gaps, riders
+within 5s/30s/60s of the winner, riders finishing at stamina 0, the first
+tick+position any rider falls more than 100 m off the front, and per-rider
+surge-tick counts. Expected winning archetype per course lives in
+`EXPECTED_ARCHETYPE`, a dict literal inside the script — test data, not
+engine knowledge, so configs stay free of it.
+
+```
+python -m race_engine.audit [--configs a,b] [--seeds 1,7,42] [--jobs 4]
+                            [--json out.json] [--baseline base.json]
+                            [--tick-cap 3.0]
+```
+
+`--json` saves per-run results; `--baseline` loads a prior `--json` output
+and prints a before/after delta per course, so a change's effect is visible
+in one run. `--tick-cap` (default `3.0`, a multiplier on the winner's finish
+tick) stops a run once it's clearly not going to finish in reasonable time —
+a bounded guard against Finding 2's unbounded-decay watchdog turning one bad
+run into an unbounded one. Before changing engine formulas or reflexes, run
+the audit against the unmodified code and save the baseline; after each
+change, re-run with `--baseline` and check the delta only moved what the
+change was meant to move.
 
 ### Rider archetypes
 
@@ -193,12 +223,13 @@ moderate terrain. Cannot win from a breakaway but rarely gets dropped.
 ### Known discrepancies (`ENGINE_FINDINGS.md`)
 `ENGINE_FINDINGS.md` documents, per course, the real-world expected winner vs.
 what the engine actually produces (seeded runs) and the mechanism behind each
-discrepancy. Climber-leaning courses match reality; long flat courses
-(`sprinters_classic`, `san_remo`) still have a **rouleur bias**: the rouleur
-presses away from the pack and solos to the win while the sprinter keeps
-sheltering — the reflex set lacks a flat-attack/press and a follow-the-move
-response (a tactics concern, see the doc). Update this file when the engine's
-behavior changes.
+discrepancy. Climber-leaning courses match reality; `sprinters_classic` and
+`san_remo` now resolve as genuine bunch sprints — see `FINDING1_PLAN.md` for
+the full diagnosis and fix (a speed-model discontinuity, an instantaneous
+shelter test, and an over-permissive chase rule; not the tactics gap
+originally suspected) and `race_engine/audit.py` for the regression harness
+that validates it. Finding 2 (unbounded decay of dropped riders) remains
+open. Update this file when the engine's behavior changes.
 
 ## Simulation tick (`RaceState.tick`)
 
@@ -221,11 +252,11 @@ The tick runs in phases so all riders see a consistent snapshot.
    cruise (see Draft hold multiplier). A rider currently surging always rides
    their own pace. No cohesion above `DRAFT_UPHILL_LIMIT` gradient. Each
    coherent rider's pack **depth** (wheels back) is recorded to scale draft
-   savings. The `drafting` flag is set only for riders who have a wheel within
-   `DRAFT_DISTANCE` (3 m) directly ahead — pack membership alone does not imply
-   `drafting`.
+   savings, gap-decayed by physical distance to the wheel ahead (see
+   Gap-decayed depth). The `pulling` flag is set only for the pack's front
+   rider (depth 0) in a multi-member pack.
 5. **Compute deltas** (per rider): final effective speed, energy drain, stamina
-   drain, drafting/pulling flags — using the shared snapshot, not the mutated
+   drain, the `pulling` flag — using the shared snapshot, not the mutated
    state.
 6. **Apply deltas**: write speed/flags, move each rider by their speed
    (1 tick = 1 s), subtract drains (m meters clamped to `[0, 100]`), mark
@@ -233,14 +264,55 @@ The tick runs in phases so all riders see a consistent snapshot.
 
 ## Terrain speed (`compute_base_speed`)
 
-Attributes map to speeds via linear interpolation `_lerp(min, max, t)` where
-`t = (attr − 1) / 99`.
+A rider's speed on a gradient is the solution to a single power-balance
+equation rather than three disjoint lookup tables. For gradient `s` (as a
+fraction, e.g. `0.08` for 8%) and per-rider coefficients `K_aero`, `K_roll`,
+`K_grav`:
 
-- **Flat** (`gradient == 0`): `flat` → `[8.0, 16.0]` m/s.
-- **Uphill** (`gradient > 0`): `climb` → `[4.0, 14.0]` m/s, minus
-  `gradient × 0.25` (speed loss per % climb), floored at 1 m/s.
-- **Downhill** (`gradient < 0`): blend `(sprint + flat) / 2` → `[12.0, 25.0]`
-  m/s, plus `|gradient| × 0.30`, capped at 25 m/s.
+```
+K_aero * v**3 + (K_roll + K_grav * s) * v = 1
+```
+
+solved for `v` by bisection (`_solve_power_balance`; monotone increasing in
+`v` whenever `K_roll + K_grav*s > 0`, true for every gradient these courses
+use). `climb` and `flat` stop being two disjoint speed tables and become what
+they physically are: power-to-weight and power-to-drag. The blend between
+them is not a tuning curve — it falls out of the equation as the ratio of the
+gravity term to the aero term. A 1% false flat is mostly aero, so `flat`
+decides it; a 10% wall is nearly all gravity, so `climb` decides it;
+everything in between interpolates itself. This also removes the old model's
+cliff at gradient 0 (a rider's speed no longer jumps discontinuously the
+instant a flat road tips into the first tenth of a percent of gradient).
+
+**Per-rider coefficients** (`_rider_resistance_coeffs`), derived from two
+calibration anchors via `_lerp(min, max, t)` where `t = (attr − 1) / 99`:
+
+```
+v_flat   = lerp(FLAT_MIN_SPEED,  FLAT_MAX_SPEED,  t_flat)     # solo speed at s=0
+v_climb8 = lerp(CLIMB_MIN_SPEED, CLIMB_MAX_SPEED, t_climb)    # solo speed at s=CLIMB_REF_GRADIENT
+
+K_aero = AERO_SHARE       / v_flat**3          # aero is 85% of flat resistance
+K_roll = (1 - AERO_SHARE) / v_flat             # rolling is the other 15%
+K_grav = (1 - K_roll*v_climb8 - K_aero*v_climb8**3) / (CLIMB_REF_GRADIENT * v_climb8)
+```
+
+Constants: `FLAT_MIN_SPEED = 12.0`, `FLAT_MAX_SPEED = 14.2` (43.2-51.1 km/h);
+`CLIMB_MIN_SPEED = 3.5`, `CLIMB_MAX_SPEED = 6.1` (12.6-22.0 km/h at
+`CLIMB_REF_GRADIENT = 0.08`); `AERO_SHARE = 0.85`.
+
+**Downhill** (`gradient < 0`) uses the same equation, then applies a handling
+cap — on a real descent the limit is cornering and braking, not power:
+`min(v, lerp(DOWNHILL_MIN_SPEED, DOWNHILL_MAX_SPEED, t))` where
+`t = ((sprint + flat) / 2 − 1) / 99` (`DOWNHILL_MIN_SPEED = 17.0`,
+`DOWNHILL_MAX_SPEED = 21.0`, i.e. 61-76 km/h) — keeping the "descending blends
+sprint and flat" idea as a cap rather than the primary formula.
+
+Coefficients and solved speeds are memoised per `(flat, climb, gradient)` —
+gradients are per-segment constants, so this is a few dozen solves per race,
+not one per tick. Real-world spread this model reproduces: ~7-12% between
+fastest/slowest archetype on the flat, ~25-40% on a 5% climb, ~35-55% on 8%
+(see `test_speeds.py`'s calibration table for the full band-by-gradient
+breakdown per archetype).
 
 Per-tick jitter: `speed += uniform(−0.3, 0.3)`, floored at 1 m/s
 (`add_speed_jitter`). This breaks perfect ties so groups form a realistic echelon.
@@ -255,10 +327,11 @@ progressively (`progressive cracking`):
 ### Drain (`compute_stamina_drain`)
 Charged on **relative intensity**, not on wall-clock time. Per tick:
 ```
-sustainable = own_speed × draft_hold_multiplier(positioning, depth, gradient)
+sustainable = own_speed × draft_hold_multiplier(positioning, eff_depth, gradient)
 intensity   = speed / max(1, sustainable)             # 1.0 = riding at your limit
 drain = 0.012 × intensity ** 3                        # aerobic cost of the effort
 drain *= 1 − (resistance / 100) × 0.6                 # fatigue tolerance
+drain *= speed / 13.4                                 # DRAIN_REFERENCE_SPEED — distance, not ticks
 if gradient > 0: drain *= 1 + gradient × 0.20         # climbs cost more
 if gradient < 0: drain −= 0.006                       # descents recover a little
 ```
@@ -275,6 +348,19 @@ your limit, while hanging on above your means costs steeply more. The previous
 formula's speed term (`(speed − 10) × 0.010`) varied drain by only a few percent
 across the whole speed range, which charged fatigue per second regardless of
 effort — so slowing the bunch down made a race *more* tiring, not less.
+
+The `speed / DRAIN_REFERENCE_SPEED` term makes drain scale with **distance
+covered**, not wall-clock ticks. Fatigue is fundamentally a cost of work done,
+not of time elapsed at a given relative effort. Without it, the resistance
+model's correctly slower climbing speeds (see Terrain speed above — climbing
+at 8% roughly halved from the old model's ~41 km/h to ~20 km/h) would double a
+climb's tick count and therefore double its cumulative stamina cost even at
+intensity 1.0 (a rider riding exactly their own sustainable pace, no
+overshoot at all) — cracking riders who are doing nothing wrong.
+`DRAIN_REFERENCE_SPEED = 13.4` m/s is the old model's mid-flat speed; the new
+model's mid-flat speed (13.1 m/s) still matches closely, so flat-terrain
+drain is essentially unchanged and only climbs (where speed drops sharply)
+scale down.
 
 ## Energy
 
@@ -313,11 +399,18 @@ simultaneously charged for holding it.
 
 - `PACK_COHESION_DISTANCE = 60.0` m — riders within this of each other on a
   draft-allowed gradient cohere into a single pack (connected-component BFS).
-  This governs pace-sharing / dropping, not the physical drafting label.
+  This governs pace-sharing / dropping, not any physical proximity label.
 - `DRAFT_UPHILL_LIMIT = 5.0` % — no cohesion/drafting on steeper climbs.
-- **Drafting flag** — `drafting=True` only when a rider has a wheel within
-  `DRAFT_DISTANCE (3.0 m)` directly ahead. Pack membership (cohesion) does
-  NOT set the flag; only physical proximity to a wheel does.
+- **No standalone "drafting" flag.** There used to be one, set from a rider's
+  nearest wheel within `DRAFT_DISTANCE` in any direction — independent of
+  real pack membership, so a rider deep in a coherent pack with no
+  *particularly* close neighbour showed neither `drafting` nor `pulling`,
+  while a rider outside a real pack could show `drafting` from a passing
+  near-miss. Real shelter is continuous (see Gap-decayed depth below) — most
+  pack members get *some* benefit, to varying degrees — and that doesn't
+  compress into a meaningful boolean. Only `pulling` (see Pack depth below)
+  is exposed: the pack's front rider is assumed to be doing the work, and
+  every other coherent member is assumed to be benefiting.
 - **Group tempo** (`compute_pack_tempo`) — a pack rolls at
   `pace_setter_speed(member_speeds) × pack_tempo_fraction(...)`.
   `pace_setter_speed` is the **median of the strongest third** of the pack's
@@ -327,9 +420,19 @@ simultaneously charged for holding it.
 
   | Situation | Fraction |
   |---|---|
-  | Someone clear up the road (> `BREAK_CLEAR_DISTANCE` = 60 m ahead of the pack's front rider), or finale (`remaining < TRANSITION_PHASE_THRESHOLD`) | `PACK_TEMPO_HARD` = 0.90 |
+  | Genuinely clear break ahead (`break_ahead`) on draftable terrain (`gradient <= DRAFT_UPHILL_LIMIT`) | `PACK_TEMPO_CHASE` = 1.08 |
+  | Someone clear up the road (> `BREAK_CLEAR_DISTANCE` = 60 m ahead of the pack's front rider) on steeper terrain, or finale (`remaining < TRANSITION_PHASE_THRESHOLD`) | `PACK_TEMPO_HARD` = 0.90 |
   | Transition phase (`remaining < EARLY_PHASE_THRESHOLD`), or early on climbing terrain | `PACK_TEMPO_STEADY` = 0.82 |
   | Early **and** flat **and** nobody up the road | `PACK_TEMPO_EASY` = 0.75 |
+
+  `PACK_TEMPO_CHASE` (> 1.0×) reflects that a rotating, drafting bunch shares
+  the wind and so is genuinely faster than any solo rider on the flat — this
+  is why real flat breaks get caught. Above `DRAFT_UPHILL_LIMIT` there is no
+  wind to share (power-to-weight dominates, not drag), so the chase falls
+  back to `PACK_TEMPO_HARD` and a climber who attacks on a real climb stays
+  away. This band depends on rotation-averaged shelter (below): chasing above
+  1.0× the pace-setter reference would shed the pack one rider at a time from
+  the front without it.
 
   A rider is DROPPED (rides alone, not sheltered) only if their
   **drafting-credited** cruise is below that tempo — see `draft_hold_multiplier`
@@ -341,11 +444,47 @@ simultaneously charged for holding it.
 - **Pack depth** — within a coherent pack, the rider with the front position is
   the puller (depth 0, exposed); each wheel behind gains a deeper shelter
   (depth 1, 2, …). Shelter quality scales with depth up to
-  `DRAFT_DEPTH_SATURATION (10)`.
+  `DRAFT_DEPTH_SATURATION (10)`. This ordinal depth (rank within the pack) is
+  then adjusted by gap-decay and rotation-averaging below before it reaches
+  `draft_hold_multiplier` — the raw rank alone is not what the fatigue
+  formulas or the drop test actually use.
+- **Gap-decayed depth** — real drafting benefit falls off sharply with
+  physical distance to the wheel ahead; ordinal rank alone doesn't capture
+  that a rider two wheels back on paper but far off the wheel ahead isn't
+  meaningfully sheltered. For each pack-coherent rider at depth `d >= 1`, a
+  `gap_factor` scales that depth before it reaches `draft_hold_multiplier`:
+  ```
+  gap = distance to the wheel immediately ahead in the pack's chain
+  gap_factor = clamp(1 - max(0, gap - DRAFT_DISTANCE) / (PACK_COHESION_DISTANCE - DRAFT_DISTANCE), 0, 1)
+  ```
+  `gap_factor` is 1.0 (full ordinal credit) for any gap `<= DRAFT_DISTANCE`
+  (3 m — the closest a rider can sit to the wheel ahead), and decays
+  linearly to 0 as the gap approaches `PACK_COHESION_DISTANCE` (60 m,
+  the edge of the pack itself). `depth 0` (the pack front) is unaffected —
+  `draft_hold_multiplier` already special-cases `depth < 1` to no credit
+  regardless.
+- **Rotation-averaged depth for the drop test and fatigue reference**
+  (`ROTATION_SHARE = 0.5`) — real bunches rotate, so nobody rides a whole
+  race at their instantaneous depth. Using raw instantaneous depth charged
+  whoever happened to be a half-wheel ahead a given tick as fully exposed
+  (depth 0, no draft credit), which could shed them on a single jitter tick.
+  The pack-cohesion drop test and the `sustainable` reference fed to the
+  energy/stamina drain formulas use
+  `eff_depth = max(depth * gap_factor, ROTATION_SHARE * (pack_size - 1) * gap_factor)`
+  instead of raw depth — every rider is credited with at least "sometimes
+  near the front, sometimes not" shelter. Scaling the rotation floor by the
+  *same* `gap_factor` (rather than leaving it unconditional) keeps the two
+  corrections consistent: the floor still protects a rider from one noisy
+  tick's ordinal position, but it no longer overrides a genuinely large,
+  sustained physical gap — this combination is what keeps gap-decay from
+  reintroducing the coin-flip drops rotation-averaging was built to remove.
+  Inert above `DRAFT_UPHILL_LIMIT`, where `draft_hold_multiplier`'s `drag`
+  term already fades to 0.
 
 ### Shelter quality (`shelter_quality`)
 The 0–1 blend of draft skill and pack depth that `draft_hold_multiplier` is
-built from:
+built from. `depth` here is the gap-decayed, rotation-averaged effective
+depth from above, not raw ordinal rank:
 ```
 skill = (positioning − 1) / 99                       # 0..1
 depth_factor = min(depth, 10) / 10                   # 0..1
@@ -370,8 +509,15 @@ useless on a sustained climb — so weak climbers are protected on flats but not
 climbs, and climber-leaning courses still split correctly.
 
 ### Pulling
-A rider pulls only when (a) not drafting themselves and (b) at least one rider
-is within `DRAFT_DISTANCE (3.0 m)` behind them. Only the group front rider pulls.
+`pulling=True` for exactly the pack's front rider (`depth == 0`) in any
+coherent pack with more than one member — the rider actually setting the
+tempo the rest of the pack is riding at. This replaced a standalone pairwise
+test ("not drafting, and someone within `DRAFT_DISTANCE` directly behind"),
+which needed a close trailing wheel to fire and so often missed the true
+pace-setter (e.g. if the next rider back happened to be 10+ m adrift that
+tick) while occasionally flagging a mid-pack rider as pulling just because
+someone was momentarily close behind *them*. A solo rider, or one outside any
+multi-member pack, never pulls.
 
 ## Tactics: race phases & surge decisions
 
@@ -414,16 +560,22 @@ Constants: `EARLY_PHASE_THRESHOLD (0.25)`, `TRANSITION_PHASE_THRESHOLD (0.10)`.
 Riders only launch an effort they can plausibly finish:
 - A normal surge/attack needs `energy >= SURGE_MIN_ENERGY (30.0)`.
 - A finish sprint costs more and needs `energy >= SPRINT_MIN_ENERGY (35.0)`.
-- A chase needs `energy >= CHASE_MIN_ENERGY (25.0)`.
+- A bridge/chase needs `energy >= CHASE_MIN_ENERGY (25.0)`.
 
 ### Surge mechanics
 
 A surge is a discrete ~20s energy-burst effort (`SURGE_DURATION = 20` ticks),
-granting a `SURGE_SPEED_BOOST = 0.25` fraction above the rider's natural cruise
-while burning `SURGE_ENERGY_COST = 0.05` extra energy per tick. A surging rider
-breaks from drafting and rides their own pace. A finish sprint is a **longer
-kick** (`SPRINT_DURATION = 40` ticks) — the sprinter sustains the burst further
-to the line.
+burning `SURGE_ENERGY_COST = 0.05` extra energy per tick. A surging rider
+breaks from drafting and rides their own pace. An attack or bridge/chase gets
+a flat `SURGE_SPEED_BOOST = 0.25` fraction above the rider's natural cruise.
+A finish sprint is a **longer kick** (`SPRINT_DURATION = 40` ticks) — the
+sprinter sustains the burst further to the line — and its boost is **sized by
+`sprint`** rather than flat:
+`boost = lerp(SPRINT_BOOST_MIN, SPRINT_BOOST_MAX, t_sprint)` where
+`t_sprint = (sprint − 1) / 99` (`SPRINT_BOOST_MIN = 0.05`,
+`SPRINT_BOOST_MAX = 0.35`). `RiderState.sprinting` marks which kind of surge
+is active so `tick()` applies the right boost; it clears when the surge ends
+and is engine-internal (not written to the JSONL log).
 
 ### Refusal conditions
 A rider does **not** start a surge if they are finished, already surging
@@ -432,30 +584,51 @@ the effort's minimum (see Energy budgeting), or who fails the relevant
 terrain/phase/strength gate below.
 
 ### Decision chain (`_decide_actions` — first matching rule wins, in this order)
-1. **Finish sprint** — within `SPRINT_DISTANCE (1000 m)` of the finish and
-   `sprint >= SPRINT_MIN_SPRINT (70)`. A strong sprinter kicks for the line.
+1. **Finish sprint** — within `SPRINT_DISTANCE (1000 m)` of the finish.
+   **Everyone kicks**; `sprint` sizes the boost (see Surge mechanics above),
+   it no longer gates eligibility. A weak sprinter's kick is simply worth
+   less — the sprint finally resolves on the `sprint` attribute rather than
+   being a yes/no gate that left every qualifying rider's kick identical.
 2. **Attack a climb** — remaining `< ATTACK_PHASE_THRESHOLD (25%)`, current
    terrain bucket `STEEP` (gradient `>= 7.0` %), and `climb >= ATTACK_MIN_CLIMB (75)`.
    A strong climber tries to break away only in the late race on a genuinely
    steep section.
-3. **Chase a leader** — not drafting, a clear break ahead, remaining
-   `< CHASE_DISTANCE_MAX (15%)`, gap `> DRAFT_DISTANCE` and
-   `<= CHASE_GAP_MAX (30 m)`. A rider must also be able to close the gap: on
-   steep terrain they will not chase a leader who is markedly a stronger climber
-   (`CHASE_MIN_CLIMB_ADVANTAGE = -10` points).
+3. **Bridge to a break** — only riders at the front of their own group
+   (`depth <= BRIDGE_MAX_DEPTH (2)`, computed by `_group_front_and_depth`
+   over the rider's own `PACK_COHESION_DISTANCE`-chained neighbours, not the
+   absolute race leader) consider it, and only when someone is **genuinely
+   clear** — `_nearest_clear_leader` finds a rider more than
+   `BREAK_CLEAR_DISTANCE` (60 m) ahead of the group's front, the same
+   `break_ahead` test pack tempo uses. Gap to that leader must be
+   `<= BRIDGE_GAP_MAX (150 m)`, `remaining_fraction < ATTACK_PHASE_THRESHOLD
+   (0.25)`, and `_can_chase` must pass (on steep terrain, don't chase a leader
+   who is markedly a stronger climber — `CHASE_MIN_CLIMB_ADVANTAGE = -10`
+   points).
+
+   This replaced a much looser rule ("no wheel within `DRAFT_DISTANCE`
+   ahead, and a 3-30 m gap to the absolute race leader") that every rider in
+   a strung-out bunch satisfied every tick — the gate wasn't "a break is
+   clear", it was "I am not glued to a wheel", so a normally-spaced peloton
+   read as eleven simultaneous breakaways the moment `remaining_fraction`
+   crossed its old threshold. See `FINDING1_PLAN.md` section 1b.
 
 ### Cooldown
-On starting a surge a rider sets `surge_ticks = SURGE_DURATION` and
-`surge_cooldown = SURGE_COOLDOWN (60 ticks)`. `surge_ticks` and `surge_cooldown`
-both decrement per tick, preventing runaway/back-to-back surges (a rider can
-make a fresh effort only after the cooldown elapses).
+On starting a surge a rider sets `surge_ticks = SURGE_DURATION` (or
+`SPRINT_DURATION` for a finish sprint) and `surge_cooldown = SURGE_COOLDOWN
+(60 ticks)`. `surge_ticks` and `surge_cooldown` both decrement per tick,
+preventing runaway/back-to-back surges (a rider can make a fresh effort only
+after the cooldown elapses).
 
 > Effect on terrain balance: gating attacks by phase and steepness makes
 > climber-leaning courses play out realistically — the pack stays together
 > through the early and middle race, and the decisive moves come on the late
-> steep climbs. Long flat courses are unaffected by the attack gate (no STEEP
-> terrain), so the residual **rouleur-bias** on those courses remains (see
-> `ENGINE_FINDINGS.md`) — a tactics gap, not a reflex-threshold one.
+> steep climbs. Long flat courses used to be unaffected by the attack gate
+> (no STEEP terrain) and were decided by an unmanaged drag race once the old
+> chase rule's loose gap window fired for the whole bunch at once (the
+> "rouleur bias", see `ENGINE_FINDINGS.md`'s Finding 1 and `FINDING1_PLAN.md`).
+> The bridge rewrite above, together with the resistance-model speed fix
+> (Terrain speed) and rotation-averaged shelter (Drafting & pack cohesion),
+> closed it: `sprinters_classic` now resolves as a genuine bunch sprint.
 
 ## Determinism & order
 
@@ -489,7 +662,6 @@ lines. Riders array order is fixed and matches `state.rider_states` order.
       "speed": 13.42,
       "energy": 62.1,
       "stamina": 88.9,
-      "drafting": false,
       "pulling": true,
       "surging": false,
       "finished": false,
@@ -509,8 +681,7 @@ Field reference (rider entries):
 | `speed` | effective speed this tick, m/s, rounded to 2 dp |
 | `energy` | anaerobic reserve 0–100, rounded to 2 dp |
 | `stamina` | aerobic endurance 0–100, rounded to 2 dp |
-| `drafting` | has a wheel within DRAFT_DISTANCE (3 m) directly ahead |
-| `pulling` | working on the front of the group this tick |
+| `pulling` | setting the pace at the front of a multi-member pack this tick |
 | `surging` | in a surge effort this tick |
 | `finished` | crossed the line |
 | `finish_time` | finish tick, or `null` |
