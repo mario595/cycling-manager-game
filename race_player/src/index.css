@@ -12,3 +12,17 @@ body {
     'Helvetica Neue', Arial, sans-serif;
   background: #fafafa;
 }
+
+/* Surge flicker: a surging rider's energy bar fades in and out (vibrates). */
+@keyframes surge-beat {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.surge-beat {
+  animation: surge-beat 0.7s ease-in-out infinite;
+}

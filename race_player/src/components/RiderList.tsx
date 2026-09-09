@@ -13,14 +13,22 @@ interface RiderListProps {
 
 const MEDALS = ['🥇', '🥈', '🥉']
 
-function EnergyBar({ value, label, color }: { value: number; label: string; color: string }) {
+const STAMINA_YELLOW = 60 // fatigue starts degrading cruise pace below this
+const STAMINA_RED = 30 // a rider this low is genuinely cracked
+
+function EnergyBar({ value, label, color, surging = false }: { value: number; label: string; color?: string; surging?: boolean }) {
+  let barColor = color ?? '#3b82f6'
+  if (!color) {
+    // Stamina: green/blue -> yellow when degraded -> red when cracked.
+    barColor = value >= STAMINA_YELLOW ? '#3b82f6' : value >= STAMINA_RED ? '#f59e0b' : '#ef4444'
+  }
   return (
     <div className="flex items-center gap-2">
       <span className="text-[10px] text-slate-400 w-4">{label}</span>
-      <div className="flex-1 h-1.5 rounded bg-slate-100 overflow-hidden">
+      <div className={`flex-1 h-1.5 rounded overflow-hidden bg-slate-100 ${surging ? 'border border-amber-400' : ''}`}>
         <div
-          className="h-full rounded transition-all"
-          style={{ width: `${value}%`, backgroundColor: color }}
+          className={`h-full transition-all ${surging ? 'surge-beat' : ''}`}
+          style={{ width: `${value}%`, backgroundColor: barColor }}
         />
       </div>
       <span className="text-xs tabular-nums text-slate-600 w-8 text-right">
@@ -66,10 +74,10 @@ function RiderRow({ rider, rank, onSelect }: { rider: Rider; rank: number; onSel
         {rider.finished ? '✓' : `${(rider.speed * 3.6).toFixed(0)} km/h`}
       </td>
       <td className="px-3 py-2 w-40">
-        <EnergyBar value={rider.stamina} label="S" color="#3b82f6" />
+        <EnergyBar value={rider.stamina} label="S" />
       </td>
       <td className="px-3 py-2 w-40">
-        <EnergyBar value={rider.energy} label="E" color="#ef4444" />
+        <EnergyBar value={rider.energy} label="E" color="#ef4444" surging={rider.surging} />
       </td>
     </tr>
   )
