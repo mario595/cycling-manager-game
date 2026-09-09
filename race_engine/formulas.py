@@ -27,6 +27,12 @@ DRAFT_STAMINA_BASE = 0.85  # stamina keep-fraction while sheltered
 DRAFT_STAMINA_FLOOR = 0.70  # best-possible stamina keep-fraction
 DRAFT_ENERGY_BASE = 0.60  # energy cost keep-fraction while sheltered
 DRAFT_ENERGY_FLOOR = 0.40  # best-possible energy cost keep-fraction
+# DRAFT_HOLD_MAX: how much faster than their SOLO cruise a deeply sheltered,
+# skilled rider can sustain in the group (the aero saving that lets a weaker
+# rider hold the bunch's tempo on flats/moderate terrain). An exposed rider
+# (depth 0) holds 1.0x their solo cruise and may be dropped.
+DRAFT_HOLD_MAX = 1.30  # best-possible hold multiplier while fully sheltered
+DRAFT_HOLD_MIN = 1.0  # exposed / no shelter
 
 # Speed variability — small per-tick jitter (m/s peak) breaks perfect ties so
 # groups form a realistic echelon (front rider pulls, rest draft).
@@ -42,6 +48,16 @@ SPEED_JITTER = 0.3
 PACK_COHESION_DISTANCE = 60.0  # meters within which riders cohere into a pack
 GROUP_DROP_FRACTION = 0.90
 
+# Terrain classification — gradients are bucketed for the tactics engine.
+TERRAIN_MODERATE_THRESHOLD = 3.0  # gradient % at which terrain becomes "moderate"
+TERRAIN_STEEP_THRESHOLD = 7.0  # gradient % at which terrain becomes "steep"
+
+# Race phases — defined by remaining distance as a fraction of total course
+# length. Phase thresholds gate when attacks and chases are viable.
+EARLY_PHASE_THRESHOLD = 0.25  # > 25% remaining → early (no attacking)
+TRANSITION_PHASE_THRESHOLD = 0.10  # 10–25% remaining → transition
+# < 10% remaining → finale
+
 # Surge / attack / sprint reflexes — discrete energy-burst efforts.
 SURGE_DURATION = 20  # ticks a single (non-sprint) effort lasts (~20s)
 SURGE_COOLDOWN = 60  # ticks before a rider may surge again (~1min)
@@ -51,9 +67,17 @@ SURGE_MIN_ENERGY = 30.0  # minimum energy to consider starting a surge
 SPRINT_DISTANCE = 1000.0  # meters from the finish that triggers the final kick
 SPRINT_DURATION = 40  # ticks a finish-sprint kick lasts (~40s), longer than a normal surge
 SPRINT_MIN_SPRINT = 70.0  # sprint attribute needed to launch a finish sprint
-ATTACK_MIN_GRADIENT = 6.0  # climb % at which a climber may attack
+SPRINT_MIN_ENERGY = 35.0  # minimum energy to launch a finish sprint (costs more)
+
+# Attack reflex — phase-gated, terrain-gated (steep terrain = the STEEP bucket).
 ATTACK_MIN_CLIMB = 75.0  # climb attribute needed to consider attacking
-CHASE_GAP_THRESHOLD = 8.0  # meters behind a leader to trigger a chase surge
+ATTACK_PHASE_THRESHOLD = 0.25  # only attack in transition + finale (< 25% remaining)
+
+# Chase reflex — wider gap threshold than before, phase-gated.
+CHASE_GAP_MAX = 30.0  # meters behind a leader to trigger a chase surge
+CHASE_DISTANCE_MAX = 0.15  # only chase in final 15% of race
+CHASE_MIN_ENERGY = 25.0  # minimum energy to initiate a chase
+CHASE_MIN_CLIMB_ADVANTAGE = -10.0  # don't chase on steep if leader is 10+ climb points stronger
 
 
 def _lerp(min_val: float, max_val: float, t: float) -> float:
@@ -142,6 +166,33 @@ def compute_draft_factors(
     stamina = DRAFT_STAMINA_BASE - (DRAFT_STAMINA_BASE - DRAFT_STAMINA_FLOOR) * quality
     energy = DRAFT_ENERGY_BASE - (DRAFT_ENERGY_BASE - DRAFT_ENERGY_FLOOR) * quality
     return (stamina, energy)
+
+
+def draft_hold_multiplier(positioning: int, depth: float, gradient: float) -> float:
+    """How much faster than solo cruise a sheltered rider can hold the tempo.
+
+    ``positioning`` is draft skill (1-100), ``depth`` how many riders shelter
+    ahead in the pack (0 = front/exposed, no save), ``gradient`` the climb %.
+    Reuses the same skill/depth quality blend as `compute_draft_factors` but
+    maps it to a **speed multiplier** a rider can sustain in the wheels instead
+    of a drain keep-fraction. Used by the pack-cohesion drop test so a weaker
+    rider who is sheltering behind a strong group (e.g. a climber in the bunch
+    on the flat) is not dropped just because their solo cruise is below the
+    group tempo.
+
+    The credit fades with gradient: drafting is hugely effective on flats (a
+    sheltered rider holds far above their solo speed) but nearly useless on a
+    sustained climb (drag matters little at climbing speeds, power-to-weight
+    dominates), so on a steep gradient a weak climber is no longer protected.
+    """
+    if depth < 1.0:
+        return DRAFT_HOLD_MIN
+    skill = (positioning - 1) / 99.0
+    depth_factor = min(float(depth), DRAFT_DEPTH_SATURATION) / DRAFT_DEPTH_SATURATION
+    quality = 0.6 * skill + 0.4 * depth_factor
+    quality = max(0.0, min(1.0, quality))
+    drag = 1.0 - min(1.0, max(0.0, gradient) / DRAFT_UPHILL_LIMIT)
+    return DRAFT_HOLD_MIN + (DRAFT_HOLD_MAX - DRAFT_HOLD_MIN) * quality * drag
 
 
 def compute_energy_drain(

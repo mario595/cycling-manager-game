@@ -37,6 +37,14 @@ decides the winner:
 - **Positioning + pack depth**: a rider's stamina/energy draft saving is scaled by
   `positioning` and how deep they sit in the pack (`compute_draft_factors`), so a
   skilled deep drafter conserves more.
+- **Drafting-credited drop test** (`draft_hold_multiplier`): the cohesion drop test
+  no longer compares a rider's raw *solo* cruise against the group tempo. Instead a
+  sheltered rider can hold a higher group pace, scaled by `positioning`, pack depth,
+  and how drag-efficient the terrain is (full credit on flats, fading to nothing by
+  `DRAFT_UPHILL_LIMIT`). This stops weak-flat riders (climbers) from being dropped
+  from the bunch on flat openers — e.g. Lombardia's opening 40 km flat now keeps the
+  whole field together instead of shedding the climbers at tick ~50-80 — while not
+  protecting them on climbs, so climber-leaning courses still split correctly.
 - **Lengthened finish kick**: the finish sprint now lasts `SPRINT_DURATION = 40`
   ticks instead of a normal 20-tick surge.
 

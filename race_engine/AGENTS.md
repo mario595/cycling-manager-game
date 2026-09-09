@@ -206,17 +206,20 @@ The tick runs in phases so all riders see a consistent snapshot.
    current segment's gradient, throttled by stamina (see `compute_base_speed` and
    `apply_stamina_cruise_modifier`), plus per-rider speed jitter. Finalized
    riders and riders past the line are skipped (speed 0).
-3. **Decide surges**: for each rider that could surge, apply the reflex rules
-   (see Surge reflexes) using the snapshot positions.
+3. **Decide actions**: for each rider that could surge, apply the tactics rules
+   (see Tactics: race phases & surge decisions) using the snapshot positions and
+   the pre-computed course profile (terrain look-ahead).
 4. **Resolve pack cohesion**: riders within `PACK_COHESION_DISTANCE` of each
    other on a draft-allowed gradient cohere into a pack that rolls at a shared
    sustainable tempo (`GROUP_DROP_FRACTION ×` the pack's best cruise). A rider
-   whose own cruise falls below that pace is DROPPED (not sheltered). A rider
-   currently surging always rides their own pace. No cohesion above
-   `DRAFT_UPHILL_LIMIT` gradient. Each coherent rider's pack **depth** (wheels
-   back) is recorded to scale draft savings. The `drafting` flag is set only
-   for riders who have a wheel within `DRAFT_DISTANCE` (3 m) directly ahead
-   — pack membership alone does not imply `drafting`.
+   whose **drafting-credited** cruise falls below that pace is DROPPED (not
+   sheltered) — shelter lets a weaker rider hold a higher pace than their solo
+   cruise (see Draft hold multiplier). A rider currently surging always rides
+   their own pace. No cohesion above `DRAFT_UPHILL_LIMIT` gradient. Each
+   coherent rider's pack **depth** (wheels back) is recorded to scale draft
+   savings. The `drafting` flag is set only for riders who have a wheel within
+   `DRAFT_DISTANCE` (3 m) directly ahead — pack membership alone does not imply
+   `drafting`.
 5. **Compute deltas** (per rider): final effective speed, energy drain, stamina
    drain, drafting/pulling flags — using the shared snapshot, not the mutated
    state.
@@ -290,8 +293,11 @@ exposed or socially-sheltered one.
   `DRAFT_DISTANCE (3.0 m)` directly ahead. Pack membership (cohesion) does
   NOT set the flag; only physical proximity to a wheel does.
 - **Group tempo** — a pack rolls at `GROUP_DROP_FRACTION (0.90) ×` the pack's best
-  cruise. A rider whose own cruise is below that tempo is DROPPED (rides alone,
-  not sheltered).
+  cruise (`pace`). A rider is DROPPED (rides alone, not sheltered) only if their
+  **drafting-credited** cruise is below that tempo — see `draft_hold_multiplier`
+  below. A sheltered rider can hold a higher pace than their solo cruise; an
+  exposed rider (depth 0) gets no credit and is dropped if their own cruise can't
+  hold the tempo.
 - **Finished riders provide no shelter** — excluded when finding pack neighbours,
   so a frozen finish-line bunch cannot shelter riders.
 - **Pack depth** — within a coherent pack, the rider with the front position is
@@ -311,11 +317,71 @@ energy_factor  = 0.60 − (0.60 − 0.40) × quality      # 1.0 if not shelterin
 ```
 A rider at depth 0 (pulling or solo) uses factor 1.0 (no save).
 
+### Draft hold multiplier (`draft_hold_multiplier`)
+The drop test uses a rider's **drafting-credited** cruise rather than their raw
+solo cruise, so a weaker rider sheltering in a strong group can hold the tempo.
+```
+skill = (positioning − 1) / 99
+depth_factor = min(depth, 10) / 10
+quality = 0.6 × skill + 0.4 × depth_factor
+drag = 1 − min(1, max(0, gradient) / DRAFT_UPHILL_LIMIT)   # fades on climbs
+multiplier = DRAFT_HOLD_MIN + (DRAFT_HOLD_MAX − DRAFT_HOLD_MIN) × quality × drag
+```
+`DRAFT_HOLD_MIN = 1.0`, `DRAFT_HOLD_MAX = 1.30`. A rider at depth 0 (pulling/solo)
+uses 1.0 (no save). The credit fades to 1.0 as gradient rises to
+`DRAFT_UPHILL_LIMIT`, because drafting is hugely effective on flats (a sheltered
+climber holds the bunch's flat pace despite a low `flat` attribute) but nearly
+useless on a sustained climb — so weak climbers are protected on flats but not on
+climbs, and climber-leaning courses still split correctly.
+
 ### Pulling
 A rider pulls only when (a) not drafting themselves and (b) at least one rider
 is within `DRAFT_DISTANCE (3.0 m)` behind them. Only the group front rider pulls.
 
-## Surge reflexes
+## Tactics: race phases & surge decisions
+
+The engine's rule-set is a set of *reflexes* layered over emergent group
+behavior (drafting, pace-sharing, fatigue cracking). It is **not** a full
+team-tactics model; tactics are a future concern. Reflexes are terrain- and
+phase-aware: riders evaluate their situation (remaining distance, terrain
+ahead, their own energy budget) before choosing to surge, so they only make
+efforts they can plausibly sustain — mimicking how a real pro manages a race.
+
+### Course profile (terrain look-ahead)
+
+Pre-computed once at race start and attached to `RaceState` as `profile`
+(`CourseProfile`). It classifies each course segment by its (whole-segment
+average) gradient:
+
+- **FLAT** — `< TERRAIN_MODERATE_THRESHOLD (3.0)` %
+- **MODERATE** — `3.0` % to `< TERRAIN_STEEP_THRESHOLD (7.0)` %
+- **STEEP** — `>= 7.0` %
+
+Each `SegmentProfile` records its `length`, `gradient`, cumulative
+`start_distance`, and `terrain` bucket. The profile exposes terrain-at-position,
+remaining distance (and fraction), and the steepest gradient within a look-ahead
+window. Riders have full route knowledge (realistic for pro cyclists).
+
+### Race phases
+
+Defined by remaining distance as a fraction of the total course length:
+
+| Phase | Remaining | Rider behavior |
+|---|---|---|
+| **Early** | `> 25%` | No attacking. Ride in pack, conserve energy. |
+| **Transition** | `10–25%` | Positioning; attack only in the finale-approach. |
+| **Finale** | `< 10%` | Attacks and the contest for the finish. |
+
+Constants: `EARLY_PHASE_THRESHOLD (0.25)`, `TRANSITION_PHASE_THRESHOLD (0.10)`.
+
+### Energy budgeting
+
+Riders only launch an effort they can plausibly finish:
+- A normal surge/attack needs `energy >= SURGE_MIN_ENERGY (30.0)`.
+- A finish sprint costs more and needs `energy >= SPRINT_MIN_ENERGY (35.0)`.
+- A chase needs `energy >= CHASE_MIN_ENERGY (25.0)`.
+
+### Surge mechanics
 
 A surge is a discrete ~20s energy-burst effort (`SURGE_DURATION = 20` ticks),
 granting a `SURGE_SPEED_BOOST = 0.25` fraction above the rider's natural cruise
@@ -326,22 +392,35 @@ to the line.
 
 ### Refusal conditions
 A rider does **not** start a surge if they are finished, already surging
-(`surge_ticks > 0`), cooling down (`surge_cooldown > 0`), or have
-`energy < SURGE_MIN_ENERGY (30.0)`.
+(`surge_ticks > 0`), cooling down (`surge_cooldown > 0`), whose energy is below
+the effort's minimum (see Energy budgeting), or who fails the relevant
+terrain/phase/strength gate below.
 
-### Triggers (first matching rule wins, in this order)
+### Decision chain (`_decide_actions` — first matching rule wins, in this order)
 1. **Finish sprint** — within `SPRINT_DISTANCE (1000 m)` of the finish and
-   `sprint >= 70`. A strong sprinter kicks for the line.
-2. **Attack a climb** — current gradient `>= 6.0` % and `climb >= 75`. A strong
-   climber tries to break away on a steep section.
-3. **Chase a leader** — not drafting and a clear break ahead: the gap to the
-   front rider is `> DRAFT_DISTANCE` and `<= CHASE_GAP_THRESHOLD (8.0 m)`.
+   `sprint >= SPRINT_MIN_SPRINT (70)`. A strong sprinter kicks for the line.
+2. **Attack a climb** — remaining `< ATTACK_PHASE_THRESHOLD (25%)`, current
+   terrain bucket `STEEP` (gradient `>= 7.0` %), and `climb >= ATTACK_MIN_CLIMB (75)`.
+   A strong climber tries to break away only in the late race on a genuinely
+   steep section.
+3. **Chase a leader** — not drafting, a clear break ahead, remaining
+   `< CHASE_DISTANCE_MAX (15%)`, gap `> DRAFT_DISTANCE` and
+   `<= CHASE_GAP_MAX (30 m)`. A rider must also be able to close the gap: on
+   steep terrain they will not chase a leader who is markedly a stronger climber
+   (`CHASE_MIN_CLIMB_ADVANTAGE = -10` points).
 
 ### Cooldown
 On starting a surge a rider sets `surge_ticks = SURGE_DURATION` and
-`surge_cooldown = SURGE_COOLDOWN (60 ticks)`. `surge_ticks` and
-`surge_cooldown` both decrement per tick, preventing runaway/back-to-back
-surges (a rider can make a fresh effort only after the cooldown elapses).
+`surge_cooldown = SURGE_COOLDOWN (60 ticks)`. `surge_ticks` and `surge_cooldown`
+both decrement per tick, preventing runaway/back-to-back surges (a rider can
+make a fresh effort only after the cooldown elapses).
+
+> Effect on terrain balance: gating attacks by phase and steepness makes
+> climber-leaning courses play out realistically — the pack stays together
+> through the early and middle race, and the decisive moves come on the late
+> steep climbs. Long flat courses are unaffected by the attack gate (no STEEP
+> terrain), so the residual **rouleur-bias** on those courses remains (see
+> `ENGINE_FINDINGS.md`) — a tactics gap, not a reflex-threshold one.
 
 ## Determinism & order
 

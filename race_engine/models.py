@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 
 
 @dataclass
@@ -40,6 +41,69 @@ class Course:
         return sum(s.length for s in self.segments)
 
 
+class Terrain(str, Enum):
+    """Terrain bucket for a course segment, derived from its gradient."""
+
+    FLAT = "flat"
+    MODERATE = "moderate"
+    STEEP = "steep"
+
+
+@dataclass
+class SegmentProfile:
+    """A course segment with its cumulative start distance and terrain bucket."""
+
+    length: float  # meters
+    gradient: float  # %
+    start_distance: float  # meters from start where this segment begins
+    terrain: Terrain
+
+
+@dataclass
+class CourseProfile:
+    """Pre-computed, from-where-you-stand view of the course for tactics."""
+
+    total_distance: float
+    segments: list[SegmentProfile]
+
+    def terrain_at(self, position: float) -> Terrain:
+        return self._find_segment(position).terrain
+
+    def remaining(self, position: float) -> float:
+        return max(0.0, self.total_distance - position)
+
+    def remaining_fraction(self, position: float) -> float:
+        return self.remaining(position) / self.total_distance
+
+    def steepest_ahead(self, position: float, distance: float) -> float:
+        """Max gradient (%) within `distance` meters ahead of `position`."""
+        horizon = position + distance
+        worst = 0.0
+        for s in self.segments:
+            end = s.start_distance + s.length
+            if end <= position:
+                continue
+            if s.start_distance > horizon:
+                break
+            worst = max(worst, s.gradient)
+        return worst
+
+    def _find_segment(self, position: float, lo: int = 0, hi: int | None = None) -> SegmentProfile:
+        if hi is None:
+            hi = len(self.segments) - 1
+        while lo <= hi:
+            mid = (lo + hi) // 2
+            s = self.segments[mid]
+            end = s.start_distance + s.length
+            if position < s.start_distance:
+                hi = mid - 1
+            elif position >= end:
+                lo = mid + 1
+            else:
+                return s
+        return self.segments[-1]
+
+
 @dataclass
 class RiderState:
     rider: Rider
@@ -61,13 +125,43 @@ class RaceState:
     course: Course
     rider_states: list[RiderState] = field(default_factory=list)
     current_time: int = 0  # seconds
+    profile: CourseProfile | None = None
 
     @classmethod
     def create_initial_state(
         cls, riders: list[Rider], course: Course
     ) -> RaceState:
         rider_states = [RiderState(rider=r) for r in riders]
-        return cls(course=course, rider_states=rider_states, current_time=0)
+        state = cls(course=course, rider_states=rider_states, current_time=0)
+        state.profile = cls._compute_profile(course)
+        return state
+
+    @staticmethod
+    def _compute_profile(course: Course) -> CourseProfile:
+        from .formulas import TERRAIN_MODERATE_THRESHOLD, TERRAIN_STEEP_THRESHOLD
+
+        segments: list[SegmentProfile] = []
+        offset = 0.0
+        for seg in course.segments:
+            g = seg.gradient
+            if g >= TERRAIN_STEEP_THRESHOLD:
+                terrain = Terrain.STEEP
+            elif g >= TERRAIN_MODERATE_THRESHOLD:
+                terrain = Terrain.MODERATE
+            else:
+                terrain = Terrain.FLAT
+            segments.append(
+                SegmentProfile(
+                    length=seg.length,
+                    gradient=seg.gradient,
+                    start_distance=offset,
+                    terrain=terrain,
+                )
+            )
+            offset += seg.length
+        return CourseProfile(
+            total_distance=course.total_distance, segments=segments
+        )
 
     def tick(self) -> None:
         from .formulas import (
@@ -116,8 +210,9 @@ class RaceState:
             own_speeds[i] = add_speed_jitter(cruise)
 
         # Decide this tick whether any rider starts an energy surge (attack a
-        # climb, chase a gap, or launch the finish sprint).
-        self._decide_surges(positions, sorted_idx, gradients)
+        # climb, chase a gap, or launch the finish sprint). Terrain- and
+        # phase-aware (uses pre-computed course profile).
+        self._decide_actions(positions, sorted_idx, gradients)
 
         # Resolve pack cohesion: riders within PACK_COHESION_DISTANCE of each other on
         # draft-allowed terrain cohere into a peloton that rolls at a shared,
@@ -128,7 +223,11 @@ class RaceState:
         #
         # Packs are connected components over (undirected) proximity within
         # PACK_COHESION_DISTANCE. Found via BFS to avoid cycle risk.
-        from .formulas import GROUP_DROP_FRACTION, PACK_COHESION_DISTANCE
+        from .formulas import (
+            GROUP_DROP_FRACTION,
+            PACK_COHESION_DISTANCE,
+            draft_hold_multiplier,
+        )
 
         active = [
             i
@@ -187,12 +286,26 @@ class RaceState:
             member_speeds = [own_speeds[m] for m in pack]
             best = max(member_speeds)
             pace = best * GROUP_DROP_FRACTION
-            coherent = [m for m in pack if own_speeds[m] >= pace]
-            # depth = how many coherent riders sit ahead (sheltering this rider)
-            coherent_by_pos = sorted(coherent, key=lambda m: positions[m], reverse=True)
+            # Shelter is credited to both the tempo-hold test and the depth
+            # bookkeeping, so a weaker rider sheltering deep in the group (e.g.
+            # a climber in the bunch on the flat) can hold the tempo even if
+            # their SOLO cruise is below it. An exposed rider (depth 0) gets no
+            # credit and is dropped if their own cruise can't hold pace.
+            by_pos = sorted(pack, key=lambda m: positions[m], reverse=True)
             depth_of: dict[int, int] = {}
-            for d, m in enumerate(coherent_by_pos):
-                depth_of[m] = d  # 0 = pulling front, 1 = first wheel, ...
+            for d, m in enumerate(by_pos):
+                depth_of[m] = d  # 0 = front/pulling, 1 = first wheel, ...
+            coherent = [
+                m
+                for m in pack
+                if own_speeds[m]
+                * draft_hold_multiplier(
+                    self.rider_states[m].rider.attributes.positioning,
+                    float(depth_of[m]),
+                    gradients[m],
+                )
+                >= pace
+            ]
             for m in coherent:
                 drafting_flags[m] = self._is_drafting(
                     m, positions, sorted_idx, gradients[m]
@@ -267,73 +380,128 @@ class RaceState:
 
         self.current_time += 1
 
-    def _decide_surges(
+    def _decide_actions(
         self,
         positions: list[float],
         sorted_idx: list[int],
         gradients: list[float],
     ) -> None:
-        """Trigger an energy-burst effort for riders facing a decisive moment.
+        """Decide the energy-burst effort each rider launches this tick.
 
-        Reflex-based (not a full tactic model): a rider launches a surge to
-        contest the finish, attack a climb to break away, or chase a leader.
-        Updates each rider's surge_ticks in place.
+        Terrain- and phase-aware rule-set layered over emerging group behavior.
+        Riders evaluate their situation (remaining distance, terrain ahead,
+        their own energy budget) before choosing to surge, so they only make
+        efforts they can plausibly sustain — mimicking how a real pro manages
+        their race. First matching rule wins:
+          1. Finish sprint — inside the final kilometer, strong sprinters kick.
+          2. Climb attack — in the finale/transition, on a steep gradient.
+          3. Chase a leader — a clear, chasable break in the final stretch.
+        Otherwise the rider rides the pack tempo.
         """
         from .formulas import (
             ATTACK_MIN_CLIMB,
-            ATTACK_MIN_GRADIENT,
-            CHASE_GAP_THRESHOLD,
+            ATTACK_PHASE_THRESHOLD,
+            CHASE_DISTANCE_MAX,
+            CHASE_GAP_MAX,
+            CHASE_MIN_CLIMB_ADVANTAGE,
+            CHASE_MIN_ENERGY,
             DRAFT_DISTANCE,
             SPRINT_DISTANCE,
             SPRINT_DURATION,
+            SPRINT_MIN_ENERGY,
             SPRINT_MIN_SPRINT,
             SURGE_COOLDOWN,
             SURGE_DURATION,
             SURGE_MIN_ENERGY,
         )
 
-        course_length = self.course.total_distance
+        profile = self.profile
 
         for i, rs in enumerate(self.rider_states):
             if rs.finished or rs.surge_ticks > 0 or rs.surge_cooldown > 0:
                 continue
-            if rs.energy < SURGE_MIN_ENERGY:
-                continue
 
+            pos = positions[i]
             gradient = gradients[i]
-            remaining = course_length - positions[i]
             attrs = rs.rider.attributes
+            remaining_frac = profile.remaining_fraction(pos)
 
             surge = False
             duration = SURGE_DURATION
+            surge_min_energy = SURGE_MIN_ENERGY
 
             # 1. Finish sprint — inside the last stretch, strong sprinters kick.
             if (
-                remaining <= SPRINT_DISTANCE
+                pos >= self.course.total_distance - SPRINT_DISTANCE
                 and attrs.sprint >= SPRINT_MIN_SPRINT
             ):
-                surge = True
-                duration = SPRINT_DURATION
+                if rs.energy >= SPRINT_MIN_ENERGY:
+                    surge = True
+                    duration = SPRINT_DURATION
+            # 2. Attack a climb — in the finale/transition, on a steep gradient,
+            # only within a viable distance of the finish.
+            elif (
+                remaining_frac < ATTACK_PHASE_THRESHOLD
+                and profile.terrain_at(pos) is Terrain.STEEP
+                and attrs.climb >= ATTACK_MIN_CLIMB
+            ):
+                if rs.energy >= surge_min_energy:
+                    surge = True
 
-            # 2. Attack a climb — a strong climber on a steep section tries to
-            # break away.
-            elif gradient >= ATTACK_MIN_GRADIENT and attrs.climb >= ATTACK_MIN_CLIMB:
-                surge = True
-
-            # 3. Chase a leader — close the draft to a clear break ahead.
+            # 3. Chase a leader — close the draft to a clear break ahead, only
+            # in the final stretch and only if the leader isn't clearly stronger
+            # on the current terrain (chasing is wasted effort otherwise).
             else:
-                leader = self._drafting_leader(
-                    i, positions, sorted_idx, gradient
-                )
+                leader = self._drafting_leader(i, positions, sorted_idx, gradient)
                 front = self._front_position(positions)
-                if leader is None and front > positions[i]:
-                    gap = front - positions[i]
-                    if gap > DRAFT_DISTANCE and gap <= CHASE_GAP_THRESHOLD:
-                        surge = True
+                if (
+                    leader is None
+                    and front > pos
+                    and remaining_frac < CHASE_DISTANCE_MAX
+                ):
+                    gap = front - pos
+                    if DRAFT_DISTANCE < gap <= CHASE_GAP_MAX:
+                        if rs.energy >= CHASE_MIN_ENERGY and self._can_chase(
+                            i, positions, sorted_idx, gradient
+                        ):
+                            surge = True
 
             if surge:
                 rs.surge_ticks = duration
                 rs.surge_cooldown = SURGE_COOLDOWN
+
+    def _can_chase(
+        self,
+        idx: int,
+        positions: list[float],
+        sorted_idx: list[int],
+        gradient: float,
+    ) -> bool:
+        """True if chasing the leader is plausible for this rider.
+
+        On steep terrain a chase is only worthwhile if the leader is no more
+        than a threshold stronger a climber than the chaser — otherwise the
+        gap will not close and the effort is wasted. On flat/descending
+        terrain a chase is always plausible (the chaser can draft/bridge).
+        """
+        from .formulas import DRAFT_UPHILL_LIMIT, CHASE_MIN_CLIMB_ADVANTAGE
+
+        if gradient <= DRAFT_UPHILL_LIMIT:
+            return True
+        leader = None
+        for other in sorted_idx:
+            if other == idx or self.rider_states[other].finished:
+                continue
+            if positions[other] > positions[idx]:
+                leader = other
+                break
+        if leader is None:
+            return True
+        my_climb = self.rider_states[idx].rider.attributes.climb
+        leader_climb = self.rider_states[leader].rider.attributes.climb
+        # CHASE_MIN_CLIMB_ADVANTAGE is negative; -advantage is the max
+        # lead we will accept (i.e. don't chase a leader clearly stronger).
+        return (leader_climb - my_climb) <= -CHASE_MIN_CLIMB_ADVANTAGE
 
     @staticmethod
     def _front_position(positions: list[float]) -> float:
