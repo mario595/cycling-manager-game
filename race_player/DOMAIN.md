@@ -55,6 +55,7 @@ Since absolute altitude is not stored in the engine logs, it must be derived fro
 - **Start/Pause:** Toggle button to start/stop the simulation.
 - **Keyboard:** `←` steps back, `→` steps forward, `Space` toggles play/pause.
 - **Speed Selector:** Options for x1, x2, x5, x10, x25, x50 playback speeds.
+- **Seek Slider:** Native `<input type="range">` (not antd `Slider`, see known issue below) spanning `0..maxTicks`; scrubs to any tick regardless of play state.
 - **Logic:** `useEffect` with `setInterval` advances ticks based on selected speed.
 
 ### 3. Rider Leaderboard (Packs)
@@ -147,4 +148,4 @@ The primary integration point is the `RaceViz` component, which accepts a `raceD
 2. **Performance:** Use `React.memo` for expensive renders (e.g. `RiderMarker`).
 3. **Type Safety:** Define all data structures in `types/race.ts` and use them throughout.
 4. **Styling:** Tailwind for layout; antd for complex UI elements.
-5. **KNOWN ISSUE:** Antd v6 `Slider` has a bug: its `Portal` component has a `useEffect` with no dependency array that causes "Maximum update depth exceeded" when dragging. Do **not** re-add the Slider until antd is patched/upgraded.
+5. **KNOWN ISSUE:** Antd v6 `Slider` has a bug: its `Portal` component has a `useEffect` with no dependency array that causes "Maximum update depth exceeded" when dragging. Do **not** re-add the Slider until antd is patched/upgraded. The playback seek control uses a plain native `<input type="range">` instead — see `PlaybackControls.tsx`.

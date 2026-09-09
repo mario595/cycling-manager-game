@@ -23,6 +23,7 @@ interface PlaybackControlsProps {
   speed: number
   onSpeedChange: (speed: number) => void
   onStep: (dir: -1 | 1) => void
+  onSeek: (tick: number) => void
 }
 
 export default function PlaybackControls({
@@ -33,38 +34,51 @@ export default function PlaybackControls({
   speed,
   onSpeedChange,
   onStep,
+  onSeek,
 }: PlaybackControlsProps) {
   return (
-    <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-slate-200">
-      <Space>
-        <Button
-          onClick={() => onStep(-1)}
-          icon={<StepBackwardOutlined />}
-          aria-label="Step back"
-        />
-        <Button
-          type="primary"
-          shape="circle"
-          icon={playing ? <PauseOutlined /> : <CaretRightOutlined />}
-          onClick={onTogglePlay}
-          aria-label={playing ? 'Pause' : 'Play'}
-        />
-        <Button
-          onClick={() => onStep(1)}
-          icon={<StepForwardOutlined />}
-          aria-label="Step forward"
-        />
-      </Space>
+    <div className="flex flex-col gap-2 p-3 bg-white rounded-lg border border-slate-200">
+      <div className="flex items-center gap-3">
+        <Space>
+          <Button
+            onClick={() => onStep(-1)}
+            icon={<StepBackwardOutlined />}
+            aria-label="Step back"
+          />
+          <Button
+            type="primary"
+            shape="circle"
+            icon={playing ? <PauseOutlined /> : <CaretRightOutlined />}
+            onClick={onTogglePlay}
+            aria-label={playing ? 'Pause' : 'Play'}
+          />
+          <Button
+            onClick={() => onStep(1)}
+            icon={<StepForwardOutlined />}
+            aria-label="Step forward"
+          />
+        </Space>
 
-      <Segmented
-        options={SPEEDS.map((s) => s.label)}
-        value={`x${speed}`}
-        onChange={(v) => onSpeedChange(Number(String(v).replace('x', '')))}
-      />
+        <Segmented
+          options={SPEEDS.map((s) => s.label)}
+          value={`x${speed}`}
+          onChange={(v) => onSpeedChange(Number(String(v).replace('x', '')))}
+        />
 
-      <div className="ml-auto text-sm text-slate-500">
-        tick {tick} / {maxTicks}
+        <div className="ml-auto text-sm text-slate-500">
+          tick {tick} / {maxTicks}
+        </div>
       </div>
+
+      <input
+        type="range"
+        min={0}
+        max={maxTicks}
+        value={tick}
+        onChange={(e) => onSeek(Number(e.target.value))}
+        className="w-full accent-blue-600 cursor-pointer"
+        aria-label="Seek"
+      />
     </div>
   )
 }

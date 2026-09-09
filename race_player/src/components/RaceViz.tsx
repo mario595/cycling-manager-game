@@ -100,6 +100,7 @@ export default function RaceViz({ raceData }: RaceVizProps) {
         speed={speed}
         onSpeedChange={setSpeed}
         onStep={handleStep}
+        onSeek={handleTickChange}
       />
 
       <div className="bg-white rounded-lg border border-slate-200 p-2">
