@@ -49,7 +49,32 @@ DRAFT_HOLD_MIN = 1.0  # exposed / no shelter
 # depth at this fraction of (pack_size - 1), i.e. every rider is credited with
 # at least "sometimes near the front, sometimes not" shelter rather than only
 # their current position.
-ROTATION_SHARE = 0.5
+#
+# Role-scaled (Tier A2, TEAM_TACTICS_PLAN.md): a team's support riders take
+# more than their share of time at depth 0 and a leader less, so the original
+# single constant (0.5, the role-blind average) becomes two — support riders
+# get a lower floor (they really are more often at the front, less shelter
+# credit), a protected leader a higher one (rotation credits them as being
+# near the front less often than they physically are). A leader physically
+# at the front still pulls this tick — this biases the *rotation average*
+# the fatigue formulas see, not the pack geometry. A solo rider (team of
+# one, `role` defaults to "leader") uses ROTATION_SHARE_LEADER — with no
+# teammates to hand shelter to, this is the same generous end of the old
+# single-constant behavior riders always had.
+ROTATION_SHARE_LEADER = 0.65
+ROTATION_SHARE_SUPPORT = 0.35
+
+# Teammate shelter priority (Tier A1, TEAM_TACTICS_PLAN.md): a rider directly
+# behind a *teammate*'s wheel gets a modest bonus to effective depth, on top
+# of the existing gap-decayed value — real teams hand each other wheels and
+# ride as a deliberate unit; strangers in a pack merely happen to be near
+# each other. Added to eff_depth (not multiplied) so it matters most for a
+# rider already close enough to be credited at all (gap_factor > 0) and does
+# nothing for one too far off the wheel to be sheltered regardless of who is
+# up there. Kept small: this stacks with A2's leader-favoring rotation floor,
+# and an over-tuned combination would make whoever is named leader
+# untouchable (see TEAM_TACTICS_PLAN.md's Risks).
+TEAMMATE_SHELTER_BONUS = 1.0
 
 # Speed variability — small per-tick jitter (m/s peak) breaks perfect ties so
 # groups form a realistic echelon (front rider pulls, rest draft).
@@ -73,7 +98,7 @@ PACK_TEMPO_HARD = 0.90  # finale, or chasing a rider who is clear
 # A rotating, drafting bunch shares the wind and so is faster than any solo
 # rider on the flat — real breaks get caught for exactly this reason. Above
 # DRAFT_UPHILL_LIMIT there's no wind to share, so the chase falls back to
-# PACK_TEMPO_HARD. Depends on rotation-averaged shelter (see ROTATION_SHARE)
+# PACK_TEMPO_HARD. Depends on rotation-averaged shelter (see ROTATION_SHARE_LEADER)
 # so the pack doesn't shed riders one at a time from the front while chasing
 # above 1.0x the pace-setter reference.
 PACK_TEMPO_CHASE = 1.08
@@ -262,7 +287,10 @@ def pace_setter_speed(member_speeds: list[float]) -> float:
 
 
 def pack_tempo_fraction(
-    remaining_fraction: float, terrain: Terrain, break_ahead: bool, gradient: float
+    remaining_fraction: float,
+    terrain: Terrain,
+    chase_willingness: float,
+    gradient: float,
 ) -> float:
     """Fraction of the pace-setter's cruise the pack chooses to ride at.
 
@@ -275,10 +303,30 @@ def pack_tempo_fraction(
     Otherwise: full gas in the finale, a steady tempo through the transition
     phase and on early climbing terrain, and a rolling pace on an early flat
     road where nobody is pushing.
+
+    ``chase_willingness`` (0-1, Tier A3) is the fraction of the pack that
+    sees a break worth chasing — a rider whose own teammate is the one clear
+    up the road sits out, since chasing down your own break helps nobody.
+    0.0 behaves exactly as "no break ahead"; 1.0 as "everyone agrees a break
+    is on" (the old boolean's True). Anything between interpolates the chase
+    tempo down rather than snapping between the two — a team with a rider
+    away doesn't single-handedly stop the whole bunch from chasing, but it
+    does genuinely blunt the chase in proportion to how many riders are
+    still willing.
     """
-    if break_ahead and gradient <= DRAFT_UPHILL_LIMIT:
-        return PACK_TEMPO_CHASE
-    if break_ahead or remaining_fraction < TRANSITION_PHASE_THRESHOLD:
+    baseline = _pack_tempo_fraction_no_break(remaining_fraction, terrain)
+    if chase_willingness <= 0.0:
+        return baseline
+    chase_target = (
+        PACK_TEMPO_CHASE if gradient <= DRAFT_UPHILL_LIMIT else PACK_TEMPO_HARD
+    )
+    chase_target = max(chase_target, PACK_TEMPO_HARD if remaining_fraction < TRANSITION_PHASE_THRESHOLD else chase_target)
+    return _lerp(baseline, chase_target, min(1.0, chase_willingness))
+
+
+def _pack_tempo_fraction_no_break(remaining_fraction: float, terrain: Terrain) -> float:
+    """The tempo fraction with nobody clear up the road worth chasing."""
+    if remaining_fraction < TRANSITION_PHASE_THRESHOLD:
         return PACK_TEMPO_HARD
     if remaining_fraction < EARLY_PHASE_THRESHOLD:
         return PACK_TEMPO_STEADY
@@ -291,12 +339,12 @@ def compute_pack_tempo(
     member_speeds: list[float],
     remaining_fraction: float,
     terrain: Terrain,
-    break_ahead: bool,
+    chase_willingness: float,
     gradient: float,
 ) -> float:
     """The shared speed a coherent pack rolls at this tick."""
     return pace_setter_speed(member_speeds) * pack_tempo_fraction(
-        remaining_fraction, terrain, break_ahead, gradient
+        remaining_fraction, terrain, chase_willingness, gradient
     )
 
 

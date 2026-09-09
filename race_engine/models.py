@@ -234,7 +234,9 @@ class RaceState:
         from .formulas import (
             BREAK_CLEAR_DISTANCE,
             PACK_COHESION_DISTANCE,
-            ROTATION_SHARE,
+            ROTATION_SHARE_LEADER,
+            ROTATION_SHARE_SUPPORT,
+            TEAMMATE_SHELTER_BONUS,
             compute_pack_tempo,
             draft_hold_multiplier,
         )
@@ -300,16 +302,30 @@ class RaceState:
             # or when someone is clear up the road and worth chasing.
             front_member = max(pack, key=lambda m: positions[m])
             pack_front = positions[front_member]
-            break_ahead = any(
-                not other.finished
-                and positions[o] - pack_front > BREAK_CLEAR_DISTANCE
+            # Tier A3: a pack member ignores a break made up solely of their
+            # own teammates when deciding whether there's something worth
+            # chasing — bringing back your own rider helps nobody. Each
+            # member's own team decides whether *they* see a chaseable
+            # break; the pack tempo then reacts to the fraction of the pack
+            # still willing, not an all-or-nothing pack-wide bool, so one
+            # team with a rider away doesn't single-handedly call off the
+            # chase for everyone else.
+            clear_ahead = [
+                o
                 for o, other in enumerate(self.rider_states)
-            )
+                if not other.finished and positions[o] - pack_front > BREAK_CLEAR_DISTANCE
+            ]
+            willing = 0
+            for m in pack:
+                my_team = self.rider_states[m].rider.team_id
+                if any(self.rider_states[o].rider.team_id != my_team for o in clear_ahead):
+                    willing += 1
+            chase_willingness = willing / len(pack) if clear_ahead else 0.0
             pace = compute_pack_tempo(
                 member_speeds,
                 self.profile.remaining_fraction(pack_front),
                 self.profile.terrain_at(pack_front),
-                break_ahead,
+                chase_willingness,
                 gradients[front_member],
             )
             # Shelter is credited to both the tempo-hold test and the depth
@@ -325,10 +341,10 @@ class RaceState:
             # (front) this is irrelevant — draft_hold_multiplier special-cases
             # depth < 1 to no credit regardless.
             gap_ahead: dict[int, float] = {}
+            wheel_ahead: dict[int, int | None] = {}
             for d, m in enumerate(by_pos):
-                gap_ahead[m] = (
-                    positions[by_pos[d - 1]] - positions[m] if d >= 1 else 0.0
-                )
+                wheel_ahead[m] = by_pos[d - 1] if d >= 1 else None
+                gap_ahead[m] = positions[wheel_ahead[m]] - positions[m] if d >= 1 else 0.0
             # Real drafting benefit falls off sharply with physical distance —
             # a rider two wheels back on paper but 13 m off the wheel ahead
             # isn't meaningfully sheltered. gap_factor is 1.0 at DRAFT_DISTANCE
@@ -346,6 +362,22 @@ class RaceState:
                 )
                 for m in pack
             }
+            # Teammate shelter priority (Tier A1): a rider sitting on a
+            # teammate's wheel gets a bonus on top of the gap-decayed value —
+            # real teams hand each other wheels deliberately, strangers just
+            # happen to be near each other. Scaled by the same gap_factor so
+            # it still requires being physically close enough to shelter at
+            # all (a teammate 50m up the road grants no bonus).
+            teammate_bonus_of = {
+                m: (
+                    TEAMMATE_SHELTER_BONUS * gap_factor_of[m]
+                    if wheel_ahead[m] is not None
+                    and self.rider_states[wheel_ahead[m]].rider.team_id
+                    == self.rider_states[m].rider.team_id
+                    else 0.0
+                )
+                for m in pack
+            }
             # The drop test and fatigue reference use rotation-averaged depth
             # (real bunches rotate — nobody is on the front the whole race),
             # scaled by the same gap_factor so the rotation floor still
@@ -353,11 +385,24 @@ class RaceState:
             # overriding a genuinely large, sustained physical gap — that
             # combination is what keeps this from reintroducing the coin-flip
             # drops rotation-averaging was built to remove.
-            rotation_floor = ROTATION_SHARE * (len(pack) - 1)
-            eff_depth_of = {
-                m: max(float(d) * gap_factor_of[m], rotation_floor * gap_factor_of[m])
-                for m, d in depth_of.items()
-            }
+            #
+            # Role-scaled (Tier A2): a support rider's floor is lower (they
+            # really do take more than their share of front-line time for
+            # the team) and a leader's is higher (teammates hand them more
+            # shelter than their instantaneous position alone would credit).
+            # This biases the rotation *average* the fatigue formulas see —
+            # a leader physically at the front this tick still pulls (depth
+            # 0, `pulling=True` below); only the drop-test/fatigue reference
+            # is protected.
+            eff_depth_of = {}
+            for m, d in depth_of.items():
+                role = self.rider_states[m].rider.role
+                share = ROTATION_SHARE_LEADER if role == "leader" else ROTATION_SHARE_SUPPORT
+                rotation_floor = share * (len(pack) - 1)
+                eff_depth_of[m] = (
+                    max(float(d) * gap_factor_of[m], rotation_floor * gap_factor_of[m])
+                    + teammate_bonus_of[m]
+                )
             coherent = [
                 m
                 for m in pack
@@ -536,14 +581,17 @@ class RaceState:
             # group (depth <= BRIDGE_MAX_DEPTH) consider it, and only when
             # someone is genuinely clear (break_ahead, the same test pack
             # tempo uses — not just "no wheel within 3m", which every rider
-            # in a strung-out bunch satisfies every tick).
-            else:
+            # in a strung-out bunch satisfies every tick). A team leader sits
+            # in and saves themself for the finale instead of spending energy
+            # on a speculative early move — that's what support riders are
+            # for (Tier A4, TEAM_TACTICS_PLAN.md).
+            elif rs.rider.role != "leader":
                 group_front, depth = self._group_front_and_depth(
                     i, positions, sorted_idx, gradients
                 )
                 if depth <= BRIDGE_MAX_DEPTH:
                     leader_pos = self._nearest_clear_leader(
-                        pos, group_front, positions
+                        i, group_front, positions
                     )
                     if leader_pos is not None:
                         gap = leader_pos - pos
@@ -635,22 +683,29 @@ class RaceState:
                 break
         return front, depth
 
-    @staticmethod
     def _nearest_clear_leader(
-        pos: float, group_front: float, positions: list[float]
+        self, idx: int, group_front: float, positions: list[float]
     ) -> float | None:
         """Nearest rider genuinely clear of `idx`'s group (a real break).
 
-        "Clear" mirrors `break_ahead` in pack tempo: more than
+        "Clear" mirrors the pack-tempo chase test: more than
         BREAK_CLEAR_DISTANCE ahead of the group's front rider — not merely
         outside DRAFT_DISTANCE, which every rider in a strung-out bunch
-        satisfies every tick. Returns the nearest such rider's position, or
-        None if nobody is clear.
+        satisfies every tick. Excludes `idx`'s own teammates (Tier A3):
+        bridging to your own leader/teammate isn't chasing a break, it's
+        just riding up to them, so it shouldn't be evaluated (or energy-
+        gated) as a chase. Returns the nearest qualifying rider's position,
+        or None if nobody clear and unrelated is up the road.
         """
         from .formulas import BREAK_CLEAR_DISTANCE
 
+        my_team = self.rider_states[idx].rider.team_id
         threshold = group_front + BREAK_CLEAR_DISTANCE
-        clear_ahead = [p for p in positions if p > threshold]
+        clear_ahead = [
+            positions[o]
+            for o, rs in enumerate(self.rider_states)
+            if positions[o] > threshold and rs.rider.team_id != my_team
+        ]
         if not clear_ahead:
             return None
         return min(clear_ahead)
