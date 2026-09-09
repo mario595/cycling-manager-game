@@ -173,7 +173,6 @@ class RaceState:
             apply_energy_burst_modifier,
             apply_stamina_cruise_modifier,
             compute_base_speed,
-            compute_draft_factors,
             compute_energy_drain,
             compute_stamina_drain,
         )
@@ -224,8 +223,9 @@ class RaceState:
         # Packs are connected components over (undirected) proximity within
         # PACK_COHESION_DISTANCE. Found via BFS to avoid cycle risk.
         from .formulas import (
-            GROUP_DROP_FRACTION,
+            BREAK_CLEAR_DISTANCE,
             PACK_COHESION_DISTANCE,
+            compute_pack_tempo,
             draft_hold_multiplier,
         )
 
@@ -284,8 +284,22 @@ class RaceState:
             if len(pack) < 2:
                 continue
             member_speeds = [own_speeds[m] for m in pack]
-            best = max(member_speeds)
-            pace = best * GROUP_DROP_FRACTION
+            # The pack picks a tempo for its situation rather than always
+            # riding a fixed fraction of its strongest rider's ceiling: it
+            # rolls on an early flat road, and only goes full gas in the finale
+            # or when someone is clear up the road and worth chasing.
+            pack_front = max(positions[m] for m in pack)
+            break_ahead = any(
+                not other.finished
+                and positions[o] - pack_front > BREAK_CLEAR_DISTANCE
+                for o, other in enumerate(self.rider_states)
+            )
+            pace = compute_pack_tempo(
+                member_speeds,
+                self.profile.remaining_fraction(pack_front),
+                self.profile.terrain_at(pack_front),
+                break_ahead,
+            )
             # Shelter is credited to both the tempo-hold test and the depth
             # bookkeeping, so a weaker rider sheltering deep in the group (e.g.
             # a climber in the bunch on the flat) can hold the tempo even if
@@ -319,8 +333,13 @@ class RaceState:
 
             drafting = drafting_flags[i]
             pulling = self._is_pulling(i, positions, sorted_idx, gradients[i])
-            draft_stamina_factor, draft_energy_factor = compute_draft_factors(
-                rs.rider.attributes.positioning, pack_depth[i]
+            # The speed this rider can hold for free in the position they are
+            # actually riding: their own cruise when exposed or alone, more
+            # when sheltered. Same reference the cohesion drop test uses, so
+            # holding the tempo the engine says they can hold is not charged —
+            # by either fatigue meter.
+            sustainable = own_speeds[i] * draft_hold_multiplier(
+                rs.rider.attributes.positioning, pack_depth[i], gradients[i]
             )
 
             if rs.surge_ticks > 0:
@@ -329,9 +348,10 @@ class RaceState:
                 effective = add_speed_jitter(
                     apply_energy_burst_modifier(surge_speed, rs.energy)
                 )
-                energy_drain = compute_energy_drain(
-                    gradients[i], effective, own_speeds[i], draft_energy_factor
-                ) + SURGE_ENERGY_COST
+                energy_drain = (
+                    compute_energy_drain(effective, sustainable)
+                    + SURGE_ENERGY_COST
+                )
                 rs.surge_ticks -= 1
             else:
                 # Adopted group pace, with the rider's energy-burst throttle.
@@ -339,12 +359,10 @@ class RaceState:
                 effective = add_speed_jitter(
                     apply_energy_burst_modifier(group_pace, rs.energy)
                 )
-                energy_drain = compute_energy_drain(
-                    gradients[i], effective, own_speeds[i], draft_energy_factor
-                )
+                energy_drain = compute_energy_drain(effective, sustainable)
 
             stamina_drain = compute_stamina_drain(
-                gradients[i], effective, draft_stamina_factor,
+                gradients[i], effective, sustainable,
                 rs.rider.attributes.resistance,
             )
 

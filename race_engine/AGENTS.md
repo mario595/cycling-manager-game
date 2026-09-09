@@ -32,11 +32,13 @@ The engine separates two forms of effort:
   cracking**). Stamina is the meter that decides who cracks in the finale.
 
 - **Energy (0–100)** — anaerobic, short-term burst reserve. It drains **only**
-  when a rider works above their own natural sustainable pace (an *overshoot*,
-  e.g. being dragged along in the group faster than they could ride alone, or
-  actively surging), and recovers while cruising or descending. Stationary
-  riding on a climb costs stamina, not energy. Energy is the meter that gates
-  surges (attacks/sprint/chase). It is capped at 100.
+  when a rider works above the pace they can sustain *in the position they are
+  riding* — their solo cruise when exposed or alone, a higher, draft-credited
+  speed when sheltered in a pack (an *overshoot*, e.g. actively surging, or
+  hanging on to a group pace their shelter cannot buy). Sitting in the wheels at
+  the bunch's tempo is free and recovers the reserve. Steady riding on a climb
+  costs stamina, not energy. Energy is the meter that gates surges
+  (attacks/sprint/chase). It is capped at 100.
 
 ## Data model
 
@@ -45,8 +47,9 @@ The engine separates two forms of effort:
 - `sprint` — top-end finishing power (finish kick) and descending speed blend.
 - `flat` — speed on flat terrain.
 - `resistance` — fatigue tolerance; slows stamina drain.
-- `positioning` — draft/shelter skill; deepens the energy/stamina saving a
-  rider gets while sheltering in the wheels.
+- `positioning` — draft/shelter skill; raises the pace a rider can hold for
+  free while sheltering in the wheels, which in turn lowers what both fatigue
+  meters charge them.
 
 ### Position / course
 - `Segment` = `length` (meters) + `gradient` (percent, `+` = uphill).
@@ -211,7 +214,8 @@ The tick runs in phases so all riders see a consistent snapshot.
    the pre-computed course profile (terrain look-ahead).
 4. **Resolve pack cohesion**: riders within `PACK_COHESION_DISTANCE` of each
    other on a draft-allowed gradient cohere into a pack that rolls at a shared
-   sustainable tempo (`GROUP_DROP_FRACTION ×` the pack's best cruise). A rider
+   tempo chosen for the race situation (`compute_pack_tempo`, see Group tempo).
+   A rider
    whose **drafting-credited** cruise falls below that pace is DROPPED (not
    sheltered) — shelter lets a weaker rider hold a higher pace than their solo
    cruise (see Draft hold multiplier). A rider currently surging always rides
@@ -249,30 +253,45 @@ progressively (`progressive cracking`):
 `base_speed × (max(0, stamina / 60) ^ 0.7)`.
 
 ### Drain (`compute_stamina_drain`)
-Per tick:
+Charged on **relative intensity**, not on wall-clock time. Per tick:
 ```
-drain = 0.012 × (1 + (speed − 10.0) × 0.010)          # rolling workload
+sustainable = own_speed × draft_hold_multiplier(positioning, depth, gradient)
+intensity   = speed / max(1, sustainable)             # 1.0 = riding at your limit
+drain = 0.012 × intensity ** 3                        # aerobic cost of the effort
 drain *= 1 − (resistance / 100) × 0.6                 # fatigue tolerance
-drain *= draft_stamina_factor                         # shelter conservation (below)
 if gradient > 0: drain *= 1 + gradient × 0.20         # climbs cost more
 if gradient < 0: drain −= 0.006                       # descents recover a little
 ```
-Stamina is clamped to `[0, 100]`. `draft_stamina_factor` ∈ `[0.70, 1.0]` is the
-fraction of drain kept while sheltered — lower = better shelter (see Drafting).
+Stamina is clamped to `[0, 100]`.
+
+`sustainable` is the **same draft-credited reference** used by the pack-cohesion
+drop test and by `compute_energy_drain`, so shelter is credited exactly once, in
+one place, to all three. There is deliberately no separate
+`draft_stamina_factor`.
+
+The cubic exponent is what makes soft-pedalling in the wheels genuinely restful:
+an easy bunch tempo runs at intensity ~0.6–0.8 and so costs 20–50 % of riding at
+your limit, while hanging on above your means costs steeply more. The previous
+formula's speed term (`(speed − 10) × 0.010`) varied drain by only a few percent
+across the whole speed range, which charged fatigue per second regardless of
+effort — so slowing the bunch down made a race *more* tiring, not less.
 
 ## Energy
 
 `compute_energy_drain` returns a positive cost (drain) when the rider is working
-above their own cruise, or a negative value (recovery) when under their own pace:
+above the pace their current shelter lets them sustain, or a negative value
+(recovery) when riding within it:
 ```
-overshoot = max(0, effective_speed − own_speed)       # excess over natural pace
-intensity = overshoot × 0.10
-intensity *= draft_energy_factor                      # shelter conservation (below)
+sustainable = own_speed × draft_hold_multiplier(positioning, depth, gradient)
+overshoot   = max(0, effective_speed − sustainable)   # excess over what shelter buys
+intensity   = overshoot × 0.10
 if intensity > 0: return intensity                     # drained
-return −0.008                                          # recovered while cruising/descending
+return −0.008                                          # recovered while within your means
 ```
-`draft_energy_factor` ∈ `[0.40, 1.0]` is the fraction of burst cost kept while
-sheltered (see Drafting).
+`sustainable` is the **same reference the pack-cohesion drop test uses**, so a
+rider the engine says can hold the tempo is not simultaneously charged for
+holding it. There is deliberately no separate `draft_energy_factor`: shelter is
+credited to the anaerobic reserve exactly once, through this reference speed.
 `apply_energy_burst_modifier` throttles burst speed when energy is low: unchanged
 while `energy >= 40`, else `speed × (0.5 + 0.5 × (energy / 40))`. This caps
 surges without throttling steady cruising (which stamina governs). Energy is
@@ -285,6 +304,13 @@ riding at maximum. Shelter within a pack is set by the rider's position (depth)
 and their `positioning` skill, so a skilled deep rider conserves more than an
 exposed or socially-sheltered one.
 
+Shelter reaches the rest of the engine through **exactly one channel**: the
+speed a sheltered rider can hold for free (`draft_hold_multiplier`). The drop
+test, the energy model and the stamina model all measure effort against that
+same speed. Crediting shelter a second time — as separate stamina/energy
+keep-fractions once did — meant a rider the engine said could hold the tempo was
+simultaneously charged for holding it.
+
 - `PACK_COHESION_DISTANCE = 60.0` m — riders within this of each other on a
   draft-allowed gradient cohere into a single pack (connected-component BFS).
   This governs pace-sharing / dropping, not the physical drafting label.
@@ -292,8 +318,20 @@ exposed or socially-sheltered one.
 - **Drafting flag** — `drafting=True` only when a rider has a wheel within
   `DRAFT_DISTANCE (3.0 m)` directly ahead. Pack membership (cohesion) does
   NOT set the flag; only physical proximity to a wheel does.
-- **Group tempo** — a pack rolls at `GROUP_DROP_FRACTION (0.90) ×` the pack's best
-  cruise (`pace`). A rider is DROPPED (rides alone, not sheltered) only if their
+- **Group tempo** (`compute_pack_tempo`) — a pack rolls at
+  `pace_setter_speed(member_speeds) × pack_tempo_fraction(...)`.
+  `pace_setter_speed` is the **median of the strongest third** of the pack's
+  cruises, not `max()`: one jittered outlier should not dictate the tempo for
+  the whole bunch. The fraction is **situational**, because a real bunch only
+  rides near its ceiling when it has a reason to:
+
+  | Situation | Fraction |
+  |---|---|
+  | Someone clear up the road (> `BREAK_CLEAR_DISTANCE` = 60 m ahead of the pack's front rider), or finale (`remaining < TRANSITION_PHASE_THRESHOLD`) | `PACK_TEMPO_HARD` = 0.90 |
+  | Transition phase (`remaining < EARLY_PHASE_THRESHOLD`), or early on climbing terrain | `PACK_TEMPO_STEADY` = 0.82 |
+  | Early **and** flat **and** nobody up the road | `PACK_TEMPO_EASY` = 0.75 |
+
+  A rider is DROPPED (rides alone, not sheltered) only if their
   **drafting-credited** cruise is below that tempo — see `draft_hold_multiplier`
   below. A sheltered rider can hold a higher pace than their solo cruise; an
   exposed rider (depth 0) gets no credit and is dropped if their own cruise can't
@@ -302,28 +340,25 @@ exposed or socially-sheltered one.
   so a frozen finish-line bunch cannot shelter riders.
 - **Pack depth** — within a coherent pack, the rider with the front position is
   the puller (depth 0, exposed); each wheel behind gains a deeper shelter
-  (depth 1, 2, …). Draft savings scale with depth up to
+  (depth 1, 2, …). Shelter quality scales with depth up to
   `DRAFT_DEPTH_SATURATION (10)`.
 
-### Draft factors (`compute_draft_factors`)
-A rider's hold-on-to-cost fractions are derived from `positioning` (skill) and
-pack `depth`:
+### Shelter quality (`shelter_quality`)
+The 0–1 blend of draft skill and pack depth that `draft_hold_multiplier` is
+built from:
 ```
 skill = (positioning − 1) / 99                       # 0..1
 depth_factor = min(depth, 10) / 10                   # 0..1
-quality = 0.6 × skill + 0.4 × depth_factor           # 0..1
-stamina_factor = 0.85 − (0.85 − 0.70) × quality      # 1.0 if not sheltering
-energy_factor  = 0.60 − (0.60 − 0.40) × quality      # 1.0 if not sheltering
+quality = clamp(0.6 × skill + 0.4 × depth_factor, 0, 1)
 ```
-A rider at depth 0 (pulling or solo) uses factor 1.0 (no save).
 
 ### Draft hold multiplier (`draft_hold_multiplier`)
 The drop test uses a rider's **drafting-credited** cruise rather than their raw
 solo cruise, so a weaker rider sheltering in a strong group can hold the tempo.
+It is also the reference speed **both** fatigue meters measure effort against
+(`compute_energy_drain`'s overshoot and `compute_stamina_drain`'s intensity).
 ```
-skill = (positioning − 1) / 99
-depth_factor = min(depth, 10) / 10
-quality = 0.6 × skill + 0.4 × depth_factor
+quality = shelter_quality(positioning, depth)
 drag = 1 − min(1, max(0, gradient) / DRAFT_UPHILL_LIMIT)   # fades on climbs
 multiplier = DRAFT_HOLD_MIN + (DRAFT_HOLD_MAX − DRAFT_HOLD_MIN) × quality × drag
 ```
