@@ -31,7 +31,11 @@ A standalone React-based web application for visualizing race simulations produc
   - `pos` (meters from start)
   - `speed` (m/s)
   - `energy`, `stamina` (0-100)
-  - `drafting`, `pulling`, `surging` (booleans)
+  - `pulling`, `surging` (booleans) — `pulling` is set only for the rider
+    setting the pace at the front of a pack; there is no separate "drafting"
+    flag (shelter degree in a pack is continuous, not a meaningful boolean —
+    every non-pulling pack member is assumed to be benefiting to some
+    degree; see `race_engine/DOMAIN.md`'s "Drafting & pack cohesion")
   - `finished`, `finish_time`
 
 ### Elevation Derivation

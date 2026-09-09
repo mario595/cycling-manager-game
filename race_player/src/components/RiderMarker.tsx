@@ -28,9 +28,6 @@ function RiderMarker({ rider, x, y, active, onClick, onHover }: RiderMarkerProps
       {active && (
         <circle r={11} fill="none" stroke={color} strokeWidth={1} opacity={0.5} />
       )}
-      {rider.drafting && !active && (
-        <circle r={9} fill="none" stroke={color} strokeWidth={0.75} opacity={0.4} />
-      )}
     </g>
   )
 }

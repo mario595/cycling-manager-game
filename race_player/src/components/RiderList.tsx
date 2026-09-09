@@ -1,7 +1,6 @@
 import { useMemo } from 'react'
 import {
   FlagOutlined,
-  TeamOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons'
 import type { Pack, Rider } from '../types/race'
@@ -46,9 +45,6 @@ function RiderStateIcons({ rider }: { rider: Rider }) {
       )}
       {rider.surging && (
         <ThunderboltOutlined style={{ color: '#f59e0b' }} aria-label="surging" />
-      )}
-      {rider.drafting && (
-        <TeamOutlined style={{ color: '#22c55e' }} aria-label="drafting" />
       )}
     </span>
   )
@@ -156,9 +152,6 @@ export default function RiderList({ packs, onSelectRider }: RiderListProps) {
         </span>
         <span className="inline-flex items-center gap-1">
           <ThunderboltOutlined style={{ color: '#f59e0b' }} /> surging (attacking)
-        </span>
-        <span className="inline-flex items-center gap-1">
-          <TeamOutlined style={{ color: '#22c55e' }} /> drafting (saving energy)
         </span>
       </div>
     </div>

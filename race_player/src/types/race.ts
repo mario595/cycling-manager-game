@@ -10,7 +10,6 @@ export interface Rider {
   speed: number
   energy: number
   stamina: number
-  drafting: boolean
   pulling: boolean
   surging: boolean
   finished: boolean
