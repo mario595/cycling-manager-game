@@ -19,7 +19,12 @@ consumption (e.g. by visualizers).
 
 The current rule-set is a set of *reflexes* (finish sprint, climb attack, gap
 chase) layered over emergent group behavior (drafting, pace-sharing, fatigue
-cracking). It is **not** a full team-tactics model; tactics are a future concern.
+cracking), plus a first layer of team tactics (Tier A: leader protection,
+teammate shelter, not chasing your own break, leaders not bridging — see
+"Team and role" in Data model and the A1–A4 biases described in Drafting &
+pack cohesion and Tactics below). It is **not** a full team-tactics model —
+finer roles and cross-team cooperation remain a future concern (Tier B/C,
+see Future work).
 
 ## Core concepts — the two meters
 
@@ -50,6 +55,22 @@ The engine separates two forms of effort:
 - `positioning` — draft/shelter skill; raises the pace a rider can hold for
   free while sheltering in the wheels, which in turn lowers what both fatigue
   meters charge them.
+
+### Team and role (`Rider`)
+
+Riders belong to a team and hold one of two roles, feeding the team-tactics
+biases below (see "Team tactics"):
+- `team_id` — which team the rider rides for. Defaults to the rider's own
+  `id` (a team of one) when not given, so hand-built `Rider` objects and
+  code paths that predate teams keep working unchanged.
+- `role` — `"leader"` or `"support"`. Defaults to `"leader"`, so a
+  default-constructed field of soloists behaves exactly as it did before
+  teams existed: every rider is their own one-person team's leader.
+
+There is no engine-side notion of "who deserves to lead" — the engine reads
+`role`, it does not derive it. Choosing a course-appropriate leader is a
+config/player decision (see "Bundled configs" below); a deliberately wrong
+choice is expressible and will lose.
 
 ### Position / course
 - `Segment` = `length` (meters) + `gradient` (percent, `+` = uphill).
@@ -89,6 +110,8 @@ makes it easy to keep multiple reusable race configurations side by side.
       {
         "id": "c1",
         "name": "Climber 1",
+        "team": "t1",
+        "role": "leader",
         "attributes": {"climb": 92, "sprint": 40, "flat": 45, "resistance": 72, "positioning": 60}
       }
     ]
@@ -98,6 +121,15 @@ makes it easy to keep multiple reusable race configurations side by side.
 - `course` — non-empty list of `{"length": m, "gradient": %}`, positive lengths.
 - `riders` — non-empty list; each has a unique `id`, a display `name`, and
   `attributes` (all five ints in `[1, 100]`, validated as in `RiderAttributes`).
+- `team` — optional; which team the rider rides for. Defaults to the
+  rider's own `id` (a team of one) when absent.
+- `role` — optional; `"leader"` or `"support"` when present (any other value
+  is a `ConfigError`). Defaults to `"leader"` when absent.
+- **Exactly one leader per team** — `load_config` raises `ConfigError` if any
+  team has zero or more than one rider with `role: "leader"`. Silent
+  acceptance would produce races that are confusing to debug: a team with no
+  leader has nobody to protect, and one with two has no well-defined "the"
+  leader for the role-scaled tactics below.
 - `name` — optional display name for the race (informational).
 - Starting `energy`/`stamina` are always 100 (engine-internal, not configurable).
   Engine constants (draft distance, surge thresholds, etc.) are not exported to
@@ -113,11 +145,40 @@ malformed input).
 
 ### Bundled configs (`configs/`)
 The `configs/` directory holds reusable race definitions modeled on real
-single-day races. They use a **shared 11-rider archetype roster** (GC climbers,
-puncheurs, rouleurs, sprinters, domestiques) embedded in each file, so terrain
-alone determines the winner. Courses are **scaled down** (roughly 90–140 km
+single-day races. They use a **shared 16-rider roster of 4 teams of 4**
+(built from the same five archetypes — GC climbers, puncheurs, rouleurs,
+sprinters, domestiques — so per-archetype attribute tuning is unchanged)
+embedded in each file. Courses are **scaled down** (roughly 90–140 km
 instead of the 250–300 km of real Monuments) for fast iteration; the profile
 character (climb ratios, late steep sections) is preserved.
+
+Rider ids keep their archetype prefix (`gc`/`pu`/`ru`/`sp`/`do`) regardless of
+team — team membership lives only in the `team` field — so `audit.py`'s
+`_archetype()` needs no changes and terrain alone still determines the
+winning archetype (see "Realism status" below).
+
+**Team roster and identities** (same 16 riders across all 6 configs):
+
+| Team | Identity | Composition |
+|------|----------|-------------|
+| `t1` | Climbing / GC | `gc1`, `gc2`, `ru1`, `do1` |
+| `t2` | Sprint | `sp1`, `pu1`, `do2`, `do3` |
+| `t3` | Classics / puncheur | `pu2`, `pu3`, `ru2`, `gc3` (Superdom) |
+| `t4` | Mixed / opportunist | `gc4`, `sp2`, `ru3`, `do4` |
+
+**Per-config leaders** — each config declares its own leader per team, chosen
+for the course's terrain (a team without a suitable rider for the terrain
+simply has a leader who cannot win, which is the intended, expressible
+outcome of a bad leader choice):
+
+| Config | `t1` leader | `t2` leader | `t3` leader | `t4` leader |
+|--------|------|------|------|------|
+| `sprinters_classic` | `ru1` | `sp1` | `pu2` | `sp2` |
+| `san_remo` | `ru1` | `sp1` | `pu2` | `sp2` |
+| `lombardia` | `gc1` | `pu1` | `pu2` | `gc4` |
+| `classics_hilly` | `gc1` | `pu1` | `pu2` | `gc4` |
+| `summit_finish` | `gc1` | `pu1` | `gc3` | `gc4` |
+| `mountain_stage` | `gc1` | `pu1` | `gc3` | `gc4` |
 
 - `sprinters_classic.json` — flat bunch-sprint style race.
 - `san_remo.json` — flat-first + Cipressa/Poggio-style late climbs.
@@ -223,28 +284,34 @@ moderate terrain. Cannot win from a breakaway but rarely gets dropped.
 ### Realism status
 
 Verified with `race_engine/audit.py` (5 seeds) against the real-world
-expected winner per course:
+expected winner per course, on the current 16-rider/4-team roster with Tier A
+tactics (A1–A4) active:
 
 | Course (scaled) | Realistic winner | Engine winner |
 |---|---|---|
 | `sprinters_classic` | Sprinter (bunch sprint) | Sprinter, 5/5 seeds |
-| `san_remo` | Sprinter-climber / puncheur | Sprinter/puncheur, 4/5 seeds |
+| `san_remo` | Sprinter-climber / puncheur | Sprinter/puncheur, 5/5 seeds |
 | `lombardia` | Climber / puncheur | GC Climber, 5/5 seeds |
 | `classics_hilly` | Puncheur / climber | GC Climber, 5/5 seeds |
 | `summit_finish` | Pure climber | GC Climber, 5/5 seeds |
 | `mountain_stage` | GC climber | GC Climber, 5/5 seeds |
 
-**Known limitation — dropped riders decay without limit.** A rider who
-cracks and falls off the back of every pack has no way back to equilibrium:
-isolated, their `sustainable` reference is their own cruise, so
-`compute_stamina_drain`'s intensity is pinned at ~1.0 regardless of how slow
-they go, and `apply_stamina_cruise_modifier`'s progressive-cracking curve
-compounds — stamina keeps falling, cruise keeps degrading, with nothing to
-break the loop. In practice this mostly shows up in the tail of the field on
-harder courses, not in who wins. Not yet fixed; candidate approaches are a
-recovery term for riding below one's own cruise, a stamina floor, or an
-"autobus" (dropped riders forming their own shelter-sharing group), possibly
-paired with a time-cut/broom-wagon DNF rule.
+**Known limitation — dropped riders decay without limit — no longer observed
+in practice at 16 riders.** A rider who cracks and falls off the back of
+every pack has no way back to equilibrium in principle: isolated, their
+`sustainable` reference is their own cruise, so `compute_stamina_drain`'s
+intensity is pinned at ~1.0 regardless of how slow they go, and
+`apply_stamina_cruise_modifier`'s progressive-cracking curve compounds —
+stamina keeps falling, cruise keeps degrading, with nothing to break the
+loop. The underlying mechanism is unchanged, but going from 11 to 16 riders
+gave every straggler more company to fall back on (rotation-averaged
+shelter, see below, is credited relative to pack size), so nobody isolates
+completely — the regression audit's baseline went from 55 DNFs/20
+tick-cap-hit runs (of 30) at 11 riders to **zero** at 16. Not fixed at the
+mechanism level; candidate approaches (a recovery term for riding below
+one's own cruise, a stamina floor, an "autobus", a time-cut/broom-wagon DNF
+rule) remain in Future work below in case a future roster or course change
+brings the tail back.
 
 Update this section (and re-run the audit) when engine behavior changes.
 
@@ -437,7 +504,7 @@ simultaneously charged for holding it.
 
   | Situation | Fraction |
   |---|---|
-  | Genuinely clear break ahead (`break_ahead`) on draftable terrain (`gradient <= DRAFT_UPHILL_LIMIT`) | `PACK_TEMPO_CHASE` = 1.08 |
+  | Everyone still willing to chase (`chase_willingness = 1.0`) on draftable terrain (`gradient <= DRAFT_UPHILL_LIMIT`) | `PACK_TEMPO_CHASE` = 1.08 |
   | Someone clear up the road (> `BREAK_CLEAR_DISTANCE` = 60 m ahead of the pack's front rider) on steeper terrain, or finale (`remaining < TRANSITION_PHASE_THRESHOLD`) | `PACK_TEMPO_HARD` = 0.90 |
   | Transition phase (`remaining < EARLY_PHASE_THRESHOLD`), or early on climbing terrain | `PACK_TEMPO_STEADY` = 0.82 |
   | Early **and** flat **and** nobody up the road | `PACK_TEMPO_EASY` = 0.75 |
@@ -450,6 +517,21 @@ simultaneously charged for holding it.
   away. This band depends on rotation-averaged shelter (below): chasing above
   1.0× the pace-setter reference would shed the pack one rider at a time from
   the front without it.
+
+  **Teammate-aware chase willingness (Tier A3)** — `break_ahead` used to be a
+  single pack-wide bool ("is anyone clear up the road"). It is now
+  `chase_willingness`, the **fraction of the pack** that sees a break worth
+  chasing: each member checks whether any rider clear ahead (the same
+  `BREAK_CLEAR_DISTANCE` test) is on a *different* team than themself —
+  chasing down your own teammate's break helps nobody, so a member whose own
+  team is the one up the road doesn't count as willing. `pack_tempo_fraction`
+  interpolates linearly between the no-break tempo (`chase_willingness = 0`)
+  and the full chase tempo (`chase_willingness = 1`) rather than snapping
+  between two fixed values, so one team with a rider away genuinely blunts
+  the chase without unilaterally calling it off for every other team still
+  racing normally. The bridge rule's `_nearest_clear_leader` (see Tactics
+  below) applies the same team filter: bridging to your own teammate isn't
+  chasing a break, it's just riding up to them.
 
   A rider is DROPPED (rides alone, not sheltered) only if their
   **drafting-credited** cruise is below that tempo — see `draft_hold_multiplier`
@@ -481,13 +563,15 @@ simultaneously charged for holding it.
   `draft_hold_multiplier` already special-cases `depth < 1` to no credit
   regardless.
 - **Rotation-averaged depth for the drop test and fatigue reference**
-  (`ROTATION_SHARE = 0.5`) — real bunches rotate, so nobody rides a whole
-  race at their instantaneous depth. Using raw instantaneous depth charged
-  whoever happened to be a half-wheel ahead a given tick as fully exposed
-  (depth 0, no draft credit), which could shed them on a single jitter tick.
-  The pack-cohesion drop test and the `sustainable` reference fed to the
-  energy/stamina drain formulas use
-  `eff_depth = max(depth * gap_factor, ROTATION_SHARE * (pack_size - 1) * gap_factor)`
+  (`ROTATION_SHARE_LEADER = 0.65`, `ROTATION_SHARE_SUPPORT = 0.35`) — real
+  bunches rotate, so nobody rides a whole race at their instantaneous depth.
+  Using raw instantaneous depth charged whoever happened to be a half-wheel
+  ahead a given tick as fully exposed (depth 0, no draft credit), which
+  could shed them on a single jitter tick. The pack-cohesion drop test and
+  the `sustainable` reference fed to the energy/stamina drain formulas use
+  ```
+  eff_depth = max(depth * gap_factor, rotation_share * (pack_size - 1) * gap_factor) + teammate_bonus
+  ```
   instead of raw depth — every rider is credited with at least "sometimes
   near the front, sometimes not" shelter. Scaling the rotation floor by the
   *same* `gap_factor` (rather than leaving it unconditional) keeps the two
@@ -497,6 +581,32 @@ simultaneously charged for holding it.
   reintroducing the coin-flip drops rotation-averaging was built to remove.
   Inert above `DRAFT_UPHILL_LIMIT`, where `draft_hold_multiplier`'s `drag`
   term already fades to 0.
+
+  **Role-scaled rotation floor (Tier A2)** — `rotation_share` is no longer a
+  single pack-wide constant. A `role == "leader"` rider uses
+  `ROTATION_SHARE_LEADER` (0.65) and a `role == "support"` rider uses
+  `ROTATION_SHARE_SUPPORT` (0.35), so supports are credited with less "often
+  near the front" shelter (they really do take more than their share of
+  front-line time for the team) and leaders with more (teammates hand them
+  more shelter than their instantaneous position alone would credit). This
+  biases the *rotation average* the fatigue formulas see; a leader
+  physically at the front this tick still pulls (depth 0, `pulling=True`) —
+  the geometry is untouched, only the fatigue reference. A solo rider (team
+  of one, `role` defaults to `"leader"`) always gets the generous end, same
+  as every rider did before teams existed.
+
+  **Teammate shelter priority (Tier A1)** — `teammate_bonus` adds
+  `TEAMMATE_SHELTER_BONUS` (1.0), scaled by the same `gap_factor`, to a
+  rider's `eff_depth` whenever the wheel immediately ahead of them in the
+  pack's chain belongs to a rider on their own team. Real teams hand each
+  other wheels deliberately; strangers in a pack merely happen to be near
+  each other. Additive (not multiplicative) so it matters most for a rider
+  already close enough to be credited at all, and does nothing for one too
+  far off the wheel to shelter regardless of who is up there.
+
+  A1 and A2 both favor the leader and are known to stack (see Risks in
+  `TEAM_TACTICS_PLAN.md`); the audit's leader-vs-support finish-order/stamina
+  check (below) is what catches an over-tuned combination.
 
 ### Shelter quality (`shelter_quality`)
 The 0–1 blend of draft skill and pack depth that `draft_hold_multiplier` is
@@ -539,9 +649,11 @@ multi-member pack, never pulls.
 ## Tactics: race phases & surge decisions
 
 The engine's rule-set is a set of *reflexes* layered over emergent group
-behavior (drafting, pace-sharing, fatigue cracking). It is **not** a full
-team-tactics model; tactics are a future concern. Reflexes are terrain- and
-phase-aware: riders evaluate their situation (remaining distance, terrain
+behavior (drafting, pace-sharing, fatigue cracking), with one reflex
+(rule 3, Bridge to a break, below) gated by team role — see Tier A4 and A3.
+It is **not** a full team-tactics model; finer roles and cross-team
+cooperation remain a future concern (see Future work). Reflexes are terrain-
+and phase-aware: riders evaluate their situation (remaining distance, terrain
 ahead, their own energy budget) before choosing to surge, so they only make
 efforts they can plausibly sustain — mimicking how a real pro manages a race.
 
@@ -610,17 +722,27 @@ terrain/phase/strength gate below.
    terrain bucket `STEEP` (gradient `>= 7.0` %), and `climb >= ATTACK_MIN_CLIMB (75)`.
    A strong climber tries to break away only in the late race on a genuinely
    steep section.
-3. **Bridge to a break** — only riders at the front of their own group
-   (`depth <= BRIDGE_MAX_DEPTH (2)`, computed by `_group_front_and_depth`
-   over the rider's own `PACK_COHESION_DISTANCE`-chained neighbours, not the
-   absolute race leader) consider it, and only when someone is **genuinely
-   clear** — `_nearest_clear_leader` finds a rider more than
-   `BREAK_CLEAR_DISTANCE` (60 m) ahead of the group's front, the same
-   `break_ahead` test pack tempo uses. Gap to that leader must be
-   `<= BRIDGE_GAP_MAX (150 m)`, `remaining_fraction < ATTACK_PHASE_THRESHOLD
-   (0.25)`, and `_can_chase` must pass (on steep terrain, don't chase a leader
-   who is markedly a stronger climber — `CHASE_MIN_CLIMB_ADVANTAGE = -10`
-   points).
+3. **Bridge to a break** — team leaders don't consider this rule at all
+   (**Tier A4**: a leader sits in and saves themself for the finale instead
+   of spending energy on a speculative early move — that's what support
+   riders are for). For a `role == "support"` rider: only those at the front
+   of their own group (`depth <= BRIDGE_MAX_DEPTH (2)`, computed by
+   `_group_front_and_depth` over the rider's own
+   `PACK_COHESION_DISTANCE`-chained neighbours, not the absolute race
+   leader) consider it, and only when someone is **genuinely clear** —
+   `_nearest_clear_leader` finds a rider more than `BREAK_CLEAR_DISTANCE`
+   (60 m) ahead of the group's front, the same test pack tempo's
+   `chase_willingness` uses, **excluding the chaser's own teammates** (Tier
+   A3: bridging to your own teammate isn't chasing a break, it's just riding
+   up to them, so it isn't evaluated — or energy-gated — as a chase). Gap to
+   that leader must be `<= BRIDGE_GAP_MAX (150 m)`, `remaining_fraction <
+   ATTACK_PHASE_THRESHOLD (0.25)`, and `_can_chase` must pass (on steep
+   terrain, don't chase a leader who is markedly a stronger climber —
+   `CHASE_MIN_CLIMB_ADVANTAGE = -10` points).
+
+   Rules 1 (finish sprint) and 2 (climb attack) stay role-blind — a team
+   leader must still be able to attack a climb or contest the sprint, that
+   is their whole purpose; only the speculative bridge move is gated by role.
 
    This replaced a much looser rule ("no wheel within `DRAFT_DISTANCE`
    ahead, and a 3-30 m gap to the absolute race leader") that every rider in
@@ -676,6 +798,8 @@ lines. Riders array order is fixed and matches `state.rider_states` order.
     {
       "id": "c1",
       "name": "Climber 1",
+      "team": "t1",
+      "role": "leader",
       "pos": 15234.56,
       "speed": 13.42,
       "energy": 62.1,
@@ -695,6 +819,8 @@ Field reference (rider entries):
 |---|---|
 | `id` | stable rider identifier |
 | `name` | display name |
+| `team` | team id (`Rider.team_id`; a team of one uses its own `id`) |
+| `role` | `"leader"` or `"support"` |
 | `pos` | meters from start, rounded to 2 dp |
 | `speed` | effective speed this tick, m/s, rounded to 2 dp |
 | `energy` | anaerobic reserve 0–100, rounded to 2 dp |
@@ -755,8 +881,8 @@ stragglers.
 **Size: medium.** Plausible shape: once one or more riders are dropped from
 the main pack, run the same cohesion/tempo logic over just the dropped
 riders as a second, slower peloton (its own `pace_setter_speed`, its own
-`break_ahead`, at a survival-oriented tempo fraction below `PACK_TEMPO_EASY`)
-rather than leaving them all fully isolated. Needs care around: riders
+`chase_willingness`, at a survival-oriented tempo fraction below
+`PACK_TEMPO_EASY`) rather than leaving them all fully isolated. Needs care around: riders
 dropped at different times/positions re-cohering into the bus without a
 teleport, whether a strong rider can bridge back to the main pack from the
 bus, and whether the bus itself can further shed its weakest riders (to the
@@ -776,6 +902,30 @@ saturation point (3-4 wheels back should already be ~full shelter, not 10)
 enough of the surrounding math that the specific old numbers aren't
 trustworthy without re-deriving them against the current model. **Size:
 small**, but needs fresh calibration work, not a drop-in constant change.
+
+### Team tactics Tier B (finer roles, negotiated cooperation)
+
+**Problem it solves:** Tier A (implemented; see "Team and role" in Data
+model and the A1–A4 biases threaded through Drafting & pack cohesion and
+Tactics above) gives every team exactly one protected leader and undifferentiated
+support riders. Real team tactics have finer structure: a designated
+lead-out man who times a sprint train rather than just "a support rider,"
+a road captain who reads the race and directs teammates mid-race, and
+riders from *different* teams cooperating in a break (an alliance of
+convenience against the chasing bunch) — none of which Tier A's two-role
+model expresses.
+
+**Size: medium-large.** Unlike Tier A (biases layered onto computations that
+already run every tick, no new subsystem), finer roles likely need their
+own state — a lead-out sequencing mechanic tied to `SPRINT_DISTANCE`/phase,
+a road-captain decision override on teammates' surges, or a shared
+"break coalition" concept that the chase-willingness fraction (Tier A3)
+doesn't currently have any notion of (right now the model only reasons
+about *your own* team, never a temporary alliance with a rival's rider up
+the road). Explicitly out of scope until Tier A's tuning is validated
+against actual gameplay (see `TEAM_TACTICS_PLAN.md`, which also scopes
+Tier C — dynamic leader reassignment, negotiated break cooperation, rival
+marking — as out of scope entirely, not just deferred).
 
 ## Submission / commit procedure
 
