@@ -2,3 +2,5 @@
 *.pyc
 __pycache__/
 .venv/
+race_engine/audit_baseline.json
+race_engine/audit_*.json
