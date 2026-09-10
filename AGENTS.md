@@ -29,6 +29,13 @@ automatically when browsing into the folder.)
 player, with no implementation detail. Order of work is **spec → plan → code**.
 Use the `product-spec` skill to write one (`/product-spec <rough idea>`).
 
+## Design mockups
+
+`design/` holds UI mockups exported from Claude Design — the visual reference
+`frontend/` is built against. They are **reference, not source**: nothing there
+is compiled or served, and the export is a template DSL rather than runnable
+HTML. See `design/README.md` before touching a screen's layout or colours.
+
 ## Tech Stack
 
 - **Backend:** Python 3.12.11 (pinned in `.python-version`, managed with pyenv), Django, Django REST Framework
@@ -68,7 +75,7 @@ up front — an empty app is just noise. The table below marks which exist.
 | `economy/` | Economy | *not yet* | Budgets, sponsorships, prize money. Use an append-only ledger, not a mutable balance field. |
 | `world/` | World Simulation | *not yet* | The tick: game-date singleton, cron management commands, AI team decisions. |
 | `api/` | API | *not yet* | DRF routers aggregating each app's serializers and views. |
-| `frontend/` | Frontend/UI | *not yet* | The React SPA. Built to `frontend/dist/`, served by Django. |
+| `frontend/` | Frontend/UI | **scaffold**, `README.md` | The React SPA. Built to `frontend/dist/`, served by Django. Dashboard and Roster render from the mockup; everything else is a placeholder route. No DB yet. |
 
 ### Dependency direction
 
@@ -100,6 +107,11 @@ cycling-manager/
 ├── config/                # Django project: settings/, urls, wsgi, asgi
 │   └── settings/          # base.py + dev.py + prod.py
 ├── specs/                 # product-level feature specs (what, not how)
+├── design/
+│   ├── README.md          # how to read the mockups; what is built from them
+│   └── *.dc.html          # Claude Design exports — reference, never a build input
+├── frontend/
+│   └── README.md          # the SPA scaffold, the /static/ prefix, conventions
 ├── race_engine/
 │   └── README.md          # engine spec + its own linked docs
 ├── race_player/
