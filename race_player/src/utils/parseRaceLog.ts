@@ -31,10 +31,19 @@ export function parseRaceLog(text: string): ParsedRace {
   const profile = computeProfile(snapshots[0].segments)
   const maxTicks = snapshots.length - 1
 
+  const teamCodes: Record<string, string> = {}
+  const teamNames: Record<string, string> = {}
+  for (const [teamId, team] of Object.entries(snapshots[0].teams ?? {})) {
+    teamCodes[teamId] = team.code
+    if (team.name) teamNames[teamId] = team.name
+  }
+
   return {
     snapshots,
     profile,
     courseLength: snapshots[0].course_length,
     maxTicks,
+    teamCodes,
+    teamNames,
   }
 }

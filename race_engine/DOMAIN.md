@@ -107,7 +107,7 @@ makes it easy to keep multiple reusable race configurations side by side.
       {"length": 1000.0, "gradient": 5.0}
     ],
     "teams": {
-      "t1": {"code": "ALP"}
+      "t1": {"code": "ALP", "name": "Alpine Racing"}
     },
     "riders": [
       {
@@ -133,15 +133,19 @@ makes it easy to keep multiple reusable race configurations side by side.
   acceptance would produce races that are confusing to debug: a team with no
   leader has nobody to protect, and one with two has no well-defined "the"
   leader for the role-scaled tactics below.
-- `teams` — optional map of team id to `{"code": "..."}`, the TV-style
-  3-letter uppercase team abbreviation (a UCI team code, e.g. `UAD` for UAE
-  Team Emirates) shown next to a rider on-screen. Purely display metadata —
-  the simulation never reads it, only `race_logger.py` does, so it is
-  entirely absent from `Rider`/`RaceState`. `load_config` rejects a code
-  that isn't exactly 3 uppercase letters, or two teams sharing one code. A
-  team with riders but no entry here simply has no code (`build_race`
-  ignores this map entirely; only `load_config`/the CLI carry it through to
-  the JSONL log).
+- `teams` — optional map of team id to `{"code": "...", "name": "..."}`.
+  `code` is the TV-style 3-letter uppercase team abbreviation (a UCI team
+  code, e.g. `UAD` for UAE Team Emirates); `name` is the full team name
+  (free text, e.g. `"Alpine Racing"`) — both shown next to a rider on-screen.
+  Purely display metadata — the simulation never reads either, only
+  `race_logger.py` does, so both are entirely absent from `Rider`/
+  `RaceState`. `load_config` requires both fields once a team entry exists
+  (a code without a name, or vice versa, is a `ConfigError`), rejects a code
+  that isn't exactly 3 uppercase letters, rejects an empty/whitespace-only
+  name, and rejects two teams sharing one code (names are not required to be
+  unique — they're display text, not an identity). A team with riders but no
+  entry here simply has no code/name (`build_race` ignores this map
+  entirely; only `load_config`/the CLI carry it through to the JSONL log).
 - `name` — optional display name for the race (informational).
 - Starting `energy`/`stamina` are always 100 (engine-internal, not configurable).
   Engine constants (draft distance, surge thresholds, etc.) are not exported to
@@ -814,7 +818,7 @@ without needing t=0). Riders array order is fixed and matches
     {"length": 1000.0, "gradient": 5.0}
   ],
   "teams": {
-    "t1": {"code": "ALP"}
+    "t1": {"code": "ALP", "name": "Alpine Racing"}
   },
   "riders": [
     {
@@ -837,7 +841,7 @@ without needing t=0). Riders array order is fixed and matches
 
 `teams` is `{}` when the config declared no `race.teams` map (`RaceLogger`'s
 `team_codes` defaults to empty). A rider's own `"team"` field is the key to
-look up in this map for its `"code"`.
+look up in this map for its `"code"`/`"name"`.
 
 Field reference (rider entries):
 

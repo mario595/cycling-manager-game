@@ -4,6 +4,7 @@ import ElevationProfile from './ElevationProfile'
 import PlaybackControls from './PlaybackControls'
 import RiderList from './RiderList'
 import { computePacks } from '../utils/computePacks'
+import { computeRaceResults } from '../utils/raceResults'
 
 interface RaceVizProps {
   raceData: ParsedRace
@@ -87,6 +88,7 @@ export default function RaceViz({ raceData }: RaceVizProps) {
   )
 
   const packs = useMemo(() => computePacks(riders, profile), [riders, profile])
+  const results = useMemo(() => computeRaceResults(raceData), [raceData])
 
   return (
     <div className="flex flex-col gap-4 p-4 max-w-5xl mx-auto">
@@ -106,12 +108,18 @@ export default function RaceViz({ raceData }: RaceVizProps) {
       <div className="bg-white rounded-lg border border-slate-200 p-2">
         <ElevationProfile
           profile={profile}
-          riders={riders}
+          packs={packs}
           onSelectRider={handleSelectRider}
         />
       </div>
 
-      <RiderList packs={packs} onSelectRider={handleSelectRider} />
+      <RiderList
+        packs={packs}
+        teamCodes={raceData.teamCodes}
+        teamNames={raceData.teamNames}
+        results={results}
+        onSelectRider={handleSelectRider}
+      />
 
       {activeRider && (
         <div className="text-xs text-slate-500">

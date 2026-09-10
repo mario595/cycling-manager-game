@@ -81,31 +81,40 @@ def _parse_course(raw: Any) -> Course:
     return Course(segments=segments)
 
 
-def _parse_teams(raw: Any) -> dict[str, str]:
-    """Parse the optional `race.teams` map: team id -> 3-letter uppercase code.
+def _parse_teams(raw: Any) -> dict[str, dict[str, str]]:
+    """Parse the optional `race.teams` map: team id -> {code, name}.
 
-    This is the TV-style team abbreviation (a UCI team code, e.g. "UAD") —
-    display metadata, not something the simulation reads. Absent entirely is
-    fine (older configs, or hand-built races with no teams); a team present
-    in `race.teams` must have a valid, unique code.
+    `code` is the TV-style team abbreviation (a UCI team code, e.g. "UAD");
+    `name` is the full display name (e.g. "United Alpine Development"). Both
+    are display metadata the simulation itself never reads. Absent entirely
+    is fine (older configs, or hand-built races with no teams); a team
+    present in `race.teams` must have both a valid, unique code and a
+    non-empty name.
     """
     teams_raw = raw.get("teams")
     if teams_raw is None:
         return {}
     if not isinstance(teams_raw, dict):
-        raise ConfigError("race.teams must be an object mapping team id to {\"code\": ...}")
+        raise ConfigError(
+            "race.teams must be an object mapping team id to {\"code\": ..., \"name\": ...}"
+        )
 
-    codes: dict[str, str] = {}
+    teams: dict[str, dict[str, str]] = {}
     for team_id, team_obj in teams_raw.items():
         path = f"race.teams.{team_id}"
-        code = _require(team_obj, "code", path)
-        code = str(code)
+        code = str(_require(team_obj, "code", path))
         if not _TEAM_CODE_RE.match(code):
             raise ConfigError(f"{path}.code must be exactly 3 uppercase letters, got {code!r}")
-        codes[str(team_id)] = code
+
+        name = str(_require(team_obj, "name", path))
+        if not name.strip():
+            raise ConfigError(f"{path}.name must not be empty")
+
+        teams[str(team_id)] = {"code": code, "name": name}
 
     seen_codes: dict[str, str] = {}
-    for team_id, code in codes.items():
+    for team_id, team_data in teams.items():
+        code = team_data["code"]
         if code in seen_codes:
             raise ConfigError(
                 f"race.teams: code {code!r} used by both {seen_codes[code]!r} and {team_id!r}; "
@@ -113,7 +122,7 @@ def _parse_teams(raw: Any) -> dict[str, str]:
             )
         seen_codes[code] = team_id
 
-    return codes
+    return teams
 
 
 def load_config(path: str) -> dict[str, Any]:

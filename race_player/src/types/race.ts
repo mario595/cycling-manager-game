@@ -6,6 +6,8 @@ export interface Segment {
 export interface Rider {
   id: string
   name: string
+  team?: string
+  role?: 'leader' | 'support'
   pos: number
   speed: number
   energy: number
@@ -21,6 +23,7 @@ export interface RaceSnapshot {
   course_length: number
   segments: Segment[]
   riders: Rider[]
+  teams?: Record<string, { code: string; name: string }>
 }
 
 export interface ProfilePoint {
@@ -40,6 +43,8 @@ export interface ParsedRace {
   profile: ProfilePoint[]
   courseLength: number
   maxTicks: number
+  teamCodes: Record<string, string>
+  teamNames: Record<string, string>
 }
 
 export interface RaceFile {

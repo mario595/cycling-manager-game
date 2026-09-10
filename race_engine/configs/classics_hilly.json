@@ -247,16 +247,20 @@
     ],
     "teams": {
       "t1": {
-        "code": "ALP"
+        "code": "ALP",
+        "name": "Alpine Racing"
       },
       "t2": {
-        "code": "SPR"
+        "code": "SPR",
+        "name": "Sprint Collective"
       },
       "t3": {
-        "code": "CLA"
+        "code": "CLA",
+        "name": "Classics Crew"
       },
       "t4": {
-        "code": "MIX"
+        "code": "MIX",
+        "name": "Mixed Nationale"
       }
     }
   }

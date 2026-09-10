@@ -733,7 +733,7 @@ def run_race(
     log_path: str | None = None,
     seed: int | None = None,
     verbose: bool = False,
-    team_codes: dict[str, str] | None = None,
+    team_codes: dict[str, dict[str, str]] | None = None,
 ) -> list[RiderState]:
     from .race_logger import RaceLogger
 

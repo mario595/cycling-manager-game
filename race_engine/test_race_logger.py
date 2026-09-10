@@ -1,10 +1,11 @@
-"""Tests for RaceLogger's JSONL output, focused on the team-code map.
+"""Tests for RaceLogger's JSONL output, focused on the team metadata map.
 
-The team code (a UCI-style 3-letter TV abbreviation, see config.py's
-`race.teams`) is display metadata the simulation itself never reads, so it
-is threaded straight from config through `run_race` into the logger rather
-than living on `Rider`/`RaceState`. It is written once per tick line (same
-as `course_length`/`segments`) as a `team_id -> {"code": ...}` map.
+Team code + name (see config.py's `race.teams`) are display metadata the
+simulation itself never reads, so they are threaded straight from config
+through `run_race` into the logger rather than living on `Rider`/`RaceState`.
+The logger doesn't need to know their shape at all — it writes whatever
+per-team dict it's given verbatim, once per tick line (same as
+`course_length`/`segments`), as a `team_id -> {"code": ..., "name": ...}` map.
 """
 
 from __future__ import annotations
@@ -26,14 +27,23 @@ def test_logger_writes_team_codes(tmp_path):
     state = RaceState.create_initial_state(riders, course)
 
     log_path = str(tmp_path / "race.jsonl")
-    logger = RaceLogger(log_path, team_codes={"t1": "ALP", "t2": "SPR"})
+    logger = RaceLogger(
+        log_path,
+        team_codes={
+            "t1": {"code": "ALP", "name": "Alpine Racing"},
+            "t2": {"code": "SPR", "name": "Sprint Collective"},
+        },
+    )
     logger.log(state)
     logger.close()
 
     with open(log_path) as f:
         entry = json.loads(f.readline())
 
-    assert entry["teams"] == {"t1": {"code": "ALP"}, "t2": {"code": "SPR"}}
+    assert entry["teams"] == {
+        "t1": {"code": "ALP", "name": "Alpine Racing"},
+        "t2": {"code": "SPR", "name": "Sprint Collective"},
+    }
 
 
 def test_logger_writes_empty_teams_when_absent(tmp_path):

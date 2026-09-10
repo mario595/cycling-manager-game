@@ -31,10 +31,20 @@ function gradientAtDistance(profile: ProfilePoint[], pos: number): number {
  * when two riders on draft-allowed terrain sit within PACK_COHESION_DISTANCE
  * of each other, unioned via BFS. A single rider is its own pack.
  */
+// Once multiple riders finish they all sit at the same `pos` (course_length),
+// so ranking by pos alone leaves ties in arbitrary array order. Break ties by
+// finish_time ascending (earlier finisher ranks first) — this is the only
+// thing that still distinguishes finished riders from one another.
+function comparePosition(a: Rider, b: Rider): number {
+  if (b.pos !== a.pos) return b.pos - a.pos
+  if (a.finished && b.finished) return (a.finish_time ?? 0) - (b.finish_time ?? 0)
+  return 0
+}
+
 export function computePacks(riders: Rider[], profile: ProfilePoint[]): Pack[] {
   if (riders.length === 0) return []
 
-  const sorted = [...riders].sort((a, b) => b.pos - a.pos)
+  const sorted = [...riders].sort(comparePosition)
 
   const idxOf = new Map(sorted.map((r, i) => [i, r]))
   const n = sorted.length
@@ -75,7 +85,7 @@ export function computePacks(riders: Rider[], profile: ProfilePoint[]): Pack[] {
     }
     const members = comp
       .map((k) => idxOf.get(k)!)
-      .sort((a, b) => b.pos - a.pos)
+      .sort(comparePosition)
     const front = members[0]
     packs.push({ riders: members, frontPos: front.pos, speed: front.speed })
   }
