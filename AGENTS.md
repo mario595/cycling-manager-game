@@ -22,6 +22,12 @@ actually needs them.
 When a new domain folder gets real work in it, give it a `DOMAIN.md` and mark it
 in the table below.
 
+## Feature specs
+
+`specs/` holds product-level feature definitions — what a feature does for the
+player, with no implementation detail. Order of work is **spec → plan → code**.
+Use the `product-spec` skill to write one (`/product-spec <rough idea>`).
+
 ## Tech Stack
 
 - **Backend:** Python, Django, Django REST Framework
@@ -56,6 +62,7 @@ cycling-manager/
 ├── manage.py
 ├── requirements.txt
 ├── pyproject.toml
+├── specs/                 # product-level feature specs (what, not how)
 ├── race_engine/
 │   └── DOMAIN.md          # engine spec + its own linked docs
 ├── race_player/
