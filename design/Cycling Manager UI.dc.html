@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  html, body { margin:0; padding:0; background:#F4F5F7; color:#2A2D33; font-family:'Plus Jakarta Sans', system-ui, sans-serif; -webkit-font-smoothing:antialiased; }
+  * { box-sizing:border-box; }
+  button { font-family:inherit; }
+  a { color:#2A2D33; text-decoration:none; }
+  a:hover { color:#7A4520; }
+  ::-webkit-scrollbar { width:8px; height:8px; }
+  ::-webkit-scrollbar-thumb { background:#D6DADF; border-radius:8px; }
+</style>
+</helmet>
+
+<div style="display:flex; min-height:100vh; background:#F4F5F7">
+
+  <div style="{{ scrimStyle }}" onClick="{{ closeDrawer }}"></div>
+
+  <aside style="{{ sidebarStyle }}">
+    <div style="padding:22px 20px 18px; display:flex; align-items:center; gap:11px">
+      <div style="width:30px; height:30px; background:#EBA76B; border-radius:7px; display:flex; align-items:center; justify-content:center; color:#2A2D33; font-weight:700; font-size:14px; letter-spacing:-0.5px">VC</div>
+      <div style="display:flex; flex-direction:column; gap:1px">
+        <div style="color:#2A2D33; font-weight:600; font-size:14.5px; letter-spacing:-0.2px">Vallée Cycling</div>
+        <div style="color:#5F636B; font-size:11px; font-family:'DM Mono', ui-monospace, monospace">CONTINENTAL · DIV 2</div>
+      </div>
+    </div>
+
+    <nav style="flex:1; overflow-y:auto; padding:4px 12px 16px; display:flex; flex-direction:column; gap:14px">
+      <sc-for list="{{ navSections }}" as="sec" hint-placeholder-count="5">
+        <div style="display:flex; flex-direction:column; gap:2px">
+          <div style="padding:6px 8px 6px; color:#5F636B; font-size:10px; letter-spacing:1.4px; font-weight:600; font-family:'DM Mono', ui-monospace, monospace">{{ sec.label }}</div>
+          <sc-for list="{{ sec.items }}" as="item" hint-placeholder-count="3">
+            <button onClick="{{ item.go }}" style="{{ item.style }}" style-hover="background:#E2E5EA; color:#2A2D33">
+              <span style="display:flex; align-items:center; gap:10px">
+                <span style="{{ item.dot }}"></span>
+                <span>{{ item.name }}</span>
+              </span>
+              <sc-if value="{{ item.badge }}" hint-placeholder-val="{{ true }}">
+                <span style="background:#EBA76B; color:#2A2D33; font-size:10px; font-weight:700; min-width:18px; height:18px; border-radius:9px; display:flex; align-items:center; justify-content:center; padding:0 5px; font-family:'DM Mono', ui-monospace, monospace">{{ item.badge }}</span>
+              </sc-if>
+            </button>
+          </sc-for>
+        </div>
+      </sc-for>
+    </nav>
+
+    <div style="border-top:1px solid #DFE2E6; padding:14px 20px; display:flex; align-items:center; justify-content:space-between; gap:10px">
+      <div style="display:flex; flex-direction:column; gap:2px">
+        <div style="color:#2A2D33; font-size:13px; font-weight:500">manager_rob</div>
+        <div style="color:#5F636B; font-size:11px; font-family:'DM Mono', ui-monospace, monospace">SEASON 3 · WK 14</div>
+      </div>
+      <button style="background:transparent; border:1px solid #D3D7DC; color:#5F636B; border-radius:8px; padding:6px 10px; font-size:11.5px; cursor:pointer" style-hover="border-color:#EBA76B; color:#EBA76B">Settings</button>
+    </div>
+  </aside>
+
+  <main style="flex:1; min-width:0; display:flex; flex-direction:column">
+
+    <header style="{{ topbarStyle }}">
+      <button onClick="{{ openDrawer }}" style="background:#2A2D33; border:none; border-radius:9px; width:38px; height:38px; display:flex; flex-direction:column; gap:4px; align-items:center; justify-content:center; cursor:pointer">
+        <span style="width:16px; height:2px; background:#FDFDFD; border-radius:2px"></span>
+        <span style="width:16px; height:2px; background:#FDFDFD; border-radius:2px"></span>
+        <span style="width:16px; height:2px; background:#FDFDFD; border-radius:2px"></span>
+      </button>
+      <div style="display:flex; flex-direction:column; gap:1px">
+        <div style="font-size:14px; font-weight:600; letter-spacing:-0.2px">{{ screenTitle }}</div>
+        <div style="font-size:11px; color:#6F737A; font-family:'DM Mono', ui-monospace, monospace">VALLÉE CYCLING</div>
+      </div>
+      <div style="margin-left:auto; background:#FFFFFF; border:1px solid #E4E6EA; border-radius:9px; padding:7px 11px; font-size:12px; font-family:'DM Mono', ui-monospace, monospace">€1.84M</div>
+    </header>
+
+    <sc-if value="{{ isDashboard }}" hint-placeholder-val="{{ true }}">
+    <div style="padding:28px 30px 60px; display:flex; flex-direction:column; gap:22px; max-width:1360px; width:100%">
+
+      <div style="display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:16px">
+        <div style="display:flex; flex-direction:column; gap:6px">
+          <div style="font-size:11px; letter-spacing:1.6px; color:#7A4520; font-weight:600; font-family:'DM Mono', ui-monospace, monospace">SEASON 3 · WEEK 14 OF 38</div>
+          <h1 style="margin:0; font-size:31px; font-weight:600; letter-spacing:-1px">Good morning, Rob.</h1>
+          <div style="font-size:14px; color:#6F737A">Two races resolved overnight. Your lineup for Tour de Sancerre is still open.</div>
+        </div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap">
+          <div style="background:#FFFFFF; border:1px solid #E4E6EA; border-radius:12px; padding:11px 15px; display:flex; flex-direction:column; gap:3px; min-width:120px">
+            <div style="font-size:10px; letter-spacing:1.2px; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">BUDGET</div>
+            <div style="font-size:19px; font-weight:600; font-family:'DM Mono', ui-monospace, monospace">€1.84M</div>
+          </div>
+          <div style="background:#FFFFFF; border:1px solid #E4E6EA; border-radius:12px; padding:11px 15px; display:flex; flex-direction:column; gap:3px; min-width:120px">
+            <div style="font-size:10px; letter-spacing:1.2px; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">DIV 2 RANK</div>
+            <div style="font-size:19px; font-weight:600; font-family:'DM Mono', ui-monospace, monospace">4<span style="font-size:12px; color:#6F737A">/16</span></div>
+          </div>
+          <div style="background:#2A2D33; border:1px solid #2A2D33; border-radius:12px; padding:11px 15px; display:flex; flex-direction:column; gap:3px; min-width:120px">
+            <div style="font-size:10px; letter-spacing:1.2px; color:#B5B9C1; font-family:'DM Mono', ui-monospace, monospace">NEXT DEADLINE</div>
+            <div style="font-size:19px; font-weight:600; color:#EBA76B; font-family:'DM Mono', ui-monospace, monospace">{{ deadline }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(258px, 1fr)); gap:14px">
+        <div style="background:#EBA76B; border-radius:14px; padding:18px 20px; display:flex; flex-direction:column; gap:12px">
+          <div style="font-size:10px; letter-spacing:1.4px; font-weight:600; color:#2A2D33; font-family:'DM Mono', ui-monospace, monospace">ACTION REQUIRED</div>
+          <div style="font-size:17px; font-weight:600; letter-spacing:-0.3px; line-height:1.25">Set your lineup for<br>Tour de Sancerre</div>
+          <div style="font-size:12.5px; color:#3A2A1A">6 of 8 slots filled · closes in 5h 42m</div>
+          <button style="margin-top:2px; align-self:flex-start; background:#2A2D33; color:#FFFFFF; border:none; border-radius:9px; padding:9px 15px; font-size:13px; font-weight:500; cursor:pointer" style-hover="background:#1E2127">Set lineup</button>
+        </div>
+        <div style="background:#FFFFFF; border:1px solid #E4E6EA; border-radius:14px; padding:18px 20px; display:flex; flex-direction:column; gap:12px">
+          <div style="font-size:10px; letter-spacing:1.4px; font-weight:600; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">OVERNIGHT</div>
+          <div style="font-size:17px; font-weight:600; letter-spacing:-0.3px; line-height:1.25">2 results ready<br>to review</div>
+          <div style="font-size:12.5px; color:#6F737A">GP de Verrières · Circuit d'Aubain</div>
+          <button onClick="{{ goRace }}" style="margin-top:2px; align-self:flex-start; background:#F4F5F7; color:#2A2D33; border:1px solid #DFE3E7; border-radius:9px; padding:9px 15px; font-size:13px; font-weight:500; cursor:pointer" style-hover="background:#EDEFF2">Watch replay</button>
+        </div>
+        <div style="background:#FFFFFF; border:1px solid #E4E6EA; border-radius:14px; padding:18px 20px; display:flex; flex-direction:column; gap:12px">
+          <div style="font-size:10px; letter-spacing:1.4px; font-weight:600; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">TRANSFER MARKET</div>
+          <div style="font-size:17px; font-weight:600; letter-spacing:-0.3px; line-height:1.25">2 bids awaiting<br>your response</div>
+          <div style="font-size:12.5px; color:#6F737A">Highest: €340k for T. Okafor</div>
+          <button style="margin-top:2px; align-self:flex-start; background:#F4F5F7; color:#2A2D33; border:1px solid #DFE3E7; border-radius:9px; padding:9px 15px; font-size:13px; font-weight:500; cursor:pointer" style-hover="background:#EDEFF2">Review bids</button>
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:16px; align-items:start">
+
+        <div style="background:#FFFFFF; border:1px solid #E4E6EA; border-radius:14px; overflow:hidden; grid-column:span 2; min-width:0">
+          <div style="padding:16px 20px 13px; border-bottom:1px solid #EDEFF2; display:flex; align-items:center; justify-content:space-between; gap:12px">
+            <div style="font-size:15px; font-weight:600; letter-spacing:-0.2px">Last night's races</div>
+            <a href="#" style="font-size:12px; color:#7A4520; font-weight:500">All results</a>
+          </div>
+          <div style="display:flex; flex-direction:column">
+            <sc-for list="{{ results }}" as="r" hint-placeholder-count="4">
+              <div style="display:grid; grid-template-columns:44px minmax(0,1.5fr) minmax(0,1fr) 70px; gap:12px; align-items:center; padding:13px 20px; border-bottom:1px solid #F1F3F5">
+                <div style="{{ r.posStyle }}">{{ r.pos }}</div>
+                <div style="display:flex; flex-direction:column; gap:2px; min-width:0">
+                  <div style="font-size:14px; font-weight:500; letter-spacing:-0.1px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ r.rider }}</div>
+                  <div style="font-size:11.5px; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">{{ r.role }}</div>
+                </div>
+                <div style="font-size:12.5px; color:#6F737A; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ r.race }}</div>
+                <div style="text-align:right; font-size:13px; font-weight:600; font-family:'DM Mono', ui-monospace, monospace; color:#3E8571">{{ r.pts }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="background:#FFFFFF; border:1px solid #E4E6EA; border-radius:14px; padding:18px 20px; display:flex; flex-direction:column; gap:14px; min-width:0">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:10px">
+            <div style="font-size:15px; font-weight:600; letter-spacing:-0.2px">Next race</div>
+            <div style="font-size:10.5px; background:#F4F5F7; border-radius:6px; padding:4px 8px; color:#6F737A; font-family:'DM Mono', ui-monospace, monospace">IN 5H 42M</div>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:4px">
+            <div style="font-size:19px; font-weight:600; letter-spacing:-0.4px">Tour de Sancerre</div>
+            <div style="font-size:12.5px; color:#6F737A; font-family:'DM Mono', ui-monospace, monospace">STAGE 1 · 128.4 KM · HILLY</div>
+          </div>
+          <div style="background:#F4F5F7; border-radius:10px; padding:12px 12px 8px">
+            <svg viewBox="0 0 320 74" preserveAspectRatio="none" style="width:100%; height:74px; display:block">
+              <polygon points="{{ profilePoints }}" fill="#E3E6EA"></polygon>
+              <polyline points="{{ profileLine }}" fill="none" stroke="#2A2D33" stroke-width="1.5"></polyline>
+            </svg>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:8px">
+            <div style="font-size:11px; letter-spacing:1.2px; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">LINEUP 6/8</div>
+            <div style="display:flex; gap:6px; flex-wrap:wrap">
+              <sc-for list="{{ lineupSlots }}" as="s" hint-placeholder-count="8">
+                <div style="{{ s.style }}">{{ s.label }}</div>
+              </sc-for>
+            </div>
+          </div>
+          <button style="background:#2A2D33; color:#FFFFFF; border:none; border-radius:9px; padding:10px 15px; font-size:13px; font-weight:500; cursor:pointer" style-hover="background:#1E2127">Complete lineup</button>
+        </div>
+
+        <div style="background:#FFFFFF; border:1px solid #E4E6EA; border-radius:14px; overflow:hidden; min-width:0">
+          <div style="padding:16px 20px 13px; border-bottom:1px solid #EDEFF2; display:flex; align-items:center; justify-content:space-between; gap:12px">
+            <div style="font-size:15px; font-weight:600; letter-spacing:-0.2px">Division 2</div>
+            <a href="#" style="font-size:12px; color:#7A4520; font-weight:500">Full table</a>
+          </div>
+          <sc-for list="{{ table }}" as="t" hint-placeholder-count="6">
+            <div style="{{ t.rowStyle }}">
+              <div style="width:20px; font-size:12px; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">{{ t.rank }}</div>
+              <div style="flex:1; min-width:0; font-size:13.5px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ t.team }}</div>
+              <div style="font-size:13px; font-weight:600; font-family:'DM Mono', ui-monospace, monospace">{{ t.pts }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="background:#FFFFFF; border:1px solid #E4E6EA; border-radius:14px; overflow:hidden; min-width:0">
+          <div style="padding:16px 20px 13px; border-bottom:1px solid #EDEFF2; font-size:15px; font-weight:600; letter-spacing:-0.2px">Form watch</div>
+          <sc-for list="{{ form }}" as="f" hint-placeholder-count="4">
+            <div style="display:flex; align-items:center; gap:12px; padding:12px 20px; border-bottom:1px solid #F1F3F5">
+              <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:2px">
+                <div style="font-size:13.5px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ f.name }}</div>
+                <div style="font-size:11px; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">{{ f.role }}</div>
+              </div>
+              <div style="width:76px; height:6px; background:#EDEFF2; border-radius:4px; overflow:hidden">
+                <div style="{{ f.barStyle }}"></div>
+              </div>
+              <div style="{{ f.deltaStyle }}">{{ f.delta }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="background:#FFFFFF; border:1px solid #E4E6EA; border-radius:14px; overflow:hidden; min-width:0">
+          <div style="padding:16px 20px 13px; border-bottom:1px solid #EDEFF2; display:flex; align-items:center; justify-content:space-between; gap:12px">
+            <div style="font-size:15px; font-weight:600; letter-spacing:-0.2px">Inbox</div>
+            <div style="background:#EBA76B; color:#2A2D33; font-size:10px; font-weight:700; padding:2px 7px; border-radius:8px; font-family:'DM Mono', ui-monospace, monospace">3</div>
+          </div>
+          <sc-for list="{{ inbox }}" as="m" hint-placeholder-count="3">
+            <div style="display:flex; flex-direction:column; gap:3px; padding:13px 20px; border-bottom:1px solid #F1F3F5">
+              <div style="display:flex; align-items:center; gap:8px">
+                <span style="{{ m.tagStyle }}">{{ m.tag }}</span>
+                <span style="font-size:11px; color:#666A72; font-family:'DM Mono', ui-monospace, monospace; margin-left:auto">{{ m.time }}</span>
+              </div>
+              <div style="font-size:13.5px; font-weight:500; letter-spacing:-0.1px">{{ m.title }}</div>
+              <div style="font-size:12.5px; color:#6F737A; line-height:1.4">{{ m.body }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+      </div>
+    </div>
+    </sc-if>
+
+    <sc-if value="{{ isRoster }}" hint-placeholder-val="{{ true }}">
+    <div style="padding:26px 30px 60px; display:flex; flex-direction:column; gap:18px; max-width:1360px; width:100%">
+
+      <div style="display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:16px">
+        <div style="display:flex; flex-direction:column; gap:6px">
+          <div style="font-size:11px; letter-spacing:1.6px; color:#7A4520; font-weight:600; font-family:'DM Mono', ui-monospace, monospace">TEAM · ROSTER</div>
+          <h1 style="margin:0; font-size:29px; font-weight:600; letter-spacing:-0.9px">Squad</h1>
+          <div style="font-size:13.5px; color:#6F737A">Tap a rider for the full profile. Attributes are the five the race engine reads.</div>
+        </div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap">
+          <sc-for list="{{ squadStats }}" as="s" hint-placeholder-count="4">
+            <div style="background:#FFFFFF; border:1px solid #E4E6EA; border-radius:12px; padding:11px 15px; display:flex; flex-direction:column; gap:3px; min-width:104px">
+              <div style="font-size:10px; letter-spacing:1.2px; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">{{ s.k }}</div>
+              <div style="font-size:19px; font-weight:600; font-family:'DM Mono', ui-monospace, monospace">{{ s.v }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:10px; background:#FFFFFF; border:1px solid #E4E6EA; border-radius:14px; padding:14px 16px">
+        <div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px">
+          <span style="font-size:10.5px; letter-spacing:1.2px; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace; margin-right:2px">ROLE</span>
+          <sc-for list="{{ filterChips }}" as="c" hint-placeholder-count="6">
+            <button onClick="{{ c.go }}" style="{{ c.style }}">{{ c.label }}</button>
+          </sc-for>
+        </div>
+        <div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px">
+          <span style="font-size:10.5px; letter-spacing:1.2px; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace; margin-right:2px">SORT</span>
+          <sc-for list="{{ sortChips }}" as="c" hint-placeholder-count="5">
+            <button onClick="{{ c.go }}" style="{{ c.style }}">{{ c.label }}</button>
+          </sc-for>
+          <span style="margin-left:auto; font-size:12px; color:#6F737A; font-family:'DM Mono', ui-monospace, monospace">{{ rosterCount }}</span>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:16px; align-items:flex-start">
+        <div style="flex:1; min-width:0; display:grid; grid-template-columns:repeat(auto-fill, minmax(288px, 1fr)); gap:12px">
+          <sc-for list="{{ riders }}" as="r" hint-placeholder-count="9">
+            <button onClick="{{ r.pick }}" style="{{ r.cardStyle }}" style-hover="border-color:#C9CDD4">
+              <div style="display:flex; align-items:center; gap:12px">
+                <div style="{{ r.ovrStyle }}">{{ r.ovr }}</div>
+                <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:3px">
+                  <div style="font-size:14.5px; font-weight:600; letter-spacing:-0.2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ r.name }}</div>
+                  <div style="font-size:11px; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">{{ r.spec }} · {{ r.meta }}</div>
+                </div>
+                <div style="{{ r.statusStyle }}">{{ r.statusLabel }}</div>
+              </div>
+
+              <div style="display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:7px">
+                <sc-for list="{{ r.attrs }}" as="a" hint-placeholder-count="5">
+                  <div style="display:flex; flex-direction:column; gap:4px">
+                    <div style="display:flex; justify-content:space-between; align-items:baseline; gap:2px">
+                      <span style="font-size:9.5px; letter-spacing:0.6px; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">{{ a.key }}</span>
+                      <span style="font-size:11px; font-weight:600; font-family:'DM Mono', ui-monospace, monospace">{{ a.val }}</span>
+                    </div>
+                    <div style="height:5px; background:#EDEFF2; border-radius:3px; overflow:hidden"><div style="{{ a.barStyle }}"></div></div>
+                  </div>
+                </sc-for>
+              </div>
+
+              <div style="display:flex; align-items:center; gap:10px; border-top:1px solid #F1F3F5; padding-top:10px">
+                <div style="display:flex; align-items:center; gap:6px; flex:1; min-width:0">
+                  <span style="font-size:9.5px; letter-spacing:0.8px; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">FRM</span>
+                  <div style="flex:1; height:5px; background:#EDEFF2; border-radius:3px; overflow:hidden"><div style="{{ r.formBar }}"></div></div>
+                </div>
+                <div style="display:flex; align-items:center; gap:6px; flex:1; min-width:0">
+                  <span style="font-size:9.5px; letter-spacing:0.8px; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">CND</span>
+                  <div style="flex:1; height:5px; background:#EDEFF2; border-radius:3px; overflow:hidden"><div style="{{ r.condBar }}"></div></div>
+                </div>
+                <span style="font-size:11px; color:#6F737A; font-family:'DM Mono', ui-monospace, monospace; white-space:nowrap">{{ r.contract }} · {{ r.wage }}</span>
+              </div>
+            </button>
+          </sc-for>
+        </div>
+
+        <sc-if value="{{ hasPick }}" hint-placeholder-val="{{ true }}">
+          <div style="{{ panelStyle }}">
+            <div style="display:flex; align-items:flex-start; gap:10px; margin-bottom:14px">
+              <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:3px">
+                <div style="font-size:18px; font-weight:600; letter-spacing:-0.4px">{{ pickName }}</div>
+                <div style="font-size:11px; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">{{ pickMeta }}</div>
+              </div>
+              <button onClick="{{ closePick }}" style="background:#F4F5F7; border:1px solid #E4E6EA; border-radius:8px; width:28px; height:28px; cursor:pointer; color:#5F636B; font-size:14px; line-height:1" style-hover="background:#EDEFF2">×</button>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:9px; margin-bottom:16px">
+              <sc-for list="{{ pickRows }}" as="p" hint-placeholder-count="5">
+                <div style="display:flex; align-items:center; gap:10px">
+                  <span style="width:88px; flex:0 0 88px; font-size:12.5px; color:#565A61">{{ p.label }}</span>
+                  <div style="flex:1; height:7px; background:#EDEFF2; border-radius:4px; overflow:hidden"><div style="{{ p.barStyle }}"></div></div>
+                  <span style="width:26px; text-align:right; font-size:12px; font-weight:600; font-family:'DM Mono', ui-monospace, monospace">{{ p.val }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:9px; margin-bottom:16px">
+              <sc-for list="{{ pickFacts }}" as="f" hint-placeholder-count="6">
+                <div style="background:#F4F5F7; border-radius:9px; padding:9px 11px; display:flex; flex-direction:column; gap:2px">
+                  <span style="font-size:10px; letter-spacing:0.8px; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">{{ f.k }}</span>
+                  <span style="font-size:14px; font-weight:600; font-family:'DM Mono', ui-monospace, monospace">{{ f.v }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:8px">
+              <button style="background:#2A2D33; color:#FFFFFF; border:none; border-radius:9px; padding:10px 14px; font-size:13px; font-weight:500; cursor:pointer" style-hover="background:#1E2127">Add to next lineup</button>
+              <div style="display:flex; gap:8px">
+                <button style="flex:1; background:#F4F5F7; color:#2A2D33; border:1px solid #DFE3E7; border-radius:9px; padding:9px 12px; font-size:12.5px; cursor:pointer" style-hover="background:#EDEFF2">Training</button>
+                <button style="flex:1; background:#F4F5F7; color:#2A2D33; border:1px solid #DFE3E7; border-radius:9px; padding:9px 12px; font-size:12.5px; cursor:pointer" style-hover="background:#EDEFF2">Transfer list</button>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+    </sc-if>
+
+    <sc-if value="{{ isRace }}" hint-placeholder-val="{{ true }}">
+    <div style="padding:26px 30px 60px; display:flex; flex-direction:column; gap:16px; max-width:1360px; width:100%">
+
+      <div style="display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:14px">
+        <div style="display:flex; flex-direction:column; gap:6px">
+          <div style="display:flex; align-items:center; gap:9px">
+            <span style="background:#2A2D33; color:#EBA76B; font-size:10px; letter-spacing:1.3px; font-weight:600; padding:4px 8px; border-radius:6px; font-family:'DM Mono', ui-monospace, monospace">RESOLVED 07:00 · REPLAY</span>
+            <span style="font-size:11px; color:#6F737A; font-family:'DM Mono', ui-monospace, monospace">CLASSIC · ROLLING</span>
+          </div>
+          <h1 style="margin:0; font-size:29px; font-weight:600; letter-spacing:-0.9px">Grand Prix de Verrières</h1>
+          <div style="font-size:13px; color:#6F737A; font-family:'DM Mono', ui-monospace, monospace">128.4 KM · 1 840 M CLIMBING · 18 °C, LIGHT CROSSWIND</div>
+        </div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap">
+          <div style="background:#FFFFFF; border:1px solid #E4E6EA; border-radius:12px; padding:11px 15px; display:flex; flex-direction:column; gap:3px; min-width:110px">
+            <div style="font-size:10px; letter-spacing:1.2px; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">RACE TIME</div>
+            <div style="font-size:19px; font-weight:600; font-family:'DM Mono', ui-monospace, monospace">{{ clock }}</div>
+          </div>
+          <div style="background:#FFFFFF; border:1px solid #E4E6EA; border-radius:12px; padding:11px 15px; display:flex; flex-direction:column; gap:3px; min-width:110px">
+            <div style="font-size:10px; letter-spacing:1.2px; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">TO GO</div>
+            <div style="font-size:19px; font-weight:600; font-family:'DM Mono', ui-monospace, monospace">{{ toGo }}</div>
+          </div>
+          <div style="background:#2A2D33; border-radius:12px; padding:11px 15px; display:flex; flex-direction:column; gap:3px; min-width:110px">
+            <div style="font-size:10px; letter-spacing:1.2px; color:#B5B9C1; font-family:'DM Mono', ui-monospace, monospace">PHASE</div>
+            <div style="font-size:19px; font-weight:600; color:#EBA76B; font-family:'DM Mono', ui-monospace, monospace">{{ phase }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#FFFFFF; border:1px solid #E4E6EA; border-radius:14px; padding:16px 18px 14px; display:flex; flex-direction:column; gap:12px">
+        <div style="position:relative; width:100%; height:150px">
+          <svg viewBox="0 0 1000 150" preserveAspectRatio="none" style="width:100%; height:150px; display:block">
+            <polygon points="{{ racePoly }}" fill="#EDEFF2"></polygon>
+            <polyline points="{{ raceLine }}" fill="none" stroke="#CFD3D9" stroke-width="2"></polyline>
+          </svg>
+          <sc-for list="{{ climbBands }}" as="c" hint-placeholder-count="3">
+            <div style="{{ c.style }}"><span style="{{ c.labelStyle }}">{{ c.label }}</span></div>
+          </sc-for>
+          <sc-for list="{{ markers }}" as="m" hint-placeholder-count="6">
+            <div style="{{ m.style }}" title="{{ m.name }}"></div>
+          </sc-for>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:10.5px; color:#666A72; font-family:'DM Mono', ui-monospace, monospace">
+          <span>0 KM</span><span>32</span><span>64</span><span>96</span><span>128.4 KM</span>
+        </div>
+        <div style="display:flex; flex-wrap:wrap; gap:8px">
+          <sc-for list="{{ climbLegend }}" as="c" hint-placeholder-count="4">
+            <div style="display:flex; align-items:center; gap:7px; background:#FDF6F1; border:1px solid #F4E2D3; border-radius:8px; padding:5px 9px 5px 6px">
+              <span style="width:16px; height:16px; border-radius:5px; background:#EBA76B; color:#2A2D33; font-size:9.5px; font-weight:700; display:flex; align-items:center; justify-content:center; font-family:'DM Mono', ui-monospace, monospace">{{ c.n }}</span>
+              <span style="font-size:12px; font-weight:500; letter-spacing:-0.1px">{{ c.name }}</span>
+              <span style="font-size:10.5px; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">{{ c.detail }}</span>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; border-top:1px solid #EDEFF2; padding-top:12px">
+          <button onClick="{{ togglePlay }}" style="background:#2A2D33; color:#FFFFFF; border:none; border-radius:9px; padding:9px 18px; font-size:13px; font-weight:500; cursor:pointer; min-width:88px" style-hover="background:#1E2127">{{ playLabel }}</button>
+          <button onClick="{{ restart }}" style="background:#F4F5F7; color:#2A2D33; border:1px solid #DFE3E7; border-radius:9px; padding:9px 14px; font-size:13px; cursor:pointer" style-hover="background:#EDEFF2">Restart</button>
+          <button onClick="{{ cycleSpeed }}" style="background:#F4F5F7; color:#2A2D33; border:1px solid #DFE3E7; border-radius:9px; padding:9px 14px; font-size:13px; cursor:pointer; font-family:'DM Mono', ui-monospace, monospace" style-hover="background:#EDEFF2">{{ speedLabel }}</button>
+          <div onClick="{{ scrub }}" style="flex:1; min-width:180px; height:26px; display:flex; align-items:center; cursor:pointer">
+            <div style="width:100%; height:6px; background:#EDEFF2; border-radius:4px; overflow:hidden">
+              <div style="{{ scrubFill }}"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(310px, 1fr)); gap:16px; align-items:start">
+
+        <div style="background:#FFFFFF; border:1px solid #E4E6EA; border-radius:14px; overflow:hidden; min-width:0">
+          <div style="padding:15px 18px 12px; border-bottom:1px solid #EDEFF2; display:flex; align-items:center; justify-content:space-between">
+            <div style="font-size:15px; font-weight:600; letter-spacing:-0.2px">On the road</div>
+            <div style="font-size:10.5px; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">GAP TO LEADER</div>
+          </div>
+          <sc-for list="{{ standings }}" as="s" hint-placeholder-count="8">
+            <div style="{{ s.rowStyle }}">
+              <div style="width:22px; font-size:12px; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">{{ s.rank }}</div>
+              <div style="{{ s.teamMark }}"></div>
+              <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:2px">
+                <div style="font-size:13.5px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ s.name }}</div>
+                <div style="font-size:10.5px; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">{{ s.state }}</div>
+              </div>
+              <div style="{{ s.gapStyle }}">{{ s.gap }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="background:#FFFFFF; border:1px solid #E4E6EA; border-radius:14px; overflow:hidden; min-width:0">
+          <div style="padding:15px 18px 12px; border-bottom:1px solid #EDEFF2; display:flex; align-items:center; justify-content:space-between">
+            <div style="font-size:15px; font-weight:600; letter-spacing:-0.2px">Your riders</div>
+            <div style="font-size:10.5px; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">STAMINA / ENERGY</div>
+          </div>
+          <sc-for list="{{ telemetry }}" as="t" hint-placeholder-count="4">
+            <div style="padding:13px 18px; border-bottom:1px solid #F1F3F5; display:flex; flex-direction:column; gap:8px">
+              <div style="display:flex; align-items:center; gap:10px">
+                <div style="font-size:13.5px; font-weight:500; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ t.name }}</div>
+                <div style="{{ t.stateStyle }}">{{ t.state }}</div>
+                <div style="font-size:12px; color:#6F737A; font-family:'DM Mono', ui-monospace, monospace">{{ t.kmh }}</div>
+              </div>
+              <div style="display:flex; gap:8px; align-items:center">
+                <div style="flex:1; height:6px; background:#EDEFF2; border-radius:4px; overflow:hidden"><div style="{{ t.stamStyle }}"></div></div>
+                <div style="flex:1; height:6px; background:#EDEFF2; border-radius:4px; overflow:hidden"><div style="{{ t.enStyle }}"></div></div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="background:#FFFFFF; border:1px solid #E4E6EA; border-radius:14px; overflow:hidden; min-width:0">
+          <div style="padding:15px 18px 12px; border-bottom:1px solid #EDEFF2; font-size:15px; font-weight:600; letter-spacing:-0.2px">Race feed</div>
+          <div style="max-height:420px; overflow-y:auto">
+            <sc-for list="{{ feed }}" as="e" hint-placeholder-count="5">
+              <div style="display:flex; gap:12px; padding:12px 18px; border-bottom:1px solid #F1F3F5">
+                <div style="font-size:11px; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace; padding-top:2px; white-space:nowrap; width:74px; flex:0 0 74px">{{ e.km }}</div>
+                <div style="display:flex; flex-direction:column; gap:2px; min-width:0">
+                  <div style="font-size:13px; font-weight:500; letter-spacing:-0.1px">{{ e.title }}</div>
+                  <div style="font-size:12.5px; color:#6F737A; line-height:1.4">{{ e.body }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+      </div>
+    </div>
+    </sc-if>
+
+  </main>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#EBA76B&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;#EBA76B&quot;,&quot;#9DB8C9&quot;,&quot;#8FB3A3&quot;,&quot;#D79A9A&quot;]}}">
+const AMBER = "#EBA76B";
+const COURSE = 128400;
+const TOTAL_T = 11200;
+
+const NAV = [
+  { label: "HOME", items: [ {id:"dashboard", name:"Dashboard"}, {id:"inbox", name:"Inbox", badge:"3"} ] },
+  { label: "TEAM", items: [ {id:"roster", name:"Roster"}, {id:"training", name:"Training"}, {id:"tactics", name:"Tactics"}, {id:"staff", name:"Staff"} ] },
+  { label: "RACING", items: [ {id:"calendar", name:"Calendar"}, {id:"race", name:"Race day"}, {id:"results", name:"Results"} ] },
+  { label: "MARKET", items: [ {id:"transfers", name:"Transfers", badge:"2"}, {id:"scouting", name:"Scouting"}, {id:"contracts", name:"Contracts"} ] },
+  { label: "COMPETITION", items: [ {id:"league", name:"League table"}, {id:"rankings", name:"Rankings"} ] },
+  { label: "CLUB", items: [ {id:"finances", name:"Finances"}, {id:"sponsors", name:"Sponsors"}, {id:"facilities", name:"Facilities"} ] }
+];
+
+const SEGMENTS = [
+  [22000, 0], [9000, 2.5], [6000, -3], [14000, 0], [7000, 4.5], [5000, -4],
+  [18000, 1], [8000, 6.5], [6000, -5], [13000, 0], [9000, 7.5], [11400, -2]
+];
+
+const RIDERS = [
+  { id:"kes", name:"M. Kestrel",    role:"GC Climber", team:"Vallée", mine:true,  v:11.62, climbEdge:1.00, pos0:0 },
+  { id:"ard", name:"S. Ardant",     role:"Puncheur",   team:"Auroch", mine:false, v:11.70, climbEdge:0.62, pos0:0 },
+  { id:"berg",name:"A. Bergström",  role:"Rouleur",    team:"Vallée", mine:true,  v:11.78, climbEdge:0.20, pos0:0 },
+  { id:"oka", name:"T. Okafor",     role:"Sprinter",   team:"Vallée", mine:true,  v:11.66, climbEdge:0.02, pos0:0 },
+  { id:"hov", name:"P. Hovland",    role:"GC Climber", team:"Nordkap",mine:false, v:11.55, climbEdge:0.94, pos0:0 },
+  { id:"del", name:"J. Delacroix",  role:"Puncheur",   team:"Marchal",mine:false, v:11.68, climbEdge:0.58, pos0:0 },
+  { id:"van", name:"R. Vance",      role:"Domestique", team:"Vallée", mine:true,  v:11.60, climbEdge:0.30, pos0:0 },
+  { id:"ito", name:"K. Ito",        role:"Sprinter",   team:"Kessel", mine:false, v:11.72, climbEdge:0.05, pos0:0 }
+];
+
+const FEED = [
+  { t: 900,  title:"Break of four goes clear", body:"Riders from Kessel, Marchal and two Continental squads slip away on the opening flat." },
+  { t: 2600, title:"Côte de Bassin — first selection", body:"Pack tempo lifts to 0.82. Two sprinters lose contact on the 2.5% drag." },
+  { t: 5400, title:"Bergström pulls the chase", body:"Your rouleur takes 6 km on the front, closing the gap to 40 s." },
+  { t: 7600, title:"Break caught", body:"Everything back together with 43 km to go. Pack tempo hard." },
+  { t: 9100, title:"Kestrel attacks on the Mur", body:"7.5% gradient, finale phase. Energy 61 → surge for 20 s." },
+  { t: 9900, title:"Hovland follows", body:"Nordkap's climber is the only one able to respond. Gap to pack 34 s." },
+  { t: 10600,title:"Okafor cracks", body:"Stamina below 60 — progressive cracking. Drops from the second group." },
+  { t: 11050,title:"Kestrel takes it", body:"Wins solo by 11 s after the descent. 60 ranking points to Vallée Cycling." }
+];
+
+function buildProfile(w, h, pad) {
+  let elev = 0, x = 0, pts = [[0, 0]], min = 0, max = 0;
+  for (const [len, grad] of SEGMENTS) {
+    x += len; elev += len * grad / 100;
+    if (elev < min) min = elev; if (elev > max) max = elev;
+    pts.push([x, elev]);
+  }
+  const span = Math.max(1, max - min);
+  const line = pts.map(([px, pe]) => [ (px / COURSE) * w, h - pad - ((pe - min) / span) * (h - pad * 2) ]);
+  return {
+    line: line.map(p => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" "),
+    poly: line.map(p => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ") + " " + w + "," + h + " 0," + h
+  };
+}
+
+const SQUAD = [
+  ["Mira Kestrel",27,"Leader","Climber",[94,38,61,86,72],92,97,2,"€480k","€2.4M","fit"],
+  ["Anders Bergström",31,"Support","Rouleur",[58,52,91,84,88],78,94,1,"€310k","€1.1M","fit"],
+  ["Tunde Okafor",24,"Leader","Sprinter",[31,93,82,64,79],54,88,3,"€395k","€2.1M","fit"],
+  ["Renzo Vance",29,"Support","Domestique",[64,41,76,90,83],66,71,2,"€180k","€620k","injured"],
+  ["Luca Duarte",22,"Support","Climber",[81,29,55,68,58],71,96,4,"€120k","€880k","fit"],
+  ["Jonas Hoffmann",33,"Support","Rouleur",[49,58,88,79,85],63,92,1,"€240k","€410k","fit"],
+  ["Émile Rouvier",26,"Leader","Puncheur",[77,66,74,72,76],84,95,2,"€330k","€1.6M","fit"],
+  ["Kaito Mori",25,"Support","Sprinter",[34,84,86,61,81],69,90,2,"€215k","€940k","fit"],
+  ["Piet Vandaele",28,"Support","Domestique",[55,47,83,88,74],58,86,1,"€165k","€520k","tired"],
+  ["Nikola Havel",30,"Support","Climber",[86,26,52,81,63],75,93,3,"€275k","€1.2M","fit"],
+  ["Sam Whitlock",23,"Support","Rouleur",[52,61,79,66,70],61,98,4,"€105k","€560k","fit"],
+  ["Ciro Battaglia",34,"Support","Puncheur",[70,55,71,77,80],47,84,1,"€190k","€230k","tired"],
+  ["Otto Lindqvist",21,"Support","Climber",[74,33,48,59,54],66,99,4,"€95k","€640k","fit"],
+  ["Marcel Aubin",27,"Support","Domestique",[60,44,80,85,87],72,91,2,"€175k","€580k","fit"],
+  ["Diego Ferrán",29,"Leader","Sprinter",[28,89,84,67,82],80,89,2,"€360k","€1.8M","fit"],
+  ["Tomas Brandt",26,"Support","Rouleur",[57,50,86,80,78],64,94,3,"€200k","€730k","fit"],
+  ["Yusuf Demir",24,"Support","Puncheur",[72,60,69,70,68],69,95,3,"€150k","€690k","fit"],
+  ["Erik Solheim",32,"Support","Domestique",[62,39,77,89,81],55,87,1,"€170k","€300k","injured"]
+].map(([name, age, role, spec, attrs, form, cond, yrs, wage, value, status], i) => ({
+  id: "r" + i, name, age, role, spec, attrs, form, cond, yrs, wage, value, status,
+  ovr: Math.round(attrs.reduce((a, b) => a + b, 0) / 5)
+}));
+
+const ATTR_KEYS = ["CLB", "SPR", "FLT", "RES", "POS"];
+const ATTR_FULL = ["Climb", "Sprint", "Flat", "Resistance", "Positioning"];
+
+class Component extends DCLogic {
+  state = { screen: "dashboard", drawer: false, w: 1280, t: 6400, playing: false, speed: 30,
+            sort: "ovr", filter: "All", picked: null };
+
+  componentDidMount() {
+    this._onResize = () => this.setState({ w: window.innerWidth });
+    this._onResize();
+    window.addEventListener("resize", this._onResize);
+    this._tick = setInterval(() => {
+      if (!this.state.playing) return;
+      this.setState(s => {
+        const nt = s.t + s.speed;
+        return nt >= TOTAL_T ? { t: TOTAL_T, playing: false } : { t: nt };
+      });
+    }, 100);
+  }
+  componentWillUnmount() { window.removeEventListener("resize", this._onResize); clearInterval(this._tick); }
+
+  posAt(r, t) {
+    if (t <= 0) return 0;
+    const PACK_V = 11.65;
+    let off = Math.sin(r.v * 97.3 + t * 0.008) * 5;
+    if (t > 2600) {
+      const d = Math.min(t, 4600) - 2600;
+      const slip = Math.max(0, 1 - r.climbEdge * 5) * d * 0.075;
+      const regain = t > 3600 ? Math.min(1, (t - 3600) / 1000) : 0;
+      off -= slip * (1 - regain);
+    }
+    if (t > 9100) {
+      const d = t - 9100;
+      if (r.climbEdge > 0.8) off += Math.min(d, 1400) * 0.52;
+      else if (r.climbEdge < 0.5) off -= Math.min(d, 1800) * 0.16;
+      else off -= Math.min(d, 1800) * 0.08;
+    }
+    if (t > 10200 && r.id === "kes") off += Math.min(t - 10200, 900) * 0.15;
+    if (t > 10600 && r.climbEdge < 0.1) off -= (t - 10600) * 0.85;
+    return Math.min(COURSE, Math.max(0, PACK_V * t + off));
+  }
+
+  riderAt(r, t) {
+    const pos = this.posAt(r, t);
+    const speed = pos >= COURSE ? 0 : Math.max(0, pos - this.posAt(r, t - 1));
+    const prog = t / TOTAL_T;
+    const stamina = Math.max(4, 100 - prog * 62 - (1 - r.climbEdge) * prog * 14);
+    const energy = Math.max(6, 100 - prog * 34 - (t > TOTAL_T * 0.8 ? r.climbEdge * 30 : 0));
+    return { pos, speed, stamina, energy };
+  }
+
+  fmtClock(t) {
+    const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = Math.floor(t % 60);
+    return h + ":" + String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+  }
+
+  rosterVals(accent, mobile) {
+    const { sort, filter, picked } = this.state;
+    const STATUS = {
+      fit:     { label:"Fit",     bg:"#E6F0EC", fg:"#2E6B58" },
+      tired:   { label:"Fatigued",bg:"#FCF1E8", fg:"#7A4520" },
+      injured: { label:"Injured", bg:"#FAECE6", fg:"#A0553F" }
+    };
+    const SORTS = [["ovr","Overall"],["form","Form"],["age","Age"],["wage","Wage"],["name","Name"]];
+    const FILTERS = ["All","Climber","Sprinter","Rouleur","Puncheur","Domestique"];
+
+    let list = SQUAD.filter(r => filter === "All" || r.spec === filter);
+    list = [...list].sort((a, b) =>
+      sort === "name" ? a.name.localeCompare(b.name)
+      : sort === "age" ? a.age - b.age
+      : sort === "wage" ? parseFloat(b.wage.replace(/[^\d.]/g, "")) - parseFloat(a.wage.replace(/[^\d.]/g, ""))
+      : b[sort] - a[sort]);
+
+    const chip = (on) => ({ padding:"6px 12px", borderRadius:"8px", fontSize:"12.5px", cursor:"pointer",
+      border:"1px solid " + (on ? "#2A2D33" : "#DFE3E7"), background: on ? "#2A2D33" : "#FFFFFF",
+      color: on ? "#FFFFFF" : "#565A61", fontWeight: on ? 600 : 400 });
+
+    const sel = picked ? SQUAD.find(r => r.id === picked) : null;
+
+    return {
+      sortChips: SORTS.map(([k, l]) => ({ label: l, style: chip(sort === k), go: () => this.setState({ sort: k }) })),
+      filterChips: FILTERS.map(f => ({ label: f, style: chip(filter === f), go: () => this.setState({ filter: f }) })),
+      rosterCount: list.length + " of " + SQUAD.length + " riders",
+      squadStats: [
+        { k:"SQUAD SIZE", v: String(SQUAD.length) },
+        { k:"AVG OVERALL", v: String(Math.round(SQUAD.reduce((a, r) => a + r.ovr, 0) / SQUAD.length)) },
+        { k:"AVG AGE", v: (SQUAD.reduce((a, r) => a + r.age, 0) / SQUAD.length).toFixed(1) },
+        { k:"WAGE BILL", v: "€4.0M" }
+      ],
+      riders: list.map(r => {
+        const st = STATUS[r.status];
+        const on = r.id === picked;
+        return {
+          id: r.id, name: r.name, spec: r.spec.toUpperCase(), meta: r.age + " yrs · " + r.role,
+          ovr: String(r.ovr), statusLabel: st.label, wage: r.wage, value: r.value,
+          contract: r.yrs + (r.yrs === 1 ? " yr left" : " yrs left"),
+          pick: () => this.setState(s => ({ picked: s.picked === r.id ? null : r.id })),
+          cardStyle: { display:"flex", flexDirection:"column", gap:"12px", padding:"15px 16px", borderRadius:"14px",
+            cursor:"pointer", background:"#FFFFFF", textAlign:"left",
+            border:"1px solid " + (on ? accent : "#E4E6EA"),
+            boxShadow: on ? "0 0 0 3px rgba(235,167,107,.22)" : "none", transition:"border-color .15s, box-shadow .15s" },
+          ovrStyle: { width:"40px", height:"40px", borderRadius:"11px", display:"flex", alignItems:"center",
+            justifyContent:"center", fontSize:"15px", fontWeight:700, fontFamily:"'DM Mono', ui-monospace, monospace",
+            background: r.ovr >= 80 ? accent : "#F4F5F7", color:"#2A2D33", flex:"0 0 40px" },
+          statusStyle: { fontSize:"9.5px", letterSpacing:"1px", fontWeight:700, padding:"3px 6px", borderRadius:"5px",
+            fontFamily:"'DM Mono', ui-monospace, monospace", background: st.bg, color: st.fg },
+          attrs: r.attrs.map((v, i) => ({
+            key: ATTR_KEYS[i], val: String(v),
+            barStyle: { width: v + "%", height:"100%", borderRadius:"3px",
+              background: v >= 80 ? "#3E8571" : v >= 60 ? accent : "#CFD3D9" }
+          })),
+          formBar: { width: r.form + "%", height:"100%", background: r.form > 70 ? "#3E8571" : r.form > 50 ? accent : "#B4614C" },
+          condBar: { width: r.cond + "%", height:"100%", background:"#6F737A" }
+        };
+      }),
+      hasPick: !!sel,
+      pickName: sel ? sel.name : "",
+      pickMeta: sel ? sel.spec + " · " + sel.age + " yrs · " + sel.role : "",
+      pickRows: sel ? sel.attrs.map((v, i) => ({ label: ATTR_FULL[i], val: String(v),
+        barStyle: { width: v + "%", height:"100%", background: v >= 80 ? "#3E8571" : v >= 60 ? accent : "#CFD3D9" } })) : [],
+      pickFacts: sel ? [
+        { k:"Contract", v: sel.yrs + (sel.yrs === 1 ? " yr" : " yrs") },
+        { k:"Wage", v: sel.wage }, { k:"Market value", v: sel.value },
+        { k:"Form", v: String(sel.form) }, { k:"Condition", v: String(sel.cond) },
+        { k:"Overall", v: String(sel.ovr) }
+      ] : [],
+      closePick: () => this.setState({ picked: null }),
+      panelStyle: mobile
+        ? { position:"fixed", left:0, right:0, bottom:0, zIndex:70, maxHeight:"72vh", overflowY:"auto",
+            background:"#FFFFFF", borderTop:"1px solid #E4E6EA", borderRadius:"18px 18px 0 0",
+            padding:"18px 20px 26px", boxShadow:"0 -14px 40px rgba(30,33,39,.16)" }
+        : { position:"sticky", top:"22px", alignSelf:"start", width:"286px", flex:"0 0 286px",
+            background:"#FFFFFF", border:"1px solid #E4E6EA", borderRadius:"14px", padding:"18px 20px" }
+    };
+  }
+
+  renderVals() {
+    const { screen, drawer, w, t, playing, speed } = this.state;
+    const mobile = w < 900;
+    const accent = this.props.accent || AMBER;
+
+    const sidebarStyle = mobile
+      ? { position:"fixed", top:0, left:0, bottom:0, width:"268px", zIndex:60, background:"#ECEEF1", borderRight:"1px solid #E1E4E8", display:"flex", flexDirection:"column",
+          transform: drawer ? "translateX(0)" : "translateX(-100%)", transition:"transform .26s cubic-bezier(.2,.8,.2,1)", boxShadow: drawer ? "0 0 60px rgba(0,0,0,.35)" : "none" }
+      : { position:"sticky", top:0, alignSelf:"flex-start", height:"100vh", width:"248px", flex:"0 0 248px", background:"#ECEEF1", borderRight:"1px solid #E1E4E8", display:"flex", flexDirection:"column" };
+
+    const scrimStyle = { position:"fixed", inset:0, zIndex:55, background:"rgba(20,20,22,.45)",
+      opacity: mobile && drawer ? 1 : 0, pointerEvents: mobile && drawer ? "auto" : "none", transition:"opacity .26s" };
+
+    const topbarStyle = { display: mobile ? "flex" : "none", alignItems:"center", gap:"12px", padding:"12px 16px",
+      borderBottom:"1px solid #E4E6EA", background:"#FAFBFC", position:"sticky", top:0, zIndex:40 };
+
+    const navSections = NAV.map(sec => ({
+      label: sec.label,
+      items: sec.items.map(it => {
+        const active = it.id === screen;
+        return {
+          name: it.name, badge: it.badge,
+          go: () => this.setState({ screen: it.id, drawer: false }),
+          dot: { width:"5px", height:"5px", borderRadius:"2px", background: active ? accent : "#C3C7CE", flex:"0 0 5px" },
+          style: { display:"flex", alignItems:"center", justifyContent:"space-between", gap:"8px", width:"100%", textAlign:"left",
+            padding:"8px 10px", borderRadius:"8px", border:"none", cursor:"pointer", fontSize:"13.5px", letterSpacing:"-0.1px",
+            background: active ? "#FFFFFF" : "transparent", color: active ? "#2A2D33" : "#565A61", fontWeight: active ? 600 : 400 }
+        };
+      })
+    }));
+
+    const titles = { dashboard:"Dashboard", race:"Race day", inbox:"Inbox", roster:"Roster", training:"Training", tactics:"Tactics",
+      staff:"Staff", calendar:"Calendar", results:"Results", transfers:"Transfers", scouting:"Scouting", contracts:"Contracts",
+      league:"League table", rankings:"Rankings", finances:"Finances", sponsors:"Sponsors", facilities:"Facilities" };
+
+    const mini = buildProfile(320, 74, 6);
+    const big = buildProfile(1000, 150, 10);
+
+    const snap = RIDERS.map(r => ({ r, ...this.riderAt(r, t) })).sort((a, b) => b.pos - a.pos);
+    const leader = snap[0];
+
+    const results = [
+      { pos:"1st", rider:"M. Kestrel", role:"GC CLIMBER", race:"GP de Verrières", pts:"+60" },
+      { pos:"7th", rider:"A. Bergström", role:"ROULEUR", race:"GP de Verrières", pts:"+14" },
+      { pos:"3rd", rider:"T. Okafor", role:"SPRINTER", race:"Circuit d'Aubain", pts:"+32" },
+      { pos:"12th", rider:"R. Vance", role:"DOMESTIQUE", race:"Circuit d'Aubain", pts:"+4" }
+    ].map(r => ({ ...r, posStyle: { fontSize:"13px", fontWeight:700, fontFamily:"'DM Mono', ui-monospace, monospace",
+      color: r.pos === "1st" ? "#2A2D33" : "#6F737A", background: r.pos === "1st" ? accent : "#F4F5F7",
+      borderRadius:"7px", padding:"5px 0", textAlign:"center" } }));
+
+    const table = [
+      { rank:1, team:"Nordkap Pro", pts:"418" }, { rank:2, team:"Auroch Racing", pts:"390" },
+      { rank:3, team:"Kessel Sport", pts:"361" }, { rank:4, team:"Vallée Cycling", pts:"344", me:true },
+      { rank:5, team:"Marchal Équipe", pts:"330" }, { rank:6, team:"Bergline", pts:"302" }
+    ].map(r => ({ ...r, rowStyle: { display:"flex", alignItems:"center", gap:"12px", padding:"11px 20px",
+      borderBottom:"1px solid #F1F3F5", background: r.me ? "#FCF1E8" : "transparent" } }));
+
+    const form = [
+      { name:"M. Kestrel", role:"GC CLIMBER", v:92, delta:"+6" },
+      { name:"A. Bergström", role:"ROULEUR", v:78, delta:"+2" },
+      { name:"T. Okafor", role:"SPRINTER", v:54, delta:"−9" },
+      { name:"R. Vance", role:"DOMESTIQUE", v:66, delta:"−1" }
+    ].map(f => ({ ...f,
+      barStyle: { width: f.v + "%", height:"100%", background: f.v > 70 ? "#3E8571" : f.v > 50 ? accent : "#B4614C" },
+      deltaStyle: { width:"30px", textAlign:"right", fontSize:"12px", fontWeight:600, fontFamily:"'DM Mono', ui-monospace, monospace",
+        color: f.delta.startsWith("+") ? "#3E8571" : "#B4614C" } }));
+
+    const inbox = [
+      { tag:"TRANSFER", title:"Bid received for T. Okafor", body:"Kessel Sport offer €340k. Expires in 22h.", time:"07:04" },
+      { tag:"MEDICAL", title:"R. Vance — minor knee strain", body:"Out for 6 days. Training load reduced automatically.", time:"06:40" },
+      { tag:"SPONSOR", title:"Objective met: top 5 at a classic", body:"€120k bonus paid into your budget.", time:"07:00" }
+    ].map(m => ({ ...m, tagStyle: { fontSize:"9.5px", letterSpacing:"1.1px", fontWeight:700, fontFamily:"'DM Mono', ui-monospace, monospace",
+      padding:"3px 6px", borderRadius:"5px", background: m.tag === "TRANSFER" ? "#EDEAF6" : m.tag === "MEDICAL" ? "#FAECE6" : "#E6F0EC",
+      color: m.tag === "TRANSFER" ? "#5C5386" : m.tag === "MEDICAL" ? "#A0553F" : "#2E6B58" } }));
+
+    const lineupSlots = ["Kestrel","Bergström","Okafor","Vance","Hoffmann","Duarte","+ empty","+ empty"].map(l => ({
+      label: l,
+      style: { fontSize:"11.5px", padding:"5px 9px", borderRadius:"7px", fontFamily: l.startsWith("+") ? "'DM Mono', ui-monospace, monospace" : "inherit",
+        background: l.startsWith("+") ? "transparent" : "#F4F5F7", color: l.startsWith("+") ? "#666A72" : "#2A2D33",
+        border: l.startsWith("+") ? "1px dashed #D6DAE0" : "1px solid #EDEFF2" }
+    }));
+
+    const CLIMB_NAMES = ["Côte de Bassin", "Côte d'Auvel", "Col de Sault", "Mur de Sault"];
+    let acc = 0, ci = 0;
+    const climbBands = [], climbLegend = [];
+    for (const [len, grad] of SEGMENTS) {
+      if (grad >= 2.4) {
+        const n = ++ci;
+        climbBands.push({
+          label: String(n),
+          style: { position:"absolute", top:0, bottom:"18px", left:((acc / COURSE) * 100) + "%", width:((len / COURSE) * 100) + "%",
+            background:"rgba(235,167,107,.20)", borderLeft:"1px solid rgba(235,167,107,.85)", pointerEvents:"none", overflow:"hidden",
+            display:"flex", justifyContent:"center", paddingTop:"3px", fontSize:"9px", fontWeight:700, color:"#7A4520",
+            fontFamily:"'DM Mono', ui-monospace, monospace" }
+        });
+        climbLegend.push({
+          n: String(n),
+          name: CLIMB_NAMES[n - 1] || "Climb",
+          detail: (len / 1000).toFixed(0) + " km @ " + grad + "% · km " + (acc / 1000).toFixed(0)
+        });
+      }
+      acc += len;
+    }
+
+    const markers = snap.map((s, i) => ({ name: s.r.name,
+      style: { position:"absolute", left:"calc(" + ((s.pos / COURSE) * 100).toFixed(2) + "% - 5px)", bottom:(16 + (i % 3) * 11) + "px",
+        width:"10px", height:"10px", borderRadius:"5px", background: s.r.mine ? accent : "#A9AEB6",
+        border:"2px solid #FFFFFF", boxShadow:"0 1px 3px rgba(0,0,0,.25)", transition:"left .1s linear", zIndex: s.r.mine ? 3 : 2 } }));
+
+    const standings = snap.map((s, i) => {
+      const gapS = i === 0 ? 0 : (leader.pos - s.pos) / 11.65;
+      const st = s.pos >= COURSE ? "FINISHED" : i === 0 ? "LEADING" : gapS < 4 ? "IN GROUP" : gapS < 25 ? "CHASING" : "DROPPED";
+      return {
+        rank: i + 1, name: s.r.name, state: s.r.team.toUpperCase() + " · " + st,
+        gap: i === 0 ? "—" : "+" + Math.round(gapS) + "s",
+        teamMark: { width:"4px", height:"22px", borderRadius:"2px", background: s.r.mine ? accent : "#DFE3E7", flex:"0 0 4px" },
+        rowStyle: { display:"flex", alignItems:"center", gap:"11px", padding:"11px 18px", borderBottom:"1px solid #F1F3F5",
+          background: s.r.mine ? "#FDF6F1" : "transparent" },
+        gapStyle: { fontSize:"12.5px", fontWeight:600, fontFamily:"'DM Mono', ui-monospace, monospace", color: i === 0 ? "#2A2D33" : "#6F737A" }
+      };
+    });
+
+    const telemetry = snap.filter(s => s.r.mine).map(s => {
+      const surging = t > TOTAL_T * 0.8 && s.r.climbEdge > 0.8;
+      const st = surging ? "SURGING" : s.stamina < 40 ? "CRACKING" : "DRAFTING";
+      return {
+        name: s.r.name, state: st, kmh: (s.speed * 3.6).toFixed(1) + " km/h",
+        stateStyle: { fontSize:"9.5px", letterSpacing:"1px", fontWeight:700, fontFamily:"'DM Mono', ui-monospace, monospace",
+          padding:"3px 6px", borderRadius:"5px",
+          background: st === "SURGING" ? accent : st === "CRACKING" ? "#FAECE6" : "#F4F5F7",
+          color: st === "CRACKING" ? "#A0553F" : "#2A2D33" },
+        stamStyle: { width: s.stamina.toFixed(0) + "%", height:"100%", background:"#3E8571" },
+        enStyle: { width: s.energy.toFixed(0) + "%", height:"100%", background: accent }
+      };
+    });
+
+    const feed = FEED.filter(e => e.t <= t).reverse().map(e => ({
+      km: Math.max(0, Math.round((COURSE - e.t * 11.65) / 1000)) + " km to go",
+      title: e.title, body: e.body
+    }));
+
+    return {
+      sidebarStyle, scrimStyle, topbarStyle, navSections,
+      screenTitle: titles[screen] || "Dashboard",
+      isDashboard: screen !== "race" && screen !== "roster",
+      isRace: screen === "race",
+      isRoster: screen === "roster",
+      ...this.rosterVals(accent, mobile),
+      openDrawer: () => this.setState({ drawer: true }),
+      closeDrawer: () => this.setState({ drawer: false }),
+      goRace: () => this.setState({ screen: "race" }),
+      deadline: "5h 42m",
+      profilePoints: mini.poly, profileLine: mini.line,
+      racePoly: big.poly, raceLine: big.line,
+      results, table, form, inbox, lineupSlots, climbBands, climbLegend, markers, standings, telemetry, feed,
+      clock: this.fmtClock(t),
+      toGo: Math.max(0, (COURSE - leader.pos) / 1000).toFixed(1) + " km",
+      phase: t / TOTAL_T > 0.9 ? "FINALE" : t / TOTAL_T > 0.75 ? "TRANSIT" : "EARLY",
+      playing, playLabel: playing ? "Pause" : "Play replay",
+      speedLabel: (speed / 10) + "×",
+      togglePlay: () => this.setState(s => ({ playing: !s.playing, t: s.t >= TOTAL_T ? 0 : s.t })),
+      restart: () => this.setState({ t: 0, playing: true }),
+      cycleSpeed: () => this.setState(s => ({ speed: s.speed >= 120 ? 10 : s.speed * 2 })),
+      scrub: (e) => {
+        const b = e.currentTarget.getBoundingClientRect();
+        this.setState({ t: Math.round(Math.min(1, Math.max(0, (e.clientX - b.left) / b.width)) * TOTAL_T) });
+      },
+      scrubFill: { width: ((t / TOTAL_T) * 100).toFixed(1) + "%", height:"100%", background:"#2A2D33" }
+    };
+  }
+}
+
+</script>
+</body>
+</html>
