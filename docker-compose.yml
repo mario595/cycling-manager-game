@@ -1,0 +1,33 @@
+# Local development services.
+#
+# Only the database runs here — Django itself runs on the host, so the usual
+# runserver/pytest/debugger workflow is unchanged.
+#
+#   docker compose up -d      start Postgres
+#   docker compose down       stop it (data survives)
+#   docker compose down -v    stop it and delete the data
+#
+# The version is pinned so every machine and CI run gets the same Postgres.
+# Credentials are deliberately trivial: this listens on localhost only and
+# holds nothing but throwaway development data.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: cycling_manager
+      POSTGRES_USER: cycling
+      POSTGRES_PASSWORD: cycling
+    ports:
+      # Host 5433 avoids clashing with a natively installed Postgres on 5432.
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cycling -d cycling_manager"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:

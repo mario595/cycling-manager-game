@@ -1,0 +1,72 @@
+"""Translation between Django models and `race_engine` dataclasses.
+
+This module is the **only** place in the project allowed to import from
+`race_engine`. Everything else goes through here. The point is to keep the
+engine a pure-Python, database-free library: it stays fast to run in bulk,
+testable without a database, and free to change its internals without a
+migration.
+
+Direction of dependency is one-way and must stay that way:
+
+    racing.adapters  ->  race_engine        (fine)
+    race_engine      ->  django / racing    (never)
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from race_engine.models import Course, Rider as EngineRider, RiderAttributes, Segment
+from riders.models import ENGINE_ATTRIBUTES
+
+if TYPE_CHECKING:
+    from riders.models import Rider as DBRider
+    from teams.models import Team
+
+    from .models import Race
+
+
+def to_engine_rider(rider: DBRider) -> EngineRider:
+    """Convert a persisted rider into the dataclass the engine simulates.
+
+    The engine identifies riders by string id; we use the primary key so that
+    results coming back out of the engine can be mapped to rows again.
+    """
+    attributes = RiderAttributes(
+        **{name: getattr(rider, name) for name in ENGINE_ATTRIBUTES}
+    )
+    return EngineRider(
+        id=str(rider.pk),
+        name=rider.name,
+        attributes=attributes,
+        # A rider with no team races as their own one-person team, which is
+        # exactly what the engine does when team_id is None.
+        team_id=str(rider.team_id) if rider.team_id else None,
+        role=rider.role,
+    )
+
+
+def to_engine_course(race: Race) -> Course:
+    """Build the engine's Course from a Race's stored segment JSON."""
+    return Course(
+        segments=[
+            Segment(length=float(s["length"]), gradient=float(s["gradient"]))
+            for s in race.course
+        ]
+    )
+
+
+def to_team_codes(teams: list[Team]) -> dict[str, dict[str, str]]:
+    """Build the team-code/colour map the race logger writes into the log.
+
+    Shape matches what `race_player` expects; see `race_player/README.md`.
+    """
+    return {
+        str(team.pk): {
+            "code": team.code,
+            "name": team.name,
+            "colour": team.primary_colour,
+            "secondary": team.secondary_colour,
+        }
+        for team in teams
+    }
