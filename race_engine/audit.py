@@ -24,7 +24,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from race_engine.config import build_race
+from race_engine.config import _VALID_WIND_BANDS, load_config
 from race_engine.models import RaceState
 
 _CONFIGS_DIR = Path(__file__).parent / "configs"
@@ -84,10 +84,21 @@ class RunResult:
     dnf_riders: list[str] = field(default_factory=list)
 
 
-def _run_one(config_path: str, seed: int, tick_cap_multiplier: float) -> RunResult:
+def _run_one(
+    config_path: str,
+    seed: int,
+    tick_cap_multiplier: float,
+    wind_override: bool | None = None,
+    wind_band_override: str | None = None,
+) -> RunResult:
     random.seed(seed)
-    riders, course = build_race(config_path)
-    state = RaceState.create_initial_state(riders, course)
+    cfg = load_config(config_path)
+    riders, course = cfg["riders"], cfg["course"]
+    wind_enabled = cfg["wind_enabled"] if wind_override is None else wind_override
+    wind_band = wind_band_override if wind_band_override is not None else cfg["wind_band"]
+    state = RaceState.create_initial_state(
+        riders, course, wind=wind_enabled, wind_band=wind_band, seed=seed
+    )
 
     surge_ticks: dict[str, int] = {rs.rider.id: 0 for rs in state.rider_states}
     first_shelled_tick: int | None = None
@@ -193,10 +204,15 @@ def _expected_ok(config: str, archetype: str) -> bool:
 
 
 def run_audit(
-    configs: list[str], seeds: list[int], jobs: int, tick_cap_multiplier: float
+    configs: list[str],
+    seeds: list[int],
+    jobs: int,
+    tick_cap_multiplier: float,
+    wind_override: bool | None = None,
+    wind_band_override: str | None = None,
 ) -> list[RunResult]:
     tasks = [
-        (str(_config_path(cfg)), seed, tick_cap_multiplier)
+        (str(_config_path(cfg)), seed, tick_cap_multiplier, wind_override, wind_band_override)
         for cfg in configs
         for seed in seeds
     ]
@@ -206,7 +222,7 @@ def run_audit(
         return list(pool.map(_run_one_star, tasks))
 
 
-def _run_one_star(task: tuple[str, int, float]) -> RunResult:
+def _run_one_star(task: tuple[str, int, float, bool | None, str | None]) -> RunResult:
     return _run_one(*task)
 
 
@@ -276,6 +292,10 @@ def main(argv: list[str] | None = None) -> int:
         default=DEFAULT_TICK_CAP_MULTIPLIER,
         help="stop a run at this multiple of the winner's finish tick (default: 3.0)",
     )
+    wind_group = parser.add_mutually_exclusive_group()
+    wind_group.add_argument("--wind", action="store_true", default=None, help="force wind on for every config, overriding each config's own setting")
+    wind_group.add_argument("--no-wind", dest="wind", action="store_false", help="force wind off for every config, overriding each config's own setting")
+    parser.add_argument("--wind-band", type=str, default=None, choices=sorted(_VALID_WIND_BANDS), help="force this weather band for every config")
     args = parser.parse_args(argv)
 
     configs = args.configs.split(",") if args.configs else _discover_configs()
@@ -288,7 +308,7 @@ def main(argv: list[str] | None = None) -> int:
         baseline_summary = _summarize([RunResult(**r) for r in baseline_raw])
 
     print(f"Running {len(configs)} configs x {len(seeds)} seeds ({len(configs) * len(seeds)} runs)...", file=sys.stderr)
-    results = run_audit(configs, seeds, args.jobs, args.tick_cap)
+    results = run_audit(configs, seeds, args.jobs, args.tick_cap, args.wind, args.wind_band)
 
     _print_report(results, baseline_summary)
 

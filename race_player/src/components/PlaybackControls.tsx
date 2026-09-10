@@ -5,6 +5,8 @@ import {
   StepBackwardOutlined,
   StepForwardOutlined,
 } from '@ant-design/icons'
+import type { Wind } from '../types/race'
+import WindCompass from './WindCompass'
 
 const SPEEDS = [
   { label: 'x1', value: 1 },
@@ -34,6 +36,7 @@ interface PlaybackControlsProps {
   onSpeedChange: (speed: number) => void
   onStep: (dir: -1 | 1) => void
   onSeek: (tick: number) => void
+  wind?: Wind
 }
 
 export default function PlaybackControls({
@@ -45,6 +48,7 @@ export default function PlaybackControls({
   onSpeedChange,
   onStep,
   onSeek,
+  wind,
 }: PlaybackControlsProps) {
   return (
     <div className="flex flex-col gap-2 p-3 bg-white rounded-lg border border-slate-200">
@@ -75,9 +79,12 @@ export default function PlaybackControls({
           onChange={(v) => onSpeedChange(Number(String(v).replace('x', '')))}
         />
 
-        <div className="ml-auto flex flex-col items-end text-sm text-slate-500 tabular-nums">
-          <span>{formatDuration(tick)} / {formatDuration(maxTicks)}</span>
-          <span className="text-xs text-slate-400">tick {tick} / {maxTicks}</span>
+        <div className="ml-auto flex items-center gap-3">
+          <div className="flex flex-col items-end text-sm text-slate-500 tabular-nums">
+            <span>{formatDuration(tick)} / {formatDuration(maxTicks)}</span>
+            <span className="text-xs text-slate-400">tick {tick} / {maxTicks}</span>
+          </div>
+          <WindCompass wind={wind} />
         </div>
       </div>
 

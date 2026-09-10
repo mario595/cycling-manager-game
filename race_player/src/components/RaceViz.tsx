@@ -103,6 +103,7 @@ export default function RaceViz({ raceData }: RaceVizProps) {
         onSpeedChange={setSpeed}
         onStep={handleStep}
         onSeek={handleTickChange}
+        wind={snapshot?.wind}
       />
 
       <div className="bg-white rounded-lg border border-slate-200 p-2">

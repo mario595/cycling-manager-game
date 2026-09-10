@@ -81,6 +81,36 @@ def _parse_course(raw: Any) -> Course:
     return Course(segments=segments)
 
 
+_VALID_WIND_BANDS = {"calm", "light", "moderate", "strong"}
+
+
+def _parse_wind(raw: Any) -> dict[str, Any]:
+    """Parse the optional `race.wind` block: {"band": ..., "enabled": ...}.
+
+    Absent entirely (the case for all bundled configs) means the band is
+    rolled from the seeded RNG at construction — the normal path. `band`
+    forces a specific weather band (testing, or authoring a deliberately
+    windy race); `enabled: false` disables wind entirely.
+    """
+    wind_raw = raw.get("wind")
+    if wind_raw is None:
+        return {"enabled": True, "band": None}
+    if not isinstance(wind_raw, dict):
+        raise ConfigError("race.wind must be an object")
+
+    band = wind_raw.get("band")
+    if band is not None and band not in _VALID_WIND_BANDS:
+        raise ConfigError(
+            f"race.wind.band must be one of {sorted(_VALID_WIND_BANDS)}, got {band!r}"
+        )
+
+    enabled = wind_raw.get("enabled", True)
+    if not isinstance(enabled, bool):
+        raise ConfigError(f"race.wind.enabled must be a boolean, got {enabled!r}")
+
+    return {"enabled": enabled, "band": band}
+
+
 def _parse_teams(raw: Any) -> dict[str, dict[str, str]]:
     """Parse the optional `race.teams` map: team id -> {code, name}.
 
@@ -153,12 +183,15 @@ def load_config(path: str) -> dict[str, Any]:
 
     _validate_team_leaders(riders)
     team_codes = _parse_teams(race)
+    wind = _parse_wind(race)
 
     return {
         "riders": riders,
         "course": course,
         "name": race.get("name"),
         "team_codes": team_codes,
+        "wind_enabled": wind["enabled"],
+        "wind_band": wind["band"],
     }
 
 

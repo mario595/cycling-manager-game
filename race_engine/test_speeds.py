@@ -94,7 +94,7 @@ def _make_state(n: int, positions: list[float]) -> RaceState:
     # the transition/finale phase (< ATTACK_PHASE_THRESHOLD remaining) so the
     # bridge rule's phase gate is active.
     course = Course(segments=[Segment(length=1_000_000.0, gradient=0.0)])
-    state = RaceState.create_initial_state(riders, course)
+    state = RaceState.create_initial_state(riders, course, wind=False)
     for rs, pos in zip(state.rider_states, positions):
         rs.position = pos
         rs.energy = 100.0

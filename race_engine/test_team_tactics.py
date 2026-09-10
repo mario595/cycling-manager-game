@@ -26,7 +26,7 @@ def test_support_pulls_more_than_leader():
         _rider("support", "t1", "support"),
     ]
     course = Course(segments=[Segment(length=500_000.0, gradient=0.0)])
-    state = RaceState.create_initial_state(riders, course)
+    state = RaceState.create_initial_state(riders, course, wind=False)
     # Start tied so who pulls first is decided by the tactics, not a head start.
     for rs in state.rider_states:
         rs.position = 100_000.0
@@ -76,7 +76,7 @@ def _pack_speed_with_break_ahead(chaser_team: str, breaker_team: str) -> float:
     riders[0].role = "leader"
     breaker = _rider("breaker", breaker_team, "leader")
     course = Course(segments=[Segment(length=500_000.0, gradient=0.0)])
-    state = RaceState.create_initial_state(riders + [breaker], course)
+    state = RaceState.create_initial_state(riders + [breaker], course, wind=False)
 
     state.rider_states[-1].position = 100_000.0 + BREAK_CLEAR_DISTANCE + 20.0
     for rs in state.rider_states[:-1]:

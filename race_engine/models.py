@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -111,6 +112,24 @@ class CourseProfile:
 
 
 @dataclass
+class WindState:
+    """Current wind, modelled relative to the riders (see WIND_PLAN.md).
+
+    0=headwind, 90=from the rider's right, 180=tailwind, 270=from the left.
+    Only `speed`, `angle` and `band` are read outside `advance_wind`; `angle`
+    is normalised to [0, 360) on read, but `target_angle` is left unwrapped
+    so the shorter-arc drift math stays simple.
+    """
+
+    speed: float  # km/h, current
+    angle: float  # degrees, rider-relative
+    target_speed: float
+    target_angle: float
+    band_mean: float
+    band: str  # "calm" | "light" | "moderate" | "strong"
+
+
+@dataclass
 class RiderState:
     rider: Rider
     speed: float = 0.0  # m/s
@@ -132,15 +151,63 @@ class RaceState:
     rider_states: list[RiderState] = field(default_factory=list)
     current_time: int = 0  # seconds
     profile: CourseProfile | None = None
+    wind: WindState | None = None
+    wind_rng: random.Random | None = None  # own substream, see WIND_PLAN.md
 
     @classmethod
     def create_initial_state(
-        cls, riders: list[Rider], course: Course
+        cls,
+        riders: list[Rider],
+        course: Course,
+        wind: bool = True,
+        wind_band: str | None = None,
+        seed: int | None = None,
     ) -> RaceState:
         rider_states = [RiderState(rider=r) for r in riders]
         state = cls(course=course, rider_states=rider_states, current_time=0)
         state.profile = cls._compute_profile(course)
+
+        if wind:
+            # Wind must never draw from the global `random` module stream —
+            # that stream is what `run_race`/`audit.py` seed and what
+            # add_speed_jitter consumes, so sharing it would shift every
+            # jitter value wind touches and make a seeded race non-
+            # reproducible against the pre-wind baseline. An unseeded caller
+            # (seed=None) still gets its own private, OS-seeded stream here,
+            # never the global one.
+            wind_rng = random.Random(seed * 7919 + 1) if seed is not None else random.Random()
+            state.wind_rng = wind_rng
+            state.wind = cls._roll_wind(wind_rng, wind_band)
+
         return state
+
+    @staticmethod
+    def _roll_wind(wind_rng: random.Random, band_override: str | None) -> WindState:
+        from .formulas import WIND_BANDS
+
+        if band_override is not None:
+            band = band_override
+        else:
+            r = wind_rng.random()
+            cumulative = 0.0
+            band = next(reversed(WIND_BANDS))
+            for name, spec in WIND_BANDS.items():
+                cumulative += spec["probability"]
+                if r < cumulative:
+                    band = name
+                    break
+
+        lo, hi = WIND_BANDS[band]["mean_range"]
+        band_mean = wind_rng.uniform(lo, hi)
+        angle = wind_rng.uniform(0.0, 360.0)
+        return WindState(
+            speed=band_mean,
+            angle=angle,
+            target_speed=band_mean,
+            target_angle=angle,
+            band_mean=band_mean,
+            band=band,
+        )
 
     @staticmethod
     def _compute_profile(course: Course) -> CourseProfile:
@@ -179,12 +246,23 @@ class RaceState:
             SURGE_SPEED_BOOST,
             _lerp,
             add_speed_jitter,
+            advance_wind,
             apply_energy_burst_modifier,
             apply_stamina_cruise_modifier,
             compute_base_speed,
             compute_energy_drain,
             compute_stamina_drain,
+            wind_aero_multiplier,
         )
+
+        # Advance wind first, before any rider is evaluated, so every rider
+        # sees one consistent wind this tick (matching the snapshot
+        # discipline the rest of tick() already follows).
+        if self.wind is not None:
+            advance_wind(self.wind, self.wind_rng)
+            aero_mult = wind_aero_multiplier(self.wind.speed, self.wind.angle)
+        else:
+            aero_mult = 1.0
 
         # Phase 1: snapshot positions and compute deltas using pre-tick state.
         positions = [rs.position for rs in self.rider_states]
@@ -213,7 +291,8 @@ class RaceState:
             # Natural cruise pace — base speed throttled by stamina (cracking),
             # before any energy/burst considerations.
             cruise = apply_stamina_cruise_modifier(
-                compute_base_speed(rs.rider.attributes, segment.gradient), rs.stamina
+                compute_base_speed(rs.rider.attributes, segment.gradient, aero_mult),
+                rs.stamina,
             )
             own_speeds[i] = add_speed_jitter(cruise)
 
@@ -734,6 +813,8 @@ def run_race(
     seed: int | None = None,
     verbose: bool = False,
     team_codes: dict[str, dict[str, str]] | None = None,
+    wind: bool = True,
+    wind_band: str | None = None,
 ) -> list[RiderState]:
     from .race_logger import RaceLogger
 
@@ -742,7 +823,9 @@ def run_race(
 
         random.seed(seed)
 
-    state = RaceState.create_initial_state(riders, course)
+    state = RaceState.create_initial_state(
+        riders, course, wind=wind, wind_band=wind_band, seed=seed
+    )
     logger = RaceLogger(log_path, team_codes=team_codes) if log_path else None
 
     import sys

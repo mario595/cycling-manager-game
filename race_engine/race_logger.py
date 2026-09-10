@@ -16,6 +16,14 @@ class RaceLogger:
         entry = {
             "time": state.current_time,
             "course_length": state.course.total_distance,
+        }
+        if state.wind is not None:
+            entry["wind"] = {
+                "speed": round(state.wind.speed, 1),
+                "angle": round(state.wind.angle % 360.0, 1),
+                "band": state.wind.band,
+            }
+        entry.update({
             "segments": [
                 {"length": s.length, "gradient": s.gradient}
                 for s in state.course.segments
@@ -38,7 +46,7 @@ class RaceLogger:
                 }
                 for rs in state.rider_states
             ],
-        }
+        })
         self._file.write(json.dumps(entry) + "\n")
         self._file.flush()
 

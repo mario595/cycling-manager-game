@@ -27,7 +27,7 @@ ATTRS = RiderAttributes(climb=50, sprint=50, flat=50, resistance=50, positioning
 def _make_state(n: int, positions: list[float]) -> RaceState:
     riders = [Rider(id=f"r{i}", name=f"R{i}", attributes=ATTRS) for i in range(n)]
     course = Course(segments=[Segment(length=500_000.0, gradient=0.0)])
-    state = RaceState.create_initial_state(riders, course)
+    state = RaceState.create_initial_state(riders, course, wind=False)
     for rs, pos in zip(state.rider_states, positions):
         rs.position = pos
     return state

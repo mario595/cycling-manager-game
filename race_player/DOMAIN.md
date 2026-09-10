@@ -54,6 +54,16 @@ A standalone React-based web application for visualizing race simulations produc
     every non-pulling pack member is assumed to be benefiting to some
     degree; see `race_engine/DOMAIN.md`'s "Drafting & pack cohesion")
   - `finished`, `finish_time`
+- **Wind:** Top-level `wind` object on a tick line, sibling to
+  `course_length`/`segments`: `{ "speed": 17.3, "angle": 214.6, "band":
+  "moderate" }`. `speed` is km/h; `angle` is degrees `[0, 360)`, **relative
+  to the rider, not a compass bearing** — `0` = headwind, `90` = crosswind
+  from the rider's right, `180` = tailwind, `270` = crosswind from the left;
+  `band` is `"calm" | "light" | "moderate" | "strong"`, constant for the
+  race. **Optional** — entirely absent (not `null`) when wind is disabled or
+  the log predates the feature; every current `public/*.jsonl` at the time
+  this was written predates it. See `race_engine/WIND_PLAN.md` for the
+  simulation side and the `Wind`/`WindBand` types in `types/race.ts`.
 
 ### Elevation Derivation
 Since absolute altitude is not stored in the engine logs, it must be derived from the segment data:
@@ -168,6 +178,37 @@ Since absolute altitude is not stored in the engine logs, it must be derived fro
 - **Refresh button:** Re-fetches the file list without page reload.
 - **Selection:** Clicking a file loads and parses it via `App.tsx`; the `RaceViz` component receives parsed data as a prop — zero coupling to the file system.
 
+### 5. Wind Compass (`WindCompass.tsx`)
+- **What it answers, at a glance:** which way the wind is hitting the riders,
+  and how hard. Lives in the `PlaybackControls` row, right-aligned next to
+  the elapsed/tick readout — a small (~110px) persistent instrument, not a
+  feature panel; it must never compete with the elevation profile.
+- **The bike never rotates; the arrow does.** This is a direct translation
+  of the engine's model: wind is relative to the rider, there is no course
+  heading, so there is nothing for the bike to rotate against. The arrow
+  rotates around the fixed bike to show where the wind is coming from.
+  Rotation is smoothed via a CSS transition driven by a continuously
+  unwrapped angle (`unwrapAngle()` in `utils/wind.ts`, tracked in a ref) so
+  a 359°→1° wrap takes the short way rather than spinning through 180°.
+- **Compass rose labelled in rider terms** — `HEAD` / `TAIL` / `L` / `R`,
+  never N/S/E/W. There is no geography in this model; writing compass
+  directions would imply one that doesn't exist.
+- **Intensity is redundantly encoded**: colour ramp (`windColor()`) and arrow
+  length/thickness (`arrowLength()`) both derive from the *live* `speed`
+  (not the band), so the arrow visibly breathes as wind drifts tick to tick;
+  the `band` name is used only for the text label underneath. Two channels
+  keep it readable for colour-blind viewers.
+- **Optional, absent means absent:** returns `null` when `wind` is
+  `undefined` (disabled races, or logs predating the feature) — no
+  placeholder, no "no wind data" box, layout collapses cleanly.
+- **Memoised** (`memo(WindCompass)`, matching `RiderMarker`/`PackMarker`) —
+  it re-renders every tick.
+- Explicitly **not built**: animated particle streaks, a per-segment wind
+  overlay on the elevation profile (wind is a property of time, not course
+  position, in this model — painting it on the distance axis would imply a
+  spatial relationship that doesn't exist), or a wind timeline under the
+  seek bar. See `race_player/WIND_VISUALIZATION_PLAN.md` decision 5.
+
 ## Architecture
 
 ### File Structure
@@ -181,11 +222,12 @@ race-player/
 │   │   ├── ElevationProfile.tsx# Custom SVG area chart with gradient coloring + labels
 │   │   ├── RiderMarker.tsx     # Custom SVG circle marker (memoized), team colour + leader shape
 │   │   ├── PackMarker.tsx      # Segmented-ring pack blob (memoized): size, team composition, leader pips
-│   │   ├── PlaybackControls.tsx# Play/Pause, speed selector, tick counter
+│   │   ├── PlaybackControls.tsx# Play/Pause, speed selector, tick counter, wind compass
 │   │   ├── RiderList.tsx       # Pack-grouped table with gap dividers, team colour bar, crown
+│   │   ├── WindCompass.tsx     # Fixed-bike/rotating-arrow wind readout (memoized)
 │   │   └── FileExplorer.tsx    # Dev sidebar: lists .jsonl, refresh, standalone
 │   ├── types/
-│   │   └── race.ts             # TypeScript interfaces (Rider, Pack, ProfilePoint, etc.)
+│   │   └── race.ts             # TypeScript interfaces (Rider, Pack, ProfilePoint, Wind, etc.)
 │   ├── utils/
 │   │   ├── parseRaceLog.ts     # Parses JSONL + computes elevation profile
 │   │   ├── interpolateRider.ts # Maps rider.pos to (x,y) on profile
@@ -194,6 +236,7 @@ race-player/
 │   │   ├── teamColors.ts       # 12-colour team palette, teamColor()/teamCode()/isLeader() helpers
 │   │   ├── raceResults.ts      # Winner finish time + gap-to-winner per rider, group-finish detection
 │   │   ├── formatTime.ts       # formatGapTime (+3m 14s) / formatFinishTime (hh:mm:ss)
+│   │   ├── wind.ts             # windColor()/windLabel()/arrowLength()/unwrapAngle() (wind.test.ts)
 │   │   └── useProfileScale.ts  # Linear SVG scale with fixed margins
 │   ├── App.tsx                 # Sidebar + dynamic file fetch (the only glue point)
 │   └── main.tsx

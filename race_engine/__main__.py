@@ -56,6 +56,8 @@ def main(argv: list[str]) -> int:
         seed=seed,
         verbose=True,
         team_codes=cfg["team_codes"],
+        wind=cfg["wind_enabled"],
+        wind_band=cfg["wind_band"],
     )
     print(f"Log saved to: {log_path}")
     print()

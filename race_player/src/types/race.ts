@@ -3,6 +3,20 @@ export interface Segment {
   gradient: number
 }
 
+export type WindBand = 'calm' | 'light' | 'moderate' | 'strong'
+
+/**
+ * Wind is modelled relative to the riders, not as a compass bearing.
+ * `angle` is where the wind blows FROM, as seen by a rider facing forward:
+ * 0 = headwind, 90 = crosswind from the right, 180 = tailwind,
+ * 270 = crosswind from the left. There is no north in this model.
+ */
+export interface Wind {
+  speed: number // km/h
+  angle: number // degrees [0, 360)
+  band: WindBand
+}
+
 export interface Rider {
   id: string
   name: string
@@ -24,6 +38,7 @@ export interface RaceSnapshot {
   segments: Segment[]
   riders: Rider[]
   teams?: Record<string, { code: string; name: string }>
+  wind?: Wind
 }
 
 export interface ProfilePoint {

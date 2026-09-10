@@ -30,13 +30,15 @@ def _rider(rid: str, team: str | None = None, role: str | None = None) -> dict:
     return raw
 
 
-def _config(riders: list[dict], teams: dict | None = None) -> dict:
+def _config(riders: list[dict], teams: dict | None = None, wind: dict | None = None) -> dict:
     race: dict = {
         "course": [{"length": 1000.0, "gradient": 0.0}],
         "riders": riders,
     }
     if teams is not None:
         race["teams"] = teams
+    if wind is not None:
+        race["wind"] = wind
     return {"race": race}
 
 
@@ -168,4 +170,36 @@ def test_config_rejects_team_empty_name(tmp_path):
         teams={"t1": {"code": "ALP", "name": "   "}},
     )
     with pytest.raises(ConfigError, match="name"):
+        load_config(_write(tmp_path, cfg))
+
+
+def test_config_defaults_wind_enabled_with_no_forced_band_when_absent(tmp_path):
+    cfg = _config([_rider("c1")])
+    result = load_config(_write(tmp_path, cfg))
+    assert result["wind_enabled"] is True
+    assert result["wind_band"] is None
+
+
+def test_config_parses_forced_wind_band(tmp_path):
+    cfg = _config([_rider("c1")], wind={"band": "strong"})
+    result = load_config(_write(tmp_path, cfg))
+    assert result["wind_enabled"] is True
+    assert result["wind_band"] == "strong"
+
+
+def test_config_parses_wind_disabled(tmp_path):
+    cfg = _config([_rider("c1")], wind={"enabled": False})
+    result = load_config(_write(tmp_path, cfg))
+    assert result["wind_enabled"] is False
+
+
+def test_config_rejects_unknown_wind_band(tmp_path):
+    cfg = _config([_rider("c1")], wind={"band": "hurricane"})
+    with pytest.raises(ConfigError, match="band"):
+        load_config(_write(tmp_path, cfg))
+
+
+def test_config_rejects_non_bool_wind_enabled(tmp_path):
+    cfg = _config([_rider("c1")], wind={"enabled": "yes"})
+    with pytest.raises(ConfigError, match="enabled"):
         load_config(_write(tmp_path, cfg))

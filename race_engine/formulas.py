@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from race_engine.models import RiderAttributes, Terrain
+import math
+import random
+from typing import Any
+
+from race_engine.models import RiderAttributes, Terrain, WindState
 
 # Terrain speed is a per-rider power balance rather than three disjoint
 # lookup tables: K_aero*v**3 + (K_roll + K_grav*s)*v = 1, where s is gradient
@@ -144,6 +148,80 @@ BRIDGE_MAX_DEPTH = 2  # only the front of a group considers bridging
 CHASE_MIN_ENERGY = 25.0  # minimum energy to initiate a bridge/chase
 CHASE_MIN_CLIMB_ADVANTAGE = -10.0  # don't chase on steep if leader is 10+ climb points stronger
 
+# Wind (Tier A: attrition only — see race_engine/WIND_PLAN.md). Modelled
+# relative to the rider (0=head, 90=from the right, 180=tail, 270=from the
+# left), never as a compass bearing. Enters the physics through the aero
+# term of compute_base_speed only.
+WIND_V_REF = 13.1  # m/s reference speed for apparent-wind calc (fixed, not live rider speed)
+WIND_K_CROSS = 0.45  # how much a crosswind component adds to apparent wind
+WIND_TAILWIND_EFFICIENCY = 0.55  # only this fraction of a tailwind's along-course component counts
+WIND_AERO_MULT_MIN = 0.55
+WIND_AERO_MULT_MAX = 2.20
+
+WIND_BANDS: dict[str, dict[str, Any]] = {
+    "calm": {"probability": 0.45, "mean_range": (0.0, 6.0)},
+    "light": {"probability": 0.30, "mean_range": (6.0, 14.0)},
+    "moderate": {"probability": 0.18, "mean_range": (14.0, 24.0)},
+    "strong": {"probability": 0.07, "mean_range": (24.0, 38.0)},
+}
+
+WIND_SPEED_RETARGET_PROB = 0.002  # chance per tick the intensity target is re-rolled
+WIND_SPEED_RELAX = 0.004  # fraction of the way current speed moves to target, per tick
+WIND_ANGLE_TURN_PROB = 0.0008  # chance per tick of a sharp swing (road turning)
+WIND_ANGLE_TURN_RANGE = (60.0, 140.0)  # degrees, magnitude of a sharp swing
+WIND_ANGLE_MEANDER_SIGMA = 0.15  # degrees, stddev of the continuous meander per tick
+WIND_ANGLE_RELAX = 0.01  # fraction of the way current angle moves to target, per tick
+
+
+def wind_aero_multiplier(wind_speed_kmh: float, angle_deg: float) -> float:
+    """Aero-drag multiplier from wind speed/angle, relative to the rider.
+
+    Uses a fixed WIND_V_REF rather than the rider's live speed — using live
+    speed would make the multiplier re-entrant with the power-balance solver
+    (speed depends on drag depends on speed) and would break the solver's
+    memoisation. A tailwind's along-course component is discounted by
+    WIND_TAILWIND_EFFICIENCY (a rider spins out their gearing and still pays
+    rolling resistance; they don't convert the whole tailwind into speed) —
+    without it, apparent wind loss lets speed run away downwind. See
+    WIND_PLAN.md decision 4 for the verified effect table this reproduces.
+    """
+    w = wind_speed_kmh / 3.6
+    along = w * math.cos(math.radians(angle_deg))
+    if along < 0:
+        along *= WIND_TAILWIND_EFFICIENCY
+    cross = abs(w * math.sin(math.radians(angle_deg)))
+    apparent = math.sqrt((WIND_V_REF + along) ** 2 + (WIND_K_CROSS * cross) ** 2)
+    mult = (apparent / WIND_V_REF) ** 2
+    return max(WIND_AERO_MULT_MIN, min(WIND_AERO_MULT_MAX, mult))
+
+
+def advance_wind(wind: WindState, rng: random.Random) -> None:
+    """Drift wind speed and angle one tick, in place. Never assigns directly.
+
+    Both intensity and angle relax exponentially toward a target
+    (Ornstein-Uhlenbeck-style), which is what guarantees wind never jumps —
+    there is no code path here that sets `speed`/`angle` outright. Angle
+    additionally meanders continuously and occasionally takes a sharp swing
+    (the road turning), moving along the shorter arc toward its target so a
+    359->1 degree wrap doesn't spin the long way around.
+
+    `rng` must be wind's own decorrelated substream (see
+    `RaceState.create_initial_state`) — never the global `random` module,
+    which `add_speed_jitter` also draws from.
+    """
+    if rng.random() < WIND_SPEED_RETARGET_PROB:
+        spread = wind.band_mean * 0.5
+        wind.target_speed = max(0.0, rng.uniform(wind.band_mean - spread, wind.band_mean + spread))
+    wind.speed = max(0.0, wind.speed + (wind.target_speed - wind.speed) * WIND_SPEED_RELAX)
+
+    wind.target_angle += rng.gauss(0.0, WIND_ANGLE_MEANDER_SIGMA)
+    if rng.random() < WIND_ANGLE_TURN_PROB:
+        magnitude = rng.uniform(*WIND_ANGLE_TURN_RANGE)
+        wind.target_angle += magnitude if rng.random() < 0.5 else -magnitude
+
+    delta = ((wind.target_angle - wind.angle + 180.0) % 360.0) - 180.0
+    wind.angle = (wind.angle + delta * WIND_ANGLE_RELAX) % 360.0
+
 
 def _lerp(min_val: float, max_val: float, t: float) -> float:
     """Linear interpolation. t in [0, 1]."""
@@ -199,7 +277,7 @@ def _solve_power_balance(k_aero: float, k_roll: float, k_grav: float, s: float) 
 
 
 _RESISTANCE_COEFF_CACHE: dict[tuple[int, int], tuple[float, float, float]] = {}
-_POWER_BALANCE_CACHE: dict[tuple[int, int, float], float] = {}
+_POWER_BALANCE_CACHE: dict[tuple[int, int, float, float], float] = {}
 
 
 def _attributes_key(attributes: RiderAttributes) -> tuple[int, int]:
@@ -210,8 +288,10 @@ def _attributes_key(attributes: RiderAttributes) -> tuple[int, int]:
     return (attributes.flat, attributes.climb)
 
 
-def compute_base_speed(attributes: RiderAttributes, gradient: float) -> float:
-    """Base speed in m/s from rider attributes and terrain gradient.
+def compute_base_speed(
+    attributes: RiderAttributes, gradient: float, aero_mult: float = 1.0
+) -> float:
+    """Base speed in m/s from rider attributes, terrain gradient, and wind.
 
     A single power-balance model (see the module docstring above) replaces
     the old three disjoint speed tables: `flat` and `climb` become
@@ -220,8 +300,17 @@ def compute_base_speed(attributes: RiderAttributes, gradient: float) -> float:
     speed uses the same equation, then applies a handling cap (cornering and
     braking, not power, limit a real descent).
 
-    Memoised per (flat, climb, gradient): gradients are per-segment
-    constants, so this is a few dozen solves per race.
+    `aero_mult` (see `wind_aero_multiplier`) scales K_aero only, so wind
+    fades on climbs automatically — the same equation that blends flat/climb
+    terrain correctly does this for free, with no gradient special-casing.
+    Defaults to 1.0 (no wind) so every pre-wind call site is unaffected.
+
+    Memoised per (flat, climb, gradient, aero_mult): gradients are per-segment
+    constants, so this is a few dozen solves per race. `aero_mult` is
+    quantised to 2 decimal places in the cache key — wind changes
+    continuously, so caching the raw float would make the cache grow
+    unboundedly and never hit. A 1% error in drag is far below the model's
+    per-tick jitter noise floor.
     """
     attrs_key = _attributes_key(attributes)
     coeffs = _RESISTANCE_COEFF_CACHE.get(attrs_key)
@@ -229,9 +318,10 @@ def compute_base_speed(attributes: RiderAttributes, gradient: float) -> float:
         coeffs = _rider_resistance_coeffs(attributes)
         _RESISTANCE_COEFF_CACHE[attrs_key] = coeffs
     k_aero, k_roll, k_grav = coeffs
+    k_aero *= aero_mult
 
     s = gradient / 100.0
-    cache_key = (attrs_key[0], attrs_key[1], gradient)
+    cache_key = (attrs_key[0], attrs_key[1], gradient, round(aero_mult, 2))
     v = _POWER_BALANCE_CACHE.get(cache_key)
     if v is None:
         v = _solve_power_balance(k_aero, k_roll, k_grav, s)

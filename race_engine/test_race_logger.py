@@ -60,3 +60,44 @@ def test_logger_writes_empty_teams_when_absent(tmp_path):
         entry = json.loads(f.readline())
 
     assert entry["teams"] == {}
+
+
+def test_logger_omits_wind_key_when_disabled(tmp_path):
+    riders = [Rider(id="c1", name="C1", attributes=ATTRS)]
+    course = Course(segments=[Segment(length=1000.0, gradient=0.0)])
+    state = RaceState.create_initial_state(riders, course, wind=False)
+
+    log_path = str(tmp_path / "race.jsonl")
+    logger = RaceLogger(log_path)
+    logger.log(state)
+    logger.close()
+
+    with open(log_path) as f:
+        entry = json.loads(f.readline())
+
+    assert "wind" not in entry
+
+
+def test_logger_writes_wind_object_when_enabled(tmp_path):
+    riders = [Rider(id="c1", name="C1", attributes=ATTRS)]
+    course = Course(segments=[Segment(length=1000.0, gradient=0.0)])
+    state = RaceState.create_initial_state(
+        riders, course, wind=True, wind_band="strong", seed=1
+    )
+
+    log_path = str(tmp_path / "race.jsonl")
+    logger = RaceLogger(log_path)
+    logger.log(state)
+    logger.close()
+
+    with open(log_path) as f:
+        entry = json.loads(f.readline())
+
+    assert "wind" in entry
+    assert set(entry["wind"].keys()) == {"speed", "angle", "band"}
+    assert entry["wind"]["band"] == "strong"
+    assert 0.0 <= entry["wind"]["angle"] < 360.0
+    assert entry["wind"]["speed"] >= 0.0
+
+    keys = list(entry.keys())
+    assert keys.index("wind") < keys.index("segments")

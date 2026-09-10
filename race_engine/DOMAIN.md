@@ -109,6 +109,7 @@ makes it easy to keep multiple reusable race configurations side by side.
     "teams": {
       "t1": {"code": "ALP", "name": "Alpine Racing"}
     },
+    "wind": {"band": "strong"},
     "riders": [
       {
         "id": "c1",
@@ -147,9 +148,15 @@ makes it easy to keep multiple reusable race configurations side by side.
   entry here simply has no code/name (`build_race` ignores this map
   entirely; only `load_config`/the CLI carry it through to the JSONL log).
 - `name` — optional display name for the race (informational).
+- `wind` — optional; see "Wind" below. Absent means the weather band is
+  rolled from the seeded RNG at construction, which is the case for all six
+  bundled configs. `band` forces `"calm"`/`"light"`/`"moderate"`/`"strong"`
+  (any other value is a `ConfigError`); `enabled: false` disables wind
+  entirely, for A/B comparison against pre-wind baselines.
 - Starting `energy`/`stamina` are always 100 (engine-internal, not configurable).
   Engine constants (draft distance, surge thresholds, etc.) are not exported to
-  config; they remain fixed in `formulas.py`.
+  config; they remain fixed in `formulas.py`. Wind's constants (aero
+  coefficients, drift rates, band means) are the same — not configurable.
 
 ### CLI
 `python -m race_engine <config.json> [--seed N]` runs a race from a config
@@ -339,11 +346,17 @@ Update this section (and re-run the audit) when engine behavior changes.
 
 The tick runs in phases so all riders see a consistent snapshot.
 
+0. **Advance wind** (if modelled): drift wind speed/angle one step
+   (`advance_wind`) and derive this tick's `aero_mult`
+   (`wind_aero_multiplier`) before any rider is evaluated, so every rider
+   sees the same wind this tick. No-ops to `aero_mult = 1.0` when
+   `RaceState.wind is None`. See Wind above.
 1. **Snapshot**: record each non-finished rider's current `position`.
 2. **Natural cruise**: for each rider compute their uncontested base speed on the
-   current segment's gradient, throttled by stamina (see `compute_base_speed` and
-   `apply_stamina_cruise_modifier`), plus per-rider speed jitter. Finalized
-   riders and riders past the line are skipped (speed 0).
+   current segment's gradient and this tick's `aero_mult`, throttled by stamina
+   (see `compute_base_speed` and `apply_stamina_cruise_modifier`), plus
+   per-rider speed jitter. Finalized riders and riders past the line are
+   skipped (speed 0).
 3. **Decide actions**: for each rider that could surge, apply the tactics rules
    (see Tactics: race phases & surge decisions) using the snapshot positions and
    the pre-computed course profile (terrain look-ahead).
@@ -420,6 +433,74 @@ breakdown per archetype).
 
 Per-tick jitter: `speed += uniform(−0.3, 0.3)`, floored at 1 m/s
 (`add_speed_jitter`). This breaks perfect ties so groups form a realistic echelon.
+
+## Wind (Tier A: attrition — see `race_engine/WIND_PLAN.md`)
+
+Wind is modelled **relative to the riders**, not as a compass bearing — there
+is no course heading. `WindState.angle` is where the wind comes from as seen
+by a rider facing forward: `0` = headwind, `90` = crosswind from the right,
+`180` = tailwind, `270` = crosswind from the left. All riders see the same
+`(speed, angle)` each tick — no per-rider or per-position wind field.
+
+**Physics — the aero term only.** `wind_aero_multiplier(speed_kmh, angle)`
+computes an apparent-wind ratio (with the tailwind component discounted by
+`WIND_TAILWIND_EFFICIENCY = 0.55`, since a rider spins out their gearing and
+still pays rolling resistance rather than converting a tailwind fully into
+speed) and returns a multiplier on `K_aero` alone, clamped to
+`[WIND_AERO_MULT_MIN, WIND_AERO_MULT_MAX] = [0.55, 2.20]`. `compute_base_speed`
+takes this as an `aero_mult` parameter (default `1.0`, inert). Because wind
+only touches `K_aero` and the power-balance equation already blends
+terrain correctly, wind fades on a climb automatically — no gradient
+special-casing. Crosswind is near-neutral on speed by design (its real
+effect, shelter/echelons, is Tier B and not built here); the small
+`WIND_K_CROSS` term keeps it from being *exactly* zero.
+
+Everything else — stamina drain, pack tempo, drafting, surges — is
+downstream of the wind-affected cruise speed and needed no changes: a
+slower headwind cruise means more seconds at proportionally lower intensity
+(stamina drain is roughly a wash, matching how distance already works), a
+sheltered pack's tempo falls with its wind-reduced pace-setter, and a solo
+attacker into a headwind is hurt more than the pack chasing them (headwind
+breaks get caught; tailwind breaks stay away) — all for free, from one hook.
+
+**Weather bands**, rolled once at construction (`RaceState._roll_wind`):
+
+| Band | Probability | Mean wind (km/h) |
+|---|---|---|
+| `calm`     | 45% | 0–6   |
+| `light`    | 30% | 6–14  |
+| `moderate` | 18% | 14–24 |
+| `strong`   | 7%  | 24–38 |
+
+**Drift** (`advance_wind`, called at the top of every tick before any rider
+is evaluated): both intensity and angle relax exponentially toward a
+periodically re-rolled target, never assigned directly. Intensity retargets
+with probability `WIND_SPEED_RETARGET_PROB` per tick and moves
+`WIND_SPEED_RELAX` of the way there each tick; angle meanders continuously
+(`gauss(0, WIND_ANGLE_MEANDER_SIGMA)`) plus a rare sharp swing
+(`WIND_ANGLE_TURN_PROB`, magnitude `WIND_ANGLE_TURN_RANGE`) representing the
+road turning, relaxing `WIND_ANGLE_RELAX` of the way per tick along the
+shorter arc. Net effect: wind never jumps.
+
+**RNG substream.** Wind draws from its own `random.Random` instance
+(`RaceState.wind_rng`, seeded `seed * 7919 + 1`), never the global `random`
+module stream that `run_race`/`audit.py` seed and that `add_speed_jitter`
+consumes. This means: a wind-disabled race is bit-identical to a pre-wind
+run of the same seed; a `calm`-band race is very nearly identical (aero_mult
+≈ 1.0); and every audit delta after enabling wind is attributable to wind,
+not to the RNG stream being shuffled.
+
+**`RaceState.wind`** is `None` when wind is off — every wind code path
+no-ops to `aero_mult = 1.0` in that case. `RaceState.create_initial_state`
+takes `wind: bool = True`, `wind_band: str | None = None` (forces a band),
+and `seed: int | None = None` (derives the substream; an unseeded caller
+still gets its own private OS-seeded substream, never the global one).
+
+**Not built here (Tier B, deferred):** echelons — wind that splits the pack
+via limited roadside shelter in a crosswind. The Tier A data model doesn't
+foreclose it (`WIND_K_CROSS` already isolates the crosswind component), but
+it touches pack structure and deserves its own plan and audit baseline. See
+`WIND_PLAN.md`'s "Tier B: echelons" section.
 
 ## Stamina
 
@@ -813,6 +894,7 @@ without needing t=0). Riders array order is fixed and matches
 {
   "time": 42,
   "course_length": 38000.0,
+  "wind": {"speed": 17.3, "angle": 214.6, "band": "moderate"},
   "segments": [
     {"length": 15000.0, "gradient": 0.0},
     {"length": 1000.0, "gradient": 5.0}
@@ -842,6 +924,13 @@ without needing t=0). Riders array order is fixed and matches
 `teams` is `{}` when the config declared no `race.teams` map (`RaceLogger`'s
 `team_codes` defaults to empty). A rider's own `"team"` field is the key to
 look up in this map for its `"code"`/`"name"`.
+
+`wind` is **entirely absent** (not `null`) when `RaceState.wind is None` —
+wind disabled, or a log predating this feature. Consumers must treat it as
+optional. `speed` is km/h rounded to 1 dp; `angle` is degrees `[0, 360)`
+rounded to 1 dp, rider-relative (`0` = headwind, `90` = from the rider's
+right, `180` = tailwind, `270` = from the left — see Wind above); `band` is
+constant across all ticks of one race.
 
 Field reference (rider entries):
 
