@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from race_engine.config import ConfigError, build_race
+from race_engine.config import ConfigError, load_config
 from race_engine.models import run_race
 
 _PUBLIC_DIR = Path("race_player/public")
@@ -44,12 +44,19 @@ def main(argv: list[str]) -> int:
     _PUBLIC_DIR.mkdir(parents=True, exist_ok=True)
 
     try:
-        riders, course = build_race(arg)
+        cfg = load_config(arg)
     except ConfigError as exc:
         print(f"error: {exc}")
         return 1
 
-    results = run_race(riders, course, log_path=log_path, seed=seed, verbose=True)
+    results = run_race(
+        cfg["riders"],
+        cfg["course"],
+        log_path=log_path,
+        seed=seed,
+        verbose=True,
+        team_codes=cfg["team_codes"],
+    )
     print(f"Log saved to: {log_path}")
     print()
     print("Results:")

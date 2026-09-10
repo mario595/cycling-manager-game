@@ -8,8 +8,9 @@ if TYPE_CHECKING:
 
 
 class RaceLogger:
-    def __init__(self, path: str) -> None:
+    def __init__(self, path: str, team_codes: dict[str, str] | None = None) -> None:
         self._file = open(path, "w")
+        self._team_codes = team_codes or {}
 
     def log(self, state: RaceState) -> None:
         entry = {
@@ -19,6 +20,9 @@ class RaceLogger:
                 {"length": s.length, "gradient": s.gradient}
                 for s in state.course.segments
             ],
+            "teams": {
+                team_id: {"code": code} for team_id, code in self._team_codes.items()
+            },
             "riders": [
                 {
                     "id": rs.rider.id,

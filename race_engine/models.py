@@ -733,6 +733,7 @@ def run_race(
     log_path: str | None = None,
     seed: int | None = None,
     verbose: bool = False,
+    team_codes: dict[str, str] | None = None,
 ) -> list[RiderState]:
     from .race_logger import RaceLogger
 
@@ -742,7 +743,7 @@ def run_race(
         random.seed(seed)
 
     state = RaceState.create_initial_state(riders, course)
-    logger = RaceLogger(log_path) if log_path else None
+    logger = RaceLogger(log_path, team_codes=team_codes) if log_path else None
 
     import sys
     import time as _time

@@ -1,9 +1,12 @@
-"""Tests for team/role config parsing and validation.
+"""Tests for team/role/team-code config parsing and validation.
 
 Covers the Team Tactics Tier A groundwork (see TEAM_TACTICS_PLAN.md): `team`
 and `role` are optional per rider, defaulting to a team-of-one leader so
 existing configs and hand-built `Rider` objects keep working unchanged, and
-exactly one leader per team is enforced at load time.
+exactly one leader per team is enforced at load time. Also covers the
+optional `race.teams` map of 3-letter uppercase team codes (the TV-style
+team abbreviation), which is display metadata validated at load time but
+absent by default.
 """
 
 from __future__ import annotations
@@ -27,13 +30,14 @@ def _rider(rid: str, team: str | None = None, role: str | None = None) -> dict:
     return raw
 
 
-def _config(riders: list[dict]) -> dict:
-    return {
-        "race": {
-            "course": [{"length": 1000.0, "gradient": 0.0}],
-            "riders": riders,
-        }
+def _config(riders: list[dict], teams: dict | None = None) -> dict:
+    race: dict = {
+        "course": [{"length": 1000.0, "gradient": 0.0}],
+        "riders": riders,
     }
+    if teams is not None:
+        race["teams"] = teams
+    return {"race": race}
 
 
 def _write(tmp_path, cfg: dict) -> str:
@@ -98,4 +102,40 @@ def test_config_rejects_team_with_zero_leaders(tmp_path):
         ]
     )
     with pytest.raises(ConfigError, match="no leader"):
+        load_config(_write(tmp_path, cfg))
+
+
+def test_config_defaults_team_codes_to_empty_when_absent(tmp_path):
+    cfg = _config([_rider("c1")])
+    result = load_config(_write(tmp_path, cfg))
+    assert result["team_codes"] == {}
+
+
+def test_config_parses_team_codes(tmp_path):
+    cfg = _config(
+        [_rider("c1", team="t1"), _rider("c2", team="t2")],
+        teams={"t1": {"code": "ALP"}, "t2": {"code": "SPR"}},
+    )
+    result = load_config(_write(tmp_path, cfg))
+    assert result["team_codes"] == {"t1": "ALP", "t2": "SPR"}
+
+
+def test_config_rejects_team_code_wrong_length(tmp_path):
+    cfg = _config([_rider("c1", team="t1")], teams={"t1": {"code": "AL"}})
+    with pytest.raises(ConfigError, match="3 uppercase letters"):
+        load_config(_write(tmp_path, cfg))
+
+
+def test_config_rejects_team_code_lowercase(tmp_path):
+    cfg = _config([_rider("c1", team="t1")], teams={"t1": {"code": "alp"}})
+    with pytest.raises(ConfigError, match="3 uppercase letters"):
+        load_config(_write(tmp_path, cfg))
+
+
+def test_config_rejects_duplicate_team_codes(tmp_path):
+    cfg = _config(
+        [_rider("c1", team="t1"), _rider("c2", team="t2")],
+        teams={"t1": {"code": "ALP"}, "t2": {"code": "ALP"}},
+    )
+    with pytest.raises(ConfigError, match="unique"):
         load_config(_write(tmp_path, cfg))

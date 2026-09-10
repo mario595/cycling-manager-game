@@ -240,6 +240,20 @@
         "team": "t4",
         "role": "support"
       }
-    ]
+    ],
+    "teams": {
+      "t1": {
+        "code": "ALP"
+      },
+      "t2": {
+        "code": "SPR"
+      },
+      "t3": {
+        "code": "CLA"
+      },
+      "t4": {
+        "code": "MIX"
+      }
+    }
   }
 }

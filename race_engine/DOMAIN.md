@@ -106,6 +106,9 @@ makes it easy to keep multiple reusable race configurations side by side.
       {"length": 7000.0, "gradient": 0.0},
       {"length": 1000.0, "gradient": 5.0}
     ],
+    "teams": {
+      "t1": {"code": "ALP"}
+    },
     "riders": [
       {
         "id": "c1",
@@ -130,6 +133,15 @@ makes it easy to keep multiple reusable race configurations side by side.
   acceptance would produce races that are confusing to debug: a team with no
   leader has nobody to protect, and one with two has no well-defined "the"
   leader for the role-scaled tactics below.
+- `teams` — optional map of team id to `{"code": "..."}`, the TV-style
+  3-letter uppercase team abbreviation (a UCI team code, e.g. `UAD` for UAE
+  Team Emirates) shown next to a rider on-screen. Purely display metadata —
+  the simulation never reads it, only `race_logger.py` does, so it is
+  entirely absent from `Rider`/`RaceState`. `load_config` rejects a code
+  that isn't exactly 3 uppercase letters, or two teams sharing one code. A
+  team with riders but no entry here simply has no code (`build_race`
+  ignores this map entirely; only `load_config`/the CLI carry it through to
+  the JSONL log).
 - `name` — optional display name for the race (informational).
 - Starting `energy`/`stamina` are always 100 (engine-internal, not configurable).
   Engine constants (draft distance, surge thresholds, etc.) are not exported to
@@ -179,6 +191,10 @@ outcome of a bad leader choice):
 | `classics_hilly` | `gc1` | `pu1` | `pu2` | `gc4` |
 | `summit_finish` | `gc1` | `pu1` | `gc3` | `gc4` |
 | `mountain_stage` | `gc1` | `pu1` | `gc3` | `gc4` |
+
+All 6 bundled configs (and `_roster.json`) declare the same team codes:
+`t1`=`ALP`, `t2`=`SPR`, `t3`=`CLA`, `t4`=`MIX` (arbitrary picks, not tied to
+any real team).
 
 - `sprinters_classic.json` — flat bunch-sprint style race.
 - `san_remo.json` — flat-first + Cipressa/Poggio-style late climbs.
@@ -783,8 +799,11 @@ after the cooldown elapses).
 `run_race` writes a JSONL file (one JSON object per line) with no terminal
 journal/effects data. Each line is a full snapshot of one tick at `"time"` t.
 The first line is t=0 (the neutral start) and subsequent lines are t=1, 2, …
-so a consumer can step frame-by-frame. `course_length` is constant across all
-lines. Riders array order is fixed and matches `state.rider_states` order.
+so a consumer can step frame-by-frame. `course_length` and `teams` are
+constant across all lines (same repeat-every-line convention as
+`course_length`/`segments`, so a consumer can start reading from any line
+without needing t=0). Riders array order is fixed and matches
+`state.rider_states` order.
 
 ```json
 {
@@ -794,6 +813,9 @@ lines. Riders array order is fixed and matches `state.rider_states` order.
     {"length": 15000.0, "gradient": 0.0},
     {"length": 1000.0, "gradient": 5.0}
   ],
+  "teams": {
+    "t1": {"code": "ALP"}
+  },
   "riders": [
     {
       "id": "c1",
@@ -812,6 +834,10 @@ lines. Riders array order is fixed and matches `state.rider_states` order.
   ]
 }
 ```
+
+`teams` is `{}` when the config declared no `race.teams` map (`RaceLogger`'s
+`team_codes` defaults to empty). A rider's own `"team"` field is the key to
+look up in this map for its `"code"`.
 
 Field reference (rider entries):
 
