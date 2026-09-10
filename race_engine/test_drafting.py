@@ -9,7 +9,7 @@ rather than real pack structure, so the true pace-setter could show
 tick. A separate `drafting` flag existed too, but shelter degree doesn't
 compress into a meaningful boolean (nearly everyone in a pack gets *some*
 shelter, just to varying degrees), so it was removed rather than fixed — see
-DOMAIN.md's "Drafting & pack cohesion". These tests build synthetic packs
+README.md's "Drafting & pack cohesion". These tests build synthetic packs
 with known gaps and check both the real shelter effect and `pulling`.
 """
 

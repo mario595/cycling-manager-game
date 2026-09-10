@@ -368,11 +368,11 @@ rather than built for completeness.
 5. **W5** `PackMarker` + **W5b** `ElevationProfile` — the pack blob and
    adaptive rendering. Largest item; do it as its own reviewable step.
 6. **W6** summary strip (optional, and reassess per W6).
-7. Update `race_player/DOMAIN.md` — see below.
+7. Update `race_player/README.md` — see below.
 
 ## Documentation update (required, not optional)
 
-`race_player/DOMAIN.md` is the authoritative spec for this app. Update:
+`race_player/README.md` is the authoritative spec for this app. Update:
 
 - **Key Data Fields** — add `team` and `role`, noting both are optional.
 - **Core Features** — team colouring and the leader crown, including the

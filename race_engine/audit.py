@@ -2,7 +2,7 @@
 
 Runs the bundled configs across a fixed set of seeds and reports the metrics
 that decide whether a course produces the expected archetype and a realistic
-finish, without a person re-running six configs by hand. See DOMAIN.md's
+finish, without a person re-running six configs by hand. See README.md's
 "Regression audit" and "Realism status" sections for how this is used to
 validate engine changes.
 
@@ -32,7 +32,7 @@ _CONFIGS_DIR = Path(__file__).parent / "configs"
 DEFAULT_SEEDS = [1, 7, 42, 123, 2024]
 
 # Expected winning archetype per course, by id prefix (gc/pu/ru/sp/do).
-# Test data, not engine knowledge — configs carry none (see DOMAIN.md).
+# Test data, not engine knowledge — configs carry none (see README.md).
 EXPECTED_ARCHETYPE = {
     "sprinters_classic": "sp",
     "san_remo": {"pu", "sp"},

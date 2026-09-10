@@ -1051,9 +1051,9 @@ marking — as out of scope entirely, not just deferred).
 The engine, its module layout, and this spec are under active development.
 
 - **Keep this file current**: after any change to the engine's data model,
-  formulas, constants, tick logic, or output format, update `DOMAIN.md`
+  formulas, constants, tick logic, or output format, update `README.md`
   to match before committing.
-- **Review ask**: before committing, re-read `DOMAIN.md`; if the pending changes
+- **Review ask**: before committing, re-read `README.md`; if the pending changes
   alter anything described here, apply the needed edits to it, then ask
   the user to review the diff and explicitly approve before committing. Do not
   commit until the user confirms.

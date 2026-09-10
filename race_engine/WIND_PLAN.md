@@ -357,7 +357,7 @@ this design:
   *Physically this understates shelter in a headwind* — drafting is worth more
   when there is more wind to hide from. Noted as a Tier B refinement; in Tier A
   the effect is directionally harmless and keeps shelter credited exactly once,
-  preserving the single-channel invariant the DOMAIN doc is emphatic about.
+  preserving the single-channel invariant the domain README is emphatic about.
 - **Surges / breakaways** — a solo attacker into a headwind is hurt more than
   the sheltered bunch chasing them, because the bunch's `PACK_TEMPO_CHASE` of
   1.08 is applied to an already wind-reduced pace while the attacker eats the
@@ -395,7 +395,7 @@ Add a top-level `wind` object to each tick, alongside `time` and
 - **Omit the whole `wind` key when wind is disabled.** Consumers must treat it
   as optional (see the player plan).
 
-Update `DOMAIN.md`'s "JSONL output format" section and its field-reference
+Update `README.md`'s "JSONL output format" section and its field-reference
 table in the same commit.
 
 ---
@@ -457,7 +457,7 @@ No re-baselining needed (E3's separate RNG substream preserves the existing
 baseline). First prove wind-off is bit-identical, then measure what wind
 actually does. See Verification.
 
-### E8 — `DOMAIN.md`: document all of the above
+### E8 — `README.md`: document all of the above
 Per the commit procedure: engine changes **must** be reflected there. New
 "Wind" section; update JSONL format, config schema, tick phases, and
 `compute_base_speed`'s description.

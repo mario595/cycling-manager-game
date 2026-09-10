@@ -249,7 +249,7 @@ shift when wind is absent (old file) versus present (new file) — the
 
 ## Documentation update (required, not optional)
 
-`race_player/DOMAIN.md` must be updated in the same commit:
+`race_player/README.md` must be updated in the same commit:
 
 - **Key Data Fields** — add the `wind` object, marked optional, with the angle
   convention spelled out.

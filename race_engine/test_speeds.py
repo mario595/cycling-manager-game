@@ -12,7 +12,7 @@ from race_engine.formulas import (
 )
 from race_engine.models import Course, RaceState, Rider, RiderAttributes, Segment
 
-# Shared roster used throughout DOMAIN.md, one rider per archetype.
+# Shared roster used throughout README.md, one rider per archetype.
 GC1 = RiderAttributes(climb=94, sprint=30, flat=40, resistance=80, positioning=52)
 PU1 = RiderAttributes(climb=76, sprint=85, flat=60, resistance=68, positioning=72)
 RU1 = RiderAttributes(climb=60, sprint=60, flat=80, resistance=86, positioning=62)

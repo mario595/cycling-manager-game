@@ -11,7 +11,7 @@ from race_engine.models import RiderAttributes, Terrain, WindState
 # as a fraction. `flat` decides K_aero/K_roll (power-to-drag), `climb` decides
 # K_grav (power-to-weight) via a second anchor at CLIMB_REF_GRADIENT, and the
 # blend between them falls out of the equation rather than being a tuning
-# curve — see `compute_base_speed` and DOMAIN.md's "Terrain speed" section.
+# curve — see `compute_base_speed` and README.md's "Terrain speed" section.
 #
 # Solo speeds at the two calibration anchors, mapped from attribute 1-100:
 # flat (gradient 0): 12.0-14.2 m/s (43.2-51.1 km/h)

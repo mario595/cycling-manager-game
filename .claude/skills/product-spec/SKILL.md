@@ -33,11 +33,11 @@ reading prevents a spec that contradicts the engine.
 1. Read `AGENTS.md` (the index) to see which domains exist and which are only
    *planned*. A feature landing in a planned-but-unbuilt domain is a very
    different conversation from one landing in `race_engine/`.
-2. Read the `DOMAIN.md` of each domain the feature plausibly touches — and only
+2. Read the `README.md` of each domain the feature plausibly touches — and only
    those. Follow its links only if the feature actually depends on them.
 3. **Check whether this already exists as thinking.** Look in:
    - the `## Future work / possible improvements` section of the relevant
-     `DOMAIN.md` — features are often already sketched there with a size
+     domain `README.md` — features are often already sketched there with a size
      estimate and known caveats;
    - existing `*_PLAN.md` files in the domain folder;
    - existing specs in `specs/`.
@@ -48,13 +48,13 @@ reading prevents a spec that contradicts the engine.
    `Development Principles` say (MVP first, domain-driven, testable).
 
 Say nothing about this step except a one-line summary of what you found — e.g.
-"This lands in the race engine; DOMAIN.md's Future work already sketches a broom
+"This lands in the race engine; its README's Future work already sketches a broom
 wagon, which overlaps." Do not narrate the reading.
 
 ## Step 2 — Ask questions (and stop)
 
 Ask what you genuinely cannot decide. A question you could answer yourself by
-reading `DOMAIN.md` is a wasted question.
+reading the domain's `README.md` is a wasted question.
 
 Use `AskUserQuestion` when it is available — it is faster for the user than
 prose. Otherwise ask in a numbered list.
@@ -95,7 +95,7 @@ that already exists.
 
 **Conflict.** Where the idea fights the game as it stands today. If a feature
 assumes something the simulation does not model, or contradicts a decision an
-existing `DOMAIN.md` settled deliberately, say so plainly and offer the two or
+existing domain `README.md` settled deliberately, say so plainly and offer the two or
 three ways out. This is the most valuable thing you produce — do not soften it.
 
 Then propose the split:
