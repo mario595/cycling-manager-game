@@ -9,6 +9,7 @@ The React SPA. Currently a **scaffold**: it reproduces the mockup in
 |-------|--------|-------|
 | `/` | Dashboard | Built — full layout from the design, fixture data |
 | `/roster` | Roster | Built — filter, sort and rider detail panel all work |
+| `/calendar` | Calendar | Built — twelve weeks from the API, no fixture data |
 | everything else | `Placeholder` | Renders the route name and path |
 
 Every sidebar item routes somewhere real. Items without a screen land on
@@ -23,9 +24,17 @@ in `src/App.tsx`. Its placeholder disappears automatically.
 ## Where the data comes from
 
 `src/placeholderData.ts` — **all of it invented**, copied from the mockup.
-There is no API yet. Keeping every fake value in one module means the screens
-already have their real shapes, and wiring them up later is a matter of
-replacing that module with fetches rather than hunting literals through JSX.
+Most screens still read from it. Keeping every fake value in one module
+means the screens already have their real shapes, and wiring them up later
+is a matter of replacing that module with fetches rather than hunting
+literals through JSX.
+
+`/calendar` is the first screen with **no placeholder data at all** —
+`src/useCalendar.ts` polls `GET /api/schedule/calendar/` and nothing else.
+Its loading and error states render nothing rather than inventing a
+season's shape, the same discipline `useSeason.ts` already established:
+a screen showing twelve empty weeks while genuinely mid-fetch would be
+indistinguishable from an off-season with a bug in it.
 
 ## How it is served
 

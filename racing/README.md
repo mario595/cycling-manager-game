@@ -129,7 +129,7 @@ once an hour so a race scheduled for a given hour starts near that hour. See
 
 | Model | Purpose |
 |-------|---------|
-| `Race` | A race to simulate: name, course JSON, wind settings, seed, plus scheduling (`starts_at`, `status`, `finished_at` — all **game** time, set and read by `world/`). `week` links it to the season it belongs to (`schedule.Week`); nullable — a race outside any season. |
+| `Race` | A race to simulate: name, course JSON, wind settings, seed, plus scheduling (`starts_at`, `status`, `finished_at` — all **game** time, set and read by `world/`). `week` links it to the season it belongs to (`schedule.Week`); nullable — a race outside any season. `race_day` is derived, never authored — see *A race belongs to a week*, below. |
 | `RaceLog` | Pointer to the log file plus its metadata. One per race. |
 | `RaceResult` | One rider's finishing position. Small, queryable, stays in the DB. |
 
@@ -153,7 +153,29 @@ and a `CheckConstraint` cannot reach across rows. `clean()` is a no-op when
 
 `on_delete=PROTECT`, deliberately: deleting a week (and by extension a
 started season) must never silently delete the races and results run in
-it.
+it. (An unstarted season's `--replace` path deletes its races explicitly
+before the season, precisely because `PROTECT` refuses to do it silently —
+see `schedule/README.md`, *Replacing a season with races*.)
+
+**Races are created by `schedule/`'s `load_season` command**, not by
+anything in this app. `schedule/loaders.create_races()` places each
+declared race into its week and calls an injected `create_race` callable —
+`racing.models.Race.objects.create`, passed in by the command — rather than
+`schedule/` importing this module directly. That indirection exists purely
+to keep the dependency direction honest: `racing -> schedule` is the
+documented, one-way edge (`AGENTS.md`), so `schedule/` importing `Race`
+would create a cycle. See `schedule/README.md`, *What `schedule/` may
+import*, for the full picture.
+
+**One race per day, enforced at the database level.** `race_day` is a
+`DateField`, set in `save()` from `starts_at`
+(`self.race_day = self.starts_at.date() if self.starts_at else None`) —
+never set by hand, never read anywhere. It exists solely so a
+`UniqueConstraint` on `(week, race_day)` can express "at most one race per
+calendar day within a week" — a rule a bare `race_day` constraint would get
+wrong, since it would forbid two unrelated ad-hoc races (both with a null
+`week`) from sharing a date; Postgres treats `NULL` as distinct in a unique
+index, so `(week, race_day)` correctly allows that.
 
 ## Simulating a race
 
