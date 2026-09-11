@@ -31,6 +31,14 @@ as `specs/<slug>-plan.md`. Order of work is **spec → plan → code**, one skil
 per step: `/product-spec <rough idea>` writes the spec, `/tech-plan
 specs/<slug>.md` writes the plan. See `specs/README.md`.
 
+**Closing a ticket:** once a ticket is done, before merging, update the
+`README.md` of every folder the feature touched with what was actually
+built, then delete that ticket's `specs/<slug>.md` and `specs/<slug>-plan.md`.
+The spec and plan are working documents for getting the feature built; once
+it exists, the documentation that matters lives in `README.md`, and a spec or
+plan left behind is a second, aging copy of decisions the code and the
+README already record.
+
 `specs/roadmap.md` says **which issues to build next and why**, and which are
 deliberately deferred. Read it before picking up work.
 
