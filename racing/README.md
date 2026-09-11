@@ -122,8 +122,8 @@ mock clock (development and test); `racing/` never knows or cares which —
 `simulate_race`'s `game_time` parameter is why.
 
 The deployment assumption is now **hourly**, not daily: the world is nudged
-once an hour so a race scheduled for a given hour starts near that hour, per
-`specs/game-clock.md`.
+once an hour so a race scheduled for a given hour starts near that hour. See
+`world/README.md`, *Deployment requirement*.
 
 ## What lives here
 

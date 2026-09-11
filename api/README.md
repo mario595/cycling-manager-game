@@ -7,9 +7,11 @@ DRF routers and serializers that aggregate other apps' data for the SPA.
 
 ## What exists
 
-One endpoint: `GET /api/world/clock/`, returning the world's current game
-time (`GameClockSerializer` in `api/serializers.py`, `ClockView` in
-`api/views.py`). See `world/README.md` for what the clock is.
+One endpoint: `GET /api/world/clock/`, returning the game's current time
+(`ClockSerializer` in `api/serializers.py`, `ClockView` in `api/views.py`,
+serializing `world.services.now()` directly — there is no model instance
+behind this response, since in production there is nothing stored to read).
+See `world/README.md` for what the clock is.
 
 ## URL ordering
 

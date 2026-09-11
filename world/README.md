@@ -1,5 +1,16 @@
 # World — the game clock and the tick
 
+## Why this exists
+
+Nothing in the game has a sense of *when* it is without a clock — no season,
+no calendar, no wage day, no training week, and no race that starts on its
+own. For the player, the clock is what turns a simulator into a world: a
+race arrives because the date arrived, is shown as racing now while it is
+being worked out, and has a result once it's known. If the player is away
+for a while, the races that were scheduled in the meantime have results
+waiting when they come back — nothing they did caused any of it; time
+passed, and the world responded.
+
 ## What this app owns
 
 The single source of truth for what time it is in the game, and the machinery
@@ -22,8 +33,10 @@ when a check actually ran on the host — real time, regardless of which clock
 the game itself is running on — and is not a stand-in for "is X due?"
 anywhere.
 
-There is no automated enforcement of this rule yet (see `specs/game-clock.md`,
-*Deferred*). It is a project convention, not a constraint the code checks.
+There is no automated enforcement of this rule yet. It is a project
+convention, not a constraint the code checks — worth revisiting once there
+is enough timed behaviour elsewhere in the game for the rule to be worth
+policing; today there is almost none.
 
 ## Which clock runs where
 
@@ -34,7 +47,7 @@ cached by `world.services.get_clock()`.
 |---|---|---|
 | `config/settings/base.py` | `world.clocks.RealClock` | The default. No state, no database — `now()` returns `timezone.now()` directly. |
 | `config/settings/dev.py` | `world.clocks.RealClock` | Same as prod by default, so a normal dev session just shows the actual time with no manual resyncing. **Read from the `GAME_CLOCK_CLASS` environment variable** — set it to `world.clocks.MockClock` for a session where you deliberately want to fast-forward a season, e.g. `GAME_CLOCK_CLASS=world.clocks.MockClock manage.py runserver`. |
-| `config/settings/prod.py` | *(inherits `RealClock` from `base.py`)* | **Deliberately not read from the environment**, unlike `dev.py`. Every other production setting in `prod.py` is env-driven, but the clock is the one exception: a non-real clock must never be a live-game possibility — "not disabled, not gated behind a permission, simply not a code path production runs" (`specs/game-clock.md`). An environment variable is a code path in `dev.py`, by design; it is not one in `prod.py`, also by design. |
+| `config/settings/prod.py` | *(inherits `RealClock` from `base.py`)* | **Deliberately not read from the environment**, unlike `dev.py`. Every other production setting in `prod.py` is env-driven, but the clock is the one exception: a non-real clock must never be a live-game possibility — not disabled, not gated behind a permission, simply not a code path production runs. An environment variable is a code path in `dev.py`, by design; it is not one in `prod.py`, also by design. |
 
 `manage.py mock_clock` refuses to run — raising `CommandError` — unless the
 active clock is `MockClock`. This is the runtime enforcement that a mistaken
@@ -114,6 +127,28 @@ manage.py tick                              # then process what's now due
 
 Every `mock_clock` subcommand refuses to run unless `GAME_CLOCK_CLASS` is
 `MockClock`.
+
+## What is deliberately not built
+
+- **No player control over the clock at all.** No pausing, no skipping, no
+  per-player time — the clock is shared world state, moved only by
+  `mock_clock` in development or by cron in production.
+- **No in-game admin screen for the mock clock.** A command line tool is
+  enough for now.
+- **No parallel race processing.** A tick works through claimed races one at
+  a time. Fine while a game day holds at most a handful of races; the
+  frugal next step, once that stops being true, is a queue held in the
+  database the game already has, with workers claiming races — no broker
+  service needed.
+
+## Deployment requirement
+
+Production must be an **always-on host with a reliable hourly scheduled
+task** running `manage.py tick`. A platform that sleeps idle applications
+cannot check for due work while asleep, and races start late by however long
+the sleep lasted — such platforms are ruled out by this feature. The task
+also needs to run long enough to work out a day's races, currently around
+eight seconds each.
 
 ## What `world/` may import
 
