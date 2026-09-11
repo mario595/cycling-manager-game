@@ -625,7 +625,7 @@ by the API — the instant is the truth and the client already formats the clock
 
 ## Work items
 
-### W1 — `schedule/loaders.py`: parse the file
+### W1 — `schedule/loaders.py`: parse the file — DONE
 `SeasonFileError`, `RaceDeclaration`, `SeasonDeclaration`, `parse_season_file`,
 `DAY_INDEX`, `_parse_course`, wind and seed parsing, the duplicate-day check.
 Move #5's inline season parsing here at the same time, leaving the command
