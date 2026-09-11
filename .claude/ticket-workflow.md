@@ -16,9 +16,39 @@ Repo: `mario595/cycling-manager`.
 
 ## Reading the ticket as input
 
-```bash
-gh issue view <N> --repo mario595/cycling-manager --comments
+**Do not run `gh issue view <N> --comments`.** It fails on this repo:
+
 ```
+GraphQL: Projects (classic) is being deprecated in favor of the new Projects
+experience ... (repository.issue.projectCards)
+```
+
+That is a bug in `gh`, not a problem with the ticket. The plain `issue view` asks
+GitHub for a Projects-classic field that no longer exists. **Do not run it, watch
+it fail, and then improvise** — use these, which never request that field:
+
+```bash
+# the issue itself
+gh issue view <N> --repo mario595/cycling-manager \
+  --json number,title,state,body,labels,url
+
+# its comments
+gh issue view <N> --repo mario595/cycling-manager --json comments
+```
+
+Naming the fields is what avoids the error: `projectCards` is only fetched when
+you ask for it by name.
+
+If those fail too, use the REST API, which does not go through GraphQL at all:
+
+```bash
+gh api repos/mario595/cycling-manager/issues/<N>
+gh api repos/mario595/cycling-manager/issues/<N>/comments
+```
+
+The root cause is an out-of-date `gh`, and upgrading it fixes this properly. Do
+not install or upgrade anything yourself — just use the commands above, and
+mention it to the user once.
 
 The body is the brief. The comments may carry earlier output — for `/tech-plan`
 the product spec snapshot is usually there, though `specs/<slug>.md` in the repo
@@ -112,6 +142,15 @@ testing, and merging to master is the last step, which closes it.
 If `gh pr create` reports a PR already exists for the branch, do not open a second
 one — update the existing PR's body instead (`gh pr edit <n> --body-file …`) and
 carry on.
+
+`gh pr create` and `gh pr edit` can hit the same Projects-classic error described
+above. If they do, use the REST API instead — it does not go through GraphQL:
+
+```bash
+gh api repos/mario595/cycling-manager/pulls \
+  -f title="<Feature>" -f head="<branch>" -f base=master \
+  -f body="$(cat <scratch-file>)"
+```
 
 ### 3. Move the Status field
 
