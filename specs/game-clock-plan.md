@@ -561,7 +561,7 @@ registering both read-mostly.
 `load()` twice, assert one row and `pk == 1`;
 `::test_tick_run_orders_newest_first`.
 
-### W3 — `racing/models.py`: `starts_at`, `status`, `finished_at`
+### W3 — `racing/models.py`: `starts_at`, `status`, `finished_at` ✅ done
 The three fields, the `Status` choices, the `race_due_idx` index, migration
 `0002_race_schedule`, updated docstring, `status` and `starts_at` added to
 `RaceAdmin.list_display` and `list_filter`.

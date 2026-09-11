@@ -74,3 +74,11 @@ def test_team_codes_match_player_format(team):
 
     assert codes[str(team.pk)]["code"] == "ALP"
     assert codes[str(team.pk)]["colour"] == "#FF0000"
+
+
+def test_race_defaults_to_scheduled_and_unscheduled(db):
+    race = Race.objects.create(name="Test Stage", course=[{"length": 1000.0, "gradient": 0.0}])
+
+    assert race.status == Race.Status.SCHEDULED
+    assert race.starts_at is None
+    assert race.finished_at is None
