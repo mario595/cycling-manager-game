@@ -697,7 +697,7 @@ not a shorter list; and `AllowAny`.
 `::test_calendar_race_carries_status_and_distance`;
 `::test_calendar_is_public` (unauthenticated client, 200).
 
-### W6 — `frontend/`: the calendar screen
+### W6 — `frontend/`: the calendar screen — DONE
 `api.ts`, `raceStatus.ts`, `useCalendar.ts`, `screens/Calendar.tsx`, the
 `SCREENS` line in `App.tsx`.
 **Test:** no test runner in `frontend/`, and this plan does not add one.
