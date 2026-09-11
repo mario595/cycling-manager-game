@@ -29,6 +29,10 @@ automatically when browsing into the folder.)
 player, with no implementation detail. Order of work is **spec → plan → code**.
 Use the `product-spec` skill to write one (`/product-spec <rough idea>`).
 
+`specs/backlog-brain-dump.md` is the captured backlog — 36 items, all tracked
+as issues #5-#43. It records *why* each item is shaped the way it is and which
+naming and design decisions were already taken; read it before speccing one.
+
 ## Design mockups
 
 `design/` holds UI mockups exported from Claude Design — the visual reference
@@ -69,10 +73,11 @@ up front — an empty app is just noise. The table below marks which exist.
 | `accounts/` | Accounts | **built** | Custom `User`. Exists from the first migration by necessity. |
 | `riders/` | Riders | **built** (model only) | Persisted riders mirroring the engine's attributes. Generation, aging, form, injury still to come. |
 | `teams/` | Teams | **built** (model only) | Teams, codes, colours, manager link. Roster/staff/tactics still to come. |
-| `transfers/` | Transfers | *not yet* | Market for buying/selling riders, contracts, free agents, youth academy. |
-| `competitions/` | Competitions | *not yet* | League tiers, promotion/relegation, seasons, cup races, championships. |
-| `schedule/` | Race Calendar | *not yet* | Race types (classics, stage races, TTs), scheduling, race-specific rules. **Not** `calendar/` — that shadows the stdlib module. |
-| `economy/` | Economy | *not yet* | Budgets, sponsorships, prize money. Use an append-only ledger, not a mutable balance field. |
+| `transfers/` | Transfers | *not yet* | Market for buying/selling riders, auctions, contracts, free agents, market value. (The youth academy is a **development squad** and lives in `riders/`.) |
+| `competitions/` | Competitions | *not yet* | Divisions and Groups, standings, points, promotion/relegation, classifications, season history. A **Division** is a tier; a **Group** is a parallel section within one. |
+| `schedule/` | Race Calendar | *not yet* | Seasons, race types (classics, stage races, TTs), scheduling, race-specific rules. **Not** `calendar/` — that shadows the stdlib module. |
+| `economy/` | Economy | *not yet* | Budgets, sponsorships, prize money, fanbase/merchandise. Use an append-only ledger, not a mutable balance field. |
+| `staff/` | Staff | *not yet* | Hired trainers, physios and scouts. Fixed slots, one per role per team. |
 | `world/` | World Simulation | *not yet* | The tick: game-date singleton, cron management commands, AI team decisions. |
 | `api/` | API | *not yet* | DRF routers aggregating each app's serializers and views. |
 | `frontend/` | Frontend/UI | **scaffold**, `README.md` | The React SPA. Built to `frontend/dist/`, served by Django. Dashboard and Roster render from the mockup; everything else is a placeholder route. No DB yet. |
@@ -86,6 +91,7 @@ accounts      -> (nothing)
 core          -> (nothing)
 riders        -> core, teams
 teams         -> core, accounts
+staff         -> core, teams, riders
 racing        -> riders, teams, race_engine
 world, api    -> everything (orchestration / presentation)
 ```
