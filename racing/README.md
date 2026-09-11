@@ -117,6 +117,10 @@ request. There is no job queue (no Celery, no Redis) and none is needed:
 `world/` owns the tick and calls `racing.services.simulate_race` for each
 race it claims as due. See `world/README.md` for how the tick works.
 
+`world/` may run against a real, live clock (production) or a developer's
+mock clock (development and test); `racing/` never knows or cares which —
+`simulate_race`'s `game_time` parameter is why.
+
 The deployment assumption is now **hourly**, not daily: the world is nudged
 once an hour so a race scheduled for a given hour starts near that hour, per
 `specs/game-clock.md`.

@@ -107,9 +107,10 @@ This covers both the pure-Python engine and the Django apps. The database must
 be up (`docker compose up -d`) — pytest creates and drops a separate test
 database, so your development data is left alone.
 
-The world advances on its own schedule in production (`manage.py tick`, run
-hourly from cron); in development, step it forward deliberately with
-`manage.py tick --day` — see [`world/README.md`](world/README.md).
+In production the game runs on real time; `manage.py tick`, run hourly from
+cron, finds and processes whatever has come due. In development, step a mock
+clock forward deliberately with `manage.py mock_clock advance` and then run
+`manage.py tick` — see [`world/README.md`](world/README.md).
 
 ## Simulating a race
 

@@ -629,7 +629,7 @@ change there.
 
 ## Work items
 
-### W1 — `world/clocks.py`: `Clock`, `RealClock`, `MockClock`
+### W1 — `world/clocks.py`: `Clock`, `RealClock`, `MockClock` ✅ done
 New file, per the code in *`world/clocks.py` (new)* above.
 **Test:** `world/tests/test_clocks.py::test_real_clock_returns_current_real_time`
 (assert within a small tolerance of `django.utils.timezone.now()`);
@@ -639,7 +639,7 @@ New file, per the code in *`world/clocks.py` (new)* above.
 `::test_mock_clock_advance_to_next_due_jumps_to_the_next_scheduled_race`;
 `::test_mock_clock_advance_to_next_due_does_nothing_when_none_scheduled`.
 
-### W2 — `world/models.py`: trim `GameClock`, trim `TickRun`
+### W2 — `world/models.py`: trim `GameClock`, trim `TickRun` ✅ done
 Remove `last_advanced_at`, add `catch_up_max_races` (default `50`); remove
 `from_game_time`, `to_game_time`, `trigger` and the `Trigger` choices class
 from `TickRun`. Migration `world/migrations/0002_mock_clock.py`. Update
@@ -657,7 +657,7 @@ needed).
 fields (no `last_advanced_at` in `load()`'s assertions; `TickRun.objects.create()`
 calls in the test no longer pass `from_game_time`/`to_game_time`).
 
-### W3 — `world/services.py`: `get_clock()`, `now()`, `tick()`
+### W3 — `world/services.py`: `get_clock()`, `now()`, `tick()` ✅ done
 Full rewrite per the code above, replacing `advance()`, `_claim()`,
 `_execute()`, `_advance_days()`. Keep `_reclaim_unfinished()` as-is (unchanged
 logic, still correct: a `RUNNING` race with no results is still the crash
@@ -686,14 +686,14 @@ each test — see Design decision 8's note on why this is required, not
 optional, once more than one test touches `GAME_CLOCK_CLASS` indirectly via
 `override_settings`.
 
-### W4 — `world/management/commands/tick.py`: drop `--to-next` / `--day`
+### W4 — `world/management/commands/tick.py`: drop `--to-next` / `--day` ✅ done
 Simplify to the no-argument version above.
 **Test:** `world/tests/test_tick_command.py::test_tick_command_runs_and_reports`
 via `call_command("tick")`. Remove the old `::test_day_flag_...` and
 `::test_to_next_and_day_together_is_an_error` cases — those flags no longer
 exist on this command.
 
-### W5 — `world/management/commands/mock_clock.py`: new command, delete `set_game_date.py`
+### W5 — `world/management/commands/mock_clock.py`: new command, delete `set_game_date.py` ✅ done
 Per the spec above, including the `MockClock`-only guard and the
 backwards-past-a-finished-race check carried over into `set`.
 **Load-bearing:** the `isinstance(clock, MockClock)` guard — this is the only
@@ -708,7 +708,7 @@ time in an environment running `RealClock`.
 from W3, assert `CommandError`).
 Delete `world/tests/test_set_game_date.py`.
 
-### W6 — `api/`: serialize `now()` instead of the `GameClock` model
+### W6 — `api/`: serialize `now()` instead of the `GameClock` model ✅ done
 `ClockSerializer` (plain `Serializer`), `ClockView.get` calling
 `world.services.now()`. `api/urls.py` unchanged.
 **Test:** `api/tests.py::test_clock_endpoint_returns_current_game_time` —
@@ -716,14 +716,14 @@ update the assertion to compare against `world.services.now()` rather than a
 `GameClock` instance's `.current`; drop the old assertions on
 `catch_up_hours` / `last_tick` (fields no longer in the response).
 
-### W7 — `frontend/src/api.ts`: trim the `Clock` type
+### W7 — `frontend/src/api.ts`: trim the `Clock` type ✅ done
 Remove `catch_up_hours` and `last_tick` from the `Clock` interface.
 **Test:** none (matches the original plan's W9 — no frontend test runner
 exists). `npm run build` (`tsc -b`) is the gate: it must still pass, and it
 will only fail here if something elsewhere in `frontend/` reads either
 removed field, which the decision 9 grep already ruled out.
 
-### W8 — Documentation
+### W8 — Documentation ✅ done
 `world/README.md`, `racing/README.md`, `AGENTS.md`, root `README.md` — see
 *Documentation update*.
 **Test:** none. Reviewed, not tested.
