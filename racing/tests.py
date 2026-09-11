@@ -3,10 +3,13 @@ from __future__ import annotations
 import pytest
 from django.utils import timezone
 
+from datetime import datetime, timedelta, timezone as dt_timezone
+
 from racing.adapters import to_engine_course, to_engine_rider, to_team_codes
 from racing.models import Race, RaceLog, RaceResult
 from racing.services import simulate_race
 from riders.models import Rider
+from schedule.models import Season, Week
 from teams.models import Team
 
 
@@ -137,3 +140,56 @@ def test_simulate_race_refuses_finished_race(running_race, four_riders):
 
     with pytest.raises(ValueError):
         simulate_race(running_race, game_time=timezone.now())
+
+
+MONDAY = datetime(2027, 3, 1, 0, 0, 0, tzinfo=dt_timezone.utc)
+
+
+@pytest.fixture
+def week(db) -> Week:
+    season = Season.objects.create(number=1, starts_at=MONDAY)
+    return Week.objects.create(
+        season=season, number=1, starts_at=MONDAY, ends_at=MONDAY + timedelta(weeks=1),
+    )
+
+
+def test_race_without_a_week_saves_unchanged(db):
+    race = Race.objects.create(
+        name="Standalone Race",
+        course=[{"length": 500.0, "gradient": 0.0}],
+        starts_at=MONDAY,
+    )
+
+    assert race.week is None
+
+
+def test_race_inside_its_week_saves(db, week):
+    race = Race.objects.create(
+        name="In Week Race",
+        course=[{"length": 500.0, "gradient": 0.0}],
+        starts_at=week.starts_at + timedelta(days=2),
+        week=week,
+    )
+
+    assert race.week == week
+
+
+def test_race_outside_its_week_is_rejected(db, week):
+    with pytest.raises(Exception):
+        Race.objects.create(
+            name="Late Race",
+            course=[{"length": 500.0, "gradient": 0.0}],
+            starts_at=week.ends_at + timedelta(seconds=1),
+            week=week,
+        )
+
+
+def test_race_at_the_exact_week_start_is_accepted(db, week):
+    race = Race.objects.create(
+        name="On Time Race",
+        course=[{"length": 500.0, "gradient": 0.0}],
+        starts_at=week.starts_at,
+        week=week,
+    )
+
+    assert race.week == week

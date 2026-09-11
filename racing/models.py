@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from django.core.exceptions import ValidationError
 from django.db import models
 
 from core.models import TimeStampedModel
@@ -11,8 +12,9 @@ class Race(TimeStampedModel):
     The course lives here as JSON in the same shape the engine's config
     parser already accepts (a list of `{length, gradient}` segments), so a
     race can be built from an existing `race_engine/configs/*.json` without
-    a translation step. When a `calendar` app arrives it will own scheduling
-    and this model will point at it; for now a Race stands alone.
+    a translation step. `week` is the link to the season it belongs to
+    (`schedule.Week`, see `racing/README.md`) — null means the race is not
+    part of any season.
 
     `starts_at` and `finished_at` are **game** time, set and read by
     `world/`. `created_at`/`updated_at` (from `TimeStampedModel`) are real
@@ -56,6 +58,14 @@ class Race(TimeStampedModel):
         blank=True,
         help_text="Game time the result was recorded.",
     )
+    week = models.ForeignKey(
+        "schedule.Week",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="races",
+        help_text="The season week this race belongs to. Null means not part of any season.",
+    )
 
     class Meta:
         indexes = [
@@ -64,6 +74,20 @@ class Race(TimeStampedModel):
 
     def __str__(self) -> str:
         return self.name
+
+    def clean(self):
+        super().clean()
+        if self.week_id and self.starts_at:
+            if not (self.week.starts_at <= self.starts_at < self.week.ends_at):
+                raise ValidationError({
+                    "starts_at": f"must fall inside week {self.week.number} of season "
+                                 f"{self.week.season.number} "
+                                 f"({self.week.starts_at} to {self.week.ends_at})",
+                })
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
 
 
 class RaceLog(TimeStampedModel):
