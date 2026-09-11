@@ -406,11 +406,11 @@ exist in the model — nothing decides what they *do*.
 
 Three questions hide in here, and conflating them is the trap:
 
-1. **Do they race?** Not really a choice — they must, or a 16-team Division has
-   six teams worth of racing in it.
-2. **Do they *decide*?** The actual question, and a spectrum rather than a binary.
-3. **What does a new user inherit when claiming one?** Separate from the other
-   two, and the answer constrains them.
+1. **Do they race?** **Yes** — settled. Not really a choice: otherwise a 16-team
+   Division has six teams worth of racing in it.
+2. **Do they *decide*?** **Idle now, heuristic later** — settled. See J1 → J2.
+3. **What does a new user inherit?** **The past, not the present** — settled.
+   See J3.
 
 ### [#44] J1. Unmanaged teams: default squad selection
 **Domains:** `world` NEW, `racing`, `teams`
@@ -440,17 +440,34 @@ Three questions hide in here, and conflating them is the trap:
 
 ### [#46] J3. What a new user inherits when claiming a team
 **Domains:** `accounts`, `teams`, `competitions` NEW
-- **Proposed:** reset to a standard starting position on claim — standard roster,
-  finances and staff — keeping identity (name, colours, code) and results history.
-- **Why not "take it over as-is":** unmanaged teams diverge, so the 7th signup
-  gets a better deal than the 12th for no reason anyone chose; and it makes
-  signup quality hostage to AI quality — if unmanaged teams decay, late signups
-  inherit a corpse.
-- **Genuine counter-argument:** a team *with* history is more interesting than a
-  clean slate. Middle option: reset finances and roster strength, keep history and
-  any self-developed riders.
-- **Open:** reset mid-Season or at the break? Does it keep its Division position?
-  What happens when a user abandons a team?
+
+**Decision taken 2026-09-11: inherit the past, reset the present.**
+
+| Inherited | Reset |
+|---|---|
+| Classification position | Money — fixed starting amount, same for everyone |
+| Points this Season | Riders — a standard starting roster |
+| Identity: name, code, colours | Staff, sponsorships |
+| Results history | |
+
+- **The line is backward- vs. forward-looking.** Points and classification
+  *describe what already happened* and change nothing about future capability.
+  Riders and money *are* future capability. The new user steps into a story
+  without stepping into an advantage.
+- **Riders considered for inheritance and rejected.** A roster *is* economics —
+  fixing the cash and varying the roster fixes the smaller half. It would couple
+  signup fairness to #45's AI quality (whoever claims the team the AI bought well
+  for wins a lottery), and it cannot be fixed by making the AI fairer: an AI
+  trading to keep rosters equal is not playing the game. It would also make one
+  decision serve two masters — "play this team well" and "leave a fair
+  inheritance" pull against each other.
+- **Accepted consequence:** a team can lie 3rd with a brand-new roster. Legible,
+  temporary, self-correcting within a Season. Not a problem to design around.
+- **Open — where do the old riders go?** They cannot vanish or the world's rider
+  population shrinks on every signup. Free agent pool ([#29], cleaner, gives #29 a
+  natural supply) or redistributed among remaining unmanaged teams. Undecided.
+- **Open:** reset on claim mid-Season or at the break? What happens when a user
+  abandons a team?
 - Splits cleanly from [#14]: that decides *where* a new user lands, this decides
   *what they get*.
 
