@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone as dt_timezone
 
 import pytest
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 
 from schedule.models import SEASON_WEEKS, Season, SeasonTransition
@@ -20,7 +21,7 @@ def test_rejects_a_start_that_is_not_a_monday_midnight(db):
     tuesday = MONDAY.replace(day=2)
     season = Season(number=1, starts_at=tuesday)
 
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         season.clean()
 
 
@@ -29,7 +30,7 @@ def test_rejects_an_overlapping_season(db):
     overlapping_start = MONDAY.replace(day=15)  # inside season 1's twelve weeks, still a Monday
     season_2 = Season(number=2, starts_at=overlapping_start)
 
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         season_2.clean()
 
 

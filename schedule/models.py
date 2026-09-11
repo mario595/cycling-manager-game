@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import time, timedelta
+from datetime import time, timedelta, timezone as dt_timezone
 
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -44,7 +44,7 @@ class Season(TimeStampedModel):
         super().clean()
         if self.starts_at is None:
             return
-        starts_at_utc = timezone.localtime(self.starts_at, timezone.utc)
+        starts_at_utc = timezone.localtime(self.starts_at, dt_timezone.utc)
         if starts_at_utc.weekday() != 0 or starts_at_utc.time() != time(0, 0, 0):
             raise ValidationError({
                 "starts_at": "must be a Monday at 00:00:00 UTC",

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import pytest
-from django.utils import timezone
-
 from datetime import datetime, timedelta, timezone as dt_timezone
+
+import pytest
+from django.core.exceptions import ValidationError
+from django.utils import timezone
 
 from racing.adapters import to_engine_course, to_engine_rider, to_team_codes
 from racing.models import Race, RaceLog, RaceResult
@@ -175,7 +176,7 @@ def test_race_inside_its_week_saves(db, week):
 
 
 def test_race_outside_its_week_is_rejected(db, week):
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         Race.objects.create(
             name="Late Race",
             course=[{"length": 500.0, "gradient": 0.0}],
