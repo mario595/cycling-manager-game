@@ -12,3 +12,11 @@ rough feature idea.
 One file per feature, kebab-case: `specs/mechanical-problems.md`.
 
 Order of work: **spec → plan → code.** A spec says what; a `*_PLAN.md` says how.
+
+## Two files here are not feature specs
+
+- **`roadmap.md`** — which issues to build next, in what order, and why the rest
+  are deferred. Read it before picking something up.
+- **`backlog-brain-dump.md`** — the captured backlog (issues #5–#43) and the
+  reasoning behind how each item was scoped and named. Read the entry for a
+  feature before speccing it; it records decisions already taken.

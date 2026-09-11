@@ -29,6 +29,9 @@ automatically when browsing into the folder.)
 player, with no implementation detail. Order of work is **spec → plan → code**.
 Use the `product-spec` skill to write one (`/product-spec <rough idea>`).
 
+`specs/roadmap.md` says **which issues to build next and why**, and which are
+deliberately deferred. Read it before picking up work.
+
 `specs/backlog-brain-dump.md` is the captured backlog — 36 items, all tracked
 as issues #5-#43. It records *why* each item is shaped the way it is and which
 naming and design decisions were already taken; read it before speccing one.
