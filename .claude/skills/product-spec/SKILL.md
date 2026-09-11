@@ -1,6 +1,7 @@
 ---
 name: product-spec
 description: Turn a vague feature idea for the cycling manager game into a clear, non-technical product spec. Use when the user describes a feature in a line or two ("implement mechanical problems during races", "add a transfer market", "riders should age") and wants it defined properly before any code is written. Also use when asked to review, challenge or re-scope an existing spec in specs/. The input is normally a GitHub issue, and the ticket moves to Scoped when the spec is agreed.
+model: opus
 ---
 
 # Product Spec

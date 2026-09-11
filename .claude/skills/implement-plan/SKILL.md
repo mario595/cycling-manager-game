@@ -1,6 +1,7 @@
 ---
 name: implement-plan
 description: Implement an agreed implementation plan from specs/<slug>-plan.md — write the code and its tests, work item by work item, keeping the full test suite green. Use when asked to build, implement or code a plan or a ticket that already has one ("implement specs/game-clock-plan.md", "build #6", "start on the game clock"). Works in a git worktree and commits each work item separately.
+model: sonnet
 ---
 
 # Implement a plan

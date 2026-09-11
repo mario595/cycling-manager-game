@@ -1,6 +1,7 @@
 ---
 name: tech-plan
 description: Turn a product spec in specs/ into an implementation plan a less experienced engineer can follow step by step. Use when a spec is ready to build ("write the plan for specs/game-clock.md", "turn this spec into a technical spec", "how should we implement #6"), or when asked to revise an existing specs/*-plan.md. Reads the code before planning; decides the technical calls rather than asking. The input is normally a GitHub issue, and the ticket moves to Refined when the plan is agreed.
+model: opus
 ---
 
 # Technical Plan
