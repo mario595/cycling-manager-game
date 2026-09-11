@@ -606,7 +606,7 @@ Including the backwards-past-a-finished-race guard.
 **Test:** `world/tests/test_set_game_date.py::test_sets_clock`;
 `::test_refuses_to_rewind_past_a_finished_race_without_force`.
 
-### W8 — `api/`: the app and the clock endpoint
+### W8 — `api/`: the app and the clock endpoint ✅ done
 `startapp api`, `LOCAL_APPS`, `migrations/__init__.py`, serializer, view,
 `api/urls.py`, wire into `config/urls.py` above the catch-all, `api/README.md`,
 add `api` to `testpaths`.
