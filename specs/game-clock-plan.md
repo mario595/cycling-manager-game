@@ -622,7 +622,7 @@ real SPA got a 403.
 Proved by the manual check in *Verification*; `npm --prefix frontend run build`
 must pass (it runs `tsc -b`), which is the real gate on this item.
 
-### W10 — Documentation
+### W10 — Documentation ✅ done
 `racing/README.md`, `AGENTS.md`, `README.md` per *Documentation update*.
 `world/README.md` and `api/README.md` land with W1 and W8, not here.
 **Test:** none. Reviewed, not tested.

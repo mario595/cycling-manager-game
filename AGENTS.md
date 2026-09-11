@@ -83,8 +83,8 @@ up front — an empty app is just noise. The table below marks which exist.
 | `schedule/` | Race Calendar | *not yet* | Seasons, race types (classics, stage races, TTs), scheduling, race-specific rules. **Not** `calendar/` — that shadows the stdlib module. |
 | `economy/` | Economy | *not yet* | Budgets, sponsorships, prize money, fanbase/merchandise. Use an append-only ledger, not a mutable balance field. |
 | `staff/` | Staff | *not yet* | Hired trainers, physios and scouts. Fixed slots, one per role per team. |
-| `world/` | World Simulation | *not yet* | The tick: game-date singleton, cron management commands, AI team decisions. |
-| `api/` | API | *not yet* | DRF routers aggregating each app's serializers and views. |
+| `world/` | World Simulation | **built**, `README.md` | The game clock and the tick. AI team decisions still to come. |
+| `api/` | API | **built**, `README.md` | DRF routers aggregating each app's serializers and views. |
 | `frontend/` | Frontend/UI | **scaffold**, `README.md` | The React SPA. Built to `frontend/dist/`, served by Django. Dashboard and Roster render from the mockup; everything else is a placeholder route. No DB yet. |
 
 ### Dependency direction

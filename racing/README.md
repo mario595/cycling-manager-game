@@ -111,21 +111,43 @@ race. Do not add a "regenerate log" feature.
 
 ## Triggering simulations
 
-Races are simulated by scheduled management commands run from cron, not in a
+Races are simulated when the game clock reaches their `starts_at`, not in a
 request/response cycle — a race takes far too long to run inside an HTTP
-request. There is no job queue (no Celery, no Redis) and none is needed: the
-game world ticks on a schedule anyway, so races do not need to run on demand.
+request. There is no job queue (no Celery, no Redis) and none is needed:
+`world/` owns the tick and calls `racing.services.simulate_race` for each
+race it claims as due. See `world/README.md` for how the tick works.
 
-When a `world/` app exists it will own the tick and call into `racing/`.
+The deployment assumption is now **hourly**, not daily: the world is nudged
+once an hour so a race scheduled for a given hour starts near that hour, per
+`specs/game-clock.md`.
 
 ## What lives here
 
 | Model | Purpose |
 |-------|---------|
-| `Race` | A race to simulate: name, course JSON, wind settings, seed. |
+| `Race` | A race to simulate: name, course JSON, wind settings, seed, plus scheduling (`starts_at`, `status`, `finished_at` — all **game** time, set and read by `world/`). |
 | `RaceLog` | Pointer to the log file plus its metadata. One per race. |
 | `RaceResult` | One rider's finishing position. Small, queryable, stays in the DB. |
 
 `Race.course` is stored in the same `{length, gradient}` shape the engine's
 config parser already accepts, so an existing `race_engine/configs/*.json`
 can seed a Race without a translation step.
+
+## Simulating a race
+
+`racing/services.py` has the one entry point: `simulate_race(race, *,
+game_time)`. It assumes the caller (`world/`) has already claimed the race by
+flipping its status to `RUNNING`; it runs the engine, writes the log and
+`RaceResult` rows, and flips the race to `FINISHED`.
+
+`game_time` is a parameter, not read from the clock here — **`racing/` must
+never import `world/`** (`AGENTS.md`'s dependency direction). The clock
+passes its own current time in; `racing/` stores it as `Race.finished_at`
+without knowing where it came from.
+
+The engine writes its log with a raw `open()` and cannot be taught about
+Django (see *Where they live*, above), so `simulate_race` runs it into a
+`tempfile.TemporaryDirectory()` and hands the finished file to
+`RaceLog.file` through Django's storage API afterwards — one extra copy per
+race, paid to keep both rules (no raw file writes, no Django in the engine)
+intact at once.

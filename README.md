@@ -107,6 +107,10 @@ This covers both the pure-Python engine and the Django apps. The database must
 be up (`docker compose up -d`) — pytest creates and drops a separate test
 database, so your development data is left alone.
 
+The world advances on its own schedule in production (`manage.py tick`, run
+hourly from cron); in development, step it forward deliberately with
+`manage.py tick --day` — see [`world/README.md`](world/README.md).
+
 ## Simulating a race
 
 The engine runs standalone, with no database and no web server:
@@ -150,11 +154,13 @@ created when a feature needs one — an empty app is just noise.
 | `riders/` | Persisted riders. | Model only |
 | `teams/` | Teams, codes, colours. | Model only |
 | `config/` | Django project: settings, URLs, WSGI. | Built |
-| [`frontend/`](frontend/README.md) | The React SPA, served by Django. | Not yet |
+| [`world/`](world/README.md) | The game clock and the tick. | Built |
+| [`api/`](api/README.md) | DRF routers aggregating each app's serializers and views. | Built |
+| [`frontend/`](frontend/README.md) | The React SPA, served by Django. | Scaffold |
 | [`specs/`](specs/README.md) | Product-level feature definitions. | — |
 
 Planned but not yet created: `transfers/`, `competitions/`, `schedule/`,
-`economy/`, `world/`, `api/`.
+`economy/`, `staff/`.
 
 ### Two rules worth knowing up front
 
