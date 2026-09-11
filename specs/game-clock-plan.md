@@ -579,7 +579,7 @@ positions starting at 1 (the `unique_position_per_race` constraint).
 `tick_count > 0`, `RaceResult` positions are `[1, 2, 3, 4]` with no gaps, and
 `race.status == FINISHED`. Also `::test_simulate_race_refuses_finished_race`.
 
-### W5 — `world/services.py`: `now()`, `_claim`, `advance()`
+### W5 — `world/services.py`: `now()`, `_claim`, `advance()` ✅ done
 The full advance, including `_reclaim_unfinished` and the real-time ceiling.
 `advance()` calls `racing.services.simulate_race`.
 **Load-bearing:** `select_for_update()` on the clock row, and simulation running
