@@ -112,8 +112,9 @@ move time.
 # config/settings/base.py
 GAME_CLOCK_CLASS = "world.clocks.RealClock"   # base.py default
 
-# config/settings/dev.py
-GAME_CLOCK_CLASS = "world.clocks.MockClock"
+# config/settings/dev.py — read from the environment, unlike prod.py
+import os
+GAME_CLOCK_CLASS = os.environ.get("GAME_CLOCK_CLASS", "world.clocks.RealClock")
 
 # config/settings/prod.py — no override; inherits RealClock from base.py
 ```
@@ -126,13 +127,35 @@ call to `now()` — `MockClock` is cheap to construct, but a future clock
 implementation might not be, and re-instantiating hides that this is meant to
 be one process-wide clock.
 
+`dev.py` defaults to `RealClock`, same as production — a normal local dev
+session should just show the real time with no manual resyncing, not a clock
+frozen at whatever moment it was last set. `MockClock` is opt-in per session
+via the `GAME_CLOCK_CLASS` environment variable, for the deliberate case of
+fast-forwarding a season by hand.
+
+**Revised from this plan's first draft**, which hardcoded `dev.py` to
+`MockClock`. That made every dev session default to a clock nobody was
+actively stepping, which just looks like the game's time silently drifting
+behind real time — worse than not having a mock clock at all for the common
+case, and the entire reason a real/mock split was wanted in the first place
+was to keep production time honest; the same honesty is wanted in dev by
+default too.
+
 `prod.py` deliberately does **not** read `GAME_CLOCK_CLASS` from the
-environment the way it reads `POSTGRES_*`. Every other production setting in
-that file is env-driven by design (`prod.py`'s own docstring: "the same image
-runs anywhere"), but the clock is the one exception: the spec is explicit that
-a non-real clock must never be a live-game possibility, "not disabled, not
-gated behind a permission, simply not a code path production runs." An env var
-is a code path. A hardcoded absence of one is not.
+environment the way it reads `POSTGRES_*`, and unlike `dev.py` now does.
+Every other production setting in that file is env-driven by design
+(`prod.py`'s own docstring: "the same image runs anywhere"), but the clock is
+the one exception: the spec is explicit that a non-real clock must never be a
+live-game possibility, "not disabled, not gated behind a permission, simply
+not a code path production runs." An env var is a code path — wanted in
+`dev.py`, precisely not wanted in `prod.py`.
+
+**The test suite does not rely on either default.** `world/tests/conftest.py`
+forces `MockClock` via an autouse `override_settings` fixture regardless of
+what `GAME_CLOCK_CLASS` a developer's shell has set, and `api/tests.py`'s
+clock test does the same locally — a test comparing two `now()` reads a
+moment apart would be flaky against `RealClock` by construction, independent
+of which clock a human happens to be running locally.
 
 ### 3. Exactly-once: lock the due races, not a clock row — load-bearing
 
@@ -782,10 +805,11 @@ lands in the same or a later commit within this sequence.
 - **Replace "Running the tick"** — `manage.py tick` (no flags now) run hourly
   from cron; `manage.py mock_clock set|advance` for development, and that it
   refuses to run unless `GAME_CLOCK_CLASS` is `MockClock`.
-- **New section, "Which clock runs where"** — `dev.py` → `MockClock`, `prod.py`
-  → `RealClock`, and that this is not overridable by environment variable in
-  `prod.py` (Design decision 2), stated as a security-relevant fact, not just
-  a default.
+- **New section, "Which clock runs where"** — `dev.py` and `prod.py` both
+  default to `RealClock`; `dev.py`'s is overridable via the `GAME_CLOCK_CLASS`
+  environment variable (opt into `MockClock` for a fast-forwarding session),
+  `prod.py`'s deliberately is not (Design decision 2), stated as a
+  security-relevant fact, not just a default.
 
 ### `racing/README.md` — one section
 
@@ -891,10 +915,10 @@ inherited `dev.py`'s override.
 confirm the sidebar shows a date/time that visibly advances every second
 (already built in the previous version's W9 — this plan does not touch
 `useClock.ts`'s polling behaviour) and matches real time to within the 60s
-poll interval, since `RealClock` is what `dev.py` would use if `GAME_CLOCK_CLASS`
-were flipped — but `dev.py` defaults to `MockClock`, so the manual check
-should instead confirm the sidebar advances from wherever `mock_clock set`
-left it, once a developer has moved it there.
+poll interval. `dev.py` now defaults to `RealClock`, so this should just
+work with no setup. To check the mock-clock path instead, run with
+`GAME_CLOCK_CLASS=world.clocks.MockClock` and confirm the sidebar advances
+from wherever `mock_clock set` left it, rather than from real time.
 
 ## Risks
 
