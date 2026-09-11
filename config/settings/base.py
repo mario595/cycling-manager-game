@@ -42,6 +42,7 @@ LOCAL_APPS = [
     "accounts",
     "riders",
     "teams",
+    "schedule",
     "racing",
     "world",
     "api",
