@@ -92,7 +92,7 @@ up front — an empty app is just noise. The table below marks which exist.
 | `teams/` | Teams | **built** (model only) | Teams, codes, colours, manager link. Roster/staff/tactics still to come. |
 | `transfers/` | Transfers | *not yet* | Market for buying/selling riders, auctions, contracts, free agents, market value. (The youth academy is a **development squad** and lives in `riders/`.) |
 | `competitions/` | Competitions | *not yet* | Divisions and Groups, standings, points, promotion/relegation, classifications, season history. A **Division** is a tier; a **Group** is a parallel section within one. |
-| `schedule/` | Race Calendar | *not yet* | Seasons, race types (classics, stage races, TTs), scheduling, race-specific rules. **Not** `calendar/` — that shadows the stdlib module. |
+| `schedule/` | Schedule | **built**, `README.md` | Seasons and their twelve weeks. The race calendar (#7) lands here next. **Not** `calendar/` — that shadows the stdlib module. |
 | `economy/` | Economy | *not yet* | Budgets, sponsorships, prize money, fanbase/merchandise. Use an append-only ledger, not a mutable balance field. |
 | `staff/` | Staff | *not yet* | Hired trainers, physios and scouts. Fixed slots, one per role per team. |
 | `world/` | World Simulation | **built**, `README.md` | The game clock and the tick. AI team decisions still to come. |
@@ -109,7 +109,8 @@ core          -> (nothing)
 riders        -> core, teams
 teams         -> core, accounts
 staff         -> core, teams, riders
-racing        -> riders, teams, race_engine
+schedule      -> core
+racing        -> riders, teams, race_engine, schedule
 world, api    -> everything (orchestration / presentation)
 ```
 
@@ -142,6 +143,8 @@ cycling-manager/
 ├── racing/
 │   ├── README.md          # the Django<->engine seam, log storage
 │   └── adapters.py        # the ONLY importer of race_engine
+├── schedule/
+│   └── README.md          # seasons, weeks, the transition record
 ├── core/
 ├── accounts/
 ├── riders/

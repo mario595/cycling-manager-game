@@ -16,8 +16,12 @@ passed, and the world responded.
 The single source of truth for what time it is in the game, and the machinery
 that finds and processes due work: `world/clocks.py` (`Clock`, `RealClock`,
 `MockClock`), `GameClock`, `TickRun`, and the `tick` and `mock_clock`
-management commands. Nothing else yet — no season, no calendar, no AI
-decisions. Those are later work for this app (see `AGENTS.md`).
+management commands. No calendar, no AI decisions — later work for this app
+(see `AGENTS.md`).
+
+The tick also records season boundaries as they're crossed, via
+`schedule.services.process_transitions()` — see `schedule/README.md` for
+what a season transition is and why it's a row rather than an action.
 
 ## The clock discipline rule
 
@@ -63,14 +67,23 @@ a millisecond apart would almost never compare equal.
 ## How a tick works
 
 `manage.py tick` — the only entry point cron, or a developer, ever calls —
-finds and processes whatever is due, in two phases:
+reads `now()` once, then finds and processes whatever is due, in three steps:
 
+0. **Transitions** — `schedule.services.process_transitions(at)` records any
+   season boundary crossed at or before `now()` that hasn't been recorded
+   yet (see `schedule/README.md`, *Exactly-once*). This runs **before**
+   claiming races: a race in week 1 of a season that has just opened should
+   be processed in a world that has already recorded the opening.
 1. **Claim** — inside one transaction, holding a row lock on the due race
    rows themselves (not a clock row — there is no longer one to lock in
    production): every `scheduled` race whose `starts_at` is at or before
    `now()` is flipped to `running`, up to `catch_up_max_races` at a time.
 2. **Execute** — outside any transaction: simulate each claimed race and
    record its result.
+
+`now()` is read once at the top of `tick()` and threaded through every step
+as `at`, rather than re-read at each one — against `RealClock` those would
+otherwise be three slightly different instants.
 
 Simulation is deliberately outside the claim transaction. A race takes real,
 measurable time (~8 seconds); holding a database lock for that long, times
