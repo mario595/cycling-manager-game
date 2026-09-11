@@ -657,7 +657,7 @@ null weeks must not collide.
 `::test_two_weekless_races_on_the_same_date_are_accepted` (the null-week case —
 this is the one a `race_day`-only constraint breaks).
 
-### W3 — `schedule/loaders.py`: `create_races`
+### W3 — `schedule/loaders.py`: `create_races` — DONE
 The placement function and its injected `create_race`.
 **Load-bearing:** `create_race` is injected, never imported; and it must be
 `objects.create`, not `bulk_create` — `bulk_create` skips `save()` and so skips

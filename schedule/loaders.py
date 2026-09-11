@@ -12,12 +12,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, time, timedelta, timezone as dt_timezone
-from typing import Any
+from typing import Any, Callable
 
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
-from .models import SEASON_WEEKS
+from .models import SEASON_WEEKS, Season
 
 DAY_INDEX = {
     "monday": 0,
@@ -216,3 +216,35 @@ def _parse_seed(raw: Any, path: str) -> int | None:
     if not isinstance(raw, int):
         raise SeasonFileError(f"{path}.seed must be an integer")
     return raw
+
+
+def create_races(
+    season: Season, declarations: list[RaceDeclaration], *, create_race: Callable[..., Any],
+) -> list[Any]:
+    """Place each declared race inside its week and create it.
+
+    `create_race` is `racing.models.Race.objects.create`, injected by the
+    caller. `schedule/` must not import `racing/` — see
+    `schedule/README.md`, *What `schedule/` may import*.
+
+    Uses the injected callable per race, never a bulk operation: `save()` is
+    what sets `race_day` and runs the week-containment check, and a bulk
+    insert skips `save()` entirely.
+    """
+    weeks = {w.number: w for w in season.weeks.all()}
+    created = []
+    for d in declarations:
+        week = weeks[d.week]
+        starts_at = week.starts_at + timedelta(
+            days=DAY_INDEX[d.day], hours=d.time.hour, minutes=d.time.minute,
+        )
+        created.append(create_race(
+            week=week,
+            name=d.name,
+            course=d.course,
+            starts_at=starts_at,
+            wind_enabled=d.wind_enabled,
+            wind_band=d.wind_band or "",
+            seed=d.seed,
+        ))
+    return created

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from datetime import datetime, time, timedelta, timezone as dt_timezone
+
 import pytest
 
-from schedule.loaders import SeasonFileError, parse_season_file
+from schedule.loaders import RaceDeclaration, SeasonFileError, create_races, parse_season_file
+from schedule.models import Season, Week
 
 BASE = {"number": 1, "starts_at": "2027-03-01T00:00:00Z"}
 
@@ -103,3 +106,68 @@ def test_races_key_is_optional():
     decl = parse_season_file(dict(BASE))
 
     assert decl.races == []
+
+
+SEASON_START = datetime(2027, 3, 1, tzinfo=dt_timezone.utc)
+
+
+@pytest.fixture
+def season(db) -> Season:
+    """A season with its twelve weeks, built the same way load_season does
+    (season.starts_at + N weeks), independent of the command itself."""
+    season = Season.objects.create(number=1, starts_at=SEASON_START)
+    weeks = []
+    for week_number in range(1, 13):
+        week_start = SEASON_START + timedelta(weeks=week_number - 1)
+        weeks.append(Week(
+            season=season, number=week_number,
+            starts_at=week_start, ends_at=week_start + timedelta(weeks=1),
+        ))
+    Week.objects.bulk_create(weeks)
+    return season
+
+
+def _stub_create_race(sink: list):
+    """A stand-in for racing.models.Race.objects.create that just records
+    what it was called with, proving create_races never imports racing/."""
+    def create_race(**kwargs):
+        sink.append(kwargs)
+        return kwargs
+    return create_race
+
+
+def test_places_a_race_on_the_right_instant(season):
+    declarations = [
+        RaceDeclaration(
+            week=3, day="sunday", time=time(14, 0),
+            name="Sunday Classic", course=[SEGMENT],
+            wind_enabled=True, wind_band=None, seed=None,
+        ),
+    ]
+    created: list = []
+
+    create_races(season, declarations, create_race=_stub_create_race(created))
+
+    assert len(created) == 1
+    # Hand-computed: season starts Monday 2027-03-01, week 3 starts
+    # 2027-03-15, + 6 days (Sunday) + 14:00 = 2027-03-21T14:00Z.
+    assert created[0]["starts_at"] == datetime(2027, 3, 21, 14, 0, tzinfo=dt_timezone.utc)
+
+
+def test_every_placed_race_satisfies_its_week_containment(season):
+    from racing.models import Race
+
+    days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+    declarations = [
+        RaceDeclaration(
+            week=12, day=day, time=time(12, 0),
+            name=f"{day.title()} Race", course=[SEGMENT],
+            wind_enabled=True, wind_band=None, seed=None,
+        )
+        for day in days
+    ]
+
+    created = create_races(season, declarations, create_race=Race.objects.create)
+
+    for race_obj in created:
+        race_obj.full_clean()
