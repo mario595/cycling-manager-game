@@ -1,39 +1,46 @@
 """The game clock: the one way any code asks what time it is, and the
-machinery that advances it.
+machinery that finds and processes due work.
 
 See `world/README.md` for the discipline this module enforces: game code
 reads `now()`, never `timezone.now()` / `datetime.now()`, when deciding
-whether something scheduled is due. The one sanctioned exception is
-`_claim`'s read of `timezone.now()`, used only to compute how far real time
-has moved since the last advance.
+whether something scheduled is due. `now()` reads whichever `Clock` is
+configured (`settings.GAME_CLOCK_CLASS`) — real, live time in production,
+a developer-controlled mock clock in dev/test.
 """
 
 from __future__ import annotations
 
 import traceback
-from datetime import datetime, timedelta
+from datetime import datetime
 
+from django.conf import settings
 from django.db import transaction
-from django.db.models import QuerySet
 from django.utils import timezone
+from django.utils.module_loading import import_string
 
 from racing.models import Race
 from racing.services import simulate_race
 
+from .clocks import Clock
 from .models import GameClock, TickRun
+
+_clock: Clock | None = None
+
+
+def get_clock() -> Clock:
+    """The process-wide clock, resolved from `settings.GAME_CLOCK_CLASS` and
+    cached. Exported (not underscore-prefixed) because `mock_clock`'s
+    commands need it to call `MockClock`-only methods."""
+    global _clock
+    if _clock is None:
+        _clock = import_string(settings.GAME_CLOCK_CLASS)()
+    return _clock
 
 
 def now() -> datetime:
     """The current game time. Every piece of game code asks here, never
     `timezone.now()` / `datetime.now()`."""
-    return GameClock.load().current
-
-
-def due_races(before: datetime) -> QuerySet[Race]:
-    """Scheduled races whose start time is at or before `before`."""
-    return Race.objects.filter(
-        status=Race.Status.SCHEDULED, starts_at__isnull=False, starts_at__lte=before,
-    ).order_by("starts_at")
+    return get_clock().now()
 
 
 def _reclaim_unfinished() -> list[int]:
@@ -45,62 +52,38 @@ def _reclaim_unfinished() -> list[int]:
     )
 
 
-def _claim(clock_pk: int, to_next: bool, days: int) -> tuple[datetime, datetime, list[int], bool]:
-    """Move the clock and claim what is due. Returns (before, after, race_ids, capped).
+def _claim(limit: int) -> list[int]:
+    """Claim up to `limit` due races by flipping them SCHEDULED -> RUNNING
+    inside a transaction holding a row lock on exactly those rows. Returns
+    the claimed ids. No simulation happens here.
 
-    Everything here runs inside one transaction holding a row lock on the
-    clock. It does NO simulation: races are only flipped to RUNNING, and the
-    work happens after this returns and the lock is released.
+    A second `tick` arriving while this transaction holds the lock blocks on
+    `select_for_update()`, then re-runs its own filter after this one
+    commits — the rows just claimed are now RUNNING and no longer match, so
+    the second claim gets nothing. This is the exactly-once guarantee; see
+    world/README.md.
     """
+    if limit <= 0:
+        return []
     with transaction.atomic():
-        clock = GameClock.objects.select_for_update().get(pk=clock_pk)
-        before = clock.current
-        cap = timedelta(hours=clock.catch_up_hours)
-
-        if days:
-            horizon, capped = before + timedelta(days=days), False
-        elif to_next:
-            nxt = (
-                Race.objects.filter(
-                    status=Race.Status.SCHEDULED, starts_at__isnull=False, starts_at__gt=before,
-                )
-                .order_by("starts_at")
-                .first()
-            )
-            horizon = nxt.starts_at if nxt else before
-            capped = False
-        else:
-            # Production: never move further than real time has, nor than the cap.
-            # `timezone.now()` here is the ONE sanctioned read of real time.
-            elapsed = timezone.now() - clock.last_advanced_at
-            horizon = before + min(elapsed, cap)
-            capped = elapsed > cap
-
-        race_ids = list(
-            Race.objects.filter(
-                status=Race.Status.SCHEDULED,
-                starts_at__isnull=False,
-                starts_at__gt=before,
-                starts_at__lte=horizon,
-            ).order_by("starts_at").values_list("pk", flat=True)
+        ids = list(
+            Race.objects.select_for_update()
+            .filter(status=Race.Status.SCHEDULED, starts_at__isnull=False, starts_at__lte=now())
+            .order_by("starts_at")
+            .values_list("pk", flat=True)[:limit]
         )
-        Race.objects.filter(pk__in=race_ids).update(status=Race.Status.RUNNING)
-
-        clock.current = horizon
-        clock.last_advanced_at = timezone.now()
-        clock.save(update_fields=["current", "last_advanced_at"])
-
-    return before, horizon, race_ids, capped
+        Race.objects.filter(pk__in=ids).update(status=Race.Status.RUNNING)
+    return ids
 
 
-def _execute(race_ids: list[int], game_time: datetime, tick: TickRun) -> None:
-    """Simulate each claimed race outside any clock transaction. One broken
-    course must not stop the world: an exception is recorded on that race
-    and on the tick, and the loop continues."""
+def _execute(race_ids: list[int], tick: TickRun) -> None:
+    """Simulate each claimed race outside any lock. One broken course must
+    not stop the run: an exception is recorded on that race and on the
+    tick, and the loop continues."""
     for race_id in race_ids:
         race = Race.objects.get(pk=race_id)
         try:
-            simulate_race(race, game_time=game_time)
+            simulate_race(race, game_time=now())
             tick.races_finished += 1
         except Exception:
             race.status = Race.Status.FAILED
@@ -108,68 +91,22 @@ def _execute(race_ids: list[int], game_time: datetime, tick: TickRun) -> None:
             tick.error += f"race {race_id}:\n{traceback.format_exc()}\n"
 
 
-def advance(trigger: str = TickRun.Trigger.CRON, to_next: bool = False, days: int = 0) -> TickRun:
-    """Advance the world once and return the record of what happened."""
-    clock = GameClock.load()
+def tick() -> TickRun:
+    """Find and process whatever is due, exactly once. The only entry point
+    cron — or a developer, after moving the mock clock with `mock_clock` —
+    ever calls."""
+    max_races = GameClock.load().catch_up_max_races
 
     reclaimed = _reclaim_unfinished()
+    claimed = _claim(limit=max(0, max_races - len(reclaimed)))
+    capped = len(reclaimed) + len(claimed) >= max_races
 
-    if days:
-        before, horizon, steps = _advance_days(clock.pk, days)
-        capped = False
-    else:
-        before, horizon, race_ids, capped = _claim(clock.pk, to_next, days=0)
-        steps = [(horizon, race_ids)]
-
-    tick = TickRun.objects.create(
-        from_game_time=before, to_game_time=horizon,
-        races_started=sum(len(ids) for _, ids in steps), trigger=trigger,
-    )
-    # Reclaimed races were stranded at some earlier moment; use the clock's
-    # starting position for those, and each step's own horizon — not the
-    # loop's final horizon — for races claimed during that step. A race
-    # claimed at 14:00 on day one of a multi-day step must not be stamped
-    # finished at the moment the whole step ended.
-    _execute(reclaimed, before, tick)
-    for step_horizon, race_ids in steps:
-        _execute(race_ids, step_horizon, tick)
-    tick.capped = capped
-    tick.finished_at = timezone.now()
-    tick.save(update_fields=["races_finished", "capped", "error", "finished_at"])
-    return tick
-
-
-def _advance_days(clock_pk: int, days: int) -> tuple[datetime, datetime, list[tuple[datetime, list[int]]]]:
-    """Process everything within `days` game days by repeatedly jumping to
-    the next scheduled moment, until the clock passes the target. Written as
-    a loop over `_claim` rather than reimplementing the claim logic a second
-    time (spec item 8, plan decision on `--day`).
-
-    Returns each step's own horizon alongside the races it claimed, so the
-    caller can stamp `finished_at` with the moment a race actually became
-    due rather than the moment the whole day-step ended.
-    """
-    origin = GameClock.objects.get(pk=clock_pk).current
-    target = origin + timedelta(days=days)
-    steps: list[tuple[datetime, list[int]]] = []
-    horizon = origin
-
-    while True:
-        before, next_horizon, race_ids, _ = _claim(clock_pk, to_next=True, days=0)
-        if next_horizon == before:
-            # Nothing left scheduled: the claim did not move the clock.
-            break
-        steps.append((next_horizon, race_ids))
-        horizon = next_horizon
-        if horizon >= target:
-            break
-
-    if horizon < target:
-        with transaction.atomic():
-            clock = GameClock.objects.select_for_update().get(pk=clock_pk)
-            clock.current = target
-            clock.last_advanced_at = timezone.now()
-            clock.save(update_fields=["current", "last_advanced_at"])
-        horizon = target
-
-    return origin, horizon, steps
+    run = TickRun.objects.create(races_started=len(claimed))
+    _execute(reclaimed + claimed, run)
+    run.capped = capped
+    # Real time regardless of which clock is active: this records when the
+    # check itself ran on the host, not game time. The one other sanctioned
+    # real-time read alongside RealClock.now() itself.
+    run.finished_at = timezone.now()
+    run.save(update_fields=["races_finished", "capped", "error", "finished_at"])
+    return run

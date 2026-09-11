@@ -19,3 +19,8 @@ ALLOWED_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0"]
 # Vite's dev server, for when the SPA runs standalone with hot reload instead
 # of being served from Django's static files.
 CORS_ALLOWED_ORIGINS = ["http://localhost:5173"]
+
+# A developer's clock they can freeze, set or step by hand — see
+# world/README.md, "Which clock runs where". manage.py mock_clock is the only
+# thing allowed to move it.
+GAME_CLOCK_CLASS = "world.clocks.MockClock"

@@ -3,13 +3,13 @@ from __future__ import annotations
 from datetime import timedelta
 
 import pytest
-from django.utils import timezone
 
 from racing.models import Race, RaceResult
 from riders.models import Rider
 from teams.models import Team
-from world.models import GameClock, TickRun
-from world.services import advance
+from world.clocks import MockClock
+from world.models import GameClock
+from world.services import get_clock, now, tick
 
 
 @pytest.fixture
@@ -43,97 +43,105 @@ def make_scheduled_race(name: str, starts_at, course=None) -> Race:
     )
 
 
-def test_advance_with_nothing_scheduled_moves_time_only(db, four_riders):
-    clock = GameClock.load()
-    before = clock.current
+def test_tick_with_nothing_scheduled_does_nothing(db, four_riders):
+    run = tick()
 
-    tick = advance()
-
-    clock.refresh_from_db()
-    assert clock.current > before
-    assert tick.races_started == 0
-    assert tick.races_finished == 0
+    assert run.races_started == 0
+    assert run.races_finished == 0
+    assert run.capped is False
 
 
-def test_advance_runs_a_due_race_once(db, four_riders):
-    clock = GameClock.load()
-    race = make_scheduled_race("Due Race", clock.current + timedelta(hours=1))
+def test_tick_runs_a_due_race_once(db, four_riders):
+    clock: MockClock = get_clock()
+    race = make_scheduled_race("Due Race", now() + timedelta(hours=1))
+    clock.advance_to_next_due()
 
-    tick = advance(to_next=True)
+    run = tick()
 
     race.refresh_from_db()
     assert race.status == Race.Status.FINISHED
-    assert tick.races_started == 1
-    assert tick.races_finished == 1
+    assert race.finished_at == now()
+    assert run.races_started == 1
+    assert run.races_finished == 1
     assert RaceResult.objects.filter(race=race).count() == len(four_riders)
 
 
-def test_advance_is_capped_at_catch_up_hours(db, four_riders):
-    clock = GameClock.load()
-    clock.last_advanced_at = timezone.now() - timedelta(hours=200)
-    clock.save(update_fields=["last_advanced_at"])
-    before = clock.current
+def test_tick_is_capped_at_catch_up_max_races(db, four_riders):
+    clock: MockClock = get_clock()
+    GameClock.load()
+    GameClock.objects.filter(pk=1).update(catch_up_max_races=2)
+    due_at = now() + timedelta(hours=1)
+    for i in range(4):
+        make_scheduled_race(f"Race {i}", due_at)
+    clock.set(due_at)
 
-    tick = advance()
+    run = tick()
 
-    clock.refresh_from_db()
-    assert clock.current == before + timedelta(hours=72)
-    assert tick.capped is True
+    assert run.races_started == 2
+    assert run.capped is True
+    assert Race.objects.filter(status=Race.Status.SCHEDULED).count() == 2
 
 
-def test_second_advance_does_not_rerun_a_finished_race(db, four_riders):
-    clock = GameClock.load()
-    race = make_scheduled_race("Once Only", clock.current + timedelta(hours=1))
+def test_tick_clamps_the_claim_limit_when_reclaimed_alone_exceeds_the_cap(db, four_riders):
+    # Reclaimed races count against the same cap as newly-claimed ones. If
+    # reclaimed races alone already exceed the cap, the claim limit must
+    # clamp to zero rather than going negative (a negative slice stop would
+    # silently return an empty queryset either way, but the cap must still
+    # report correctly and nothing must error).
+    GameClock.load()
+    GameClock.objects.filter(pk=1).update(catch_up_max_races=1)
+    for i in range(2):
+        Race.objects.create(
+            name=f"Stranded {i}", course=[{"length": 500.0, "gradient": 0.0}],
+            starts_at=now() - timedelta(hours=1), status=Race.Status.RUNNING,
+        )
 
-    advance(to_next=True)
+    run = tick()
+
+    assert run.capped is True
+    assert Race.objects.filter(status=Race.Status.RUNNING).count() == 0
+
+
+def test_second_tick_does_not_rerun_a_finished_race(db, four_riders):
+    clock: MockClock = get_clock()
+    race = make_scheduled_race("Once Only", now() + timedelta(hours=1))
+    clock.advance_to_next_due()
+
+    tick()
     race.refresh_from_db()
     assert race.status == Race.Status.FINISHED
     first_count = RaceResult.objects.filter(race=race).count()
 
-    advance(to_next=True)
+    tick()
     race.refresh_from_db()
     assert race.status == Race.Status.FINISHED
     assert RaceResult.objects.filter(race=race).count() == first_count
 
 
 def test_interrupted_race_is_reclaimed(db, four_riders):
-    clock = GameClock.load()
     race = Race.objects.create(
         name="Stranded",
         course=[{"length": 500.0, "gradient": 0.0}],
-        starts_at=clock.current - timedelta(hours=1),
+        starts_at=now() - timedelta(hours=1),
         status=Race.Status.RUNNING,
     )
 
-    tick = advance()
+    run = tick()
 
     race.refresh_from_db()
     assert race.status == Race.Status.FINISHED
     assert RaceResult.objects.filter(race=race).count() == len(four_riders)
-    assert tick.races_finished >= 1
-
-
-def test_day_step_stamps_finished_at_with_the_races_own_moment(db, four_riders):
-    # A race due partway through a multi-day step must be stamped with the
-    # moment it actually ran, not with wherever the day-step's clock ends up.
-    clock = GameClock.load()
-    race = make_scheduled_race("Mid Day", clock.current + timedelta(hours=5))
-
-    advance(days=1)
-
-    race.refresh_from_db()
-    assert race.status == Race.Status.FINISHED
-    assert race.finished_at == clock.current + timedelta(hours=5)
+    assert run.races_finished >= 1
 
 
 def test_race_failure_marks_failed_and_continues(db, four_riders):
-    clock = GameClock.load()
-    bad = make_scheduled_race(
-        "Broken Course", clock.current + timedelta(hours=1), course=[{"length": "oops"}],
-    )
-    good = make_scheduled_race("Good Race", clock.current + timedelta(hours=1))
+    clock: MockClock = get_clock()
+    due_at = now() + timedelta(hours=1)
+    bad = make_scheduled_race("Broken Course", due_at, course=[{"length": "oops"}])
+    good = make_scheduled_race("Good Race", due_at)
+    clock.set(due_at)
 
-    advance(to_next=True)
+    tick()
 
     bad.refresh_from_db()
     good.refresh_from_db()
