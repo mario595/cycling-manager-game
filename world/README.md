@@ -33,12 +33,19 @@ cached by `world.services.get_clock()`.
 | Setting file | Clock | Notes |
 |---|---|---|
 | `config/settings/base.py` | `world.clocks.RealClock` | The default. No state, no database — `now()` returns `timezone.now()` directly. |
-| `config/settings/dev.py` | `world.clocks.MockClock` | Overrides the default. Backed by the `GameClock` row; moved only by `manage.py mock_clock`. |
-| `config/settings/prod.py` | *(inherits `RealClock` from `base.py`)* | **Deliberately not read from the environment.** Every other production setting in `prod.py` is env-driven, but the clock is the one exception: a non-real clock must never be a live-game possibility — "not disabled, not gated behind a permission, simply not a code path production runs" (`specs/game-clock.md`). An environment variable is a code path; a hardcoded absence of one is not. |
+| `config/settings/dev.py` | `world.clocks.RealClock` | Same as prod by default, so a normal dev session just shows the actual time with no manual resyncing. **Read from the `GAME_CLOCK_CLASS` environment variable** — set it to `world.clocks.MockClock` for a session where you deliberately want to fast-forward a season, e.g. `GAME_CLOCK_CLASS=world.clocks.MockClock manage.py runserver`. |
+| `config/settings/prod.py` | *(inherits `RealClock` from `base.py`)* | **Deliberately not read from the environment**, unlike `dev.py`. Every other production setting in `prod.py` is env-driven, but the clock is the one exception: a non-real clock must never be a live-game possibility — "not disabled, not gated behind a permission, simply not a code path production runs" (`specs/game-clock.md`). An environment variable is a code path in `dev.py`, by design; it is not one in `prod.py`, also by design. |
 
 `manage.py mock_clock` refuses to run — raising `CommandError` — unless the
 active clock is `MockClock`. This is the runtime enforcement that a mistaken
 invocation cannot move time in an environment running `RealClock`.
+
+**Tests always run against `MockClock`**, regardless of what `GAME_CLOCK_CLASS`
+a developer's shell happens to have set — `world/tests/conftest.py`'s
+`_use_mock_clock` fixture forces it for every test under `world/tests/`, and
+`api/tests.py`'s clock test does the same locally. This is what makes the
+suite deterministic: against `RealClock`, two separate `now()` reads
+a millisecond apart would almost never compare equal.
 
 ## How a tick works
 

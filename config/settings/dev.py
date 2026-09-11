@@ -11,6 +11,8 @@ database (a natively installed one, say) without touching this file.
 
 from __future__ import annotations
 
+import os
+
 from .base import *  # noqa: F403
 
 DEBUG = True
@@ -20,7 +22,11 @@ ALLOWED_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0"]
 # of being served from Django's static files.
 CORS_ALLOWED_ORIGINS = ["http://localhost:5173"]
 
-# A developer's clock they can freeze, set or step by hand — see
-# world/README.md, "Which clock runs where". manage.py mock_clock is the only
-# thing allowed to move it.
-GAME_CLOCK_CLASS = "world.clocks.MockClock"
+# RealClock by default, same as prod, so a normal dev session just shows the
+# actual time with no manual resyncing. Switch to the mock clock only for a
+# session where you deliberately want to fast-forward a season:
+#   GAME_CLOCK_CLASS=world.clocks.MockClock manage.py runserver
+# Unlike prod.py, this IS read from the environment — dev is exactly where a
+# code path to override it is wanted. See world/README.md, "Which clock runs
+# where".
+GAME_CLOCK_CLASS = os.environ.get("GAME_CLOCK_CLASS", "world.clocks.RealClock")
