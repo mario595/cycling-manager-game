@@ -18,6 +18,9 @@ export const TEAM = {
   tier: 'CONTINENTAL · DIV 2',
   budget: '€1.84M',
   manager: 'manager_rob',
+  // Now only a fallback for the Sidebar footer, shown while the real game
+  // clock (GET /api/world/clock/, see useClock.ts) is loading or unreachable.
+  // DASHBOARD.eyebrow below still uses this invented season directly.
   season: 'SEASON 3 · WK 14',
 } as const
 

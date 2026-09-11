@@ -3,6 +3,18 @@ import { NavLink } from 'react-router-dom'
 import { NAV_SECTIONS } from '../navigation'
 import { TEAM } from '../placeholderData'
 import { color, font } from '../theme'
+import { useClock } from '../useClock'
+
+function formatGameDate(iso: string): string {
+  const date = new Date(iso)
+  const day = date.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  })
+  const hour = String(date.getUTCHours()).padStart(2, '0')
+  return `${day} · ${hour}:00`
+}
 
 interface SidebarProps {
   /** True below the mobile breakpoint, where the rail becomes a drawer. */
@@ -14,6 +26,9 @@ interface SidebarProps {
 }
 
 export function Sidebar({ mobile, open, onNavigate }: SidebarProps) {
+  const { clock, error } = useClock()
+  const dateLabel = clock && !error ? formatGameDate(clock.current) : TEAM.season
+
   const style: React.CSSProperties = mobile
     ? {
         position: 'fixed',
@@ -174,7 +189,7 @@ export function Sidebar({ mobile, open, onNavigate }: SidebarProps) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <div style={{ fontSize: 13, fontWeight: 500 }}>{TEAM.manager}</div>
           <div style={{ color: color.mutedStrong, fontSize: 11, fontFamily: font.mono }}>
-            {TEAM.season}
+            {dateLabel}
           </div>
         </div>
         <button

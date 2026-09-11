@@ -616,7 +616,7 @@ ordering before the SPA catch-all.
 DRF `APIClient` **unauthenticated** — an authenticated test would pass while the
 real SPA got a 403.
 
-### W9 — `frontend/`: show the clock
+### W9 — `frontend/`: show the clock ✅ done
 `src/api.ts`, `src/useClock.ts`, `Sidebar.tsx` wiring, the placeholder comment.
 **Test:** no test runner exists in `frontend/` and this plan does not add one.
 Proved by the manual check in *Verification*; `npm --prefix frontend run build`
