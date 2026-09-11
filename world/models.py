@@ -5,36 +5,32 @@ from django.utils import timezone
 
 
 class GameClock(models.Model):
-    """The world's current game datetime. There is exactly one row, `pk=1`.
+    """The mock clock's current value. There is exactly one row, `pk=1`.
 
-    A row rather than a settings value or a cache key, because an advance
-    must take a database lock on the clock in the same transaction as the
-    work it claims — see `world/README.md`, *Exactly-once*.
+    **Only meaningful when `world.clocks.MockClock` is the configured
+    clock** (`settings.GAME_CLOCK_CLASS`, dev/test default). In production,
+    with `RealClock` active, this row is never read or written — `now()`
+    returns live real time directly instead. See `world/README.md`, *Which
+    clock runs where*.
 
-    Not a `TimeStampedModel`: `created_at`/`updated_at` would be a third kind
-    of timestamp on a row that already carries game time (`current`) and real
-    time (`last_advanced_at`), which is exactly the confusion this feature
-    exists to remove.
+    A row rather than a settings value or a cache key, because moving it
+    must take a database lock in the same transaction as any read racing
+    against it — see `world/README.md`, *Exactly-once*.
     """
 
     current = models.DateTimeField(
-        help_text="The world's current game datetime, aware UTC.",
+        help_text="The mock clock's value, aware UTC. Unused when RealClock is active.",
     )
-    last_advanced_at = models.DateTimeField(
-        help_text="Real wall-clock time of the last successful advance.",
-    )
-    catch_up_hours = models.PositiveSmallIntegerField(
-        default=72,
-        help_text="Per-advance cap on how much game time one advance will work through.",
+    catch_up_max_races = models.PositiveSmallIntegerField(
+        default=50,
+        help_text="Per-tick cap on how many due races one tick will claim. Applies regardless of which clock is active.",
     )
 
     @classmethod
     def load(cls) -> GameClock:
         """The one clock row, created at the current real time on first call."""
         now = timezone.now()
-        obj, _ = cls.objects.get_or_create(
-            pk=1, defaults={"current": now, "last_advanced_at": now},
-        )
+        obj, _ = cls.objects.get_or_create(pk=1, defaults={"current": now})
         return obj
 
     def __str__(self) -> str:
@@ -42,33 +38,22 @@ class GameClock(models.Model):
 
 
 class TickRun(models.Model):
-    """A record of one advance of the world.
+    """A record of one tick: what it found due and what it did.
 
-    Spec item 10: "did the world tick?" must be an answerable question.
+    Spec item 8: "did anything run, and did it work?" must be an answerable
+    question.
     """
-
-    class Trigger(models.TextChoices):
-        CRON = "cron", "Cron"
-        TO_NEXT = "to_next", "To next"
-        DAY = "day", "Day"
 
     started_at = models.DateTimeField(auto_now_add=True)
     finished_at = models.DateTimeField(
         null=True, blank=True,
         help_text="Real time. Null means the run did not complete.",
     )
-    from_game_time = models.DateTimeField(help_text="Clock before this run.")
-    to_game_time = models.DateTimeField(
-        help_text="Clock after this run. Equal to from_game_time when nothing moved.",
-    )
     races_started = models.PositiveIntegerField(default=0)
     races_finished = models.PositiveIntegerField(default=0)
     capped = models.BooleanField(
         default=False,
-        help_text="True when the catch-up cap limited this advance.",
-    )
-    trigger = models.CharField(
-        max_length=20, choices=Trigger.choices, default=Trigger.CRON,
+        help_text="True when catch_up_max_races limited this run.",
     )
     error = models.TextField(
         blank=True, default="",
@@ -80,4 +65,4 @@ class TickRun(models.Model):
         indexes = [models.Index(fields=["-started_at"])]
 
     def __str__(self) -> str:
-        return f"tick at {self.started_at} ({self.trigger})"
+        return f"tick at {self.started_at}"

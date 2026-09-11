@@ -5,13 +5,12 @@ from .models import GameClock, TickRun
 
 @admin.register(GameClock)
 class GameClockAdmin(admin.ModelAdmin):
-    list_display = ("current", "last_advanced_at", "catch_up_hours")
+    list_display = ("current", "catch_up_max_races")
 
 
 @admin.register(TickRun)
 class TickRunAdmin(admin.ModelAdmin):
     list_display = (
-        "started_at", "trigger", "from_game_time", "to_game_time",
-        "races_started", "races_finished", "capped",
+        "started_at", "races_started", "races_finished", "capped",
     )
-    list_filter = ("trigger", "capped")
+    list_filter = ("capped",)
