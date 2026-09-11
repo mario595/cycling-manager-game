@@ -43,6 +43,7 @@ LOCAL_APPS = [
     "riders",
     "teams",
     "racing",
+    "world",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
