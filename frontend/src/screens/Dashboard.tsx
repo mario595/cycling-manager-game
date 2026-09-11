@@ -18,17 +18,20 @@ import {
   NEXT_RACE,
   RESULTS,
 } from '../placeholderData'
+import { seasonLabel } from '../seasonLabel'
 import { color, font, formColor, inboxTag } from '../theme'
+import { useSeason } from '../useSeason'
 
 const profile = buildProfile(320, 74, 6)
 
 export function Dashboard() {
   const navigate = useNavigate()
+  const { position } = useSeason()
 
   return (
     <PageBody>
       <PageHeading
-        eyebrow={DASHBOARD.eyebrow}
+        eyebrow={seasonLabel(position)}
         title={DASHBOARD.greeting}
         subtitle={DASHBOARD.subtitle}
         aside={

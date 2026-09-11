@@ -133,7 +133,7 @@ export function PageHeading({
   aside,
   titleSize = 31,
 }: {
-  eyebrow: string
+  eyebrow?: string | null
   title: string
   subtitle: string
   aside?: ReactNode
@@ -150,17 +150,19 @@ export function PageHeading({
       }}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <div
-          style={{
-            fontSize: 11,
-            letterSpacing: '1.6px',
-            color: color.accentInk,
-            fontWeight: 600,
-            fontFamily: font.mono,
-          }}
-        >
-          {eyebrow}
-        </div>
+        {eyebrow ? (
+          <div
+            style={{
+              fontSize: 11,
+              letterSpacing: '1.6px',
+              color: color.accentInk,
+              fontWeight: 600,
+              fontFamily: font.mono,
+            }}
+          >
+            {eyebrow}
+          </div>
+        ) : null}
         <h1 style={{ margin: 0, fontSize: titleSize, fontWeight: 600, letterSpacing: '-1px' }}>
           {title}
         </h1>
