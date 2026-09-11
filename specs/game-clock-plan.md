@@ -546,7 +546,7 @@ a nicety — the clock endpoint being down should not take the UI with it.
 
 ## Work items
 
-### W1 — `world/`: create the app
+### W1 — `world/`: create the app ✅ done
 `startapp world`, delete `views.py` and `tests.py` from the scaffold, add
 `"world"` to `LOCAL_APPS`, write `world/README.md` (sections per
 *Documentation update*), add `world` to `testpaths` in `pyproject.toml`.
