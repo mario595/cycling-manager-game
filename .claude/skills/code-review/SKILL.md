@@ -73,7 +73,7 @@ Run all four. Each failure is a **blocking** finding:
 ```bash
 docker compose up -d                                   # tests need Postgres
 
-PYTEST                                                 # the suite
+PYTEST --durations=10                                  # the suite, slowest tests shown
 /home/mario/dev/cycling-manager/.venv/bin/python manage.py makemigrations --check --dry-run
 cd frontend && npm run lint                            # oxlint
 cd frontend && npm run build                           # tsc -b, then vite build
@@ -103,8 +103,9 @@ Work through, in this order:
    find each item in the code. An item with no code behind it is blocking.
 2. **Is every new behaviour tested?** See below.
 3. **Correctness and the stack pitfalls.** See the checklists.
-4. **Architecture and conventions.**
-5. **Clarity.**
+4. **Performance**, wherever the cost grows with data. See below.
+5. **Architecture and conventions.**
+6. **Clarity.**
 
 ### Tests — check these specifically
 
@@ -140,6 +141,8 @@ Every finding gets one of three levels. Be honest about which.
 - an `AGENTS.md` architecture rule broken;
 - a security problem: a secret in the repo, a missing permission check, an
   injection, user input trusted where it should not be;
+- **an N+1, or a cost that grows superlinearly, on a path that will carry real
+  data** — see Performance below for where the line sits;
 - something that will be very expensive to undo once data exists.
 
 **Should fix** — real, but the sky will not fall. A misleading name, duplication
@@ -175,14 +178,9 @@ Not a checklist to recite — the things that actually go wrong in this stack.
   `list` / `dict` as callables.
 - **Naive datetimes.** `datetime.now()` where `django.utils.timezone.now()` is
   meant. Especially dangerous in anything time-driven.
-- **N+1 queries.** A loop over a queryset touching a related object, or a
-  serializer with a nested field, and no `select_related` / `prefetch_related`.
-- **A query inside a loop** that could be one query outside it.
-- **`len(qs)` where `.count()` is meant**, or truthiness where `.exists()` is.
+- **A uniqueness rule enforced in Python** instead of by a database constraint.
 - **No `transaction.atomic`** where several writes must land together — or
   `select_for_update()` outside a transaction, where it silently does nothing.
-- **A field filtered on constantly with no index**, or a uniqueness rule enforced
-  in Python instead of by a constraint.
 - **`.get()` with no `DoesNotExist` handling** on a path where absence is normal.
 - **Bare `except:` or `except Exception:`** that swallows and continues.
 - **Business logic in a view or a serializer** instead of a service.
@@ -190,7 +188,6 @@ Not a checklist to recite — the things that actually go wrong in this stack.
 
 ### Django REST Framework
 
-- A list endpoint with no pagination.
 - Permission classes left to the default when the endpoint is not public.
 - A server-owned field writable because it is missing from `read_only_fields`.
 - A serializer performing writes that belong in a service.
@@ -211,6 +208,87 @@ Not a checklist to recite — the things that actually go wrong in this stack.
   `role` as genuinely optional — check the fallback is deliberate, not `?.`
   sprinkled to stop a crash.
 - A component doing fetching, layout and business logic at once.
+
+### Performance
+
+Performance is a review dimension in its own right, not an afterthought. But
+judge it by **how the cost grows**, not by how it looks.
+
+**The question to ask of every hot path: what multiplies?** A cost paid once is
+not a performance problem however ugly. A cost paid per row, per rider, per tick
+or per render is one, and it gets worse exactly when the game gets bigger.
+
+**Blocking** when the cost scales with data on a path that will carry it:
+
+- **An N+1 query.** A loop over a queryset that touches a related object, a
+  serializer with a nested field, a template or view reaching across a relation
+  — with no `select_related` (forward FK / one-to-one) or `prefetch_related`
+  (reverse FK / many-to-many). One race with 16 riders hides it; a season does
+  not.
+- **A query inside a loop** that could be one query outside it, including a
+  `.get()` per iteration and a `.save()` per row where a bulk operation exists
+  (`bulk_create`, `bulk_update`, a single `update()`).
+- **Loading a whole table to count, filter or check it in Python** — `len(qs)`
+  for `.count()`, iterating to find one row instead of `.filter().first()`,
+  truthiness instead of `.exists()`.
+- **A missing index on a column that is filtered or ordered on** every time.
+- **Work added inside the engine's per-tick loop** that is not needed per tick.
+  The race engine runs one iteration per rider per second of race time, so a
+  per-tick allocation or recomputation is multiplied by tens of thousands.
+  Anything that can be hoisted out of the loop, or cached, should be — and note
+  that `compute_base_speed`'s cache key is deliberately quantised, so a new
+  unquantised key would blow the cache up rather than speed anything up.
+- **An unbounded query on a growing table** — a list endpoint with no
+  pagination, a report that reads the full history.
+
+**Should fix** when the cost is real but bounded, or the path is not hot yet: an
+extra query on a page that loads once, a list comprehension over a small fixed
+set, a repeated computation that is cheap but obviously repeated.
+
+**Nit** for micro-optimisation of code that runs once, or a rewrite whose only
+argument is that it is faster in principle. Do not trade clarity for speed
+nobody can measure.
+
+**Prevention beats a comment.** When you find an N+1, the fix worth asking for is
+usually the `select_related`/`prefetch_related` *plus* a test that pins the query
+count — `pytest-django` is already installed and provides the
+`django_assert_num_queries` fixture. A query-count test is the only thing that
+stops the N+1 coming back on the next change.
+
+#### React re-renders
+
+`race_player` plays a race back tick by tick with many riders on screen, so
+render cost here is real rather than theoretical.
+
+- **A new object, array or function created during render and passed as a prop.**
+  It is a different value every time, so every memoised child re-renders anyway
+  and the memo is dead weight. Look for inline `{...}`, `[...]`, `() => ...` and
+  `.map()`/`.filter()` results in JSX props.
+- **A context value rebuilt each render** — every consumer re-renders on every
+  parent render, however deep.
+- **State lifted higher than it needs to be**, so a change that concerns one
+  component re-renders a whole subtree. Playback state that ticks every frame is
+  the case to watch.
+- **Expensive work in the render body** rather than in `useMemo` — parsing,
+  sorting, or recomputing a derived collection on every frame.
+- **A memoised component whose props defeat the memo** (see the first bullet).
+  `React.memo` on a component that always gets fresh props costs more than it
+  saves; say so rather than praising the memo.
+- **A long list rendered in full** where only a window is visible.
+- Conversely: **do not demand `useMemo`/`useCallback` everywhere.** They cost
+  something too. Ask for them where the child is memoised, the value is
+  genuinely expensive, or the render happens per frame — otherwise it is a nit.
+
+#### Judging without a profiler
+
+There is no profiler wired up, so reason about it instead: state what multiplies,
+by roughly how much, and on which path. "This adds one query per rider, so a
+16-rider race result page goes from 2 queries to 18" is a finding. "This feels
+slow" is not — leave it out.
+
+If `race_engine/` changed, the repo has a regression harness worth running:
+`python -m race_engine.audit --baseline audit_baseline.json`. A large swing in
+runtime is a finding even when the results are unchanged.
 
 ### Tests
 
