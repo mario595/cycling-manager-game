@@ -646,7 +646,7 @@ these) —
 `::test_warns_on_non_zero_minutes`;
 `::test_races_key_is_optional`.
 
-### W2 — `racing/`: `race_day` and the one-race-per-day constraint
+### W2 — `racing/`: `race_day` and the one-race-per-day constraint — DONE
 The `DateField`, the `save()` assignment, the `UniqueConstraint`, migration
 `0004_race_race_day` with the `RunPython` backfill.
 **Load-bearing:** the constraint is `(week, race_day)`, not `race_day` alone —
