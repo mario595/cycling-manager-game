@@ -5,8 +5,6 @@
 
 export interface Clock {
   current: string
-  catch_up_hours: number
-  last_tick: string | null
 }
 
 export async function getClock(): Promise<Clock> {
