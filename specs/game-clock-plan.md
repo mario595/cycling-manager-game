@@ -554,7 +554,7 @@ Nothing else — this lands on its own so everything after it has a home.
 **Test:** `world/tests/test_app.py::test_world_app_is_installed` asserts
 `apps.is_installed("world")`.
 
-### W2 — `world/models.py`: `GameClock` and `TickRun`
+### W2 — `world/models.py`: `GameClock` and `TickRun` ✅ done
 Both models, `GameClock.load()`, migration `0001_initial`, `world/admin.py`
 registering both read-mostly.
 **Test:** `world/tests/test_models.py::test_load_creates_single_clock` — call
