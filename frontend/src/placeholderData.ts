@@ -20,14 +20,12 @@ export const TEAM = {
   manager: 'manager_rob',
   // Now only a fallback for the Sidebar footer, shown while the real game
   // clock (GET /api/world/clock/, see useClock.ts) is loading or unreachable.
-  // DASHBOARD.eyebrow below still uses this invented season directly.
   season: 'SEASON 3 · WK 14',
 } as const
 
 // --- Dashboard ------------------------------------------------------------
 
 export const DASHBOARD = {
-  eyebrow: 'SEASON 3 · WEEK 14 OF 38',
   greeting: 'Good morning, Rob.',
   subtitle:
     'Two races resolved overnight. Your lineup for Tour de Sancerre is still open.',

@@ -3,7 +3,9 @@ import { Outlet, useLocation } from 'react-router-dom'
 
 import { titleForPath } from '../navigation'
 import { TEAM } from '../placeholderData'
+import { seasonLabel } from '../seasonLabel'
 import { MOBILE_BREAKPOINT, color, font } from '../theme'
+import { useSeason } from '../useSeason'
 import { Sidebar } from './Sidebar'
 
 /** True while the viewport is narrow enough to want the drawer layout. */
@@ -27,6 +29,8 @@ export function Layout() {
   const mobile = useIsMobile()
   const [drawer, setDrawer] = useState(false)
   const { pathname } = useLocation()
+  const { position } = useSeason()
+  const label = seasonLabel(position)
 
   // Growing the window past the breakpoint while the drawer is open would
   // otherwise leave `drawer` stuck true behind the now-static sidebar.
@@ -93,6 +97,7 @@ export function Layout() {
             </div>
             <div style={{ fontSize: 11, color: color.muted, fontFamily: font.mono }}>
               {TEAM.name.toUpperCase()}
+              {label ? ` · ${label}` : ''}
             </div>
           </div>
           <div
@@ -109,6 +114,22 @@ export function Layout() {
             {TEAM.budget}
           </div>
         </header>
+
+        {!mobile && label ? (
+          <div
+            style={{
+              padding: '10px 24px',
+              borderBottom: `1px solid ${color.border}`,
+              background: '#FAFBFC',
+              fontSize: 11,
+              letterSpacing: '1px',
+              color: color.mutedStrong,
+              fontFamily: font.mono,
+            }}
+          >
+            {label.toUpperCase()}
+          </div>
+        ) : null}
 
         <Outlet />
       </main>

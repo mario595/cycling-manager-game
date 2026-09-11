@@ -7,11 +7,18 @@ DRF routers and serializers that aggregate other apps' data for the SPA.
 
 ## What exists
 
-One endpoint: `GET /api/world/clock/`, returning the game's current time
-(`ClockSerializer` in `api/serializers.py`, `ClockView` in `api/views.py`,
-serializing `world.services.now()` directly — there is no model instance
-behind this response, since in production there is nothing stored to read).
-See `world/README.md` for what the clock is.
+- `GET /api/world/clock/` — the game's current time (`ClockSerializer`,
+  `ClockView`, serializing `world.services.now()` directly — there is no
+  model instance behind this response, since in production there is
+  nothing stored to read). See `world/README.md` for what the clock is.
+- `GET /api/schedule/position/` — where the world is in its season
+  (`PositionSerializer`, `PositionView`, serializing
+  `schedule.services.current_position(now())`). One of three shapes,
+  discriminated by `state`: `in_season` (with `season`, `week`,
+  `week_ends_at`), `off_season` (with `season` — the one that just
+  finished — and `week`/`week_ends_at` null), or `no_season` (everything
+  null, before any season has ever been declared). See
+  `schedule/README.md` for what a season is.
 
 ## URL ordering
 

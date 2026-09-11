@@ -6,6 +6,7 @@ import pytest
 
 from racing.models import Race, RaceResult
 from riders.models import Rider
+from schedule.models import Season, SeasonTransition
 from teams.models import Team
 from world.clocks import MockClock
 from world.models import GameClock
@@ -148,3 +149,32 @@ def test_race_failure_marks_failed_and_continues(db, four_riders):
     assert bad.status == Race.Status.FAILED
     assert good.status == Race.Status.FINISHED
     assert RaceResult.objects.filter(race=good).count() == len(four_riders)
+
+
+def test_tick_records_a_season_opening(db):
+    clock: MockClock = get_clock()
+    season = Season.objects.create(number=1, starts_at=now())
+    clock.set(season.starts_at + timedelta(hours=1))
+
+    run = tick()
+
+    assert run.seasons_opened == 1
+    assert run.seasons_closed == 0
+    assert SeasonTransition.objects.filter(
+        season=season, kind=SeasonTransition.Kind.OPENED,
+    ).exists()
+
+
+def test_tick_does_not_record_a_transition_twice(db):
+    clock: MockClock = get_clock()
+    season = Season.objects.create(number=1, starts_at=now())
+    clock.set(season.starts_at + timedelta(hours=1))
+
+    first = tick()
+    second = tick()
+
+    assert first.seasons_opened == 1
+    assert second.seasons_opened == 0
+    assert SeasonTransition.objects.filter(
+        season=season, kind=SeasonTransition.Kind.OPENED,
+    ).count() == 1

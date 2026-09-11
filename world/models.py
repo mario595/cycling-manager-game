@@ -55,6 +55,8 @@ class TickRun(models.Model):
         default=False,
         help_text="True when catch_up_max_races limited this run.",
     )
+    seasons_opened = models.PositiveSmallIntegerField(default=0)
+    seasons_closed = models.PositiveSmallIntegerField(default=0)
     error = models.TextField(
         blank=True, default="",
         help_text="Traceback if the run failed. Empty on success.",

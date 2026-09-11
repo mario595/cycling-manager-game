@@ -65,6 +65,12 @@ docker compose up -d
 
 Then open <http://127.0.0.1:8000/>.
 
+Declare a season with:
+
+```bash
+.venv/bin/python manage.py load_season seasons/season-1.example.json
+```
+
 `python` there is whatever `.python-version` selects, so with pyenv set up you
 get the pinned 3.12.11 without naming it. Without pyenv, use `python3.12`
 explicitly.

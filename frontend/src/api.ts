@@ -14,3 +14,18 @@ export async function getClock(): Promise<Clock> {
   }
   return response.json()
 }
+
+export interface Position {
+  state: 'in_season' | 'off_season' | 'no_season'
+  season: number | null
+  week: number | null
+  week_ends_at: string | null
+}
+
+export async function getPosition(): Promise<Position> {
+  const response = await fetch('/api/schedule/position/')
+  if (!response.ok) {
+    throw new Error(`position request failed: ${response.status}`)
+  }
+  return response.json()
+}

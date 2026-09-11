@@ -5,8 +5,8 @@ from .models import Race, RaceLog, RaceResult
 
 @admin.register(Race)
 class RaceAdmin(admin.ModelAdmin):
-    list_display = ("name", "status", "starts_at", "wind_enabled", "seed", "created_at")
-    list_filter = ("status",)
+    list_display = ("name", "status", "starts_at", "week", "wind_enabled", "seed", "created_at")
+    list_filter = ("status", "week")
 
 
 @admin.register(RaceLog)

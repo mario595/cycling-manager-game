@@ -129,13 +129,31 @@ once an hour so a race scheduled for a given hour starts near that hour. See
 
 | Model | Purpose |
 |-------|---------|
-| `Race` | A race to simulate: name, course JSON, wind settings, seed, plus scheduling (`starts_at`, `status`, `finished_at` — all **game** time, set and read by `world/`). |
+| `Race` | A race to simulate: name, course JSON, wind settings, seed, plus scheduling (`starts_at`, `status`, `finished_at` — all **game** time, set and read by `world/`). `week` links it to the season it belongs to (`schedule.Week`); nullable — a race outside any season. |
 | `RaceLog` | Pointer to the log file plus its metadata. One per race. |
 | `RaceResult` | One rider's finishing position. Small, queryable, stays in the DB. |
 
 `Race.course` is stored in the same `{length, gradient}` shape the engine's
 config parser already accepts, so an existing `race_engine/configs/*.json`
 can seed a Race without a translation step.
+
+### A race belongs to a week
+
+`Race.week` is a `ForeignKey("schedule.Week", ...)`, declared as a string so
+`racing/models.py` needs no import of `schedule/` — the app-level dependency
+(`racing -> schedule`, see `AGENTS.md`) is real, but the module stays
+import-free of it.
+
+A race whose `starts_at` falls outside its week's `[starts_at, ends_at)`
+range is rejected: `Race.clean()` checks the containment, called from
+`Race.save()`. This is enforced in Python, not a database constraint,
+because the bound lives on a different table (`Week.starts_at`/`ends_at`)
+and a `CheckConstraint` cannot reach across rows. `clean()` is a no-op when
+`week` is null — every race before this feature landed, is.
+
+`on_delete=PROTECT`, deliberately: deleting a week (and by extension a
+started season) must never silently delete the races and results run in
+it.
 
 ## Simulating a race
 
