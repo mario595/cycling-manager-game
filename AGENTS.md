@@ -26,8 +26,10 @@ automatically when browsing into the folder.)
 ## Feature specs
 
 `specs/` holds product-level feature definitions — what a feature does for the
-player, with no implementation detail. Order of work is **spec → plan → code**.
-Use the `product-spec` skill to write one (`/product-spec <rough idea>`).
+player, with no implementation detail — and the implementation plan for each,
+as `specs/<slug>-plan.md`. Order of work is **spec → plan → code**, one skill
+per step: `/product-spec <rough idea>` writes the spec, `/tech-plan
+specs/<slug>.md` writes the plan. See `specs/README.md`.
 
 `specs/roadmap.md` says **which issues to build next and why**, and which are
 deliberately deferred. Read it before picking up work.
