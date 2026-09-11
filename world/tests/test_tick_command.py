@@ -7,6 +7,7 @@ from django.core.management import call_command
 
 from racing.models import Race
 from riders.models import Rider
+from schedule.models import Season
 from teams.models import Team
 from world.services import now
 
@@ -48,3 +49,12 @@ def test_tick_command_runs_and_reports(db, four_riders, capsys):
     out = capsys.readouterr().out
     assert "races started 1, finished 1" in out
     assert "capped=False" in out
+
+
+def test_tick_summary_reports_season_transitions(db, capsys):
+    Season.objects.create(number=1, starts_at=now() - timedelta(hours=1))
+
+    call_command("tick")
+
+    out = capsys.readouterr().out
+    assert "seasons opened 1, closed 0" in out

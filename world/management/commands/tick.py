@@ -13,7 +13,8 @@ class Command(BaseCommand):
 
         self.stdout.write(
             f"races started {run.races_started}, finished {run.races_finished} | "
-            f"capped={run.capped}"
+            f"capped={run.capped} | "
+            f"seasons opened {run.seasons_opened}, closed {run.seasons_closed}"
         )
 
         if run.error:
