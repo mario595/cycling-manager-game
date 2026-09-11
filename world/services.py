@@ -115,31 +115,43 @@ def advance(trigger: str = TickRun.Trigger.CRON, to_next: bool = False, days: in
     reclaimed = _reclaim_unfinished()
 
     if days:
-        before, horizon, race_ids = _advance_days(clock.pk, days)
+        before, horizon, steps = _advance_days(clock.pk, days)
         capped = False
     else:
         before, horizon, race_ids, capped = _claim(clock.pk, to_next, days=0)
+        steps = [(horizon, race_ids)]
 
     tick = TickRun.objects.create(
         from_game_time=before, to_game_time=horizon,
-        races_started=len(race_ids), trigger=trigger,
+        races_started=sum(len(ids) for _, ids in steps), trigger=trigger,
     )
-    _execute(reclaimed + race_ids, horizon, tick)
+    # Reclaimed races were stranded at some earlier moment; use the clock's
+    # starting position for those, and each step's own horizon — not the
+    # loop's final horizon — for races claimed during that step. A race
+    # claimed at 14:00 on day one of a multi-day step must not be stamped
+    # finished at the moment the whole step ended.
+    _execute(reclaimed, before, tick)
+    for step_horizon, race_ids in steps:
+        _execute(race_ids, step_horizon, tick)
     tick.capped = capped
     tick.finished_at = timezone.now()
     tick.save(update_fields=["races_finished", "capped", "error", "finished_at"])
     return tick
 
 
-def _advance_days(clock_pk: int, days: int) -> tuple[datetime, datetime, list[int]]:
+def _advance_days(clock_pk: int, days: int) -> tuple[datetime, datetime, list[tuple[datetime, list[int]]]]:
     """Process everything within `days` game days by repeatedly jumping to
     the next scheduled moment, until the clock passes the target. Written as
     a loop over `_claim` rather than reimplementing the claim logic a second
     time (spec item 8, plan decision on `--day`).
+
+    Returns each step's own horizon alongside the races it claimed, so the
+    caller can stamp `finished_at` with the moment a race actually became
+    due rather than the moment the whole day-step ended.
     """
     origin = GameClock.objects.get(pk=clock_pk).current
     target = origin + timedelta(days=days)
-    all_race_ids: list[int] = []
+    steps: list[tuple[datetime, list[int]]] = []
     horizon = origin
 
     while True:
@@ -147,7 +159,7 @@ def _advance_days(clock_pk: int, days: int) -> tuple[datetime, datetime, list[in
         if next_horizon == before:
             # Nothing left scheduled: the claim did not move the clock.
             break
-        all_race_ids += race_ids
+        steps.append((next_horizon, race_ids))
         horizon = next_horizon
         if horizon >= target:
             break
@@ -160,4 +172,4 @@ def _advance_days(clock_pk: int, days: int) -> tuple[datetime, datetime, list[in
             clock.save(update_fields=["current", "last_advanced_at"])
         horizon = target
 
-    return origin, horizon, all_race_ids
+    return origin, horizon, steps

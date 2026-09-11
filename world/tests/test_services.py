@@ -113,6 +113,19 @@ def test_interrupted_race_is_reclaimed(db, four_riders):
     assert tick.races_finished >= 1
 
 
+def test_day_step_stamps_finished_at_with_the_races_own_moment(db, four_riders):
+    # A race due partway through a multi-day step must be stamped with the
+    # moment it actually ran, not with wherever the day-step's clock ends up.
+    clock = GameClock.load()
+    race = make_scheduled_race("Mid Day", clock.current + timedelta(hours=5))
+
+    advance(days=1)
+
+    race.refresh_from_db()
+    assert race.status == Race.Status.FINISHED
+    assert race.finished_at == clock.current + timedelta(hours=5)
+
+
 def test_race_failure_marks_failed_and_continues(db, four_riders):
     clock = GameClock.load()
     bad = make_scheduled_race(
