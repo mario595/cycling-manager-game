@@ -569,7 +569,7 @@ The three fields, the `Status` choices, the `race_due_idx` index, migration
 no schedule, and a non-null field would need a fabricated default game date.
 **Test:** `racing/tests.py::test_race_defaults_to_scheduled_and_unscheduled`.
 
-### W4 — `racing/services.py` + `racing/adapters.py`: `simulate_race`
+### W4 — `racing/services.py` + `racing/adapters.py`: `simulate_race` ✅ done
 `run_race_via_adapter` in the adapter; `simulate_race(race, *, game_time)` in
 the service. No clock involvement.
 **Load-bearing:** the temp-file-then-storage path (decision 8), and dense

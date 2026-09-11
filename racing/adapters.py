@@ -20,6 +20,7 @@ from race_engine.models import Course, Rider as EngineRider, RiderAttributes, Se
 from riders.models import ENGINE_ATTRIBUTES
 
 if TYPE_CHECKING:
+    from race_engine.models import RiderState
     from riders.models import Rider as DBRider
     from teams.models import Team
 
@@ -70,3 +71,23 @@ def to_team_codes(teams: list[Team]) -> dict[str, dict[str, str]]:
         }
         for team in teams
     }
+
+
+def run_race_via_adapter(
+    riders: list[EngineRider],
+    course: Course,
+    log_path: str,
+    seed: int | None,
+    team_codes: dict[str, dict[str, str]],
+    wind: bool,
+    wind_band: str | None,
+) -> list[RiderState]:
+    """Call the engine's `run_race`. Exists so `racing/services.py` can run a
+    race without importing `race_engine` — see this file's module docstring.
+    """
+    from race_engine.models import run_race
+
+    return run_race(
+        riders, course, log_path=log_path, seed=seed, verbose=False,
+        team_codes=team_codes, wind=wind, wind_band=wind_band,
+    )

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import pytest
+from django.utils import timezone
 
 from racing.adapters import to_engine_course, to_engine_rider, to_team_codes
-from racing.models import Race
+from racing.models import Race, RaceLog, RaceResult
+from racing.services import simulate_race
 from riders.models import Rider
 from teams.models import Team
 
@@ -82,3 +84,56 @@ def test_race_defaults_to_scheduled_and_unscheduled(db):
     assert race.status == Race.Status.SCHEDULED
     assert race.starts_at is None
     assert race.finished_at is None
+
+
+@pytest.fixture
+def four_riders(db, team) -> list[Rider]:
+    return [
+        Rider.objects.create(
+            name=f"Rider {i}",
+            team=team,
+            role=Rider.Role.LEADER if i == 0 else Rider.Role.SUPPORT,
+            climb=60,
+            sprint=60,
+            flat=60,
+            resistance=60,
+            positioning=60,
+        )
+        for i in range(4)
+    ]
+
+
+@pytest.fixture
+def running_race(db) -> Race:
+    return Race.objects.create(
+        name="Tiny Sprint",
+        course=[{"length": 500.0, "gradient": 0.0}],
+        status=Race.Status.RUNNING,
+    )
+
+
+def test_simulate_race_writes_log_and_results(running_race, four_riders):
+    game_time = timezone.now()
+
+    results = simulate_race(running_race, game_time=game_time)
+
+    running_race.refresh_from_db()
+    assert running_race.status == Race.Status.FINISHED
+    assert running_race.finished_at == game_time
+
+    log = RaceLog.objects.get(race=running_race)
+    assert log.tick_count > 0
+
+    positions = sorted(
+        RaceResult.objects.filter(race=running_race).values_list("position", flat=True)
+    )
+    assert positions == [1, 2, 3, 4]
+    assert len(results) == 4
+
+
+def test_simulate_race_refuses_finished_race(running_race, four_riders):
+    simulate_race(running_race, game_time=timezone.now())
+    running_race.refresh_from_db()
+
+    with pytest.raises(ValueError):
+        simulate_race(running_race, game_time=timezone.now())
