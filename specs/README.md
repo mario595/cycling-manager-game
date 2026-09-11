@@ -13,6 +13,16 @@ One file per feature, kebab-case: `specs/mechanical-problems.md`.
 
 Order of work: **spec → plan → code.** A spec says what; a plan says how.
 
+Both writing steps start from a GitHub issue and move it on when their output is
+agreed: `/product-spec` moves the ticket to **Scoped**, `/tech-plan` to
+**Refined**. Each also posts its document to the issue as a snapshot comment —
+the file here stays the source of truth. The procedure is in
+`.claude/ticket-workflow.md`.
+
+The third step is `/implement-plan`, which builds an agreed plan: a git worktree,
+one commit per work item, tests for every new behaviour, and the full suite green
+before each commit. It does not move the ticket.
+
 ## Plans
 
 The implementation plan for a spec sits beside it as `specs/<slug>-plan.md`

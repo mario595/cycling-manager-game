@@ -28,8 +28,11 @@ automatically when browsing into the folder.)
 `specs/` holds product-level feature definitions — what a feature does for the
 player, with no implementation detail — and the implementation plan for each,
 as `specs/<slug>-plan.md`. Order of work is **spec → plan → code**, one skill
-per step: `/product-spec <rough idea>` writes the spec, `/tech-plan
-specs/<slug>.md` writes the plan. See `specs/README.md`.
+per step: `/product-spec #<issue>` writes the spec and moves the ticket to
+**Scoped**; `/tech-plan #<issue>` writes the plan and moves it to **Refined**;
+`/implement-plan specs/<slug>-plan.md` builds it in a worktree, one commit per
+work item. See `specs/README.md`, and `.claude/ticket-workflow.md` for the
+ticket handoff.
 
 `specs/roadmap.md` says **which issues to build next and why**, and which are
 deliberately deferred. Read it before picking up work.

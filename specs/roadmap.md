@@ -56,6 +56,23 @@ It does not need [#41](https://github.com/mario595/cycling-manager/issues/41)
 (injuries) to ship. The stage-race squad lock is simply less interesting without
 it — an argument for doing #41 soon after, not for blocking on it.
 
+## Phase 2.5 — somebody to race against
+
+**Issue: [#44](https://github.com/mario595/cycling-manager/issues/44) — unmanaged
+teams field a default squad**
+
+A Division is full long before it has enough users — 16 teams, 6 users. Without
+this, most of the field does not start and there is nothing to simulate.
+
+Small, and it belongs here rather than in its own phase because **it is the same
+mechanism as [#39](https://github.com/mario595/cycling-manager/issues/39)**
+(a managed team whose manager did not log in). Both are *"a team with no human
+input needs a squad"*. Build it once.
+
+[#45](https://github.com/mario595/cycling-manager/issues/45) (heuristic AI) is
+**not** in the early phases — but it has a named expiry, not an open-ended one.
+See the deferrals below.
+
 ## Phase 3 — the loop closes
 
 **Issues: [#15](https://github.com/mario595/cycling-manager/issues/15),
@@ -74,7 +91,7 @@ structure nobody is in yet.
 ## After Phase 3, the game is playable
 
 Races happen weekly. The player picks who rides. Results accumulate. There is a
-table. Six issues, plus a slice of a seventh.
+table. Seven issues, plus a slice of an eighth.
 
 Everything past this point makes the game *better* rather than making it *exist*,
 and the order becomes a matter of taste rather than dependency.
@@ -112,6 +129,23 @@ realism balance across all six bundled courses and requires re-deriving it.
 
 High cost, and they add **texture** rather than a loop. Do them when the work is
 about making racing better, not while making it exist.
+
+### Heuristic AI for unmanaged teams — #45
+
+Deferred, but **with a hard expiry rather than an open-ended one: the first full
+Season played with real users.**
+
+[#44](https://github.com/mario595/cycling-manager/issues/44) leaves unmanaged
+teams weak in a predictable, unchanging way. Human teams train and buy; these do
+not, so the gap widens every Season. For a six-user playtest that is fine —
+arguably useful, as a stable baseline to measure human teams against. For a real
+league it is fatal: a Season ending with every human team above every unmanaged
+one is not a competition, and it makes promotion and relegation
+([#13](https://github.com/mario595/cycling-manager/issues/13)) meaningless,
+because teams move by headcount rather than merit.
+
+So this is not "when we get round to it". It is a prerequisite for the first
+Season that counts.
 
 ### Team tactics — #38
 

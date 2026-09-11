@@ -1,6 +1,6 @@
 # Backlog — brain dump session 2026-09-11
 
-**All 36 items are now GitHub issues #5–#43.** This file is the index and the
+**39 items, tracked as GitHub issues #5–#46.** This file is the index and the
 reasoning record; the issues are the tracker. Each item below is prefixed with
 its issue number.
 
@@ -397,6 +397,64 @@ Conventions:
   has a past.
 - **Open:** how far back is history browsable; are there individual season awards
   (rider of the season) distinct from race results?
+
+## J. Unmanaged teams *(added 2026-09-11, second session)*
+
+A Division is full long before it has enough users: 16 teams, 6 users, 10
+unmanaged teams. `teams.Team.manager` is nullable by design, so these already
+exist in the model — nothing decides what they *do*.
+
+Three questions hide in here, and conflating them is the trap:
+
+1. **Do they race?** Not really a choice — they must, or a 16-team Division has
+   six teams worth of racing in it.
+2. **Do they *decide*?** The actual question, and a spectrum rather than a binary.
+3. **What does a new user inherit when claiming one?** Separate from the other
+   two, and the answer constrains them.
+
+### [#44] J1. Unmanaged teams: default squad selection
+**Domains:** `world` NEW, `racing`, `teams`
+- Unmanaged teams field a squad for every race, chosen by a cheap default rule.
+- No training, no transfers, no sponsorship. That is J2.
+- **Same problem as [#39]** — "a team with no human input needs a squad". One
+  mechanism, not two.
+- **Accepted limitation:** they are weak in a *predictable, unchanging* way. Human
+  teams improve, these do not, so the gap widens every Season. Fine for a
+  playtest, not for a league.
+
+### [#45] J2. Unmanaged teams: simple heuristic AI
+**Domains:** `world` NEW, `teams`, `transfers` NEW, `staff` NEW
+- Squad by course suitability, rotating training focus, transfers within budget.
+- **Expiry condition on J1, and the point of this item:** the first full Season
+  played with real users. A Season ending with every human above every unmanaged
+  team is not a competition, and it makes promotion/relegation ([#13])
+  meaningless — teams move by headcount, not merit.
+- **Ongoing cost, stated plainly:** every new player-facing system needs an AI
+  branch or unmanaged teams fall behind in that dimension. Budget for it.
+- **Alternative considered — scripted results:** generate their results toward a
+  target rather than simulating decisions. Cheaper, never falls behind a new
+  system, but makes racing against them fake in a way the race player would
+  expose. Revisit if the AI branch cost gets out of hand.
+- **Open:** how strong should they be? Matching the human average is the obvious
+  target and probably wrong — it removes the reward for playing well.
+
+### [#46] J3. What a new user inherits when claiming a team
+**Domains:** `accounts`, `teams`, `competitions` NEW
+- **Proposed:** reset to a standard starting position on claim — standard roster,
+  finances and staff — keeping identity (name, colours, code) and results history.
+- **Why not "take it over as-is":** unmanaged teams diverge, so the 7th signup
+  gets a better deal than the 12th for no reason anyone chose; and it makes
+  signup quality hostage to AI quality — if unmanaged teams decay, late signups
+  inherit a corpse.
+- **Genuine counter-argument:** a team *with* history is more interesting than a
+  clean slate. Middle option: reset finances and roster strength, keep history and
+  any self-developed riders.
+- **Open:** reset mid-Season or at the break? Does it keep its Division position?
+  What happens when a user abandons a team?
+- Splits cleanly from [#14]: that decides *where* a new user lands, this decides
+  *what they get*.
+
+---
 
 ## New domains this dump requires
 
