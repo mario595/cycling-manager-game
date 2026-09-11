@@ -1,695 +1,812 @@
 # Game clock — Implementation Plan
 
 **Spec:** `specs/game-clock.md` · **Issue:** [#6](https://github.com/mario595/cycling-manager/issues/6) · **Status:** proposed
-**Apps touched:** `world/` (**new**), `racing/`, `api/` (**new**), `frontend/`, `config/`
+**Apps touched:** `world/`, `racing/`, `api/`, `frontend/`, `config/`
 
 ## Context you need
 
-The repo today is a fast, Django-free race simulator (`race_engine/`) with a thin
-Django layer around it. Read `racing/README.md` before anything else in this
-plan — it holds the rules this work is bound by.
+This is a **revision** of an already-implemented feature. A first version
+shipped on this branch with a stored `GameClock` row that `advance()` moved
+forward under a row lock, approximating real time. The revised spec (see
+`specs/game-clock.md`) rejects that: production's game time **is** real time,
+read live, with nothing stored or advanced. A separate, swappable clock exists
+purely for development and test, where a real engineer needs to freeze time or
+jump to the next event without waiting for it.
 
-**What exists:**
+Read `world/README.md` and `racing/README.md` before touching either app — this
+plan changes decisions those files currently document as settled and both need
+updating (see *Documentation update*).
 
-- `racing/models.py` — `Race` (name, `course` JSON, wind settings, seed),
-  `RaceLog` (a `FileField` pointer plus metadata), `RaceResult` (one row per
-  rider per race). A `Race` has **no date and no status**; nothing schedules it.
-- `racing/adapters.py` — the **only** module permitted to import `race_engine`.
-  It converts a `riders.Rider` row to an engine dataclass, a `Race.course` JSON
-  blob to an engine `Course`, and a list of teams to the log's colour map. It
-  converts; it does not run anything.
-- `race_engine.models.run_race(riders, course, log_path=..., seed=..., team_codes=..., wind=..., wind_band=...)`
-  → `list[RiderState]`, each with `.rider`, `.finish_time` (int seconds or
-  `None`). It writes the JSONL log itself, through a raw `open()`.
-- `core/models.TimeStampedModel` — abstract `created_at` / `updated_at`. Its
-  docstring already says these are wall-clock, **never** in-game dates, and that
-  game time will live in `world/`.
-- `config/settings/{base,dev,prod}.py`; `LOCAL_APPS` in `base.py`; `config/urls.py`
-  has a commented-out `path("api/", include("api.urls"))` waiting for this work.
-- `frontend/` — a React SPA scaffold with **no API calls at all**. Every value
-  comes from `src/placeholderData.ts`. `TEAM.season` (`'SEASON 3 · WK 14'`) is
-  rendered in `Sidebar.tsx`; `DASHBOARD.eyebrow` is rendered in `Dashboard.tsx`.
-  `vite.config.ts` already proxies `/api` to Django on :8000.
+**What exists today, and what of it survives:**
 
-**What does not exist and is easy to assume does:**
+- `world.models.GameClock` — a `pk=1` row holding `current`, `last_advanced_at`,
+  `catch_up_hours`. **Survives, repurposed**: it becomes the storage for the
+  mock clock only. In production, with the real clock active, this row is
+  never read or written. `last_advanced_at` is dropped — it existed to compute
+  elapsed real time since the last advance, which no longer drives anything.
+- `world.models.TickRun` — a record of one advance, currently including
+  `from_game_time` / `to_game_time`. **Survives, trimmed**: there is no more
+  "clock moved from X to Y"; a run either does or does not move the mock
+  clock, and that is the mock clock's own business, not the tick's.
+- `world.services.now()`, `advance()`, `_claim()`, `_execute()`,
+  `_advance_days()`, `_reclaim_unfinished()`, `due_races()` — **all replaced**.
+  The claim mechanism moves from locking the clock row to locking the due
+  races themselves (Design decision 3), because there is no longer a clock row
+  to lock in production.
+- `world.management.commands.tick` — **kept, behaviour changes**. No longer
+  takes `--to-next` / `--day`; those move to a new `mock_clock` command,
+  because they are meaningless against the real clock and this command must
+  work (and be the only command cron ever calls) regardless of which clock is
+  configured.
+- `world.management.commands.set_game_date` — **replaced** by
+  `mock_clock set`, alongside `mock_clock advance` (to-next / by-amount) as
+  subcommands of one mock-clock-only tool. Reason in Design decision 5.
+- `racing.models.Race.starts_at` / `.status` / `.finished_at`,
+  `racing.services.simulate_race(race, *, game_time)` — **unchanged**. Neither
+  knows or cares which clock produced `game_time`; this plan does not touch
+  `racing/` except its README.
+- `api.serializers.GameClockSerializer`, `api.views.ClockView` — **changed**.
+  The endpoint now serializes `world.services.now()` directly (whichever
+  clock is active) rather than the `GameClock` row, since in production there
+  is no row to read.
+- `frontend/src/api.ts`, `useClock.ts`, `Sidebar.tsx` — **unchanged by this
+  plan**. They already treat `current` as an opaque ISO datetime from the
+  endpoint; nothing about the response shape changes.
 
-- **There is no code anywhere that simulates a `Race` into a `RaceLog` and
-  `RaceResult` rows.** `grep -rn "RaceLog.objects" --include=*.py .` returns
-  nothing. The engine has only ever been driven by `python -m race_engine`,
-  which writes to `race_player/public/` and touches no database. Part of this
-  plan builds that service, because the clock has nothing to trigger otherwise.
-- There is no `management/` directory in any app. This plan adds the first ones.
-- There is no `api/` app, no serializer, no DRF view, no `api/urls.py`.
-- There is no season and no calendar (#5, #7). A `Race` gets a start time here
-  and nothing more; `schedule/` will own the calendar later.
+**Repo rules that bind this work** (`AGENTS.md`):
 
-**Repo rules that bind this work:**
-
-- `race_engine/` imports nothing from Django, ever. Only `racing/adapters.py`
-  imports the engine. This plan does not change either.
-- Dependency direction (`AGENTS.md`): `world/` and `api/` may know about
-  everything; **nothing may import them.** So `racing/` must not import `world/`.
-- Postgres in dev and prod alike. Tests are pytest via `.venv/bin/python -m pytest`.
-- Race logs are authoritative records, never regenerated.
+- Dependency direction: `world/` and `api/` may import everything; nothing may
+  import them. `racing/` must not import `world/` — unaffected by this plan.
+- Postgres in dev and prod alike. Tests are pytest via
+  `.venv/bin/python -m pytest`.
+- A field that is only meaningful in one clock mode must say so in its
+  `help_text`, since the model is now shared by two different runtime
+  behaviours.
 
 ## Goal
 
 When this is done:
 
-- A single `GameClock` row holds the world's current game datetime, and
-  `world.services.now()` is the one way any code asks what time it is.
-- `python manage.py tick` advances that clock to the next due moment, fires what
-  is due, and is safe to run from cron every hour — concurrently, or interrupted
-  mid-run, without anything firing twice.
-- A `Race` carries a game-time `starts_at` and a status that moves
-  `scheduled → running → finished`, and a due race is actually simulated: its
-  log file and `RaceResult` rows are written.
-- A developer can run `manage.py tick --to-next` or `manage.py tick --day` to
-  walk a world forward deliberately.
-- Every advance writes a `TickRun` row recording what it did.
-- The SPA shows the game date and time, fetched from `GET /api/world/clock/`.
+- `world.services.now()` returns the literal current time in production
+  (`RealClock`), with nothing stored and nothing to lock.
+- `manage.py tick` finds races whose `starts_at` has passed and are still
+  `scheduled`, claims each exactly once via a row lock on the race itself (not
+  a clock row), and simulates them, capped per run at a configurable number of
+  races so a large backlog cannot turn into one unbounded run.
+- A developer can select `MockClock` per-environment (a Django setting), and
+  while it is active, `manage.py mock_clock set <datetime>` and
+  `manage.py mock_clock advance [--to-next | --by <duration>]` move it by
+  hand; `tick` behaves exactly as in production once the mock clock has moved,
+  finding and claiming whatever is now due.
+- Selecting `MockClock` in production is not a supported configuration: `dev.py`
+  defaults to it, `prod.py` defaults to `RealClock`, and nothing in `prod.py`
+  can be overridden by environment variable to change that (Design decision 2).
+- `GET /api/world/clock/` reports whichever clock is active, transparently to
+  the frontend.
+- Every tick run leaves a `TickRun` row recording what it found and did.
 
 ## Design decisions (settled — implement these, do not substitute)
 
-### 1. The clock is a single row, pinned to `pk=1`, and read through a service
-
-`world.models.GameClock` is a normal model with `id` forced to 1 by
-`GameClock.load()`. **Do not** use a settings value, a cache key, a
-`django-solo` dependency, or a `Singleton` metaclass.
-
-A row is the right shape because the clock must participate in the same
-transaction and the same row lock as the work an advance does. A cached or
-in-memory clock cannot give the exactly-once guarantee that spec item 4
-demands, and that guarantee is the entire reason this feature is built first.
-
-**All reads go through `world.services.now()`**, never `GameClock.objects.get()`
-in calling code. That indirection is what makes spec item 11 ("game code reads
-the game clock, never `datetime.now()`") enforceable later, and it is the only
-thing later features have to remember.
-
-### 2. Exactly-once comes from `SELECT ... FOR UPDATE` on the clock row — load-bearing
-
-Every advance opens a transaction and takes a row lock on the clock **first**:
+### 1. `Clock` is an abstract class with one method: `now()`
 
 ```python
-with transaction.atomic():
-    clock = GameClock.objects.select_for_update().get(pk=1)
-    ...
+# world/clocks.py
+class Clock(ABC):
+    def now(self) -> datetime: ...
 ```
 
-A second `tick` process arriving while the first holds the lock blocks until the
-first commits, then re-reads a clock that has already moved past the work it was
-about to do. That is the whole concurrency design.
+`RealClock.now()` returns `django.utils.timezone.now()` directly — no state,
+no database read. `MockClock.now()` reads the stored `GameClock` row.
 
-**Do not** reach for `select_for_update(nowait=True)` or a
-`skip_locked` variant here: a blocked second tick that then finds nothing to do
-is the correct behaviour, and a tick that errors out because another was running
-is worse than one that waits. **Do not** substitute a Postgres advisory lock —
-it works, but it is a second mechanism to reason about when the row lock the
-transaction already needs is sufficient.
+**Do not** give `Clock` any method beyond `now()`. Setting or advancing the
+clock is `MockClock`-specific (Design decision 4) and must not appear on the
+abstract type — a caller holding a `Clock` (which is what every piece of game
+code holds) has no business moving it, only reading it. This is what makes
+decision 9 of the spec ("game code reads the clock, never real time
+directly") enforceable: the interface game code is handed literally cannot
+move time.
 
-This is the single load-bearing detail in the plan. If it is got wrong, nothing
-downstream is trustworthy and the failure only shows up under concurrency.
+### 2. The active clock is chosen by a Django setting, resolved once, lazily
 
-### 3. Work is claimed by a status transition inside the lock, executed outside it
+```python
+# config/settings/base.py
+GAME_CLOCK_CLASS = "world.clocks.RealClock"   # base.py default
 
-Spec: *"Becoming due and being carried out are separate things."* A race takes
-~8 real seconds. Holding a database transaction open for that — times however
-many races a catch-up finds — is how you end up with lock contention and a
-tick the host kills mid-transaction.
+# config/settings/dev.py
+GAME_CLOCK_CLASS = "world.clocks.MockClock"
 
-So each step of an advance is two phases:
+# config/settings/prod.py — no override; inherits RealClock from base.py
+```
 
-1. **Claim (inside the transaction, holding the clock lock):** move the clock
-   to the due moment, flip every race due at that moment from `scheduled` to
-   `running`, collect their ids, commit.
-2. **Execute (outside any transaction):** simulate each claimed race, then write
-   its results and flip it to `finished` in its own small transaction.
+`world/services.py` resolves the dotted path with `django.utils.module_loading
+.import_string`, instantiates it once, and caches the instance at module
+level (mirroring how `django.core.files.storage.default_storage` is a
+lazily-instantiated singleton). **Do not** re-instantiate the clock on every
+call to `now()` — `MockClock` is cheap to construct, but a future clock
+implementation might not be, and re-instantiating hides that this is meant to
+be one process-wide clock.
 
-A crash between the phases leaves a race `running` with no results. That is
-exactly the state spec item 5 describes as *racing now*, and the next tick
-re-claims it (see decision 4). **Do not** simulate inside the clock transaction.
+`prod.py` deliberately does **not** read `GAME_CLOCK_CLASS` from the
+environment the way it reads `POSTGRES_*`. Every other production setting in
+that file is env-driven by design (`prod.py`'s own docstring: "the same image
+runs anywhere"), but the clock is the one exception: the spec is explicit that
+a non-real clock must never be a live-game possibility, "not disabled, not
+gated behind a permission, simply not a code path production runs." An env var
+is a code path. A hardcoded absence of one is not.
 
-### 4. A `running` race with no results is re-claimed by the next tick
+### 3. Exactly-once: lock the due races, not a clock row — load-bearing
 
-Because claiming is a status flip and execution is separate, a killed tick can
-strand a race in `running`. `advance()` therefore begins by re-claiming any race
-that is `running` and has no `RaceResult` rows, and executing it, **before**
-looking at the clock at all.
+There is no clock row to lock against in production, so the row lock moves to
+the races themselves:
 
-This is what makes "still only ever run once" true across a restart: the flip to
-`running` is the claim, and `finished` is only ever written together with the
-results in one transaction. A race is never simulated twice because a second
-simulation would have to find it `scheduled`, and it is not.
+```python
+# world/services.py
+def _claim(limit: int) -> list[int]:
+    """Claim up to `limit` due races by flipping them SCHEDULED -> RUNNING
+    inside a transaction holding a row lock on exactly those rows. Returns
+    the claimed ids. No simulation happens here."""
+    with transaction.atomic():
+        ids = list(
+            Race.objects.select_for_update()
+            .filter(status=Race.Status.SCHEDULED, starts_at__isnull=False,
+                     starts_at__lte=now())
+            .order_by("starts_at")
+            .values_list("pk", flat=True)[:limit]
+        )
+        Race.objects.filter(pk__in=ids).update(status=Race.Status.RUNNING)
+    return ids
+```
 
-**Do not** handle this with a timeout ("re-run anything `running` for more than
-N minutes"). There is one tick process; there is no legitimate concurrent owner
-to race with, and a timeout would be a guess.
+A second `tick` arriving while the first holds the lock blocks on
+`select_for_update()`, then re-runs its own `filter(status=SCHEDULED, ...)`
+after the first commits — the rows the first claimed are now `RUNNING` and no
+longer match, so the second claims nothing. Same guarantee as the previous
+design's clock-row lock, different lock target, because there is no longer a
+single row whose lock naturally serialises every claim — the race rows
+themselves now play that role.
 
-### 5. Advancing means jumping to the next due moment, not stepping hour by hour
+**Do not** reach for `select_for_update(skip_locked=True)` here: skipping a
+locked row would let a second concurrent tick claim *different* due races
+while the first is still claiming, which is fine for correctness but means
+two ticks are simulating concurrently with nothing coordinating log storage or
+`RaceLog.update_or_create` between them. That concurrency is explicitly
+deferred (spec, *Deferred*: "Several races worked out at the same time").
+Until it is designed, one tick fully blocks the next.
 
-`advance()` asks "what is the earliest `starts_at` after the current clock, and
-is it within the cap?" — and moves there. It does not loop in one-hour
-increments. With nothing scheduled (the state this ships in), an advance is one
-query and one `UPDATE`, which is what makes an hourly cron nudge free.
+### 4. `MockClock` owns its own mutation methods; `Clock` does not
 
-The horizon of an advance is `min(next_due, now + cap)` where `cap` is 72 hours
-of game time (spec). When nothing is due inside the horizon, the clock moves to
-the horizon and the run ends uneventfully — spec item 9.
+```python
+# world/clocks.py
+class MockClock(Clock):
+    def now(self) -> datetime: ...
+    def set(self, when: datetime) -> None: ...
+    def advance_to_next_due(self) -> None: ...
+    def advance_by(self, delta: timedelta) -> None: ...
+```
 
-### 6. Real time drives the clock; the clock does not drive itself
+These are `MockClock`-only, called only from `manage.py mock_clock` (Design
+decision 5), never from `world/services.py`'s tick logic. `tick` only ever
+calls `now()` through the `Clock` interface, exactly like production —
+this is what guarantees a developer stepping the mock clock forward is
+indistinguishable, from `tick`'s point of view, from real time having simply
+passed.
 
-In production one game week passes in one real week (spec item 3), so the clock
-must not advance further than real time has. `advance()` computes a **real-time
-ceiling**: `clock.current + (real_now - clock.last_advanced_at)`, capped at 72
-hours. The world therefore tracks real time by construction, including across an
-outage — item 6's catch-up is simply a large elapsed real interval — and cannot
-run ahead of it.
+`advance_to_next_due()` needs to know what's due, which means `MockClock`
+(living in `world/clocks.py`) queries `racing.models.Race`. This is allowed:
+`world/` may import everything (`AGENTS.md`); the constraint is the reverse.
 
-`--to-next` and `--day` (developer stepping, item 8) bypass the ceiling but
-**not** the exactly-once machinery. That is the only difference between a
-developer step and a production nudge, and it is why there is no speed
-multiplier anywhere: stepping *is* the fast-forward.
+### 5. `mock_clock` is one command with subcommands, and refuses to run against `RealClock`
 
-`last_advanced_at` is real wall-clock (`django.utils.timezone.now()`) and is the
-**one** place in game code permitted to read real time. Say so in the code.
+```
+manage.py mock_clock set 2027-03-01T09:00
+manage.py mock_clock advance --to-next
+manage.py mock_clock advance --by 1d
+manage.py mock_clock advance --by 6h
+```
 
-### 7. `racing/` owns simulation; `world/` calls it — never the reverse
+Every subcommand's `handle()` starts by checking
+`isinstance(get_clock(), MockClock)` and raises `CommandError` immediately if
+not — "this command only works when GAME_CLOCK_CLASS is world.clocks.MockClock;
+current setting: <path>". This is the enforcement half of decision 2: the
+setting keeps `RealClock` the only thing production can run, and this check
+stops someone fat-fingering a mock-clock command against a production
+database from doing anything at all.
 
-`AGENTS.md` forbids `racing/` importing `world/`. So:
+**Do not** make `set_game_date` and `tick --to-next` / `tick --day` survive
+as-is alongside the new command. One command, `mock_clock`, is the only place
+that can move time, matching the spec's "developer, and only a developer" —
+having two entry points (a flag on `tick` and a separate command) makes it
+easy to add a new flag to `tick` later without remembering it must carry the
+same `MockClock`-only guard.
 
-- `racing/services.py` (**new**) gets `simulate_race(race)` — knows how to run
-  one race and record it, knows nothing about time.
-- `world/services.py` imports `racing` and calls it.
+`--by` parses a duration string (`1d`, `6h`, `30m`, or combinations like
+`1d6h`) with a small hand-rolled parser — **do not** add a dependency for
+this; the format is deliberately tiny and one regex covers it
+(`re.findall(r"(\d+)([dhm])", value)`).
 
-`world/` is allowed to import everything; that is its job. When `schedule/`
-arrives it will register its own due-work in the same shape.
+### 6. The backlog cap moves from hours to a race count
 
-**Do not** put a `Race.simulate()` method on the model and call it from the
-clock — the seam is `racing/services.py`, matching how `adapters.py` already
-isolates engine knowledge.
+```python
+# world/models.py
+class GameClock(models.Model):
+    ...
+    catch_up_max_races = models.PositiveSmallIntegerField(default=50)
+```
 
-### 8. The log file goes through Django storage, with one unavoidable temp file
+The old `catch_up_hours` capped how much *game time* one advance would move
+through; there is no game-time movement to cap now, only a query result size.
+`50` is a placeholder default with the same reasoning the old `72` hours had:
+races are sparse today (no calendar yet), so this should never engage in
+normal operation, and it is configuration precisely so it can be raised for an
+exceptional recovery. **Do not** invent a time-based cap here (e.g. "races due
+in the last 72 hours") — the spec's reframed rule is explicitly about backlog
+size, not backlog age, because age is meaningless once the clock cannot lag.
 
-`racing/README.md` is explicit: logs are written through Django's storage API,
-never a raw `open()`. But `race_engine.run_race` takes a filesystem `log_path`
-and opens it itself, and the engine may not learn about Django.
+This field stays on `GameClock` even though `GameClock` otherwise only backs
+`MockClock`, because the cap applies to `tick`'s claim query regardless of
+which clock is active — `tick` reads `GameClock.load().catch_up_max_races`
+directly (a plain read, no lock needed: this value changes by admin action,
+not by every tick).
 
-Resolution: `simulate_race` runs the engine into a `tempfile.TemporaryDirectory`,
-then saves the finished file into the `RaceLog.file` `FileField`. One extra copy
-per race, paid once, in exchange for keeping both rules intact. **Do not** pass a
-storage path into the engine and **do not** give the engine a file-like
-parameter — that is engine surgery for a Django convenience.
+### 7. `TickRun` drops the clock-movement fields, keeps the audit trail
 
-### 9. `api/` is created now, minimally, because the clock needs the first endpoint
+```python
+class TickRun(models.Model):
+    started_at = models.DateTimeField(auto_now_add=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    races_started = models.PositiveIntegerField(default=0)
+    races_finished = models.PositiveIntegerField(default=0)
+    capped = models.BooleanField(default=False)
+    error = models.TextField(blank=True, default="")
+```
 
-Spec item 2 requires the date visible to the player. That needs an endpoint, and
-`AGENTS.md` says DRF routers aggregating each app's serializers live in `api/`.
-One app, one `urls.py`, one view, wired into `config/urls.py` at the line
-already commented there.
+`from_game_time` / `to_game_time` are removed — there is no clock movement a
+tick causes; the mock clock moves independently, by hand, via `mock_clock`.
+`trigger` is also removed: the old three values (`cron` / `to_next` / `day`)
+described what moved the clock, which is no longer `tick`'s job. `tick` has
+exactly one behaviour now regardless of caller, so there is nothing left to
+distinguish.
 
-The clock endpoint is **public** (`AllowAny`), overriding the project-wide
-`IsAuthenticated` default in `REST_FRAMEWORK`. The world's date is not private,
-and there is no login flow in the SPA yet — an authenticated endpoint would
-render the feature invisible.
+**Load-bearing:** `races_started == races_finished` after a clean run is the
+signal that nothing was left half-done; `capped=True` is the signal the claim
+query hit `catch_up_max_races` and there may be more still due.
 
-### 10. Game datetimes are timezone-aware UTC `DateTimeField`s
+### 8. `now()` resolution: a lazy, cached, settings-driven singleton
 
-`USE_TZ = True` and `TIME_ZONE = "UTC"` already. Game time uses the same aware
-UTC datetimes as real time — different meaning, identical representation. **Do
-not** invent a custom field, an integer offset-from-epoch, or a naive datetime;
-the mixing hazard is real but it is addressed by naming (`starts_at` is game
-time, `created_at` is real) and by routing every read through
-`world.services.now()`, not by a type.
+```python
+# world/services.py
+from datetime import datetime
+from django.conf import settings
+from django.utils.module_loading import import_string
+
+_clock = None
+
+def get_clock() -> Clock:
+    global _clock
+    if _clock is None:
+        _clock = import_string(settings.GAME_CLOCK_CLASS)()
+    return _clock
+
+def now() -> datetime:
+    return get_clock().now()
+```
+
+`get_clock()` is exported (not underscore-prefixed) because `mock_clock`'s
+commands need it to call `MockClock`-only methods and to perform the
+`isinstance` guard from decision 5.
+
+**Load-bearing for tests:** module-level caching means a test that overrides
+`settings.GAME_CLOCK_CLASS` (e.g. `@override_settings`) must also reset
+`world.services._clock = None`, or it keeps talking to whichever clock was
+resolved first. Give the test suite a fixture for this (Work item W5) rather
+than expecting every test file to remember the reset.
+
+### 9. `GET /api/world/clock/` serializes `now()`, not a model instance
+
+```python
+# api/serializers.py
+class ClockSerializer(serializers.Serializer):
+    current = serializers.DateTimeField()
+
+# api/views.py
+class ClockView(APIView):
+    permission_classes = [AllowAny]
+    def get(self, request):
+        return Response(ClockSerializer({"current": now()}).data)
+```
+
+The old `GameClockSerializer` was a `ModelSerializer` over `GameClock`,
+exposing `catch_up_hours` and `last_tick`. Neither survives on the response:
+`catch_up_hours` was implementation detail leaking into a public API, not
+something a player needs, and `last_tick` (the most recent `TickRun.finished_at`)
+described clock health, not game time — worth having in an ops view later, not
+in the player-facing endpoint. **Do not** carry them over for compatibility;
+nothing in `frontend/` reads either field (verify: `grep -n "catch_up_hours\|
+last_tick" frontend/src/*.ts` returns nothing outside `api.ts`'s old `Clock`
+type, which this plan also trims — see W8).
 
 ## Data model
 
-### `world.models.GameClock` (new) — `world/migrations/0001_initial.py`
+### `world.models.GameClock` — migration `world/migrations/0002_mock_clock.py`
 
 | Field | Type | Null/blank | Default | Notes |
 |---|---|---|---|---|
-| `id` | `BigAutoField` | no | — | Always 1. Enforced by `load()`, not by a constraint. |
-| `current` | `DateTimeField` | no | — | The world's game datetime, aware UTC. Set at creation. |
-| `last_advanced_at` | `DateTimeField` | no | — | **Real** wall-clock time of the last successful advance. |
-| `catch_up_hours` | `PositiveSmallIntegerField` | no | `72` | Per-advance cap, in game hours. Configuration, per spec. |
+| `id` | `BigAutoField` | no | — | Always 1, enforced by `load()`. Unchanged. |
+| `current` | `DateTimeField` | no | — | The mock clock's value. **Only meaningful when `MockClock` is active** — say so in `help_text`. Unchanged type. |
+| `last_advanced_at` | — | — | — | **Removed.** Drop the field. |
+| `catch_up_hours` | — | — | — | **Removed**, replaced by `catch_up_max_races` below. |
+| `catch_up_max_races` | `PositiveSmallIntegerField` | no | `50` | Per-tick cap on races claimed in one run. Read regardless of which clock is active. |
 
-Not a `TimeStampedModel` — `created_at`/`updated_at` on the clock itself would be
-three timestamps of three different kinds on one row, which is the confusion this
-feature exists to remove.
+`GameClock.load()` is unchanged in shape (`get_or_create(pk=1, ...)`), but its
+`defaults` drop `last_advanced_at`.
+
+### `world.models.TickRun` — same migration
+
+| Field | Type | Null/blank | Default | Notes |
+|---|---|---|---|---|
+| `started_at` | `DateTimeField` | no | `auto_now_add` | Unchanged. |
+| `finished_at` | `DateTimeField` | yes/yes | `None` | Unchanged. |
+| `races_started` | `PositiveIntegerField` | no | `0` | Unchanged. |
+| `races_finished` | `PositiveIntegerField` | no | `0` | Unchanged. |
+| `capped` | `BooleanField` | no | `False` | Unchanged meaning, now means "the claim query hit `catch_up_max_races`". |
+| `error` | `TextField` | blank/yes (`blank=True`, default `""`) | `""` | Unchanged. |
+| `from_game_time` | — | — | — | **Removed.** |
+| `to_game_time` | — | — | — | **Removed.** |
+| `trigger` | — | — | — | **Removed**, and its `Trigger` `TextChoices` inner class with it. |
+
+`Meta.ordering = ["-started_at"]` and the `-started_at` index are unchanged.
+
+### `racing.models.Race`
+
+No changes. `starts_at`, `status`, `finished_at` already exist and are
+clock-implementation-agnostic (`racing/services.simulate_race` takes
+`game_time` as a parameter regardless of where it came from).
+
+## `world/clocks.py` (new)
 
 ```python
-@classmethod
-def load(cls) -> GameClock:
-    """The one clock row, created at the current real time on first call."""
-    now = timezone.now()
-    obj, _ = cls.objects.get_or_create(
-        pk=1, defaults={"current": now, "last_advanced_at": now},
-    )
-    return obj
+from __future__ import annotations
+
+import re
+from abc import ABC, abstractmethod
+from datetime import datetime, timedelta
+
+from django.db import transaction
+from django.utils import timezone
+
+from .models import GameClock
+
+
+class Clock(ABC):
+    @abstractmethod
+    def now(self) -> datetime: ...
+
+
+class RealClock(Clock):
+    def now(self) -> datetime:
+        return timezone.now()
+
+
+class MockClock(Clock):
+    """Development- and test-only clock, backed by the `GameClock` row.
+    `world.services.get_clock()` is the only sanctioned way to obtain the
+    active clock; do not import this class to bypass `mock_clock`'s
+    isinstance guard."""
+
+    def now(self) -> datetime:
+        return GameClock.load().current
+
+    def set(self, when: datetime) -> None:
+        with transaction.atomic():
+            clock = GameClock.objects.select_for_update().get(pk=1)
+            clock.current = when
+            clock.save(update_fields=["current"])
+
+    def advance_by(self, delta: timedelta) -> None:
+        with transaction.atomic():
+            clock = GameClock.objects.select_for_update().get(pk=1)
+            clock.current += delta
+            clock.save(update_fields=["current"])
+
+    def advance_to_next_due(self) -> None:
+        """Jump straight to the next scheduled race's starts_at, or do
+        nothing if none is scheduled after the current moment."""
+        from racing.models import Race  # local import: see note below
+
+        with transaction.atomic():
+            clock = GameClock.objects.select_for_update().get(pk=1)
+            nxt = (
+                Race.objects.filter(
+                    status=Race.Status.SCHEDULED, starts_at__isnull=False,
+                    starts_at__gt=clock.current,
+                )
+                .order_by("starts_at")
+                .first()
+            )
+            if nxt is not None:
+                clock.current = nxt.starts_at
+                clock.save(update_fields=["current"])
 ```
 
-### `world.models.TickRun` (new) — same migration
+The import of `racing.models.Race` is local to `advance_to_next_due`, not at
+module level, purely to keep `world/clocks.py`'s top-level imports free of
+other-app models — `world/` is allowed to import `racing/` (`AGENTS.md`), this
+is a style choice for this one file, not a dependency-direction requirement.
+A reviewer should not read the local import as load-bearing.
 
-Spec item 10: each advance leaves a record.
+`GameClock.load()` inside `MockClock` methods, not passed in, because
+`MockClock` is only ever asked to move *the* clock — there is exactly one row,
+same as before.
 
-| Field | Type | Null/blank | Default | Notes |
-|---|---|---|---|---|
-| `started_at` | `DateTimeField` | no | `auto_now_add` | Real time. |
-| `finished_at` | `DateTimeField` | yes / yes | `None` | Real time. Null means the run did not complete. |
-| `from_game_time` | `DateTimeField` | no | — | Clock before. |
-| `to_game_time` | `DateTimeField` | no | — | Clock after. Equal to `from_game_time` when nothing moved. |
-| `races_started` | `PositiveIntegerField` | no | `0` | Races claimed this run. |
-| `races_finished` | `PositiveIntegerField` | no | `0` | Races whose results were written this run. |
-| `capped` | `BooleanField` | no | `False` | True when the 72-hour cap limited the advance. |
-| `trigger` | `CharField(max_length=20, choices=Trigger)` | no | `CRON` | `cron` / `to_next` / `day`. |
-| `error` | `TextField` | no / yes (`blank=True`) | `""` | Traceback if the run failed. Empty on success. |
-
-`Meta.ordering = ["-started_at"]`, and `models.Index(fields=["-started_at"])`.
-
-### `racing.models.Race` — changes, `racing/migrations/0002_race_schedule.py`
-
-| Field | Type | Null/blank | Default | Notes |
-|---|---|---|---|---|
-| `starts_at` | `DateTimeField` | yes / yes | `None` | **Game** time, on the hour. Null = unscheduled; such a race is never picked up by a tick. |
-| `status` | `CharField(max_length=12, choices=Status)` | no | `SCHEDULED` | See below. |
-| `finished_at` | `DateTimeField` | yes / yes | `None` | **Game** time the result was recorded. |
+## `world/services.py` — rewritten
 
 ```python
-class Status(models.TextChoices):
-    SCHEDULED = "scheduled", "Scheduled"
-    RUNNING = "running", "Racing now"
-    FINISHED = "finished", "Finished"
-    FAILED = "failed", "Failed"
-```
+from __future__ import annotations
 
-Choices live on the model as a `TextChoices` inner class, matching
-`riders.Rider.Role`. `FAILED` is not in the spec's three states but is required:
-a race whose simulation raises must not sit `running` forever being re-claimed on
-every tick. It is an operator-visible dead end, shown to the player as finished
-without a result.
+import traceback
+from datetime import datetime
 
-Index: `models.Index(fields=["status", "starts_at"], name="race_due_idx")` — the
-due query filters on exactly this pair and runs on every tick.
+from django.conf import settings
+from django.db import transaction
+from django.utils.module_loading import import_string
 
-Docstring update on `Race`: `starts_at` and `finished_at` are **game** time;
-`created_at`/`updated_at` (from `TimeStampedModel`) are real time.
+from racing.models import Race
+from racing.services import simulate_race
 
-No changes to `RaceLog` or `RaceResult`.
+from .clocks import Clock
+from .models import GameClock, TickRun
 
-## `world/services.py` (new)
+_clock: Clock | None = None
 
-The module every later feature will import. Four public functions.
 
-```python
+def get_clock() -> Clock:
+    global _clock
+    if _clock is None:
+        _clock = import_string(settings.GAME_CLOCK_CLASS)()
+    return _clock
+
+
 def now() -> datetime:
-    """The current game time. Every piece of game code asks here, never
-    `timezone.now()` / `datetime.now()`."""
+    return get_clock().now()
 
-def advance(trigger: str = TickRun.Trigger.CRON, to_next: bool = False,
-            days: int = 0) -> TickRun:
-    """Advance the world once and return the record of what happened."""
-
-def due_races(before: datetime) -> QuerySet[Race]:
-    """Scheduled races whose start time is at or before `before`."""
 
 def _reclaim_unfinished() -> list[int]:
-    """Race ids left `running` with no results by an interrupted run."""
-```
-
-The claim phase, written out because the natural first attempt gets it wrong:
-
-```python
-def _claim(clock_pk: int, to_next: bool, days: int) -> tuple[datetime, datetime, list[int], bool]:
-    """Move the clock and claim what is due. Returns (before, after, race_ids, capped).
-
-    Everything here runs inside one transaction holding a row lock on the
-    clock. It does NO simulation: races are only flipped to RUNNING, and the
-    work happens after this returns and the lock is released.
-    """
-    with transaction.atomic():
-        clock = GameClock.objects.select_for_update().get(pk=clock_pk)
-        before = clock.current
-        cap = timedelta(hours=clock.catch_up_hours)
-
-        if days:
-            horizon, capped = before + timedelta(days=days), False
-        elif to_next:
-            nxt = due_races_after(before).first()
-            horizon = nxt.starts_at if nxt else before
-            capped = False
-        else:
-            # Production: never move further than real time has, nor than the cap.
-            # `timezone.now()` here is the ONE sanctioned read of real time.
-            elapsed = timezone.now() - clock.last_advanced_at
-            horizon = before + min(elapsed, cap)
-            capped = elapsed > cap
-
-        race_ids = list(
-            Race.objects.filter(
-                status=Race.Status.SCHEDULED,
-                starts_at__isnull=False,
-                starts_at__gt=before,
-                starts_at__lte=horizon,
-            ).order_by("starts_at").values_list("pk", flat=True)
-        )
-        Race.objects.filter(pk__in=race_ids).update(status=Race.Status.RUNNING)
-
-        clock.current = horizon
-        clock.last_advanced_at = timezone.now()
-        clock.save(update_fields=["current", "last_advanced_at"])
-
-    return before, horizon, race_ids, capped
-```
-
-Three details that are load-bearing and easy to drop:
-
-- **`starts_at__gt=before`**, not `__gte`. A race exactly at the current clock
-  was claimed by the advance that reached that moment; `__gte` re-claims it,
-  which is only harmless because status filtering catches it — do not rely on
-  that.
-- **`.update()`, not a loop of `.save()`.** One statement, inside the lock,
-  atomic against a concurrent reader.
-- **`clock.last_advanced_at = timezone.now()`** is assigned *after* the work is
-  laid out, not read once at the top. It anchors the next advance's elapsed
-  calculation, so drift here compounds.
-
-`advance()` then, outside the transaction, calls `racing.services.simulate_race`
-for each reclaimed id and each claimed id in order, counting successes, and
-writes the `TickRun`. An exception from one race is caught, recorded on that
-`Race` as `FAILED`, appended to `TickRun.error`, and the loop continues — one
-broken course must not stop the world.
-
-**`--day` processes everything within the day** (spec item 8) by looping
-`_claim(days=0, to_next=True)` until the clock passes `before + 1 day`, then
-setting the clock to exactly that. Write it as a loop over `_claim`; do not
-reimplement the claim logic a second time.
-
-## `world/management/commands/tick.py` (new)
-
-```
-manage.py tick                # production nudge: advance by elapsed real time, capped
-manage.py tick --to-next      # jump to the next scheduled moment
-manage.py tick --day          # advance one game day, processing everything in it
-manage.py tick --day 7        # seven of them
-```
-
-`--to-next` and `--day` are mutually exclusive; the command errors with
-`CommandError` if both are given. It prints a one-line summary — clock before,
-clock after, races started, races finished, whether capped — and exits non-zero
-if `TickRun.error` is non-empty, so cron mail carries a real signal.
-
-## `world/management/commands/set_game_date.py` (new)
-
-`manage.py set_game_date 2027-03-01T09:00` — sets `current` and resets
-`last_advanced_at` to real now. Development and admin only; the spec puts a
-player-facing version out of scope. It refuses to move the clock **backwards**
-past a `finished` race unless `--force` is given, because a rewound clock makes
-already-run races due again in a world that has their results.
-
-## `racing/services.py` (new)
-
-```python
-def simulate_race(race: Race, *, game_time: datetime) -> list[RaceResult]:
-    """Run one race through the engine and record it.
-
-    `game_time` is the world's current game time, passed in because `racing/`
-    may not import `world/` (AGENTS.md). It is stored as `Race.finished_at`.
-
-    Assumes the caller has already claimed the race (status RUNNING). Writes
-    the log through Django storage, the results in one transaction, and flips
-    the race to FINISHED. Idempotent only in the sense that a FINISHED race is
-    refused: call it once per claim.
-    """
-```
-
-Shape, with the parts that are easy to get wrong spelled out:
-
-```python
-def simulate_race(race: Race, *, game_time: datetime) -> list[RaceResult]:
-    if race.status == Race.Status.FINISHED:
-        raise ValueError(f"{race} is already finished")
-
-    db_riders = list(Rider.objects.select_related("team"))
-    if not db_riders:
-        raise ValueError("no riders to race")
-    # to_team_codes takes Teams, so free agents contribute none — the adapter
-    # already races a teamless rider as their own one-person team.
-    teams = [r.team for r in db_riders if r.team_id]
-
-    engine_riders = [to_engine_rider(r) for r in db_riders]
-    course = to_engine_course(race)
-
-    # The engine writes the log itself with a raw open(), and it may not learn
-    # about Django. So it writes to a temp file and we hand the finished file
-    # to storage. See racing/README.md — logs never bypass the storage API.
-    with tempfile.TemporaryDirectory() as tmp:
-        log_path = Path(tmp) / f"race-{race.pk}.jsonl"
-        states = run_race_via_adapter(          # racing/adapters.py — see below
-            engine_riders, course, str(log_path), race.seed,
-            to_team_codes(teams), race.wind_enabled, race.wind_band or None,
-        )
-        tick_count = sum(1 for _ in log_path.open())
-        size = log_path.stat().st_size
-        with log_path.open("rb") as fh:
-            saved = ContentFile(fh.read(), name=f"race-{race.pk}.jsonl")
-
-    by_pk = {str(r.pk): r for r in db_riders}
-    finishers = sorted(
-        states,
-        key=lambda s: (s.finish_time is None, s.finish_time if s.finish_time is not None else 0),
+    """Race ids left RUNNING with no results by an interrupted run."""
+    return list(
+        Race.objects.filter(status=Race.Status.RUNNING, results__isnull=True)
+        .order_by("starts_at")
+        .values_list("pk", flat=True)
     )
 
+
+def _claim(limit: int) -> list[int]:
+    """Claim up to `limit` due races. See Design decision 3."""
     with transaction.atomic():
-        RaceLog.objects.update_or_create(
-            race=race,
-            defaults={"file": saved, "tick_count": tick_count, "size_bytes": size},
+        ids = list(
+            Race.objects.select_for_update()
+            .filter(status=Race.Status.SCHEDULED, starts_at__isnull=False,
+                     starts_at__lte=now())
+            .order_by("starts_at")
+            .values_list("pk", flat=True)[:limit]
         )
-        results = RaceResult.objects.bulk_create([
-            RaceResult(
-                race=race, rider=by_pk[s.rider.id], position=i,
-                finish_time=float(s.finish_time) if s.finish_time is not None else None,
-            )
-            for i, s in enumerate(finishers, start=1)
-        ])
-        race.status = Race.Status.FINISHED
-        race.finished_at = game_time      # passed in; racing/ must not import world/
-        race.save(update_fields=["status", "finished_at"])
-    return results
+        Race.objects.filter(pk__in=ids).update(status=Race.Status.RUNNING)
+    return ids
+
+
+def _execute(race_ids: list[int], tick: TickRun) -> None:
+    """Simulate each claimed race outside any lock. One broken course must
+    not stop the run: recorded on the race and the tick, loop continues."""
+    for race_id in race_ids:
+        race = Race.objects.get(pk=race_id)
+        try:
+            simulate_race(race, game_time=now())
+            tick.races_finished += 1
+        except Exception:
+            race.status = Race.Status.FAILED
+            race.save(update_fields=["status"])
+            tick.error += f"race {race_id}:\n{traceback.format_exc()}\n"
+
+
+def tick() -> TickRun:
+    """Find and process whatever is due, exactly once. The only entry point
+    cron (or a developer, after moving the mock clock) ever calls."""
+    max_races = GameClock.load().catch_up_max_races
+
+    reclaimed = _reclaim_unfinished()
+    claimed = _claim(limit=max_races - len(reclaimed))
+    capped = len(reclaimed) + len(claimed) >= max_races
+
+    run = TickRun.objects.create(races_started=len(claimed))
+    _execute(reclaimed + claimed, run)
+    run.capped = capped
+    run.finished_at = timezone_now_for_tick_run()  # see note
+    run.save(update_fields=["races_finished", "capped", "error", "finished_at"])
+    return run
 ```
 
 Notes the reader needs:
 
-- **`racing/` must not import `world/`** (`AGENTS.md`). `finished_at` is
-  therefore a **parameter**: `simulate_race(race, *, game_time: datetime)`. The
-  clock passes its own `current`. Do not import `world.services` here.
-- **`RaceResult` has a `unique_position_per_race` constraint**, so position must
-  be dense and start at 1. Non-finishers still get positions, ordered after
-  every finisher — the sort key above does that.
-- Every rider in the database races, because there is no squad selection yet
-  (#37) and no calendar to say who is entered. Say so in a comment; it is a
-  deliberate placeholder, not an oversight.
-- `bulk_create` inside the same transaction as the status flip is what makes
-  decision 4's "running with no results" a reliable crash signal.
+- **`tick()` replaces `advance()`.** No `trigger`, `to_next` or `days`
+  parameters — those were about moving the clock, which `tick` no longer does.
+  A developer who wants "the next event" calls
+  `manage.py mock_clock advance --to-next` first, then `manage.py tick`, which
+  now finds it due and runs it. Two commands, not one command with modes,
+  matching decision 5.
+- **`max_races - len(reclaimed)`**: reclaimed races count against the same cap
+  as newly-claimed ones — a run that is mostly clearing a stranded backlog
+  from a crash should not *also* claim a full cap's worth of newly-due races
+  on top, or the cap stops bounding anything.
+- **`finished_at` on `TickRun`** is real time regardless of which clock is
+  active — it is a record of when the *check* ran, not game time. Use
+  `django.utils.timezone.now()` directly here (not `now()` from this module),
+  and say so in a comment: this is the one other sanctioned real-time read
+  alongside `RealClock.now()` itself, because a `TickRun` audit log must be
+  orderable by when it actually executed on the host, independent of which
+  clock the game itself was running on.
 
-## `racing/adapters.py` — one addition
-
-`run_race` lives in `race_engine`, so only this module may call it. Add:
+## `world/management/commands/tick.py` — simplified
 
 ```python
-def run_race_via_adapter(riders, course, log_path, seed, team_codes, wind, wind_band):
-    """Call the engine's `run_race`. Exists so `racing/services.py` can run a
-    race without importing `race_engine` — see this file's module docstring."""
-    from race_engine.models import run_race
-    return run_race(riders, course, log_path=log_path, seed=seed, verbose=False,
-                    team_codes=team_codes, wind=wind, wind_band=wind_band)
+class Command(BaseCommand):
+    help = "Find and process whatever is due, exactly once. Run hourly from cron in production."
+
+    def handle(self, *args, **options):
+        run = world_services.tick()
+        self.stdout.write(
+            f"races started {run.races_started}, finished {run.races_finished} | "
+            f"capped={run.capped}"
+        )
+        if run.error:
+            self.stderr.write(run.error)
+            raise CommandError("tick completed with errors")
 ```
 
-`verbose=False` matters: the engine's progress printer writes `\r`-terminated
-lines to stderr, which turns cron mail into noise.
+No arguments. `--to-next` / `--day` are gone from this command (decision 5).
 
-## `api/` (new app)
+## `world/management/commands/mock_clock.py` (new, replaces `set_game_date.py`)
 
-- `api/apps.py`, added to `LOCAL_APPS` in `config/settings/base.py`.
-- `api/serializers.py` — `GameClockSerializer`: read-only `current`,
-  `catch_up_hours`, plus a `SerializerMethodField` `last_tick` returning the most
-  recent `TickRun.finished_at` (or null). No migration; `api/` owns no models,
-  so it gets `migrations/__init__.py` and nothing else.
-- `api/views.py` — `ClockView(APIView)` with `permission_classes = [AllowAny]`
-  (decision 9) and a `get` returning the serialized clock.
-- `api/urls.py` — `app_name = "api"`, `path("world/clock/", ClockView.as_view(), name="clock")`.
-- `config/urls.py` — uncomment/replace with `path("api/", include("api.urls"))`,
-  **above** the SPA catch-all. The catch-all is a `<path:unused>` and will
-  swallow `/api/...` if ordered after it.
+```
+manage.py mock_clock set 2027-03-01T09:00
+manage.py mock_clock advance --to-next
+manage.py mock_clock advance --by 1d
+manage.py mock_clock advance --by 6h
+```
 
-`GET /api/world/clock/` → `{"current": "2026-09-11T14:00:00Z", "catch_up_hours": 72, "last_tick": "..."}`.
+Implemented as one `Command` with a required positional `action`
+(`set` / `advance`) via `add_subparsers`-style argument handling — follow
+whatever subcommand pattern reads most like existing Django management
+commands in this repo (there is no existing multi-subcommand command here to
+copy; `argparse` subparsers are the standard-library-only way, so use those
+rather than a third-party dependency).
 
-## `frontend/` changes
+Every code path starts:
 
-The SPA has never made a fetch. Keep the first one small.
+```python
+clock = world_services.get_clock()
+if not isinstance(clock, MockClock):
+    raise CommandError(
+        f"mock_clock only works when GAME_CLOCK_CLASS is MockClock; "
+        f"current setting: {settings.GAME_CLOCK_CLASS}"
+    )
+```
 
-- `src/api.ts` (**new**) — `getClock(): Promise<Clock>` hitting
-  `/api/world/clock/`. Relative URL: Vite already proxies `/api` to :8000 in
-  dev, and in production Django serves both.
-- `src/useClock.ts` (**new**) — a hook returning `{clock, loading, error}`.
-  Polls every 60 s with `setInterval`, cleared on unmount. Polling, not a
-  websocket: an hourly clock does not need a socket, and a socket needs ASGI.
-- `src/components/Sidebar.tsx` — replace the hard-coded `TEAM.season` in the
-  footer with the formatted game date, falling back to `TEAM.season` while
-  loading or on error. Formatting stays in the component
-  (`toLocaleDateString` + `HH:00`), in `font.mono` per the existing style.
-- `src/placeholderData.ts` — leave `TEAM.season` in place as the fallback, with
-  a comment saying it is now only a fallback. Do not delete it;
-  `DASHBOARD.eyebrow` still uses the same invented season.
+`--by` duration parsing: `re.findall(r"(\d+)([dhm])", value)`, building a
+`timedelta` from the matched `(amount, unit)` pairs (`d`→days, `h`→hours,
+`m`→minutes). Raise `CommandError` if the regex matches nothing (an
+unparseable string like `--by soon`).
 
-A failed fetch must not blank the sidebar. The fallback is the requirement, not
-a nicety — the clock endpoint being down should not take the UI with it.
+`set`'s datetime argument reuses the same parse-and-make-aware logic the old
+`set_game_date` had (`parse_datetime`, then `timezone.make_aware` if naive) —
+copy that, it does not change.
+
+**Do not** carry over `set_game_date`'s backwards-past-a-finished-race guard.
+That guard existed because rewinding a clock that *drives* due-checks past a
+finished race would make it due again. Under this design the guard is still
+correct and still needed for the same reason — keep it, but move it into
+`mock_clock set`'s handler rather than dropping it; it is one of the few
+pieces of business logic in the old command worth preserving as-is.
+
+## `api/serializers.py` and `api/views.py`
+
+See Design decision 9. `GameClockSerializer` → `ClockSerializer` (a plain
+`serializers.Serializer`, not a `ModelSerializer` — there is no longer a
+single model instance this response maps onto). `ClockView.get` calls
+`world.services.now()` directly.
+
+## `frontend/src/api.ts`
+
+```typescript
+export interface Clock {
+  current: string
+}
+```
+
+Drop `catch_up_hours` and `last_tick` from the type (Design decision 9). No
+other change — `getClock()` still fetches the same URL and returns the same
+shape minus those two fields, and nothing in `useClock.ts` or `Sidebar.tsx`
+reads either field (confirmed by grep, see decision 9), so no cascading
+change there.
 
 ## Work items
 
-### W1 — `world/`: create the app ✅ done
-`startapp world`, delete `views.py` and `tests.py` from the scaffold, add
-`"world"` to `LOCAL_APPS`, write `world/README.md` (sections per
-*Documentation update*), add `world` to `testpaths` in `pyproject.toml`.
-Nothing else — this lands on its own so everything after it has a home.
-**Test:** `world/tests/test_app.py::test_world_app_is_installed` asserts
-`apps.is_installed("world")`.
+### W1 — `world/clocks.py`: `Clock`, `RealClock`, `MockClock`
+New file, per the code in *`world/clocks.py` (new)* above.
+**Test:** `world/tests/test_clocks.py::test_real_clock_returns_current_real_time`
+(assert within a small tolerance of `django.utils.timezone.now()`);
+`::test_mock_clock_now_reads_the_stored_row`;
+`::test_mock_clock_set_moves_the_stored_row`;
+`::test_mock_clock_advance_by_adds_a_delta`;
+`::test_mock_clock_advance_to_next_due_jumps_to_the_next_scheduled_race`;
+`::test_mock_clock_advance_to_next_due_does_nothing_when_none_scheduled`.
 
-### W2 — `world/models.py`: `GameClock` and `TickRun` ✅ done
-Both models, `GameClock.load()`, migration `0001_initial`, `world/admin.py`
-registering both read-mostly.
-**Test:** `world/tests/test_models.py::test_load_creates_single_clock` — call
-`load()` twice, assert one row and `pk == 1`;
-`::test_tick_run_orders_newest_first`.
+### W2 — `world/models.py`: trim `GameClock`, trim `TickRun`
+Remove `last_advanced_at`, add `catch_up_max_races` (default `50`); remove
+`from_game_time`, `to_game_time`, `trigger` and the `Trigger` choices class
+from `TickRun`. Migration `world/migrations/0002_mock_clock.py`. Update
+`world/admin.py`'s `list_display` on both (drop the removed fields).
+**Load-bearing:** this is a destructive migration on fields that may hold data
+in any environment this branch has already been deployed to informally (it has
+not been deployed anywhere yet — confirm with `git log --oneline --
+'*/settings/prod.py'` and the absence of a deployment target in
+`specs/game-clock.md`'s Open questions before treating this as safe to just
+drop; if genuinely nothing depends on the old columns, a straightforward
+`RemoveField`/`AddField` migration is correct and no data preservation step is
+needed).
+**Test:** `world/tests/test_models.py::test_load_creates_single_clock` and
+`::test_tick_run_orders_newest_first` are kept but updated to the trimmed
+fields (no `last_advanced_at` in `load()`'s assertions; `TickRun.objects.create()`
+calls in the test no longer pass `from_game_time`/`to_game_time`).
 
-### W3 — `racing/models.py`: `starts_at`, `status`, `finished_at` ✅ done
-The three fields, the `Status` choices, the `race_due_idx` index, migration
-`0002_race_schedule`, updated docstring, `status` and `starts_at` added to
-`RaceAdmin.list_display` and `list_filter`.
-**Load-bearing:** `starts_at` must be nullable — every existing `Race` row has
-no schedule, and a non-null field would need a fabricated default game date.
-**Test:** `racing/tests.py::test_race_defaults_to_scheduled_and_unscheduled`.
+### W3 — `world/services.py`: `get_clock()`, `now()`, `tick()`
+Full rewrite per the code above, replacing `advance()`, `_claim()`,
+`_execute()`, `_advance_days()`. Keep `_reclaim_unfinished()` as-is (unchanged
+logic, still correct: a `RUNNING` race with no results is still the crash
+signature regardless of which clock is active).
+**Load-bearing:** `select_for_update()` on the *race rows*, and simulation
+running outside that transaction, same discipline as before, new lock target.
+**Test:** `world/tests/test_services.py`, rewritten —
+`::test_tick_with_nothing_scheduled_does_nothing` (spec item — a run with no
+due races is valid and uneventful);
+`::test_tick_runs_a_due_race_once`;
+`::test_tick_is_capped_at_catch_up_max_races` (schedule more due races than
+the cap, assert only `catch_up_max_races` are claimed and `TickRun.capped`);
+`::test_second_tick_does_not_rerun_a_finished_race`;
+`::test_interrupted_race_is_reclaimed` (a `RUNNING` race with no results is
+picked up and finished, same as before);
+`::test_race_failure_marks_failed_and_continues`.
+Every test that needs a specific "now" uses `MockClock` (already the `dev.py`
+/ test default — confirm `pyproject.toml`'s `DJANGO_SETTINGS_MODULE =
+"config.settings.dev"` makes this automatic for the test run) and drives it
+via `world.services.get_clock().set(...)` / `.advance_by(...)` directly rather
+than going through the `mock_clock` management command — these are service
+tests, not command tests.
+**Also add:** a `conftest.py` fixture (or a helper in
+`world/tests/__init__.py`) that resets `world.services._clock = None` after
+each test — see Design decision 8's note on why this is required, not
+optional, once more than one test touches `GAME_CLOCK_CLASS` indirectly via
+`override_settings`.
 
-### W4 — `racing/services.py` + `racing/adapters.py`: `simulate_race` ✅ done
-`run_race_via_adapter` in the adapter; `simulate_race(race, *, game_time)` in
-the service. No clock involvement.
-**Load-bearing:** the temp-file-then-storage path (decision 8), and dense
-positions starting at 1 (the `unique_position_per_race` constraint).
-**Test:** `racing/tests.py::test_simulate_race_writes_log_and_results` — a tiny
-2-segment course and four riders; assert a `RaceLog` row exists with
-`tick_count > 0`, `RaceResult` positions are `[1, 2, 3, 4]` with no gaps, and
-`race.status == FINISHED`. Also `::test_simulate_race_refuses_finished_race`.
+### W4 — `world/management/commands/tick.py`: drop `--to-next` / `--day`
+Simplify to the no-argument version above.
+**Test:** `world/tests/test_tick_command.py::test_tick_command_runs_and_reports`
+via `call_command("tick")`. Remove the old `::test_day_flag_...` and
+`::test_to_next_and_day_together_is_an_error` cases — those flags no longer
+exist on this command.
 
-### W5 — `world/services.py`: `now()`, `_claim`, `advance()` ✅ done
-The full advance, including `_reclaim_unfinished` and the real-time ceiling.
-`advance()` calls `racing.services.simulate_race`.
-**Load-bearing:** `select_for_update()` on the clock row, and simulation running
-outside that transaction.
-**Test:** `world/tests/test_services.py` —
-`::test_advance_with_nothing_scheduled_moves_time_only` (spec item 9),
-`::test_advance_runs_a_due_race_once`,
-`::test_advance_is_capped_at_catch_up_hours` (set `last_advanced_at` back 200 h,
-assert the clock moved exactly 72 h and `TickRun.capped`),
-`::test_second_advance_does_not_rerun_a_finished_race`,
-`::test_interrupted_race_is_reclaimed` (create a `RUNNING` race with no results,
-advance, assert it finishes and no duplicate `RaceResult` rows appear),
-`::test_race_failure_marks_failed_and_continues` (a race with a malformed
-`course`, plus a good one after it; assert the good one still ran).
+### W5 — `world/management/commands/mock_clock.py`: new command, delete `set_game_date.py`
+Per the spec above, including the `MockClock`-only guard and the
+backwards-past-a-finished-race check carried over into `set`.
+**Load-bearing:** the `isinstance(clock, MockClock)` guard — this is the only
+runtime enforcement that a misconfigured or mistaken invocation cannot move
+time in an environment running `RealClock`.
+**Test:** `world/tests/test_mock_clock_command.py::test_set_moves_the_clock`;
+`::test_advance_to_next_moves_to_the_next_due_race`;
+`::test_advance_by_parses_duration_strings` (cover `1d`, `6h`, `1d6h`);
+`::test_refuses_to_rewind_past_a_finished_race_without_force`;
+`::test_raises_when_real_clock_is_active` (use `@override_settings
+(GAME_CLOCK_CLASS="world.clocks.RealClock")` plus the `_clock` reset fixture
+from W3, assert `CommandError`).
+Delete `world/tests/test_set_game_date.py`.
 
-### W6 — `world/management/commands/tick.py` ✅ done
-The command, its flags, its summary line, its non-zero exit on error.
-**Test:** `world/tests/test_tick_command.py::test_tick_advances_clock` via
-`call_command("tick")`; `::test_day_flag_processes_races_within_the_day`;
-`::test_to_next_and_day_together_is_an_error` asserting `CommandError`.
+### W6 — `api/`: serialize `now()` instead of the `GameClock` model
+`ClockSerializer` (plain `Serializer`), `ClockView.get` calling
+`world.services.now()`. `api/urls.py` unchanged.
+**Test:** `api/tests.py::test_clock_endpoint_returns_current_game_time` —
+update the assertion to compare against `world.services.now()` rather than a
+`GameClock` instance's `.current`; drop the old assertions on
+`catch_up_hours` / `last_tick` (fields no longer in the response).
 
-### W7 — `world/management/commands/set_game_date.py` ✅ done
-Including the backwards-past-a-finished-race guard.
-**Test:** `world/tests/test_set_game_date.py::test_sets_clock`;
-`::test_refuses_to_rewind_past_a_finished_race_without_force`.
+### W7 — `frontend/src/api.ts`: trim the `Clock` type
+Remove `catch_up_hours` and `last_tick` from the `Clock` interface.
+**Test:** none (matches the original plan's W9 — no frontend test runner
+exists). `npm run build` (`tsc -b`) is the gate: it must still pass, and it
+will only fail here if something elsewhere in `frontend/` reads either
+removed field, which the decision 9 grep already ruled out.
 
-### W8 — `api/`: the app and the clock endpoint ✅ done
-`startapp api`, `LOCAL_APPS`, `migrations/__init__.py`, serializer, view,
-`api/urls.py`, wire into `config/urls.py` above the catch-all, `api/README.md`,
-add `api` to `testpaths`.
-**Load-bearing:** `AllowAny` (the project default is `IsAuthenticated`) and URL
-ordering before the SPA catch-all.
-**Test:** `api/tests.py::test_clock_endpoint_returns_current_game_time` using the
-DRF `APIClient` **unauthenticated** — an authenticated test would pass while the
-real SPA got a 403.
-
-### W9 — `frontend/`: show the clock ✅ done
-`src/api.ts`, `src/useClock.ts`, `Sidebar.tsx` wiring, the placeholder comment.
-**Test:** no test runner exists in `frontend/` and this plan does not add one.
-Proved by the manual check in *Verification*; `npm --prefix frontend run build`
-must pass (it runs `tsc -b`), which is the real gate on this item.
-
-### W10 — Documentation ✅ done
-`racing/README.md`, `AGENTS.md`, `README.md` per *Documentation update*.
-`world/README.md` and `api/README.md` land with W1 and W8, not here.
+### W8 — Documentation
+`world/README.md`, `racing/README.md`, `AGENTS.md`, root `README.md` — see
+*Documentation update*.
 **Test:** none. Reviewed, not tested.
 
 ## Execution order
 
-W1 → W2 → W3 → W4 → W5 → W6 → W7 → W8 → W9 → W10, and it is worth saying why
-this order and not the obvious "clock first, then everything else":
+W1 → W2 → W3 → W4 → W5 → W6 → W7 → W8.
 
-- **W1–W2 first** because the app and its models are what every later item
-  imports, and they are trivially verifiable on their own.
-- **W3 and W4 before W5** — deliberately. W4 proves the hardest untested thing in
-  the feature (a race actually simulating into the database) *without* any clock
-  or concurrency in the picture. If the engine-to-storage path is broken, you
-  find out in a test you can read, not inside a transaction-and-lock test where
-  three things could be at fault.
-- **W5 then W6** — the service is where the correctness lives; the command is a
-  thin wrapper. Test the service directly, not through `call_command`.
-- **W8 and W9 last** because they are the only player-visible part and they
-  depend on nothing the earlier items need.
+- **W1 before W2** — `MockClock` needs `GameClock.load()`, but W1 is written
+  against the *current* (pre-trim) model shape and W2 trims it in the same
+  migration step. In practice, land W1 and W2 together in implementation if
+  it is awkward to have `MockClock` reference fields being removed in the very
+  next commit — but keep them as two commits: W1 introduces the clock
+  abstraction and can be reviewed on the old model shape (it only touches
+  `current`, which survives), W2 is the destructive model change reviewed on
+  its own.
+- **W3 depends on both** — `tick()` needs `Clock` (W1) and the trimmed
+  `TickRun` (W2).
+- **W4 and W5 depend on W3** — both are thin command wrappers around
+  `world.services`.
+- **W6 depends on W3** — the endpoint calls `now()`.
+- **W7 is independent of the backend items** but sequenced after W6 so the
+  frontend change is reviewed against the API shape it actually matches.
+- **W8 last**, once behaviour is final.
 
-**Commit at each W.** The repo is green after every one: W1–W3 are additive,
-W4 adds a service nothing calls yet, W5 wires them together.
+**Commit at each W.** Note that this plan, unlike a from-scratch feature, is
+replacing already-merged-pending code (PR #48) rather than adding to an empty
+surface — the repo is *not* green after W1 alone the way a new app's first
+commit would be, because W1 introduces `Clock`/`RealClock`/`MockClock` without
+yet wiring `world/services.py` to use them, so the old `advance()`-based
+tests keep passing against the old code until W3 replaces them. This is fine:
+W1's own new tests (`test_clocks.py`) pass in isolation, and the full suite
+stays green throughout because nothing is deleted before its replacement
+lands in the same or a later commit within this sequence.
 
 ## Documentation update (required, not optional)
 
-### `world/README.md` (new, lands with W1)
+### `world/README.md` — substantial rewrite
 
-Sections: **What this app owns** (the clock, the tick, nothing else yet);
-**The clock discipline rule** — stated as the project rule the spec asks for:
-*game code reads `world.services.now()`, never `timezone.now()` or
-`datetime.now()`, when deciding whether something scheduled is due*, with the
-one sanctioned exception (`last_advanced_at`) named and explained;
-**How an advance works** — the two phases, and why simulation is outside the
-lock; **Exactly-once** — the row lock, and the reclaim-on-restart rule;
-**The 72-hour cap** — what it is, when it engages, that it is configuration;
-**Running the tick** — the cron line, and the developer flags;
-**What `world/` may import** (everything) and **what may import `world/`**
-(nothing).
+- **What this app owns** — add `world/clocks.py` (`Clock`, `RealClock`,
+  `MockClock`) to the list.
+- **Replace "The clock discipline rule"** — restate as: game code reads
+  `world.services.now()`, which reads whichever `Clock` is configured via
+  `GAME_CLOCK_CLASS`; there is no longer a "one sanctioned exception" for
+  `last_advanced_at`, because that field is gone. Add the new one sanctioned
+  exception: `TickRun.finished_at`, which uses real time directly regardless
+  of the active clock, and why (Design decision `tick()`'s note).
+- **Replace "How an advance works" and "Exactly-once"** — rewrite around
+  `tick()`'s claim-then-execute split and the row lock on due races (Design
+  decision 3), not the old clock-row lock. Keep the two-phase framing
+  (claim inside a transaction, execute outside it) — that part is unchanged
+  and still the reason simulation never appears inside `transaction.atomic()`.
+- **Replace "The 72-hour cap"** — becomes "The catch-up cap":
+  `catch_up_max_races`, a race count not an hour count, same reasoning
+  (configuration, raised for exceptional recovery).
+- **Replace "Running the tick"** — `manage.py tick` (no flags now) run hourly
+  from cron; `manage.py mock_clock set|advance` for development, and that it
+  refuses to run unless `GAME_CLOCK_CLASS` is `MockClock`.
+- **New section, "Which clock runs where"** — `dev.py` → `MockClock`, `prod.py`
+  → `RealClock`, and that this is not overridable by environment variable in
+  `prod.py` (Design decision 2), stated as a security-relevant fact, not just
+  a default.
 
-### `api/README.md` (new, lands with W8)
+### `racing/README.md` — one section
 
-What lives here (routers and serializers aggregating other apps, no models);
-the one endpoint that exists; that `/api/` must stay above the SPA catch-all;
-that the project default is `IsAuthenticated` and the clock deliberately is not.
+- **"Triggering simulations"** — currently says `world/` "owns the tick and
+  calls `racing.services.simulate_race`". Still true; add one sentence that
+  `world/` may run against either a real or a mock clock, and `racing/` never
+  knows or cares which — `simulate_race`'s `game_time` parameter is why.
 
-### `racing/README.md` (W10)
+### `AGENTS.md`
 
-- **"Triggering simulations"** — replace "run from cron" with: `world/` owns the
-  tick and calls `racing.services.simulate_race`; the deployment assumption is
-  now **hourly**, not daily, per `specs/game-clock.md`. The spec calls out this
-  change explicitly; make it here rather than leaving a stale sentence.
-- **"What lives here"** table — add `starts_at`, `status`, `finished_at` to the
-  `Race` row and note that those are game time.
-- **New subsection "Simulating a race"** — `racing/services.py`, the temp-file
-  hop and why (decision 8), and that `racing/` must never import `world/`.
+No app-table changes (`world/` and `api/` are already marked **built**). If
+the dependency-direction diagram or app descriptions mention "the tick" in a
+way that implies clock-advancing, check and reword to "finds and processes
+due work" — a small wording pass, not a structural one.
 
-### `AGENTS.md` (W10)
+### `README.md` (root)
 
-App table: `world/` → **built**, `README.md`, description "the game clock and
-the tick"; `api/` → **built**, `README.md`. Both already have rows; change the
-status column rather than adding rows.
-
-### `README.md` (root, W10)
-
-One line under running it: the tick command and that a development world is
-stepped with `manage.py tick --day`.
+The line added by the previous version ("the tick command and that a
+development world is stepped with `manage.py tick --day`") is now wrong —
+`tick --day` no longer exists. Replace with: the tick command, and that a
+development clock is stepped with `manage.py mock_clock advance`.
 
 ## Verification
 
@@ -701,46 +818,42 @@ docker compose up -d
 .venv/bin/python -m pytest
 ```
 
-**The end-to-end check that actually proves the feature**, because the unit
-tests each prove one piece:
+**The end-to-end check that actually proves the feature:**
 
 ```bash
-.venv/bin/python manage.py set_game_date 2027-03-01T09:00
+.venv/bin/python manage.py mock_clock set 2027-03-01T09:00
 .venv/bin/python manage.py shell -c "
 from racing.models import Race
 from django.utils.dateparse import parse_datetime
 import json
-# The bundled configs nest the course under a 'race' key; Race.course wants the list itself.
 cfg = json.load(open('race_engine/configs/sprinters_classic.json'))['race']
 Race.objects.create(name='E2E', course=cfg['course'], starts_at=parse_datetime('2027-03-01T14:00:00Z'))
 "
-.venv/bin/python manage.py tick --day
+.venv/bin/python manage.py mock_clock advance --to-next
+.venv/bin/python manage.py tick
 .venv/bin/python manage.py shell -c "
 from racing.models import Race, RaceResult
-from world.models import GameClock, TickRun
 r = Race.objects.get(name='E2E')
 print(r.status, r.finished_at, RaceResult.objects.filter(race=r).count())
-print(GameClock.load().current)
-print(TickRun.objects.first().__dict__)
 "
 ```
 
-Expect: `finished`, a `finished_at` of `14:00`, a result row per rider, a clock
-at `2027-03-02T09:00`, and a `TickRun` with `races_started == races_finished == 1`.
-`sprinters_classic.json` is a 130 km flat course — the fastest of the bundled
-six to run. Note it takes real seconds, not milliseconds.
+Expect: `finished`, `finished_at` of `2027-03-01T14:00:00Z` (the moment the
+mock clock was advanced to, not any later moment — there is no "day step" to
+conflate it with now, which is exactly what the previous version's real bug
+was), a result row per rider.
 
-**Then run `tick --day` a second time.** The race must stay `finished` with the
-same number of `RaceResult` rows. This is the check that catches the likeliest
-failure mode below — a passing first run proves nothing about exactly-once.
+**Then run `manage.py tick` a second time.** The race must stay `finished`
+with the same result count — proves exactly-once still holds with the new
+lock target.
 
-**The concurrency check**, which no unit test covers honestly:
+**The concurrency check** (unchanged in spirit from the previous version, now
+locking races instead of a clock row):
 
 ```bash
-.venv/bin/python manage.py set_game_date 2027-03-01T09:00
-# re-create the E2E race exactly as above, then:
-.venv/bin/python manage.py tick --day &
-.venv/bin/python manage.py tick --day &
+# after seeding one due race, with the mock clock already advanced past it:
+.venv/bin/python manage.py tick &
+.venv/bin/python manage.py tick &
 wait
 .venv/bin/python -c "
 import django, os; os.environ['DJANGO_SETTINGS_MODULE']='config.settings.dev'; django.setup()
@@ -749,39 +862,53 @@ print(RaceResult.objects.count())
 "
 ```
 
-The count must equal the rider count exactly. A doubled count means the row lock
-is not doing its job — and note that this would **not** surface as an error,
-because `bulk_create` with duplicate positions violates
-`unique_position_per_race` and raises, so the symptom is a failed second tick
-rather than silent duplication. Either outcome is a failure; only a clean second
-run passes.
+Count must equal the rider count exactly, same failure signature as before: a
+doubled count means the lock did not do its job, and a race condition here
+would surface as a failed second tick (a `UniqueConstraint` violation on
+`RaceResult`), not silent duplication.
 
-**Frontend:**
+**The `RealClock` sanity check**, new to this revision — nothing in the
+previous version's verification actually exercised production's clock at all:
 
 ```bash
-npm --prefix frontend run build && .venv/bin/python manage.py runserver
+DJANGO_SETTINGS_MODULE=config.settings.prod \
+DJANGO_SECRET_KEY=x POSTGRES_DB=cycling_manager POSTGRES_USER=cycling POSTGRES_PASSWORD=cycling \
+  .venv/bin/python -c "
+import django, os; django.setup()
+from world.services import now
+from django.utils import timezone
+print(abs((now() - timezone.now()).total_seconds()) < 1)
+"
 ```
 
-Load `http://127.0.0.1:8000/`, confirm the sidebar footer shows the game date
-(not `SEASON 3 · WK 14`), run `manage.py tick --day` in another shell, and
-confirm the date advances within 60 seconds without a page reload. Then stop
-Django's ability to answer by requesting `/api/world/clock/` against a stopped
-server — the sidebar must fall back, not blank.
+Expect `True` — proves `prod.py`'s settings actually resolve to `RealClock`
+and that it reads live time, not a stale default. This is the check that
+would have caught a `GAME_CLOCK_CLASS` typo or a `prod.py` that accidentally
+inherited `dev.py`'s override.
+
+**Frontend:** unchanged from before —
+`npm --prefix frontend run build && .venv/bin/python manage.py runserver`,
+confirm the sidebar shows a date/time that visibly advances every second
+(already built in the previous version's W9 — this plan does not touch
+`useClock.ts`'s polling behaviour) and matches real time to within the 60s
+poll interval, since `RealClock` is what `dev.py` would use if `GAME_CLOCK_CLASS`
+were flipped — but `dev.py` defaults to `MockClock`, so the manual check
+should instead confirm the sidebar advances from wherever `mock_clock set`
+left it, once a developer has moved it there.
 
 ## Risks
 
 | Risk | Mitigation |
 |---|---|
-| **Simulation left inside the clock transaction.** The natural way to write `advance()` is one `atomic()` block around everything. It passes every test, then holds a row lock for eight seconds per race in production. | Decision 3 and the `_claim` code above. Review for it specifically: `simulate_race` must not appear inside any `with transaction.atomic()` in `world/services.py`. |
-| **Exactly-once believed rather than proven.** Single-process tests always pass. | The two-process concurrency check in *Verification*, plus `::test_second_advance_does_not_rerun_a_finished_race` and `::test_interrupted_race_is_reclaimed`. |
-| **Game time and real time mixed.** Both are aware UTC datetimes; nothing in the type system stops `timezone.now()` being compared to `starts_at`. | Naming (`starts_at`/`finished_at` = game, `created_at`/`last_advanced_at` = real), the rule in `world/README.md`, and the single sanctioned real-time read in `_claim`. Spec defers automated enforcement. |
-| **A race that always raises blocks every tick.** Without the `FAILED` state, a bad course is re-claimed forever. | `Race.Status.FAILED` (W3), the per-race try/except in W5, and `::test_race_failure_marks_failed_and_continues`. |
-| **`/api/` swallowed by the SPA catch-all.** `config/urls.py` ends with `<path:unused>`; appending the API include gives a 200 of HTML where JSON was expected. | W8 names the ordering; `api/tests.py` hits the real URL through the project's URLconf, which fails loudly if ordering is wrong. |
-| **Hosting sleeps the app.** The spec's own open question. A platform that idles the app cannot nudge the world, and races start late. | Out of this feature's hands. Recorded in `world/README.md` as a deployment requirement, and already logged against the deployment decision in the spec. |
-| **A long catch-up costs ~8 s per race.** The 72-hour cap bounds it, but a dense future calendar could still make one tick long. | The cap is configuration (`GameClock.catch_up_hours`). Revisit when #7 puts real race density on the calendar; the spec defers parallel execution deliberately. |
+| **The module-level `_clock` singleton goes stale across a settings override in tests.** A test using `@override_settings(GAME_CLOCK_CLASS=...)` sees no effect because `get_clock()` already cached the old instance from an earlier test. | W3's required `conftest.py` fixture resetting `world.services._clock = None`. Review any new test touching `GAME_CLOCK_CLASS` for this fixture's presence. |
+| **A `mock_clock` invocation slips through against `RealClock` in a misconfigured environment.** | The `isinstance` guard in every subcommand (decision 5), tested explicitly by `::test_raises_when_real_clock_is_active`. |
+| **`select_for_update()` on the races table causes more lock contention than the old single-row lock**, once the calendar (#7) puts real density of races on the clock and many are due in the same claim. | Accepted for now — the spec explicitly defers "several races worked out at the same time"; this plan does not attempt to solve a problem that does not exist yet with today's near-empty calendar. Revisit when #7 lands. |
+| **`catch_up_max_races` interacting with `_reclaim_unfinished()`'s count** — if reclaimed races alone exceed the cap, `_claim(limit=max_races - len(reclaimed))` goes negative, and a Python slice with a negative stop silently returns nothing (not an error), which could look like "capped" when actually nothing new was claimed. | `tick()` should clamp with `max(0, max_races - len(reclaimed))` — call this out explicitly in W3's implementation, and add a test case for "reclaimed alone exceeds the cap" to `test_tick_is_capped_at_catch_up_max_races`. |
+| **Removing `TickRun.trigger` loses the ability to tell "was this a cron run or a developer's manual `tick` invocation" from the audit log.** | Accepted per decision 7 — `tick()` has one behaviour now regardless of caller, so the distinction described nothing real to keep. If this is missed operationally later, it is cheap to re-add as a field the *management command* stamps, not something `tick()` itself needs to know. |
+| **A reviewer expects `tick --to-next` / `--day` to still exist** because they are named in the still-open PR #48's description and the old `world/README.md`. | *Documentation update* rewrites both. Flag this explicitly in the PR body update: name the removed flags and point at `mock_clock` as the replacement, so review does not flag it as an accidental regression. |
 
 ## Open questions
 
-None blocking. The spec's open question — where the game is hosted — constrains
-deployment, not this implementation, and is already recorded against the
-deployment decision.
+None blocking. The spec's open question (hosting) is unaffected by this
+revision — an always-on host with an hourly scheduled task is still the
+requirement, regardless of which clock implementation backs `now()`.
