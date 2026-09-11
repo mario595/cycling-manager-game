@@ -22,8 +22,12 @@ the file here stays the source of truth. The procedure is in
 The third step is `/implement-plan`, which builds an agreed plan: a git worktree,
 one commit per work item, tests for every new behaviour, and the full suite green
 before each commit. It finishes by opening a pull request and moving the ticket to
-**Implemented**. Review, testing and the merge to master happen on the PR — which
-closes the issue.
+**Implemented**.
+
+`/code-review` then reviews that PR: it runs the suite, the migration check, the
+linter and the type-check, judges the diff, and either requests changes or
+approves and moves the ticket to **Code reviewed**. It never edits the code. The
+merge to master stays yours — and closes the issue.
 
 ## Plans
 

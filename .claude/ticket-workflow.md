@@ -9,6 +9,7 @@ point here so there is one place to fix when the board changes.
 | `/product-spec` | the issue body (the rough idea) | `specs/<slug>.md` | **Scoped** |
 | `/tech-plan` | the issue body + the spec snapshot comment | `specs/<slug>-plan.md` | **Refined** |
 | `/implement-plan` | `specs/<slug>-plan.md` | code, tests, a branch and a pull request | **Implemented** |
+| `/code-review` | the ticket and its pull request | a review on the PR | **Code reviewed** |
 
 Repo: `mario595/cycling-manager`.
 
@@ -143,8 +144,12 @@ If `gh pr create` reports a PR already exists for the branch, do not open a seco
 one — update the existing PR's body instead (`gh pr edit <n> --body-file …`) and
 carry on.
 
-`gh pr create` and `gh pr edit` can hit the same Projects-classic error described
-above. If they do, use the REST API instead — it does not go through GraphQL:
+**`/code-review` — post a review on the PR.** Also no snapshot comment. It posts
+with `gh pr review --approve` or `--request-changes` and only moves the ticket
+when it approves; the review body format is in that skill.
+
+`gh pr create`, `gh pr edit` and `gh pr review` can hit the same Projects-classic
+error described above. If they do, use the REST API instead — it does not go through GraphQL:
 
 ```bash
 gh api repos/mario595/cycling-manager/pulls \
