@@ -601,7 +601,7 @@ The command, its flags, its summary line, its non-zero exit on error.
 `call_command("tick")`; `::test_day_flag_processes_races_within_the_day`;
 `::test_to_next_and_day_together_is_an_error` asserting `CommandError`.
 
-### W7 — `world/management/commands/set_game_date.py`
+### W7 — `world/management/commands/set_game_date.py` ✅ done
 Including the backwards-past-a-finished-race guard.
 **Test:** `world/tests/test_set_game_date.py::test_sets_clock`;
 `::test_refuses_to_rewind_past_a_finished_race_without_force`.
