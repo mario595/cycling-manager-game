@@ -11,7 +11,22 @@ rough feature idea.
 
 One file per feature, kebab-case: `specs/mechanical-problems.md`.
 
-Order of work: **spec → plan → code.** A spec says what; a `*_PLAN.md` says how.
+Order of work: **spec → plan → code.** A spec says what; a plan says how.
+
+## Plans
+
+The implementation plan for a spec sits beside it as `specs/<slug>-plan.md`
+(`game-clock.md` → `game-clock-plan.md`). It is written by the `tech-plan` skill
+(`.claude/skills/tech-plan/`), which reads the spec *and the code*, settles the
+technical decisions, and breaks the work into ordered, commit-sized items each
+with the test that proves it. Run it with `/tech-plan specs/<slug>.md`.
+
+A plan is written for an engineer who has not seen this codebase, so it names
+files, fields and tests explicitly rather than describing them.
+
+Older plans live next to their code as `<app>/<FEATURE>_PLAN.md` —
+`race_engine/WIND_PLAN.md`, `race_player/TEAM_VISUALIZATION_PLAN.md`. Those stay
+where they are and remain the best examples of the format; new plans go here.
 
 ## Two files here are not feature specs
 
