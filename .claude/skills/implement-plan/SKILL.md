@@ -196,7 +196,7 @@ you can see, and which you would pick.
 - Never leave commented-out code, or dead code you added.
 - Never add a dependency without asking.
 - Never edit `specs/<slug>.md`, or change a decision in the plan.
-- Never merge the worktree back yourself.
+- Never merge the pull request or the branch yourself.
 - Never end a work item with the suite red.
 
 ---
@@ -240,12 +240,24 @@ are the ones that get broken:
 1. Run the full suite one last time. It must be green.
 2. Do the plan's **Documentation update** section. It is not optional.
 3. Commit that documentation change.
-4. Report, briefly:
-   - the branch name and where the worktree is;
+4. **Open the PR and move the ticket.** Follow `.claude/ticket-workflow.md`:
+   confirm in one line and wait for a yes, then push the branch and open the pull
+   request, then set the board's Status field to **Implemented**. That file has
+   the PR body template and the exact `gh` commands.
+
+   The PR body ends with `Closes #<N>`. That is deliberate — the ticket stays at
+   **Implemented** through review and testing, and merging to master is the last
+   step.
+5. Report, briefly:
+   - the pull request URL, and the branch name;
    - which work items are done (and any that are not, and why);
    - tests added, and the baseline count versus the final count;
    - anything you had to stop and ask about;
    - anything you noticed that the plan did not cover.
 
-**Leave the merge to the user.** Do not merge, do not push, do not delete the
-worktree.
+**Do not merge the pull request. Do not delete the worktree.** Review and testing
+happen on the PR, and the user merges it.
+
+**If you stopped part-way** — a work item unfinished, a question unanswered, the
+suite not green — do not open the PR and do not move the ticket. Commit what is
+finished, say exactly where you got to, and stop.

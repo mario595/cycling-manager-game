@@ -31,8 +31,8 @@ as `specs/<slug>-plan.md`. Order of work is **spec → plan → code**, one skil
 per step: `/product-spec #<issue>` writes the spec and moves the ticket to
 **Scoped**; `/tech-plan #<issue>` writes the plan and moves it to **Refined**;
 `/implement-plan specs/<slug>-plan.md` builds it in a worktree, one commit per
-work item. See `specs/README.md`, and `.claude/ticket-workflow.md` for the
-ticket handoff.
+work item, then opens a PR and moves the ticket to **Implemented**. See
+`specs/README.md`, and `.claude/ticket-workflow.md` for the ticket handoff.
 
 `specs/roadmap.md` says **which issues to build next and why**, and which are
 deliberately deferred. Read it before picking up work.

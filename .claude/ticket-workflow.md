@@ -8,6 +8,7 @@ point here so there is one place to fix when the board changes.
 |---|---|---|---|
 | `/product-spec` | the issue body (the rough idea) | `specs/<slug>.md` | **Scoped** |
 | `/tech-plan` | the issue body + the spec snapshot comment | `specs/<slug>-plan.md` | **Refined** |
+| `/implement-plan` | `specs/<slug>-plan.md` | code, tests, a branch and a pull request | **Implemented** |
 
 Repo: `mario595/cycling-manager`.
 
@@ -45,7 +46,9 @@ Wait for a yes. Silence is not a yes. If the user is clearly away (a scheduled o
 unattended run), write the file, skip the handoff, and say the ticket still needs
 moving.
 
-### 2. Post the snapshot comment
+### 2. Put the output on the ticket
+
+**`/product-spec` and `/tech-plan` — post a snapshot comment.**
 
 The repo file is the source of truth; the comment is a convenience copy. Build
 the comment in a scratch file — never edit the spec or plan to add the header:
@@ -66,6 +69,49 @@ gh issue comment <N> --repo mario595/cycling-manager --body-file <scratch-file>
 Before posting, check whether the file is committed and pushed. If it is not, the
 pointer is dead for anyone but the author — say so in one line. Not a blocker if
 the user is happy with it.
+
+**`/implement-plan` — push the branch and open a pull request.** No snapshot
+comment: the PR is the output, and it cross-links to the issue by itself.
+
+Take the branch name from `git branch --show-current` rather than assuming it —
+a worktree made by the `EnterWorktree` tool names its branch itself.
+
+```bash
+git push -u origin "$(git branch --show-current)"
+gh pr create --repo mario595/cycling-manager \
+  --base master \
+  --title "<Feature>" \
+  --body-file <scratch-file>
+```
+
+The PR body:
+
+```
+Implements #<N>.
+
+<one paragraph: what this adds, from the player's point of view>
+
+**Spec:** `specs/<slug>.md`
+**Plan:** `specs/<slug>-plan.md`
+
+## What is in here
+<the work items, one line each>
+
+## Tests
+<what was added, and the suite count before and after>
+
+## Not in here
+<anything the plan deferred, so a reviewer does not look for it>
+
+Closes #<N>
+```
+
+`Closes #<N>` is deliberate: the ticket sits at **Implemented** through review and
+testing, and merging to master is the last step, which closes it.
+
+If `gh pr create` reports a PR already exists for the branch, do not open a second
+one — update the existing PR's body instead (`gh pr edit <n> --body-file …`) and
+carry on.
 
 ### 3. Move the Status field
 
