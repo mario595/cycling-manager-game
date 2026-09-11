@@ -595,7 +595,7 @@ advance, assert it finishes and no duplicate `RaceResult` rows appear),
 `::test_race_failure_marks_failed_and_continues` (a race with a malformed
 `course`, plus a good one after it; assert the good one still ran).
 
-### W6 — `world/management/commands/tick.py`
+### W6 — `world/management/commands/tick.py` ✅ done
 The command, its flags, its summary line, its non-zero exit on error.
 **Test:** `world/tests/test_tick_command.py::test_tick_advances_clock` via
 `call_command("tick")`; `::test_day_flag_processes_races_within_the_day`;
