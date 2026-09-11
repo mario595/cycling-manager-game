@@ -670,7 +670,7 @@ not re-derive it with the same arithmetic the code uses);
 each of the seven days of week 12 and call `full_clean()` on each — this is the
 test that catches an off-by-one in `DAY_INDEX` or the week anchor).
 
-### W4 — `load_season`: create races from the file
+### W4 — `load_season`: create races from the file — DONE
 The command's extension: `races` parsed not warned, races created inside the
 existing transaction, the `--replace` race deletion, the output lines.
 **Load-bearing:** the `racing` and `world` imports are inside `handle()`; and

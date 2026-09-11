@@ -67,10 +67,85 @@ def test_refuses_an_overlap(db, tmp_path):
 
 
 def test_ignores_unknown_keys_with_a_warning(db, tmp_path, capsys):
-    path = write_season_file(tmp_path, races=[{"name": "Tour de Something"}])
+    path = write_season_file(tmp_path, sponsor="Some Sponsor")
 
     call_command("load_season", path)
 
     out = capsys.readouterr().out
-    assert "races" in out
+    assert "sponsor" in out
     assert Season.objects.filter(number=1).exists()
+
+
+SEGMENT = {"length": 1000.0, "gradient": 0.0}
+
+
+def race_entry(**overrides):
+    data = {
+        "week": 1,
+        "day": "sunday",
+        "time": "14:00",
+        "name": "Opening Classic",
+        "course": [SEGMENT],
+    }
+    data.update(overrides)
+    return data
+
+
+def test_creates_the_declared_races(db, tmp_path):
+    path = write_season_file(tmp_path, races=[race_entry()])
+
+    call_command("load_season", path)
+
+    season = Season.objects.get(number=1)
+    week_one = Week.objects.get(season=season, number=1)
+    race = week_one.races.get()
+    assert race.name == "Opening Classic"
+    assert race.starts_at.isoformat() == "2027-03-07T14:00:00+00:00"
+
+
+def test_a_malformed_race_creates_no_season_at_all(db, tmp_path):
+    path = write_season_file(
+        tmp_path,
+        races=[race_entry(name="Good Race"), race_entry(week=13, name="Broken Race")],
+    )
+
+    with pytest.raises(CommandError):
+        call_command("load_season", path)
+
+    assert Season.objects.count() == 0
+
+
+def test_replace_deletes_the_previous_races(db, tmp_path):
+    from racing.models import Race
+
+    path = write_season_file(tmp_path, races=[race_entry()])
+    call_command("load_season", path)
+    assert Race.objects.count() == 1
+
+    replacement = write_season_file(tmp_path, races=[])
+    call_command("load_season", replacement, "--replace")
+
+    assert Race.objects.count() == 0
+
+
+def test_replace_refuses_after_start(db, tmp_path):
+    from racing.models import Race
+
+    path = write_season_file(tmp_path, races=[race_entry()])
+    call_command("load_season", path)
+    call_command("mock_clock", "set", "2027-03-01T00:00:00")
+
+    with pytest.raises(CommandError):
+        call_command("load_season", path, "--replace")
+
+    assert Season.objects.filter(number=1).exists()
+    assert Race.objects.count() == 1
+
+
+def test_races_key_is_optional_end_to_end(db, tmp_path):
+    path = write_season_file(tmp_path)
+
+    call_command("load_season", path)
+
+    season = Season.objects.get(number=1)
+    assert Week.objects.filter(season=season).count() == 12
