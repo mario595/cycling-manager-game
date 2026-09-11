@@ -684,7 +684,7 @@ one; assert `Season.objects.count() == 0` — this is the transaction test);
 `::test_replace_refuses_after_start` (assert the season and its races survive);
 `::test_races_key_is_optional_end_to_end` (a #5-era file still loads).
 
-### W5 — `api/`: the calendar endpoint
+### W5 — `api/`: the calendar endpoint — DONE
 `CalendarRaceSerializer`, `CalendarWeekSerializer`, `CalendarSerializer`,
 `CalendarView`, the URL, `api/README.md`.
 **Load-bearing:** twelve week entries always, `races: []` for an empty week —
