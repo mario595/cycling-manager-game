@@ -13,7 +13,17 @@ class Race(TimeStampedModel):
     race can be built from an existing `race_engine/configs/*.json` without
     a translation step. When a `calendar` app arrives it will own scheduling
     and this model will point at it; for now a Race stands alone.
+
+    `starts_at` and `finished_at` are **game** time, set and read by
+    `world/`. `created_at`/`updated_at` (from `TimeStampedModel`) are real
+    time — never confuse the two.
     """
+
+    class Status(models.TextChoices):
+        SCHEDULED = "scheduled", "Scheduled"
+        RUNNING = "running", "Racing now"
+        FINISHED = "finished", "Finished"
+        FAILED = "failed", "Failed"
 
     name = models.CharField(max_length=150)
     course = models.JSONField(
@@ -32,6 +42,25 @@ class Race(TimeStampedModel):
             "the only authoritative record of what happened."
         ),
     )
+
+    starts_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Game time, on the hour. Null means unscheduled — never picked up by a tick.",
+    )
+    status = models.CharField(
+        max_length=12, choices=Status.choices, default=Status.SCHEDULED,
+    )
+    finished_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Game time the result was recorded.",
+    )
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["status", "starts_at"], name="race_due_idx"),
+        ]
 
     def __str__(self) -> str:
         return self.name

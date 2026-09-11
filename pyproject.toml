@@ -6,5 +6,5 @@ requires-python = ">=3.12"
 DJANGO_SETTINGS_MODULE = "config.settings.dev"
 # race_engine tests are plain pytest and need no database; the Django app
 # tests get one via pytest-django's fixtures.
-testpaths = ["race_engine", "core", "accounts", "riders", "teams", "racing"]
+testpaths = ["race_engine", "core", "accounts", "riders", "teams", "racing", "world", "api"]
 python_files = ["test_*.py", "tests.py"]

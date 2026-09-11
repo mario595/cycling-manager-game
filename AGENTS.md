@@ -34,6 +34,14 @@ per step: `/product-spec #<issue>` writes the spec and moves the ticket to
 work item, then opens a PR and moves the ticket to **Implemented**. See
 `specs/README.md`, and `.claude/ticket-workflow.md` for the ticket handoff.
 
+**Closing a ticket:** once a ticket is implemented, before opening the pull
+request, update the `README.md` of every folder the feature touched with
+what was actually built, then delete that ticket's `specs/<slug>.md` and
+`specs/<slug>-plan.md`. The spec and plan are working documents for getting
+the feature built; once it exists, the documentation that matters lives in
+`README.md`, and a spec or plan left behind is a second, aging copy of
+decisions the code and the README already record.
+
 `specs/roadmap.md` says **which issues to build next and why**, and which are
 deliberately deferred. Read it before picking up work.
 
@@ -86,8 +94,8 @@ up front — an empty app is just noise. The table below marks which exist.
 | `schedule/` | Race Calendar | *not yet* | Seasons, race types (classics, stage races, TTs), scheduling, race-specific rules. **Not** `calendar/` — that shadows the stdlib module. |
 | `economy/` | Economy | *not yet* | Budgets, sponsorships, prize money, fanbase/merchandise. Use an append-only ledger, not a mutable balance field. |
 | `staff/` | Staff | *not yet* | Hired trainers, physios and scouts. Fixed slots, one per role per team. |
-| `world/` | World Simulation | *not yet* | The tick: game-date singleton, cron management commands, AI team decisions. |
-| `api/` | API | *not yet* | DRF routers aggregating each app's serializers and views. |
+| `world/` | World Simulation | **built**, `README.md` | The game clock and the tick. AI team decisions still to come. |
+| `api/` | API | **built**, `README.md` | DRF routers aggregating each app's serializers and views. |
 | `frontend/` | Frontend/UI | **scaffold**, `README.md` | The React SPA. Built to `frontend/dist/`, served by Django. Dashboard and Roster render from the mockup; everything else is a placeholder route. No DB yet. |
 
 ### Dependency direction

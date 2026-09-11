@@ -3,6 +3,31 @@ import { NavLink } from 'react-router-dom'
 import { NAV_SECTIONS } from '../navigation'
 import { TEAM } from '../placeholderData'
 import { color, font } from '../theme'
+import { useClock } from '../useClock'
+
+// No per-user timezone setting exists yet, so every player sees the game
+// clock in CET/CEST. When that setting lands, this becomes the fallback
+// passed to formatGameDate instead of a hardcoded default.
+const DEFAULT_TIMEZONE = 'Europe/Paris'
+
+const gameDateFormatter = new Intl.DateTimeFormat(undefined, {
+  timeZone: DEFAULT_TIMEZONE,
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+})
+
+const gameTimeFormatter = new Intl.DateTimeFormat(undefined, {
+  timeZone: DEFAULT_TIMEZONE,
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: false,
+})
+
+function formatGameDate(date: Date): string {
+  return `${gameDateFormatter.format(date)} · ${gameTimeFormatter.format(date)}`
+}
 
 interface SidebarProps {
   /** True below the mobile breakpoint, where the rail becomes a drawer. */
@@ -14,6 +39,9 @@ interface SidebarProps {
 }
 
 export function Sidebar({ mobile, open, onNavigate }: SidebarProps) {
+  const { now, error } = useClock()
+  const dateLabel = now && !error ? formatGameDate(now) : TEAM.season
+
   const style: React.CSSProperties = mobile
     ? {
         position: 'fixed',
@@ -174,7 +202,7 @@ export function Sidebar({ mobile, open, onNavigate }: SidebarProps) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <div style={{ fontSize: 13, fontWeight: 500 }}>{TEAM.manager}</div>
           <div style={{ color: color.mutedStrong, fontSize: 11, fontFamily: font.mono }}>
-            {TEAM.season}
+            {dateLabel}
           </div>
         </div>
         <button

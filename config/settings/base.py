@@ -43,6 +43,8 @@ LOCAL_APPS = [
     "riders",
     "teams",
     "racing",
+    "world",
+    "api",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -156,6 +158,17 @@ STORAGES = {
 
 # Subdirectory of the default storage where race logs are kept.
 RACE_LOG_STORAGE_PREFIX = "race_logs"
+
+
+# --- Game clock -------------------------------------------------------------
+
+# Which world.clocks.Clock the game runs on. Defaults to RealClock here so
+# that inheriting base.py without an override (as prod.py does) is safe by
+# construction. dev.py overrides this to MockClock. Deliberately NOT read
+# from the environment the way POSTGRES_* is — see world/README.md, "Which
+# clock runs where": a non-real clock must never be a live-game possibility,
+# and an env var is a code path that could put one there by accident.
+GAME_CLOCK_CLASS = "world.clocks.RealClock"
 
 
 # --- DRF ------------------------------------------------------------------
