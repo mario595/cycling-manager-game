@@ -670,7 +670,7 @@ Register both in `racing/admin.py` with the inline and the comment.
 inside `pytest.raises`, each in its own `transaction.atomic()` block so the
 first does not poison the test's connection.
 
-### W2 — `race_engine/models.py`, `race_engine/config.py`: leader validation applies to `run_race`
+### W2 — `race_engine/models.py`, `race_engine/config.py`: leader validation applies to `run_race` ✅
 
 Move `_validate_team_leaders` → `models.validate_team_leaders`, add
 `RaceSetupError`, make `ConfigError` subclass it, call it from `run_race`.

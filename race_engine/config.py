@@ -4,10 +4,17 @@ import json
 import re
 from typing import Any
 
-from race_engine.models import Course, Rider, RiderAttributes, Segment
+from race_engine.models import (
+    Course,
+    RaceSetupError,
+    Rider,
+    RiderAttributes,
+    Segment,
+    validate_team_leaders,
+)
 
 
-class ConfigError(ValueError):
+class ConfigError(RaceSetupError):
     """Raised when a race config file is malformed or fails validation."""
 
 
@@ -181,7 +188,10 @@ def load_config(path: str) -> dict[str, Any]:
     if len(set(ids)) != len(ids):
         raise ConfigError("race.riders contains duplicate ids")
 
-    _validate_team_leaders(riders)
+    try:
+        validate_team_leaders(riders)
+    except RaceSetupError as exc:
+        raise ConfigError(str(exc)) from exc
     team_codes = _parse_teams(race)
     wind = _parse_wind(race)
 
@@ -195,32 +205,6 @@ def load_config(path: str) -> dict[str, Any]:
     }
 
 
-def _validate_team_leaders(riders: list[Rider]) -> None:
-    """Exactly one leader per team — zero or two+ is a config error.
-
-    Silent acceptance here would produce races that are confusing to debug:
-    a team with no leader has nobody to protect, and a team with two has an
-    undefined "the" leader for role-scaled tactics.
-    """
-    leaders_by_team: dict[str, list[str]] = {}
-    for r in riders:
-        if r.role == "leader":
-            leaders_by_team.setdefault(r.team_id, []).append(r.id)
-
-    for team_id, leader_ids in leaders_by_team.items():
-        if len(leader_ids) > 1:
-            raise ConfigError(
-                f"team {team_id!r} has {len(leader_ids)} leaders {leader_ids}; "
-                "exactly one leader is required per team"
-            )
-
-    all_teams = {r.team_id for r in riders}
-    teams_without_leader = sorted(all_teams - leaders_by_team.keys())
-    if teams_without_leader:
-        raise ConfigError(
-            f"team(s) {teams_without_leader} have no leader; "
-            "exactly one leader is required per team"
-        )
 
 
 def build_race(config_path: str) -> tuple[list[Rider], Course]:
