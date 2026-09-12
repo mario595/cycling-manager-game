@@ -150,9 +150,15 @@ testable. No course awareness — the spec's *Out of scope* assigns that to #45,
 and the whole point of item 9 is that a deliberate choice beats this one.
 
 Three callers: the pre-fill when a team has no previous squad, the API's
-suggestion, and the claim-time fallback. **One function**, per the spec's note
-that #39 and #44 will later share a single mechanism — this is where they will
-attach.
+suggestion, and the claim-time fallback. **One function**, and that is
+load-bearing beyond this ticket: `specs/roadmap.md`'s Phase 3 states that
+[#44](https://github.com/mario595/cycling-manager/issues/44) and
+[#39](https://github.com/mario595/cycling-manager/issues/39) "are one mechanism,
+not two … two implementations will disagree, and the disagreement surfaces
+mid-race", with this feature's manager choice as the interesting path and the
+default as the fallback. `auto_pick_squad` and `ensure_squads` are that
+mechanism. When #44 and #39 land, they replace the *rule inside*
+`auto_pick_squad` — they do not add a second entry point beside it.
 
 ### 6. The engine's one-leader-per-team rule moves out of `config.py` and is applied on the Django path too
 
@@ -216,20 +222,26 @@ no way for it to know which team is "mine" — `api/README.md`'s *Authentication
 already records the symptom.
 
 The fix has a ticket: [#50](https://github.com/mario595/cycling-manager/issues/50)
-(register, log in, log out), which `specs/roadmap.md` places in **Phase 1.5,
-immediately before this feature**. It is not yet specced, and the roadmap is
-explicit that nothing in Phases 1–3 technically needs it — so this plan does not
-block on it. But it is the near-term next thing, not an open-ended someday, and
-the shape here is chosen to collapse cleanly into it:
+(register, log in, log out). `specs/roadmap.md` places it in **Phase 4, two
+phases after this one**, and gives the reason: registration ends in *claiming an
+unmanaged team*, so #50 depends on #44 and #46 existing first. The roadmap is
+explicit that "the phases before this run fine on a superuser account. That is
+not a compromise — a single-manager world is exactly what Phases 1–3 are
+testing."
+
+So the hole is not a stopgap awaiting an imminent fix; it is the deliberate
+shape of the game until Phase 4. That argues *for* the team-in-the-URL form
+rather than against it — anything more elaborate would be building against
+requirements #46 has not settled yet. What changes when #50 lands:
 
 - `<team_id>` becomes `request.user.team`; the URL loses a segment.
 - `permission_classes` drops back to the project default `IsAuthenticated`.
 - The frontend's `?team=` query parameter disappears.
 
 Nothing else about these views, the serializers or the services moves. Do not
-try to anticipate #50 further than that — its own open questions (username or
-email, open or invite-only, whether registration claims a team) are unanswered,
-and guessing at them here would produce work that has to be undone.
+anticipate #50 further than that — its open questions (username or email, open
+or invite-only, what a claim hands over) are unanswered, and guessing at them
+here produces work that has to be undone.
 
 **CSRF:** DRF's `SessionAuthentication` enforces CSRF only for *authenticated*
 sessions, so an anonymous `PUT` from the SPA passes `CsrfViewMiddleware`
@@ -237,7 +249,7 @@ untouched. Do not add a CSRF token dance to the frontend; do not add
 `@csrf_exempt` either. #50 lists "CSRF handling for the SPA needs settling" as a
 parked technical concern — this is the first write endpoint that makes it
 concrete, so record it in `api/README.md` next to the identity hole. Both close
-in #50, together.
+in #50.
 
 ### 9. The screen builds only what the spec covers
 
@@ -907,7 +919,7 @@ that count are `test_only_selected_riders_appear_in_the_results` and
 | **An invalid squad reaches the engine** and produces a plausible-looking but meaningless race. | W2 — `validate_team_leaders` moves into `run_race`. This is why W2 comes before W5. |
 | **`ensure_squads` deadlocks or races with a concurrent tick.** It writes rows for a race the tick has already claimed. | The claim is exactly-once (`world/README.md`), so only one tick ever holds a given race — `ensure_squads` runs single-threaded per race by construction. Do not add locking. |
 | **`set_squad`'s status guard blocks `ensure_squads`**, because the tick has already flipped the race to `RUNNING`. This is the trap in this plan. | `_write_squad` holds the write, `set_squad` adds the guard, `ensure_squads` calls `_write_squad`. Do not add a `force=` flag to `set_squad`. |
-| **Anyone can edit anyone's squad.** | Accepted and documented (decision 8). It is a single-user development game today, and [#50](https://github.com/mario595/cycling-manager/issues/50) is the named ticket that closes it — recorded in `api/README.md` so it is picked up there rather than discovered later. |
+| **Anyone can edit anyone's squad.** | Accepted and documented (decision 8). A single-manager world is what `specs/roadmap.md` says Phases 1–3 are deliberately testing, and [#50](https://github.com/mario595/cycling-manager/issues/50) (Phase 4) is the named ticket that closes it — recorded in `api/README.md` so it is picked up there rather than discovered later. |
 | **A team with fewer than four riders crashes a race for everyone.** | `ensure_squads` skips and warns. Tested. The real fix belongs to whichever ticket lets riders leave a roster — the spec says so. |
 | **#7 is not merged when this starts**, and `racing/models.py` conflicts. | #7 already adds `0004_race_race_day.py`, so W1's is `0005`. Run `ls racing/migrations/` after the merge and let `makemigrations` name it rather than hand-numbering. |
 
