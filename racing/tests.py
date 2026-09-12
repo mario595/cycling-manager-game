@@ -4,11 +4,11 @@ from datetime import datetime, timedelta, timezone as dt_timezone
 
 import pytest
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from racing.adapters import to_engine_course, to_engine_rider, to_team_codes
-from racing.models import Race, RaceLog, RaceResult
+from racing.models import Race, RaceLog, RaceResult, RaceSquad, RaceSquadRider
 from racing.services import simulate_race
 from riders.models import Rider
 from schedule.models import Season, Week
@@ -255,3 +255,20 @@ def test_two_weekless_races_on_the_same_date_are_accepted(db):
     )
 
     assert Race.objects.filter(week__isnull=True, race_day=MONDAY.date()).count() == 2
+
+
+def test_a_team_cannot_have_two_squads_for_one_race(db, running_race, team):
+    RaceSquad.objects.create(race=running_race, team=team)
+
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            RaceSquad.objects.create(race=running_race, team=team)
+
+
+def test_a_rider_cannot_appear_twice_in_a_squad(running_race, four_riders):
+    squad = RaceSquad.objects.create(race=running_race, team=four_riders[0].team)
+    RaceSquadRider.objects.create(squad=squad, rider=four_riders[0], is_leader=True)
+
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            RaceSquadRider.objects.create(squad=squad, rider=four_riders[0])

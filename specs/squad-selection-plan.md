@@ -660,7 +660,7 @@ Make each race row a `<Link to={/race/${race.id}}>`. No other change.
 
 ## Work items
 
-### W1 — `racing/models.py`, `racing/migrations/0005_racesquad.py`: the two models
+### W1 — `racing/models.py`, `racing/migrations/0005_racesquad.py`: the two models ✅
 
 `SQUAD_SIZE`, `RaceSquad`, `RaceSquadRider`, both constraints, the index.
 Register both in `racing/admin.py` with the inline and the comment.
