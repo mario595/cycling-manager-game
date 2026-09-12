@@ -19,6 +19,16 @@ DRF routers and serializers that aggregate other apps' data for the SPA.
   finished — and `week`/`week_ends_at` null), or `no_season` (everything
   null, before any season has ever been declared). See
   `schedule/README.md` for what a season is.
+- `GET /api/schedule/calendar/` — the current season's whole calendar
+  (`CalendarSerializer`, `CalendarView`). Same `state` vocabulary as the
+  position endpoint. `weeks` is always exactly twelve entries when
+  `in_season`, each with a `races` list — zero to seven entries, since the
+  calendar's rule is at most one race per *day*, not per week — never a
+  shorter list and never `null`, so an empty week is visible as one rather
+  than looking like missing data. Outside `in_season`, `weeks` is `[]`.
+  `status` on a race is `Race.status` verbatim (including `failed`);
+  mapping it to player-facing words is the SPA's job. See
+  `schedule/README.md`, *The race calendar*.
 
 ## URL ordering
 

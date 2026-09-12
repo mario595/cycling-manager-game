@@ -71,6 +71,10 @@ Declare a season with:
 .venv/bin/python manage.py load_season seasons/season-1.example.json
 ```
 
+The example file declares a bare season with no races. A season's `races`
+list — which week, day and course each race gets — is documented in
+[`schedule/README.md`](schedule/README.md).
+
 `python` there is whatever `.python-version` selects, so with pyenv set up you
 get the pinned 3.12.11 without naming it. Without pyenv, use `python3.12`
 explicitly.

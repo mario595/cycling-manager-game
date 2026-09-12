@@ -92,7 +92,7 @@ up front — an empty app is just noise. The table below marks which exist.
 | `teams/` | Teams | **built** (model only) | Teams, codes, colours, manager link. Roster/staff/tactics still to come. |
 | `transfers/` | Transfers | *not yet* | Market for buying/selling riders, auctions, contracts, free agents, market value. (The youth academy is a **development squad** and lives in `riders/`.) |
 | `competitions/` | Competitions | *not yet* | Divisions and Groups, standings, points, promotion/relegation, classifications, season history. A **Division** is a tier; a **Group** is a parallel section within one. |
-| `schedule/` | Schedule | **built**, `README.md` | Seasons and their twelve weeks. The race calendar (#7) lands here next. **Not** `calendar/` — that shadows the stdlib module. |
+| `schedule/` | Schedule | **built**, `README.md` | Seasons, their twelve weeks, and the race calendar declared within them. **Not** `calendar/` — that shadows the stdlib module. |
 | `economy/` | Economy | *not yet* | Budgets, sponsorships, prize money, fanbase/merchandise. Use an append-only ledger, not a mutable balance field. |
 | `staff/` | Staff | *not yet* | Hired trainers, physios and scouts. Fixed slots, one per role per team. |
 | `world/` | World Simulation | **built**, `README.md` | The game clock and the tick. AI team decisions still to come. |
@@ -119,6 +119,15 @@ nothing is allowed to import *them*.
 
 **`race_engine/` imports nothing from Django, ever.** The only module permitted
 to import the engine is `racing/adapters.py`. See `racing/README.md` for why.
+
+**`schedule -> core` still holds even though `schedule`'s `load_season`
+command creates `racing.Race` rows.** `schedule/management/commands/load_season.py`
+imports `racing.models.Race` and `world.services.now` **inside `handle()`**,
+never at module scope, and `schedule/`'s library code (`models.py`,
+`services.py`, `loaders.py`) imports neither — a management command is an
+entry point, the same way `world/`'s own commands are. This is deliberate,
+not an oversight in the graph above; see `schedule/README.md`, *What
+`schedule/` may import*.
 
 ## Project Structure
 

@@ -1,12 +1,12 @@
-# Schedule — seasons, weeks, and the transition record
+# Schedule — seasons, weeks, and the race calendar
 
 ## What this app owns
 
 `Season`, `Week`, and `SeasonTransition` — the numbered periods racing
-happens inside, and the exactly-once record of when one opens or closes.
-Not races (that is `racing/`, which points at a `Week`), not the clock
-(`world/`), and not the race calendar yet (#7 — which weeks and days races
-fall on).
+happens inside, and the exactly-once record of when one opens or closes —
+plus the race calendar: which races a season's declaration file places into
+which week and day. Not the race itself as a model (that is `racing.Race`,
+which a week's `races` points at), and not the clock (`world/`).
 
 ## Derived, not stored
 
@@ -29,8 +29,8 @@ A season's `starts_at` must be a Monday at 00:00:00 UTC. This is an
 arbitrary but fixed choice — any single fixed weekday would satisfy the
 spec's "every week starts on the same day" rule, and Monday reads as "week
 1" to a European cycling audience. UTC because every other datetime in the
-project is UTC. The race calendar (#7) will place a race's "day of the
-week" against this same anchor.
+project is UTC. The race calendar places every race's day of the week
+against this same anchor — see *Placing a race*, below.
 
 ## Exactly-once
 
@@ -65,36 +65,178 @@ manage.py load_season seasons/season-1.example.json
 manage.py load_season seasons/season-1.example.json --replace
 ```
 
-The file is JSON: `number` (int, starting at 1) and `starts_at` (ISO 8601,
-must resolve to a Monday 00:00:00 UTC). The command creates the `Season`
-and its twelve `Week` rows in one transaction.
+The file is JSON: `number` (int, starting at 1), `starts_at` (ISO 8601,
+must resolve to a Monday 00:00:00 UTC), and an optional `races` list. The
+command creates the `Season`, its twelve `Week` rows and any declared races
+in one transaction — a malformed race anywhere in the file creates none of
+it, season included.
 
 A season that has already started (`starts_at <= now()`) can never be
 touched again — `load_season` refuses outright, with no `--replace`
 escape. A season declared but not yet started is still a draft: reloading
-its file requires `--replace` and replaces it (cascading its weeks).
+its file requires `--replace` and replaces it, races included (see
+*Replacing a season with races*, below).
 
-Unknown top-level keys in the file are warned about and ignored, not
-rejected — the file gains a `races` key when #7 lands, and this is the one
-place a forward-compatibility allowance is worth it.
+Unknown top-level keys, and unknown keys within a race entry, are warned
+about and ignored, not rejected — the file is hand-edited by one admin, and
+this is the one place a forward-compatibility allowance is worth it.
 
 There is deliberately no admin UI, no API endpoint, and no interactive
 prompt for declaring a season — see `specs/season.md`'s *Out of scope*.
 
+### The `races` list
+
+```json
+{
+  "number": 1,
+  "starts_at": "2027-03-01T00:00:00Z",
+  "races": [
+    {
+      "week": 1,
+      "day": "sunday",
+      "time": "14:00",
+      "name": "Opening Classic",
+      "course": [
+        { "length": 40000, "gradient": 0.0 },
+        { "length": 12000, "gradient": 5.0 }
+      ]
+    },
+    {
+      "week": 3,
+      "day": "saturday",
+      "time": "13:00",
+      "name": "Windy Coastal",
+      "wind": { "band": "strong" },
+      "seed": 12345,
+      "course": [{ "length": 60000, "gradient": 0.0 }]
+    }
+  ]
+}
+```
+
+| Key | Required | Notes |
+|---|---|---|
+| `week` | yes | 1 to `SEASON_WEEKS` (12). |
+| `day` | yes | Lowercase `monday`…`sunday`. |
+| `time` | yes | `HH:MM`, 24-hour. Non-zero minutes are accepted with a warning — see *Placing a race*. |
+| `name` | yes | Non-empty, at most 150 characters (`Race.name`'s limit). |
+| `course` | yes | A non-empty list of `{length, gradient}` segments — the engine's own shape. |
+| `wind` | no | `{"enabled": bool, "band": "calm"\|"light"\|"moderate"\|"strong"}`. Absent means the model's defaults: wind on, band rolled from the seed. |
+| `seed` | no | Stored on `Race.seed` for reproducibility. |
+
+`races` may be empty or absent — a season with no racing is still a valid
+season, and is exactly what the first season shipped with before this
+feature existed.
+
+## Placing a race
+
+A race entry says where it sits in season-relative terms — `(week, day,
+time)`. The loader resolves that to what the database actually stores —
+`(week` FK`, starts_at)` — using the week's own `starts_at` (a Monday
+00:00 UTC, see *The week boundary*) as the anchor:
+
+```python
+starts_at = week.starts_at + timedelta(days=DAY_INDEX[day], hours=h, minutes=m)
+```
+
+`DAY_INDEX` runs Monday=0 through Sunday=6. This is the only place "day of
+the week" is computed for a race — `race.starts_at.weekday()` recovers it
+afterwards, and `race.week.number` recovers the week. Nothing else stores
+either separately (`race_day`, below, is the one exception, and it exists
+for a different reason).
+
+**The tick is hourly, so a race's minutes are honoured but not urgent.** A
+race declared at `14:30` starts at the next hourly tick after that moment,
+not at `14:30` itself — see `world/README.md`, *How a tick works*. The
+loader warns rather than refuses on non-zero minutes: an admin may want two
+races on the same day ordered relative to each other once a day can hold
+more than one, which it cannot today.
+
+## One race per day
+
+Spec: at most one race per calendar **day** (not per week — a Saturday and
+Sunday race in the same week are both allowed). Two layers enforce it:
+
+- **The loader** rejects a duplicate `(week, day)` pair while parsing the
+  file, naming both races in the error — this is the message an admin
+  actually sees.
+- **`racing.models.Race`** carries a `UniqueConstraint` on
+  `(week, race_day)`, where `race_day` is a `DateField` set in `save()`
+  from `starts_at`. This is what makes the rule true at the database level,
+  not merely checked at load time.
+
+`race_day` exists **solely** as that constraint's target. It is never read
+by anything, never editable, and is not a second source of truth for a
+race's day — `starts_at` is, always. See `racing/README.md`.
+
+## Why the course is validated twice
+
+`race_engine.config._parse_course` already validates the `{length,
+gradient}` segment shape. `schedule/loaders.py` re-implements the same
+check rather than importing it, because either alternative breaks a rule
+this project holds hard:
+
+- Importing `race_engine` here would make `schedule/` the second module
+  (besides `racing/adapters.py`) allowed to import the engine — see
+  `racing/README.md`, *The core rule*.
+- Routing the check through `racing/` instead (`schedule -> racing ->
+  race_engine`) would mean `schedule/` importing `racing/`, which is
+  backwards: the dependency runs `racing -> schedule`, one way.
+
+Fifteen duplicated lines is the deliberate cost of keeping both rules
+intact. **Do not** "fix" this duplication by adding either import — that is
+this repo's actual mistake waiting to happen here, not a code smell.
+
+## Replacing a season with races
+
+`--replace` on a not-yet-started season deletes it. `Race.week` is
+`on_delete=PROTECT` (`racing/README.md`), so once a season has races,
+deleting the `Season` directly raises `ProtectedError` — the command
+therefore deletes the season's races first:
+
+```python
+Race.objects.filter(week__season=existing).delete()
+existing.delete()
+```
+
+This is safe only because the not-yet-started check has already run: no
+race being deleted here can have been simulated, because nothing in an
+unstarted season's future can be due yet.
+
+## A status the spec does not name
+
+`specs/race-calendar.md` describes three player-visible states: not yet
+happened, happening today, finished. `Race.status` has a fourth,
+`failed` — set by `world.services._execute` when a simulation raises. The
+calendar's API returns it verbatim rather than inventing a fifth word or
+folding it into `finished` (which would show a player a completed race
+with no result); the SPA shows it as "Not run". See `frontend/README.md`.
+
 ## What `schedule/` may import
 
 `core`, and nothing else it needs today. **`schedule/` must never import
-`world/`** — that would invert the dependency direction in `AGENTS.md`
-(`world/` may import everything; nothing may import `world/`).
+`world/` or `racing/`** — either would invert the dependency direction in
+`AGENTS.md` (`world/` may import everything; nothing may import `world/`;
+`racing -> schedule`, one way, not the reverse).
 
-The one documented exception: `load_season.py` reads `world.services.now()`
-to check whether a season has already started, imported **inside**
-`handle()`, not at module scope. That is deliberate — the rule protects
-`schedule/`'s *library* code (`models.py`, `services.py`), and the command
-is an entry point, the same way `world/`'s own management commands are.
+The documented exceptions, both **inside `load_season.py`'s `handle()`**,
+never at module scope and never in `schedule/loaders.py` or
+`schedule/services.py`:
+
+- `world.services.now()`, to check whether a season has already started.
+- `racing.models.Race`, whose `.objects.create` is passed into
+  `schedule.loaders.create_races()` as an injected callable — `loaders.py`
+  itself never imports `racing/` at all. That injection is not ceremony:
+  it is what keeps `schedule/loaders.py`'s tests running with no database
+  and no import of `racing/`.
+
+**`apps.get_model("racing", "Race")` is not an acceptable substitute** for
+either of the above inside library code — it is an import in disguise that
+`grep -rn "racing\|world" schedule/ --include=*.py` would miss.
 
 ## What may import `schedule/`
 
 `racing/` (a `Race` points at the `Week` it belongs to, via a string FK —
 see `racing/README.md`), `world/` (the tick calls `process_transitions()`),
-and `api/` (the position endpoint calls `current_position()`).
+and `api/` (the position and calendar endpoints call
+`current_position()`).

@@ -1,23 +1,20 @@
 from __future__ import annotations
 
 import json
-from datetime import time, timedelta, timezone as dt_timezone
+from datetime import timedelta
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
-from django.utils import timezone
-from django.utils.dateparse import parse_datetime
 
+from schedule.loaders import SeasonFileError, create_races, parse_season_file
 from schedule.models import SEASON_WEEKS, Season, Week
-
-_KNOWN_KEYS = {"number", "starts_at"}
 
 
 class Command(BaseCommand):
     help = (
-        "Declare a season from a JSON file: its number and start. Creates "
-        "the season and its twelve weeks. A season that has already "
-        "started can never be touched again."
+        "Declare a season from a JSON file: its number, start and races. "
+        "Creates the season, its twelve weeks and any declared races. A "
+        "season that has already started can never be touched again."
     )
 
     def add_arguments(self, parser):
@@ -29,9 +26,10 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         # Imported here, not at module scope: schedule/'s library code
-        # (models.py, services.py) must never import world/ (AGENTS.md).
-        # This management command is an entry point, like world/'s own —
-        # see schedule/README.md.
+        # (models.py, services.py, loaders.py) must never import racing/ or
+        # world/ (AGENTS.md). This management command is an entry point,
+        # like world/'s own — see schedule/README.md.
+        from racing.models import Race
         from world.services import now
 
         path = options["path"]
@@ -43,32 +41,16 @@ class Command(BaseCommand):
         except json.JSONDecodeError as exc:
             raise CommandError(f"could not parse {path!r} as JSON: {exc}")
 
-        unknown_keys = set(data) - _KNOWN_KEYS
-        if unknown_keys:
-            self.stdout.write(
-                self.style.WARNING(f"ignoring unknown key(s): {', '.join(sorted(unknown_keys))}")
-            )
+        try:
+            declaration = parse_season_file(data)
+        except SeasonFileError as exc:
+            raise CommandError(str(exc))
 
-        number = data.get("number")
-        if not isinstance(number, int) or number < 1:
-            raise CommandError("'number' must be an integer >= 1")
+        for warning in declaration.warnings:
+            self.stdout.write(self.style.WARNING(warning))
 
-        raw_starts_at = data.get("starts_at")
-        if not isinstance(raw_starts_at, str):
-            raise CommandError("'starts_at' is required and must be an ISO 8601 string")
-        starts_at = parse_datetime(raw_starts_at)
-        if starts_at is None:
-            raise CommandError(f"could not parse 'starts_at': {raw_starts_at!r}")
-        if timezone.is_naive(starts_at):
-            starts_at = timezone.make_aware(starts_at, dt_timezone.utc)
-
-        starts_at_utc = timezone.localtime(starts_at, dt_timezone.utc)
-        if starts_at_utc.weekday() != 0 or starts_at_utc.time() != time(0, 0, 0):
-            nearest_monday = starts_at_utc.date() - timedelta(days=starts_at_utc.weekday())
-            raise CommandError(
-                f"'starts_at' must be a Monday at 00:00:00 UTC; "
-                f"got {starts_at_utc.isoformat()}, nearest Monday is {nearest_monday}"
-            )
+        number = declaration.number
+        starts_at = declaration.starts_at
 
         existing = Season.objects.filter(number=number).first()
         if existing is not None:
@@ -105,6 +87,11 @@ class Command(BaseCommand):
 
         with transaction.atomic():
             if existing is not None:
+                # Race.week is PROTECT, so the season's races must go before
+                # the season itself — see schedule/README.md, *Declaring a
+                # season*. Safe only because the not-yet-started check above
+                # already refused any season whose races could be simulated.
+                Race.objects.filter(week__season=existing).delete()
                 existing.delete()
             season = Season.objects.create(number=number, starts_at=starts_at, ends_at=ends_at)
             weeks = []
@@ -119,7 +106,17 @@ class Command(BaseCommand):
                     )
                 )
             Week.objects.bulk_create(weeks)
+            races = create_races(season, declaration.races, create_race=Race.objects.create)
 
         self.stdout.write(f"season {season.number}: {season.starts_at} to {season.ends_at}")
         for week in weeks:
             self.stdout.write(f"  week {week.number}: {week.starts_at} to {week.ends_at}")
+
+        for race in races:
+            distance_km = sum(s["length"] for s in race.course) / 1000
+            self.stdout.write(
+                f"  week {race.week.number} {race.starts_at.strftime('%a %H:%M')} "
+                f"— {race.name} ({distance_km:.1f} km)"
+            )
+        if races:
+            self.stdout.write(f"{len(races)} race(s) declared")

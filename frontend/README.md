@@ -9,6 +9,7 @@ The React SPA. Currently a **scaffold**: it reproduces the mockup in
 |-------|--------|-------|
 | `/` | Dashboard | Built — full layout from the design, fixture data |
 | `/roster` | Roster | Built — filter, sort and rider detail panel all work |
+| `/calendar` | Calendar | Built — twelve weeks from the API, no fixture data |
 | everything else | `Placeholder` | Renders the route name and path |
 
 Every sidebar item routes somewhere real. Items without a screen land on
@@ -23,9 +24,17 @@ in `src/App.tsx`. Its placeholder disappears automatically.
 ## Where the data comes from
 
 `src/placeholderData.ts` — **all of it invented**, copied from the mockup.
-There is no API yet. Keeping every fake value in one module means the screens
-already have their real shapes, and wiring them up later is a matter of
-replacing that module with fetches rather than hunting literals through JSX.
+Most screens still read from it. Keeping every fake value in one module
+means the screens already have their real shapes, and wiring them up later
+is a matter of replacing that module with fetches rather than hunting
+literals through JSX.
+
+`/calendar` is the first screen with **no placeholder data at all** —
+`src/useCalendar.ts` polls `GET /api/schedule/calendar/` and nothing else.
+Its loading and error states render nothing rather than inventing a
+season's shape, the same discipline `useSeason.ts` already established:
+a screen showing twelve empty weeks while genuinely mid-fetch would be
+indistinguishable from an off-season with a bug in it.
 
 ## How it is served
 
@@ -85,6 +94,14 @@ from — the reference for spacing, colour and copy. It is a mockup in a custom
 template DSL, not runnable source, and it is not a build input. When it is
 re-exported, reconcile `src/theme.ts` against it first.
 
-The mockup also contains a third screen, **Race day**, which is not built here:
+The mockup also contains a **Race day** screen, which is not built here:
 `race_player/` already exists as a separate visualizer, and folding the two
 together is its own decision.
+
+The mockup's **Calendar** screen additionally shows things this feature does
+not have — multiple season cards with a switcher, win/podium/points stats, a
+"Next up" highlight state, race terrain/class metadata, and result positions
+that link through to a race-detail screen (#47, not built). `Calendar.tsx`
+matches the mockup's per-season card and week-row structure, but shows one
+season only (there is no multi-season history yet) and drops anything that
+needs standings or a detail screen that does not exist.

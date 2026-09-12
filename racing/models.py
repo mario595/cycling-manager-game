@@ -66,10 +66,24 @@ class Race(TimeStampedModel):
         related_name="races",
         help_text="The season week this race belongs to. Null means not part of any season.",
     )
+    race_day = models.DateField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Derived from starts_at on save, never set directly. Exists only "
+            "as the target of the one-race-per-day-per-week constraint — see "
+            "racing/README.md."
+        ),
+    )
 
     class Meta:
         indexes = [
             models.Index(fields=["status", "starts_at"], name="race_due_idx"),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["week", "race_day"], name="one_race_per_day_per_week",
+            ),
         ]
 
     def __str__(self) -> str:
@@ -87,6 +101,7 @@ class Race(TimeStampedModel):
 
     def save(self, *args, **kwargs):
         self.clean()
+        self.race_day = self.starts_at.date() if self.starts_at else None
         super().save(*args, **kwargs)
 
 
