@@ -59,10 +59,7 @@ export function Sidebar({ mobile, open, onNavigate }: SidebarProps) {
         boxShadow: open ? '0 0 60px rgba(0,0,0,.35)' : 'none',
       }
     : {
-        position: 'sticky',
-        top: 0,
-        alignSelf: 'flex-start',
-        height: '100vh',
+        height: '100%',
         width: '248px',
         flex: '0 0 248px',
         background: color.rail,
