@@ -490,9 +490,13 @@ and [#46] both begin at "a user signs up", an event the game cannot produce.
 **Domains:** `accounts`, `frontend`
 - Register, log in, log out; the SPA knows who is logged in.
 - Lets endpoints stop opting out of `IsAuthenticated`.
-- **Open:** does registration end in claiming a team ([#46]) rather than creating
-  one? What does a logged-in user with no team see? Username or email as
-  identifier? Open registration or invite-only for the first playtest?
+- **Settled 2026-09-12: registration *claims* an unmanaged team**, it does not
+  create one. No team-creation form. This gives K1 a dependency it did not have
+  when written — on [#44] (unmanaged teams exist) and [#46] (what a claim hands
+  over) — and moved account work later in `specs/roadmap.md`.
+- **Open:** flow shape (account then claim, or one signup?); can a user pick
+  which team, or is it assigned ([#14])? What does a logged-in user with no team
+  see? Username or email as identifier? Open registration or invite-only?
 - **Tech concerns (parked):** sessions are already configured and the SPA is
   same-origin, so sessions are the path of least resistance — CSRF needs settling
   either way. Package (`django-allauth`, `dj-rest-auth`) vs. hand-rolled against

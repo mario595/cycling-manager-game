@@ -1,11 +1,16 @@
 # Roadmap
 
-**Status:** agreed 2026-09-11
+**Status:** agreed 2026-09-11, revised 2026-09-12
 **Scope:** ordering only. This file says *what to build next and why*; it does not
 say what any feature does — that is each issue, and later each spec.
 
-The backlog is 43 issues. This is the order to take them in, and — more useful —
-the reasons for deferring the rest.
+The backlog is 47 open issues. This is the order to take them in, and — more
+useful — the reasons for deferring the rest.
+
+**Progress:** Phase 1 is done bar one — [#6](https://github.com/mario595/cycling-manager/issues/6)
+(clock) and [#5](https://github.com/mario595/cycling-manager/issues/5) (season)
+are merged; [#7](https://github.com/mario595/cycling-manager/issues/7) (calendar)
+is in progress.
 
 ## The question this roadmap answers
 
@@ -21,9 +26,9 @@ elegant economy for a game nobody is playing yet.
 
 ## Phase 1 — a race happens on its own
 
-**Issues: [#6](https://github.com/mario595/cycling-manager/issues/6),
-[#5](https://github.com/mario595/cycling-manager/issues/5),
-[#7](https://github.com/mario595/cycling-manager/issues/7)**
+**Issues: [#6](https://github.com/mario595/cycling-manager/issues/6) ✅,
+[#5](https://github.com/mario595/cycling-manager/issues/5) ✅,
+[#7](https://github.com/mario595/cycling-manager/issues/7) — in progress**
 
 Today a race is simulated because somebody runs a command. Until races happen
 *because time passed*, there is no game — there is a simulator with a web front
@@ -44,34 +49,6 @@ convenience, but "simulate months in minutes" collides with simulation cost the
 moment a single race takes real minutes to run. Measure per-race wall-clock time
 before committing to that requirement.
 
-## Phase 1.5 — a player can exist
-
-**Issue: [#50](https://github.com/mario595/cycling-manager/issues/50) — register,
-log in, log out**
-
-Added 2026-09-12, after the gap was noticed directly rather than by working
-through the backlog.
-
-**There is currently no way for a player to exist.** `accounts.User` is a model
-with nothing behind it — no registration, no login, no views. Users are created
-with `createsuperuser`.
-
-It hid because every item that needs it starts *after* signup:
-[#14](https://github.com/mario595/cycling-manager/issues/14) and
-[#46](https://github.com/mario595/cycling-manager/issues/46) both begin at "a
-user signs up". `api/README.md` already records the symptom — endpoints given
-`AllowAny` because the SPA has no login flow, a workaround that had no ticket
-behind it until now.
-
-Where it goes in the order is a judgement call rather than a dependency:
-**nothing in Phases 1–3 technically needs it**, because a single-player-shaped
-game can be tested with a superuser. It is placed here because the phases after
-it are about *managers making choices*, and "which manager" stops being
-rhetorical the moment there is more than one.
-
-[#51](https://github.com/mario595/cycling-manager/issues/51) (password reset and
-the rest) is deliberately **not** here — see the deferrals.
-
 ## Phase 2 — the player makes a decision that matters
 
 **Issue: [#37](https://github.com/mario595/cycling-manager/issues/37) — squad selection**
@@ -80,28 +57,67 @@ The highest-value single item in the backlog, and under-rated when it was first
 written up. It is the **only** item in Phases 1–3 where a player choice changes
 an outcome. Everything before it is plumbing; everything after it is depth.
 
+[#7](https://github.com/mario595/cycling-manager/issues/7)'s spec sharpened this:
+it enters **every team in every race, unconditionally**, and explicitly punts
+"what happens when a manager hasn't prepared a squad" to #37. So the first race
+day after the calendar lands needs a squad for every team in the game — which is
+why the next phase is not optional.
+
 It does not need [#41](https://github.com/mario595/cycling-manager/issues/41)
 (injuries) to ship. The stage-race squad lock is simply less interesting without
 it — an argument for doing #41 soon after, not for blocking on it.
 
-## Phase 2.5 — somebody to race against
+## Phase 3 — somebody to race against
 
-**Issue: [#44](https://github.com/mario595/cycling-manager/issues/44) — unmanaged
-teams field a default squad**
+**Issues: [#44](https://github.com/mario595/cycling-manager/issues/44) — unmanaged
+teams field a default squad, and
+[#39](https://github.com/mario595/cycling-manager/issues/39) — the same for an
+absent manager**
 
 A Division is full long before it has enough users — 16 teams, 6 users. Without
 this, most of the field does not start and there is nothing to simulate.
 
-Small, and it belongs here rather than in its own phase because **it is the same
-mechanism as [#39](https://github.com/mario595/cycling-manager/issues/39)**
-(a managed team whose manager did not log in). Both are *"a team with no human
-input needs a squad"*. Build it once.
+**#39 and #44 are one mechanism, not two.** Both reduce to *"a squad must exist
+for every team at every race"*; the only difference is whether a last-used squad
+is available to fall back on. Two implementations will disagree, and the
+disagreement surfaces mid-race. Build it once — ideally specced together with
+#37, as "how a squad comes to exist", with the manager's choice as the
+interesting path and the default as the fallback.
 
 [#45](https://github.com/mario595/cycling-manager/issues/45) (heuristic AI) is
-**not** in the early phases — but it has a named expiry, not an open-ended one.
-See the deferrals below.
+**not** here — but it has a named expiry, not an open-ended one. See the
+deferrals below.
 
-## Phase 3 — the loop closes
+## Phase 4 — a player can exist
+
+**Issues: [#50](https://github.com/mario595/cycling-manager/issues/50) — register,
+log in, log out, and
+[#46](https://github.com/mario595/cycling-manager/issues/46) — what a claim gives
+you. Plus [#14](https://github.com/mario595/cycling-manager/issues/14) if signups
+can arrive mid-Season.**
+
+Added 2026-09-12, after the gap was noticed directly rather than by working
+through the backlog: **there is currently no way for a player to exist.**
+`accounts.User` is a model with nothing behind it — no registration, no login,
+no views. Users are created with `createsuperuser`.
+
+It hid because every item that needs it starts *after* signup. `api/README.md`
+already records the symptom — endpoints given `AllowAny` because the SPA has no
+login flow, a workaround that had no ticket behind it until now.
+
+**Why this sits after Phase 3 rather than near the start** (it was briefly
+placed second, and that was wrong): registration ends in **claiming an
+unmanaged team**, decided 2026-09-12. That makes #50 depend on unmanaged teams
+existing (#44) and on rules for what a claim hands over (#46). Signup cannot be
+built before the thing being signed up *for*.
+
+The phases before this run fine on a superuser account. That is not a
+compromise — a single-manager world is exactly what Phases 1–3 are testing.
+
+[#51](https://github.com/mario595/cycling-manager/issues/51) (password reset and
+the rest) is deliberately **not** here — see the deferrals.
+
+## Phase 5 — the loop closes
 
 **Issues: [#15](https://github.com/mario595/cycling-manager/issues/15),
 [#12](https://github.com/mario595/cycling-manager/issues/12), and a slice of
@@ -116,10 +132,11 @@ structure nobody is in yet.
 
 ---
 
-## After Phase 3, the game is playable
+## After Phase 5, the game is playable
 
 Races happen weekly. The player picks who rides. Results accumulate. There is a
-table. Eight issues, plus a slice of a ninth.
+table. A player can sign up and take over a team. Ten issues, plus a slice of an
+eleventh.
 
 Everything past this point makes the game *better* rather than making it *exist*,
 and the order becomes a matter of taste rather than dependency.
@@ -175,6 +192,13 @@ because teams move by headcount rather than merit.
 So this is not "when we get round to it". It is a prerequisite for the first
 Season that counts.
 
+### Divisions beyond one Group — #11, #13
+
+Deferred with Phase 5's slice of #10: a league table needs one Group, not a
+pyramid. Promotion and relegation (#13) are also meaningless until
+[#45](https://github.com/mario595/cycling-manager/issues/45) exists — see that
+deferral.
+
 ### Account self-service — #51
 
 Password reset, change password, change email, delete account. Split from
@@ -218,5 +242,10 @@ Work the phases in order. For each issue, the next step is a spec, not code:
 Order of work remains **spec → plan → code** (`specs/README.md`).
 
 Revisit this file whenever a phase completes, or whenever an assumption in it
-turns out to be wrong — particularly the per-race simulation cost noted against
-#6, which is the one number here that could force a rethink.
+turns out to be wrong.
+
+**Revised 2026-09-12.** Deciding that registration *claims* an unmanaged team
+rather than creating a fresh one moved account work from second in the order to after
+Phase 3 — a decision about how a feature works reordered the plan, which is the
+normal way this file goes stale. Re-read it after any decision of that kind, not
+only after a phase completes.

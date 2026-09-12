@@ -109,13 +109,11 @@ that writes the set.
 
 ### 3. Replace-whole-squad, never partial edits
 
-`set_squad` deletes every existing `RaceSquadRider` for that `(race, team)` and
-inserts the new four. There is no "add rider" or "swap rider" endpoint.
-
-The manager's screen holds the whole selection in local state and PUTs it. A
-partial API would need its own validity story for the intermediate states
-(three riders, two leaders) that the spec says cannot be saved — so it does not
-exist.
+The writer deletes every existing `RaceSquadRider` for that `(race, team)` and
+inserts the new four. There is no "add rider" or "swap rider" endpoint: the
+screen holds the whole selection in local state and PUTs it. A partial API
+would need a validity story for exactly the intermediate states the spec says
+cannot be saved — three riders, two leaders — so it does not exist.
 
 ### 4. `Rider.role` stays, but the simulation stops reading it
 
@@ -164,14 +162,12 @@ attach.
 reaches `run_race`, where a team with two leaders has undefined role-scaled
 tactics and a team with none has nobody to protect.
 
-Move the function to `race_engine/models.py` (it takes `list[Rider]` and raises;
-it has no config-parsing in it) and call it from **both** `config.load_config`
-and `race_engine.models.run_race`. `config.py` re-exports it so
-`ConfigError`-catching callers are unaffected — it must keep raising
-`ConfigError`, which lives in `config.py`, so define a plain `ValueError`
-subclass in `models.py` and have `ConfigError` subclass **it**.
+Move it to `race_engine/models.py` — it takes `list[Rider]` and raises, with no
+config parsing in it — and call it from **both** `load_config` and `run_race`.
+Existing callers catch `ConfigError`, which lives in `config.py`, so define a
+plain `ValueError` subclass in `models.py` and have `ConfigError` subclass it.
 
-Concretely, in `race_engine/models.py`:
+In `race_engine/models.py`:
 
 ```python
 class RaceSetupError(ValueError):
@@ -209,23 +205,39 @@ spec calls a roster below four "a broken game state" and places the fix on
 whichever ticket lets riders leave a roster — so this must not crash the tick
 for every other team in the race.
 
-### 8. Identity is deferred: the team id is in the URL
+### 8. Identity is deferred to #50: the team id goes in the URL
 
 `GET|PUT /api/racing/races/<race_id>/squads/<team_id>/`, `AllowAny`, matching
 every other endpoint in `api/`.
 
-**This is a known, deliberate hole: anyone can edit anyone's squad.** There is
-no login flow in the SPA (see `api/README.md`'s *Authentication*) and building
-one is a larger piece of work than this feature. The decision is recorded here
-and in `api/README.md` so the next person does not mistake it for an oversight.
-When login lands, `<team_id>` collapses to `request.user.team` and the
-permission class changes; nothing else about these views moves.
+**This is a known, deliberate hole: anyone can edit anyone's squad.** Squad
+selection is inherently per-manager, but there is no login flow in the SPA and
+no way for it to know which team is "mine" — `api/README.md`'s *Authentication*
+already records the symptom.
+
+The fix has a ticket: [#50](https://github.com/mario595/cycling-manager/issues/50)
+(register, log in, log out), which `specs/roadmap.md` places in **Phase 1.5,
+immediately before this feature**. It is not yet specced, and the roadmap is
+explicit that nothing in Phases 1–3 technically needs it — so this plan does not
+block on it. But it is the near-term next thing, not an open-ended someday, and
+the shape here is chosen to collapse cleanly into it:
+
+- `<team_id>` becomes `request.user.team`; the URL loses a segment.
+- `permission_classes` drops back to the project default `IsAuthenticated`.
+- The frontend's `?team=` query parameter disappears.
+
+Nothing else about these views, the serializers or the services moves. Do not
+try to anticipate #50 further than that — its own open questions (username or
+email, open or invite-only, whether registration claims a team) are unanswered,
+and guessing at them here would produce work that has to be undone.
 
 **CSRF:** DRF's `SessionAuthentication` enforces CSRF only for *authenticated*
 sessions, so an anonymous `PUT` from the SPA passes `CsrfViewMiddleware`
 untouched. Do not add a CSRF token dance to the frontend; do not add
-`@csrf_exempt` either. Note it in `api/README.md` alongside the identity hole —
-both close together.
+`@csrf_exempt` either. #50 lists "CSRF handling for the SPA needs settling" as a
+parked technical concern — this is the first write endpoint that makes it
+concrete, so record it in `api/README.md` next to the identity hole. Both close
+in #50, together.
 
 ### 9. The screen builds only what the spec covers
 
@@ -307,8 +319,8 @@ Add `SQUAD_SIZE`, `RaceSquad`, `RaceSquadRider` as above. No change to `Race`,
 
 ## racing/services.py
 
-Four new functions plus a rewrite of the field-building lines in
-`simulate_race`.
+`SquadError` plus five functions, and a rewrite of the field-building lines
+in `simulate_race`.
 
 ```python
 class SquadError(ValueError):
@@ -345,23 +357,36 @@ def suggested_squad(race: Race, team: Team) -> tuple[list[int], int]:
     auto-pick. Reads only; writes nothing."""
 
 
-def set_squad(race: Race, team: Team, rider_ids: list[int], leader_id: int,
-              *, auto: bool = False) -> RaceSquad:
-    """Replace `team`'s squad for `race`. The only sanctioned writer.
+def set_squad(race: Race, team: Team, rider_ids: list[int], leader_id: int) -> RaceSquad:
+    """Replace `team`'s squad for `race`. The public writer — everything a
+    manager does goes through here.
 
-    Raises SquadError when the race is not SCHEDULED, when rider_ids is not
-    exactly SQUAD_SIZE distinct ids, when any rider is not on `team`, or
-    when leader_id is not among them.
+    Refuses a race that is not SCHEDULED, then delegates to _write_squad.
+    Raises SquadError for that and for every validation failure below.
     """
 ```
 
-`set_squad`'s body, where getting it wrong is likely:
+### The writer is split in two, and this is the trap in the plan
+
+`set_squad` refuses a race that is not `SCHEDULED` — the spec's item 10. But
+`ensure_squads` (decision 7) runs *inside* `simulate_race`, by which point the
+tick has already flipped the race to `RUNNING`. So the guard and the write have
+to be separable:
+
+- **`_write_squad(race, team, rider_ids, leader_id, *, auto)`** — validation and
+  the write, no status check.
+- **`set_squad(...)`** — the status check, then `_write_squad`. The public
+  writer; everything a manager does goes through it.
+- **`ensure_squads`** calls `_write_squad` directly.
+
+**Do not** solve this with a `force=True` flag on `set_squad`. A flag that
+disables the one rule protecting a started race is a flag someone will pass by
+mistake, and the mistake is invisible.
+
+`_write_squad`'s body, where getting it wrong is likely:
 
 ```python
-def set_squad(race, team, rider_ids, leader_id, *, auto=False):
-    if race.status != Race.Status.SCHEDULED:
-        raise SquadError(f"{race} has already started; its squads are fixed")
-
+def _write_squad(race, team, rider_ids, leader_id, *, auto):
     ids = list(dict.fromkeys(rider_ids))
     if len(ids) != len(rider_ids):
         raise SquadError("a rider cannot be entered twice")
@@ -391,7 +416,7 @@ and the "exists" check in one query. Fetching by `pk__in` alone and comparing
 `rider.team_id` afterwards is the version that misses a rider id that does not
 exist at all.
 
-`ensure_squads`, called at the top of `simulate_race`:
+### `ensure_squads`, called at the top of `simulate_race`
 
 ```python
 def ensure_squads(race: Race) -> None:
@@ -410,25 +435,17 @@ def ensure_squads(race: Race) -> None:
         except SquadError as exc:
             logger.warning("no squad for %s in %s: %s", team, race, exc)
             continue
-        set_squad(race, team, rider_ids, leader_id, auto=True)
+        _write_squad(race, team, rider_ids, leader_id, auto=True)
 ```
 
-**Load-bearing:** `ensure_squads` runs while the race is `RUNNING` (the tick
-claims before it executes), but `set_squad` refuses a non-`SCHEDULED` race. So
-`ensure_squads` must call the row-writing path directly rather than through
-`set_squad`'s status guard — either lift the guard into a `_write_squad` helper
-that both call, or have `ensure_squads` pass a flag. **Use the helper:** a
-`force` flag on the public writer is the thing a later reader will pass by
-mistake.
+`racing/` has no logger today — add `logger = logging.getLogger(__name__)` at
+module scope. It also does not import `teams/` yet; `from teams.models import
+Team` is new here and allowed (`racing -> teams` is in `AGENTS.md`'s graph).
 
-```python
-def _write_squad(race, team, rider_ids, leader_id, *, auto):
-    """Validation and write, with no status check. set_squad adds the
-    status check; ensure_squads deliberately skips it, because the tick has
-    already flipped the race to RUNNING by the time it runs."""
-```
+### The change inside `simulate_race`
 
-The change inside `simulate_race`, replacing the `db_riders` block:
+Replacing the `db_riders` block and its "every rider in the database races"
+comment:
 
 ```python
     ensure_squads(race)
@@ -521,13 +538,12 @@ class SquadWriteSerializer(serializers.Serializer):
 ```
 
 `candidates` is the team's **whole roster**, each flagged `selected` /
-`is_leader`. One request gives the screen everything it draws — the roster to
-choose from and the current selection — and the response of a `PUT` is the same
-shape as the `GET`, so the screen re-renders from what it got back.
+`is_leader`: one request gives the screen everything it draws. A `PUT` returns
+the same shape as the `GET`, so the screen re-renders from what it got back.
 
-`distance_km` is `sum(s["length"] for s in race.course) / 1000`, matching
-`_race_payload` in the calendar view. Factor that one line into a shared helper
-in `api/views.py` rather than writing it twice.
+`distance_km` repeats `_race_payload`'s `sum(s["length"] for s in race.course)
+/ 1000` from #7's calendar view — factor it into a shared helper in
+`api/views.py` rather than writing it twice.
 
 ## api/views.py
 
@@ -622,8 +638,9 @@ decision 9:
   the leader marked, no checkboxes and no CTA. That is the spec's item 10.
 
 The team id comes from `?team=<id>` on the URL, defaulting to the first team the
-calendar knows about. **Ugly on purpose** — it is the visible edge of the
-deferred-identity decision, and it is meant to be obviously temporary.
+calendar knows about. **Ugly on purpose** — it is the visible edge of decision
+8, and it should read as obviously temporary. It disappears in
+[#50](https://github.com/mario595/cycling-manager/issues/50).
 
 ## frontend/src/screens/Calendar.tsx
 
@@ -752,8 +769,8 @@ own; W7 and W8 change no Python.
 |---|---|
 | `racing/README.md` | A new **Squads** section: the two models and why membership is rows rather than JSON (decision 1); that `set_squad` is the only sanctioned writer and the four/one-leader rule is a service rule, not a constraint, with the admin's ability to violate it called out (decision 2); that `ensure_squads` runs inside `simulate_race` so an absent manager still starts, and that a team under four riders is skipped rather than raising (decision 7). Update the *What lives here* table with both models. Update *Simulating a race* — the "every rider in the database races" placeholder is gone. |
 | `race_engine/README.md` | *Config format* currently states the one-leader-per-team rule as a `load_config` rule. Widen it: the rule is enforced by `run_race` too, and `ConfigError` now subclasses `RaceSetupError`. |
-| `api/README.md` | Add the endpoint to *What exists*. Extend *Authentication* with the deferred-identity decision **and the CSRF consequence** (decision 8) — that this endpoint is `AllowAny` with the team in the URL, that this means anyone can edit anyone's squad, that it is temporary, and what changes when login lands. |
-| `frontend/README.md` | Add `/race/:raceId` to the route table. Note that it is the first parameterised route and so is registered explicitly rather than through `SCREENS`. Note the `?team=` query parameter as the temporary stand-in for identity. Update *Relationship to `design/`*: the *Race day* screen is now **partly** built, and say which parts of the mockup were deliberately not built and why (decision 9's table). |
+| `api/README.md` | Add the endpoint to *What exists*. Extend *Authentication* with the deferred-identity decision **and the CSRF consequence** (decision 8): this endpoint is `AllowAny` with the team in the URL, anyone can edit anyone's squad, and both that and the SPA's CSRF story close in [#50](https://github.com/mario595/cycling-manager/issues/50). Name the issue — the section currently describes the workaround with nothing pointing at its fix. |
+| `frontend/README.md` | Add `/race/:raceId` to the route table. Note that it is the first parameterised route and so is registered explicitly rather than through `SCREENS`. Note the `?team=` query parameter as the temporary stand-in for identity, and that it goes away in #50. Update *Relationship to `design/`*: the *Race day* screen is now **partly** built, and say which parts of the mockup were deliberately not built and why (decision 9's table). |
 | `design/README.md` | The re-exported mockup adds the race screen with 8-rider squads, suitability scores and injury states. Record that the game's squad size is **four** and that the export's eight is not the spec — so the next person reconciling the export does not "fix" the app to match it. |
 | `AGENTS.md` | The `racing/` row still reads as the engine seam, which is still true — no change needed. Check the `transfers/` row's parenthetical about roster concerns is still accurate; it is. |
 
@@ -771,30 +788,65 @@ Unit tests first:
 All of it, not just `racing/` — W2 touches the engine, whose 49 tests are the
 guard that the move did not change behaviour.
 
-Then end to end, which is the part that actually proves it. There is **no
-seeding command** in this repo, so build the world by hand:
+Then end to end, which is the part that actually proves it. **There is no
+seeding command in this repo**, and `seasons/season-1.example.json` declares no
+races, so build the world by hand.
+
+A season file with one race, saved as `seasons/squad-check.json` (the `races`
+key and its shape come from #7 — see `schedule/README.md`, *The `races` list*):
+
+```json
+{
+  "number": 1,
+  "starts_at": "2027-03-01T00:00:00Z",
+  "races": [
+    {
+      "week": 1,
+      "day": "sunday",
+      "time": "14:00",
+      "name": "Squad Check Classic",
+      "course": [
+        { "length": 40000, "gradient": 0.0 },
+        { "length": 12000, "gradient": 5.0 }
+      ]
+    }
+  ]
+}
+```
+
+Two teams of six riders each, created in the shell:
 
 ```bash
 .venv/bin/python manage.py migrate
-.venv/bin/python manage.py shell
+.venv/bin/python manage.py shell -c "
+from teams.models import Team
+from riders.models import Rider
+for code, name in [('ALP', 'Team Alpha'), ('BET', 'Team Beta')]:
+    t, _ = Team.objects.get_or_create(code=code, defaults={'name': name})
+    for i in range(6):
+        Rider.objects.get_or_create(
+            name=f'{code} Rider {i}', team=t,
+            defaults=dict(role='leader' if i == 0 else 'support',
+                          climb=50 + i * 5, sprint=50, flat=50,
+                          resistance=50, positioning=50),
+        )
+print(Rider.objects.count(), 'riders')
+"
+.venv/bin/python manage.py load_season seasons/squad-check.json --replace
 ```
 
-In the shell: create two teams, six riders each with distinguishable
-attributes, and a race in week 1 of a declared season. Then:
+Then run against the mock clock, positioned inside week 1 but before the race:
 
 ```bash
-.venv/bin/python manage.py load_season seasons/season-1.example.json
-GAME_CLOCK_CLASS=world.clocks.MockClock .venv/bin/python manage.py runserver
-```
-
-and in another shell, with the same env var:
-
-```bash
+export GAME_CLOCK_CLASS=world.clocks.MockClock
 .venv/bin/python manage.py mock_clock set 2027-03-03T09:00
+.venv/bin/python manage.py runserver
 ```
 
-Open `/calendar`, click the race, pick a squad for team one, save, reload —
-the selection persists. Leave team two untouched. Then:
+Open `/calendar` — the race is in week 1. Click it. Pick a squad for **ALP**
+that is deliberately *not* the auto-pick (choose the four weakest, and make a
+`support` rider the leader), save, and reload: the selection persists. Leave
+**BET** untouched. Then, in another shell with the same env var:
 
 ```bash
 .venv/bin/python manage.py mock_clock advance --to-next
@@ -806,27 +858,45 @@ twelve.
 
 ```bash
 .venv/bin/python manage.py shell -c "
-from racing.models import Race, RaceSquad, RaceResult
+from racing.models import Race, RaceResult
 r = Race.objects.latest('pk')
-print(r.status, RaceResult.objects.filter(race=r).count())
-for s in r.squads.all():
-    print(s.team.code, s.is_auto_picked,
-          [(m.rider.name, m.is_leader) for m in s.members.all()])
+print(r.status, RaceResult.objects.filter(race=r).count(), 'results')
+for s in r.squads.select_related('team'):
+    print(s.team.code, 'auto' if s.is_auto_picked else 'chosen',
+          [(m.rider.name, m.is_leader) for m in s.members.select_related('rider')])
 "
 ```
 
-Twelve rows means `ensure_squads` or the field-building block is still reaching
-for every rider in the database. Four rows means only the chosen team's squad
-was built and `ensure_squads` did not fire for team two. Eight, with team two's
-squad marked `is_auto_picked=True` and exactly one leader each, is the pass.
+Reading the output:
 
-Then reload the race screen: it now reads `Result in`, and the panel shows the
-four who rode with no checkboxes.
+- **Twelve results** — the field-building block in `simulate_race` is still
+  reaching for every rider in the database. W5 is not done.
+- **Four results** — only ALP's squad was built; `ensure_squads` did not fire
+  for BET. Item 8 of the spec is broken.
+- **Eight results**, ALP `chosen` with the four you picked, BET `auto` with
+  four, and **exactly one `True` leader in each** — the pass.
+
+Then check the role actually reached the engine, which the result count alone
+does not prove:
+
+```bash
+grep -m1 '"role"' "$(.venv/bin/python manage.py shell -c '
+from racing.models import RaceLog
+print(RaceLog.objects.latest("pk").file.path)')" | head -c 400
+```
+
+The rider you nominated must appear with `"role": "leader"` even though their
+`Rider.role` is `support`. If it says `support`, `to_engine_rider` is still
+reading the model field and decision 4 is not implemented.
+
+Finally reload the race screen: it reads `Result in`, and the panel shows the
+four who rode with no checkboxes and no CTA — the spec's item 10.
 
 **Evidence that proves nothing:** a test that saves a squad and reads it back.
 That exercises the serializer and the model and never touches the thing this
-feature is actually about, which is the field the engine receives. The test that
-counts is `test_only_selected_riders_appear_in_the_results`.
+feature is actually about, which is the field the engine receives. The tests
+that count are `test_only_selected_riders_appear_in_the_results` and
+`test_the_squad_leader_races_as_leader_regardless_of_rider_role`.
 
 ## Risks
 
@@ -837,7 +907,7 @@ counts is `test_only_selected_riders_appear_in_the_results`.
 | **An invalid squad reaches the engine** and produces a plausible-looking but meaningless race. | W2 — `validate_team_leaders` moves into `run_race`. This is why W2 comes before W5. |
 | **`ensure_squads` deadlocks or races with a concurrent tick.** It writes rows for a race the tick has already claimed. | The claim is exactly-once (`world/README.md`), so only one tick ever holds a given race — `ensure_squads` runs single-threaded per race by construction. Do not add locking. |
 | **`set_squad`'s status guard blocks `ensure_squads`**, because the tick has already flipped the race to `RUNNING`. This is the trap in this plan. | `_write_squad` holds the write, `set_squad` adds the guard, `ensure_squads` calls `_write_squad`. Do not add a `force=` flag to `set_squad`. |
-| **Anyone can edit anyone's squad.** | Accepted and documented (decision 8). It is a single-user development game today. Recorded in `api/README.md` so it closes with the login work rather than being discovered later. |
+| **Anyone can edit anyone's squad.** | Accepted and documented (decision 8). It is a single-user development game today, and [#50](https://github.com/mario595/cycling-manager/issues/50) is the named ticket that closes it — recorded in `api/README.md` so it is picked up there rather than discovered later. |
 | **A team with fewer than four riders crashes a race for everyone.** | `ensure_squads` skips and warns. Tested. The real fix belongs to whichever ticket lets riders leave a roster — the spec says so. |
 | **#7 is not merged when this starts**, and `racing/models.py` conflicts. | #7 already adds `0004_race_race_day.py`, so W1's is `0005`. Run `ls racing/migrations/` after the merge and let `makemigrations` name it rather than hand-numbering. |
 
