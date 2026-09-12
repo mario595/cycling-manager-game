@@ -735,7 +735,7 @@ rows exist), `::test_putting_five_riders_is_a_400`,
 `::test_putting_a_squad_for_a_finished_race_is_a_400`, and
 `::test_unknown_race_or_team_is_a_404`.
 
-### W7 — `frontend/src/api.ts`, `useSquad.ts`: the client
+### W7 — `frontend/src/api.ts`, `useSquad.ts`: the client ✅
 
 Types, `getSquad`, `putSquad`, the hook. No polling.
 
