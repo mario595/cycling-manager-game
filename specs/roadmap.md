@@ -44,6 +44,34 @@ convenience, but "simulate months in minutes" collides with simulation cost the
 moment a single race takes real minutes to run. Measure per-race wall-clock time
 before committing to that requirement.
 
+## Phase 1.5 — a player can exist
+
+**Issue: [#50](https://github.com/mario595/cycling-manager/issues/50) — register,
+log in, log out**
+
+Added 2026-09-12, after the gap was noticed directly rather than by working
+through the backlog.
+
+**There is currently no way for a player to exist.** `accounts.User` is a model
+with nothing behind it — no registration, no login, no views. Users are created
+with `createsuperuser`.
+
+It hid because every item that needs it starts *after* signup:
+[#14](https://github.com/mario595/cycling-manager/issues/14) and
+[#46](https://github.com/mario595/cycling-manager/issues/46) both begin at "a
+user signs up". `api/README.md` already records the symptom — endpoints given
+`AllowAny` because the SPA has no login flow, a workaround that had no ticket
+behind it until now.
+
+Where it goes in the order is a judgement call rather than a dependency:
+**nothing in Phases 1–3 technically needs it**, because a single-player-shaped
+game can be tested with a superuser. It is placed here because the phases after
+it are about *managers making choices*, and "which manager" stops being
+rhetorical the moment there is more than one.
+
+[#51](https://github.com/mario595/cycling-manager/issues/51) (password reset and
+the rest) is deliberately **not** here — see the deferrals.
+
 ## Phase 2 — the player makes a decision that matters
 
 **Issue: [#37](https://github.com/mario595/cycling-manager/issues/37) — squad selection**
@@ -91,7 +119,7 @@ structure nobody is in yet.
 ## After Phase 3, the game is playable
 
 Races happen weekly. The player picks who rides. Results accumulate. There is a
-table. Seven issues, plus a slice of an eighth.
+table. Eight issues, plus a slice of a ninth.
 
 Everything past this point makes the game *better* rather than making it *exist*,
 and the order becomes a matter of taste rather than dependency.
@@ -146,6 +174,18 @@ because teams move by headcount rather than merit.
 
 So this is not "when we get round to it". It is a prerequisite for the first
 Season that counts.
+
+### Account self-service — #51
+
+Password reset, change password, change email, delete account. Split from
+[#50](https://github.com/mario595/cycling-manager/issues/50) so the blocking half
+ships without it.
+
+A player who can register and log in can play. Password reset in particular
+drags in **email delivery**, which is a deployment and cost decision — and
+`CLAUDE.md` still has deployment as TBD, targeting low-cost/free hosting.
+Resolving that while deciding how accounts work would be answering two unrelated
+questions at once.
 
 ### Team tactics — #38
 

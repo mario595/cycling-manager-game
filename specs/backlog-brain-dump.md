@@ -1,6 +1,6 @@
 # Backlog — brain dump session 2026-09-11
 
-**39 items, tracked as GitHub issues #5–#46.** This file is the index and the
+**41 items, tracked as GitHub issues #5–#51.** This file is the index and the
 reasoning record; the issues are the tracker. Each item below is prefixed with
 its issue number.
 
@@ -470,6 +470,43 @@ Three questions hide in here, and conflating them is the trap:
   abandons a team?
 - Splits cleanly from [#14]: that decides *where* a new user lands, this decides
   *what they get*.
+
+---
+
+## K. Player accounts *(added 2026-09-12)*
+
+Not in the original dump, and not noticed until asked for directly: **there is
+no way for a player to exist.** `accounts.User` is a model and nothing else — no
+registration, no login, no logout, no URLs, no views. Users are created with
+`createsuperuser` or through Django admin.
+
+It sat unnoticed because every item that needs it starts *after* signup. [#14]
+and [#46] both begin at "a user signs up", an event the game cannot produce.
+`api/README.md` already records the symptom: the project default is
+`IsAuthenticated`, but with no login flow in the SPA, endpoints were given
+`AllowAny` to work around it — a workaround with no ticket behind it.
+
+### [#50] K1. Player accounts: register, log in, log out
+**Domains:** `accounts`, `frontend`
+- Register, log in, log out; the SPA knows who is logged in.
+- Lets endpoints stop opting out of `IsAuthenticated`.
+- **Open:** does registration end in claiming a team ([#46]) rather than creating
+  one? What does a logged-in user with no team see? Username or email as
+  identifier? Open registration or invite-only for the first playtest?
+- **Tech concerns (parked):** sessions are already configured and the SPA is
+  same-origin, so sessions are the path of least resistance — CSRF needs settling
+  either way. Package (`django-allauth`, `dj-rest-auth`) vs. hand-rolled against
+  `django.contrib.auth` is a tech-plan call, not a spec one.
+
+### [#51] K2. Account self-service
+**Domains:** `accounts`
+- Password reset, change password, change email, delete account.
+- **Split from K1 deliberately** so the blocking half ships first. None of this
+  blocks a playtest, and password reset drags in **email delivery** — a
+  deployment and cost decision, not a game one.
+- **Open:** which email provider, and does a free tier cover it? What happens to
+  a deleted user's team — presumably back to the unmanaged pool, which makes this
+  depend on [#44]/[#46]. Is email verified at registration at all?
 
 ---
 

@@ -57,7 +57,7 @@
     <div style="border-top:1px solid #DFE2E6; padding:14px 20px; display:flex; align-items:center; justify-content:space-between; gap:10px">
       <div style="display:flex; flex-direction:column; gap:2px">
         <div style="color:#2A2D33; font-size:13px; font-weight:500">manager_rob</div>
-        <div style="color:#5F636B; font-size:11px; font-family:'DM Mono', ui-monospace, monospace">SEASON 3 · WK 14</div>
+        <div style="color:#5F636B; font-size:11px; font-family:'DM Mono', ui-monospace, monospace">SEASON 3 · WK 12/12</div>
       </div>
       <button style="background:transparent; border:1px solid #D3D7DC; color:#5F636B; border-radius:8px; padding:6px 10px; font-size:11.5px; cursor:pointer" style-hover="border-color:#EBA76B; color:#EBA76B">Settings</button>
     </div>
@@ -83,7 +83,7 @@
 
       <div style="display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:16px">
         <div style="display:flex; flex-direction:column; gap:6px">
-          <div style="font-size:11px; letter-spacing:1.6px; color:#7A4520; font-weight:600; font-family:'DM Mono', ui-monospace, monospace">SEASON 3 · WEEK 14 OF 38</div>
+          <div style="font-size:11px; letter-spacing:1.6px; color:#7A4520; font-weight:600; font-family:'DM Mono', ui-monospace, monospace">SEASON 3 · WEEK 12 OF 12 · FINALE</div>
           <h1 style="margin:0; font-size:31px; font-weight:600; letter-spacing:-1px">Good morning, Rob.</h1>
           <div style="font-size:14px; color:#6F737A">Two races resolved overnight. Your lineup for Tour de Sancerre is still open.</div>
         </div>
@@ -94,7 +94,7 @@
           </div>
           <div style="background:#FFFFFF; border:1px solid #E4E6EA; border-radius:12px; padding:11px 15px; display:flex; flex-direction:column; gap:3px; min-width:120px">
             <div style="font-size:10px; letter-spacing:1.2px; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">DIV 2 RANK</div>
-            <div style="font-size:19px; font-weight:600; font-family:'DM Mono', ui-monospace, monospace">4<span style="font-size:12px; color:#6F737A">/16</span></div>
+            <div style="font-size:19px; font-weight:600; font-family:'DM Mono', ui-monospace, monospace">{{ divRank }}<span style="font-size:12px; color:#6F737A">/{{ divTeams }}</span></div>
           </div>
           <div style="background:#2A2D33; border:1px solid #2A2D33; border-radius:12px; padding:11px 15px; display:flex; flex-direction:column; gap:3px; min-width:120px">
             <div style="font-size:10px; letter-spacing:1.2px; color:#B5B9C1; font-family:'DM Mono', ui-monospace, monospace">NEXT DEADLINE</div>
@@ -108,19 +108,19 @@
           <div style="font-size:10px; letter-spacing:1.4px; font-weight:600; color:#2A2D33; font-family:'DM Mono', ui-monospace, monospace">ACTION REQUIRED</div>
           <div style="font-size:17px; font-weight:600; letter-spacing:-0.3px; line-height:1.25">Set your lineup for<br>Tour de Sancerre</div>
           <div style="font-size:12.5px; color:#3A2A1A">6 of 8 slots filled · closes in 5h 42m</div>
-          <button style="margin-top:2px; align-self:flex-start; background:#2A2D33; color:#FFFFFF; border:none; border-radius:9px; padding:9px 15px; font-size:13px; font-weight:500; cursor:pointer" style-hover="background:#1E2127">Set lineup</button>
+          <button onClick="{{ goLineup }}" style="margin-top:2px; align-self:flex-start; background:#2A2D33; color:#FFFFFF; border:none; border-radius:9px; padding:9px 15px; font-size:13px; font-weight:500; cursor:pointer" style-hover="background:#1E2127">Set lineup</button>
         </div>
         <div style="background:#FFFFFF; border:1px solid #E4E6EA; border-radius:14px; padding:18px 20px; display:flex; flex-direction:column; gap:12px">
           <div style="font-size:10px; letter-spacing:1.4px; font-weight:600; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">OVERNIGHT</div>
           <div style="font-size:17px; font-weight:600; letter-spacing:-0.3px; line-height:1.25">2 results ready<br>to review</div>
-          <div style="font-size:12.5px; color:#6F737A">GP de Verrières · Circuit d'Aubain</div>
+          <div style="font-size:12.5px; color:#6F737A">{{ overnightNames }}</div>
           <button onClick="{{ goRace }}" style="margin-top:2px; align-self:flex-start; background:#F4F5F7; color:#2A2D33; border:1px solid #DFE3E7; border-radius:9px; padding:9px 15px; font-size:13px; font-weight:500; cursor:pointer" style-hover="background:#EDEFF2">Watch replay</button>
         </div>
         <div style="background:#FFFFFF; border:1px solid #E4E6EA; border-radius:14px; padding:18px 20px; display:flex; flex-direction:column; gap:12px">
           <div style="font-size:10px; letter-spacing:1.4px; font-weight:600; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">TRANSFER MARKET</div>
           <div style="font-size:17px; font-weight:600; letter-spacing:-0.3px; line-height:1.25">2 bids awaiting<br>your response</div>
           <div style="font-size:12.5px; color:#6F737A">Highest: €340k for T. Okafor</div>
-          <button style="margin-top:2px; align-self:flex-start; background:#F4F5F7; color:#2A2D33; border:1px solid #DFE3E7; border-radius:9px; padding:9px 15px; font-size:13px; font-weight:500; cursor:pointer" style-hover="background:#EDEFF2">Review bids</button>
+          <button onClick="{{ goTransfers }}" style="margin-top:2px; align-self:flex-start; background:#F4F5F7; color:#2A2D33; border:1px solid #DFE3E7; border-radius:9px; padding:9px 15px; font-size:13px; font-weight:500; cursor:pointer" style-hover="background:#EDEFF2">Review bids</button>
         </div>
       </div>
 
@@ -152,8 +152,8 @@
             <div style="font-size:10.5px; background:#F4F5F7; border-radius:6px; padding:4px 8px; color:#6F737A; font-family:'DM Mono', ui-monospace, monospace">IN 5H 42M</div>
           </div>
           <div style="display:flex; flex-direction:column; gap:4px">
-            <div style="font-size:19px; font-weight:600; letter-spacing:-0.4px">Tour de Sancerre</div>
-            <div style="font-size:12.5px; color:#6F737A; font-family:'DM Mono', ui-monospace, monospace">STAGE 1 · 128.4 KM · HILLY</div>
+            <div style="font-size:19px; font-weight:600; letter-spacing:-0.4px">{{ nextRaceName }}</div>
+            <div style="font-size:12.5px; color:#6F737A; font-family:'DM Mono', ui-monospace, monospace">{{ nextRaceMeta }}</div>
           </div>
           <div style="background:#F4F5F7; border-radius:10px; padding:12px 12px 8px">
             <svg viewBox="0 0 320 74" preserveAspectRatio="none" style="width:100%; height:74px; display:block">
@@ -169,7 +169,7 @@
               </sc-for>
             </div>
           </div>
-          <button style="background:#2A2D33; color:#FFFFFF; border:none; border-radius:9px; padding:10px 15px; font-size:13px; font-weight:500; cursor:pointer" style-hover="background:#1E2127">Complete lineup</button>
+          <button onClick="{{ goLineup }}" style="background:#2A2D33; color:#FFFFFF; border:none; border-radius:9px; padding:10px 15px; font-size:13px; font-weight:500; cursor:pointer" style-hover="background:#1E2127">Complete lineup</button>
         </div>
 
         <div style="background:#FFFFFF; border:1px solid #E4E6EA; border-radius:14px; overflow:hidden; min-width:0">
@@ -219,6 +219,219 @@
           </sc-for>
         </div>
 
+      </div>
+    </div>
+    </sc-if>
+
+    <sc-if value="{{ isCalendar }}" hint-placeholder-val="{{ true }}">
+    <div style="padding:26px 30px 60px; display:flex; flex-direction:column; gap:18px; max-width:1360px; width:100%">
+
+      <div style="display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:16px">
+        <div style="display:flex; flex-direction:column; gap:6px">
+          <div style="font-size:11px; letter-spacing:1.6px; color:#7A4520; font-weight:600; font-family:'DM Mono', ui-monospace, monospace">RACING · SEASON 3</div>
+          <h1 style="margin:0; font-size:29px; font-weight:600; letter-spacing:-0.9px">Calendar</h1>
+          <div style="font-size:13.5px; color:#6F737A">Twelve race weeks per season, then one week off. You are in week 12 — the season finale.</div>
+        </div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap">
+          <sc-for list="{{ calStats }}" as="s" hint-placeholder-count="4">
+            <div style="background:#FFFFFF; border:1px solid #E4E6EA; border-radius:12px; padding:11px 15px; display:flex; flex-direction:column; gap:3px; min-width:104px">
+              <div style="font-size:10px; letter-spacing:1.2px; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">{{ s.k }}</div>
+              <div style="font-size:19px; font-weight:600; font-family:'DM Mono', ui-monospace, monospace">{{ s.v }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; background:#FFFFFF; border:1px solid #E4E6EA; border-radius:14px; padding:14px 16px">
+        <span style="font-size:10.5px; letter-spacing:1.2px; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace; margin-right:2px">SEASON</span>
+        <sc-for list="{{ seasonChips }}" as="c" hint-placeholder-count="4">
+          <button onClick="{{ c.go }}" style="{{ c.style }}">{{ c.label }}</button>
+        </sc-for>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:22px">
+        <sc-for list="{{ calSeasons }}" as="s" hint-placeholder-count="2">
+          <div style="{{ s.cardStyle }}">
+
+            <div style="{{ s.headStyle }}">
+              <div style="display:flex; flex-wrap:wrap; align-items:baseline; gap:12px">
+                <div style="font-size:19px; font-weight:700; letter-spacing:-0.5px">{{ s.title }}</div>
+                <div style="font-size:10.5px; letter-spacing:1.3px; color:#6F737A; font-family:'DM Mono', ui-monospace, monospace">{{ s.sub }}</div>
+                <span style="{{ s.tagStyle }}">{{ s.tag }}</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap">
+                <div style="font-size:11.5px; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">{{ s.record }}</div>
+                <div style="display:flex; gap:3px; align-items:flex-end">
+                  <sc-for list="{{ s.ticks }}" as="t" hint-placeholder-count="13">
+                    <div style="{{ t.style }}" title="{{ t.title }}"></div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+
+            <sc-for list="{{ s.weeks }}" as="w" hint-placeholder-count="12">
+              <div style="{{ w.rowStyle }}">
+                <div style="{{ w.railStyle }}">
+                  <div style="font-size:9px; letter-spacing:1.4px; font-family:'DM Mono', ui-monospace, monospace; opacity:0.7">WEEK</div>
+                  <div style="font-size:22px; font-weight:700; font-family:'DM Mono', ui-monospace, monospace; line-height:1">{{ w.wLabel }}</div>
+                  <div style="{{ w.dateStyle }}">{{ w.dateLabel }}</div>
+                </div>
+
+                <div style="display:flex; flex-direction:column; gap:8px; min-width:0; padding:10px 16px 10px 0">
+                  <sc-if value="{{ w.isCur }}" hint-placeholder-val="{{ false }}">
+                    <div style="font-size:9.5px; letter-spacing:1.5px; font-weight:700; color:#7A4520; font-family:'DM Mono', ui-monospace, monospace">CURRENT WEEK</div>
+                  </sc-if>
+
+                  <sc-for list="{{ w.races }}" as="r" hint-placeholder-count="1">
+                    <button onClick="{{ r.open }}" style="{{ r.rowStyle }}" style-hover="border-color:#C9CED4">
+                      <div style="display:flex; flex-direction:column; gap:4px; min-width:0">
+                        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap">
+                          <span style="font-size:14px; font-weight:600; letter-spacing:-0.2px">{{ r.name }}</span>
+                          <span style="{{ r.statusStyle }}">{{ r.statusLabel }}</span>
+                        </div>
+                        <div style="font-size:11px; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">{{ r.date }} · {{ r.meta }} · {{ r.km }}</div>
+                      </div>
+                      <div style="display:flex; align-items:center; gap:10px">
+                        <span style="{{ r.resultStyle }}">{{ r.resultLabel }}</span>
+                        <span style="font-size:11.5px; font-weight:600; color:#3E8571; font-family:'DM Mono', ui-monospace, monospace; width:32px; text-align:right">{{ r.ptsLabel }}</span>
+                      </div>
+                    </button>
+                  </sc-for>
+
+                  <sc-if value="{{ w.empty }}" hint-placeholder-val="{{ false }}">
+                    <div style="font-size:12.5px; color:#9DA1A8; font-style:italic; padding:6px 2px">{{ w.emptyLabel }}</div>
+                  </sc-if>
+                </div>
+              </div>
+            </sc-for>
+
+            <div style="display:grid; grid-template-columns:84px minmax(0,1fr); align-items:center; background:repeating-linear-gradient(135deg,#F7F4F0 0 8px,#F2EEE9 8px 16px); border-top:1px solid #E4E6EA">
+              <div style="display:flex; flex-direction:column; align-items:center; gap:2px; padding:12px 0; color:#8A6642">
+                <div style="font-size:9px; letter-spacing:1.4px; font-family:'DM Mono', ui-monospace, monospace; opacity:0.7">WEEK</div>
+                <div style="font-size:22px; font-weight:700; font-family:'DM Mono', ui-monospace, monospace; line-height:1">13</div>
+              </div>
+              <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; padding:12px 16px 12px 0">
+                <div style="font-size:13px; font-weight:600; color:#7A4520; letter-spacing:0.2px">Off-season week · no racing</div>
+                <div style="font-size:11px; color:#8A6642; font-family:'DM Mono', ui-monospace, monospace">CONTRACTS · TRANSFERS · REST</div>
+              </div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    </sc-if>
+
+    <sc-if value="{{ isRaceDetail }}" hint-placeholder-val="{{ true }}">
+    <div style="padding:26px 30px 60px; display:flex; flex-direction:column; gap:16px; max-width:1360px; width:100%">
+
+      <button onClick="{{ rdBack }}" style="align-self:flex-start; background:transparent; border:none; cursor:pointer; font-size:12.5px; color:#5F636B; padding:0" style-hover="color:#2A2D33">← Calendar</button>
+
+      <div style="display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:16px">
+        <div style="display:flex; flex-direction:column; gap:7px">
+          <div style="display:flex; align-items:center; gap:9px; flex-wrap:wrap">
+            <span style="{{ rdStatusStyle }}">{{ rdStatusLabel }}</span>
+            <span style="font-size:11px; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">{{ rdDate }} · 11:00</span>
+          </div>
+          <h1 style="margin:0; font-size:29px; font-weight:600; letter-spacing:-0.9px">{{ rdName }}</h1>
+          <div style="font-size:12.5px; color:#6F737A; font-family:'DM Mono', ui-monospace, monospace">{{ rdMeta }}</div>
+        </div>
+        <sc-if value="{{ rdIsLive }}" hint-placeholder-val="{{ true }}">
+          <button onClick="{{ rdWatch }}" style="background:#2A2D33; color:#FFFFFF; border:none; border-radius:9px; padding:11px 18px; font-size:13px; font-weight:500; cursor:pointer" style-hover="background:#1E2127">Follow live</button>
+        </sc-if>
+        <sc-if value="{{ rdIsPast }}" hint-placeholder-val="{{ true }}">
+          <button onClick="{{ rdWatch }}" style="background:#F4F5F7; color:#2A2D33; border:1px solid #DFE3E7; border-radius:9px; padding:11px 18px; font-size:13px; font-weight:500; cursor:pointer" style-hover="background:#EDEFF2">Watch replay</button>
+        </sc-if>
+      </div>
+
+      <div style="background:#FFFFFF; border:1px solid #E4E6EA; border-radius:14px; padding:16px 18px 14px; display:flex; flex-direction:column; gap:12px">
+        <div style="font-size:10.5px; letter-spacing:1.2px; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">COURSE PROFILE</div>
+        <svg viewBox="0 0 1000 140" preserveAspectRatio="none" style="width:100%; height:140px; display:block">
+          <polygon points="{{ rdPoly }}" fill="#EDEFF2"></polygon>
+          <polyline points="{{ rdLine }}" fill="none" stroke="#A9AEB6" stroke-width="2"></polyline>
+        </svg>
+        <div style="display:flex; justify-content:space-between; font-size:10.5px; color:#666A72; font-family:'DM Mono', ui-monospace, monospace; border-top:1px solid #EDEFF2; padding-top:10px">
+          <span>START</span><span>{{ rdKm }}</span><span>FINISH</span>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap">
+        <div style="flex:1; min-width:280px; display:flex; flex-direction:column; gap:16px">
+
+          <div style="background:#FFFFFF; border:1px solid #E4E6EA; border-radius:14px; padding:16px 18px">
+            <div style="font-size:15px; font-weight:600; letter-spacing:-0.2px; margin-bottom:12px">Race information</div>
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(128px, 1fr)); gap:9px">
+              <sc-for list="{{ rdFacts }}" as="f" hint-placeholder-count="8">
+                <div style="background:#F4F5F7; border-radius:9px; padding:10px 12px; display:flex; flex-direction:column; gap:3px">
+                  <span style="font-size:10px; letter-spacing:0.9px; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">{{ f.k }}</span>
+                  <span style="font-size:14px; font-weight:600">{{ f.v }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <sc-if value="{{ rdIsPast }}" hint-placeholder-val="{{ true }}">
+            <div style="background:#FFFFFF; border:1px solid #E4E6EA; border-radius:14px; overflow:hidden">
+              <div style="padding:15px 18px 12px; border-bottom:1px solid #EDEFF2; display:flex; align-items:center; justify-content:space-between">
+                <div style="font-size:15px; font-weight:600; letter-spacing:-0.2px">Final classification</div>
+                <div style="font-size:10.5px; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">GAP · PTS</div>
+              </div>
+              <sc-for list="{{ rdResults }}" as="r" hint-placeholder-count="8">
+                <div style="{{ r.rowStyle }}">
+                  <div style="{{ r.posStyle }}">{{ r.pos }}</div>
+                  <div style="display:flex; flex-direction:column; gap:2px; min-width:0">
+                    <div style="font-size:13.5px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ r.name }}</div>
+                    <div style="font-size:10.5px; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">{{ r.team }}</div>
+                  </div>
+                  <div style="font-size:12px; color:#6F737A; font-family:'DM Mono', ui-monospace, monospace">{{ r.gap }}</div>
+                  <div style="text-align:right; font-size:12.5px; font-weight:600; color:#3E8571; font-family:'DM Mono', ui-monospace, monospace">{{ r.pts }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ rdIsLive }}" hint-placeholder-val="{{ true }}">
+            <div style="background:#FFFFFF; border:1px solid #E4E6EA; border-radius:14px; padding:18px 20px; display:flex; flex-direction:column; gap:10px">
+              <div style="font-size:15px; font-weight:600; letter-spacing:-0.2px">Race in progress</div>
+              <div style="font-size:13.5px; color:#6F737A; line-height:1.5">Your eight riders are on the road. Squad selection is closed — follow the live race for gaps, stamina and events as they resolve.</div>
+              <button onClick="{{ rdWatch }}" style="align-self:flex-start; margin-top:4px; background:#2A2D33; color:#FFFFFF; border:none; border-radius:9px; padding:10px 16px; font-size:13px; font-weight:500; cursor:pointer" style-hover="background:#1E2127">Open race day</button>
+            </div>
+          </sc-if>
+        </div>
+
+        <sc-if value="{{ rdIsUpcoming }}" hint-placeholder-val="{{ true }}">
+          <div style="{{ rdPanelStyle }}">
+            <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:4px">
+              <div style="font-size:15px; font-weight:600; letter-spacing:-0.2px">Select squad</div>
+              <div style="font-size:11.5px; font-weight:600; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">{{ rdCount }}</div>
+            </div>
+            <div style="font-size:12px; color:#6F737A; margin-bottom:12px">Sorted by suitability for this terrain. Tap ★ to set your leader.</div>
+
+            <div style="background:#F4F5F7; border-radius:10px; padding:10px 12px; display:flex; flex-direction:column; gap:2px; margin-bottom:12px">
+              <span style="font-size:10px; letter-spacing:0.9px; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">LEADER</span>
+              <span style="font-size:14px; font-weight:600">{{ rdLeaderName }}</span>
+              <span style="font-size:11px; color:#6F737A; font-family:'DM Mono', ui-monospace, monospace">{{ rdLeaderFit }}</span>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:7px; max-height:420px; overflow-y:auto; margin-bottom:12px">
+              <sc-for list="{{ rdCandidates }}" as="c" hint-placeholder-count="8">
+                <div onClick="{{ c.toggle }}" style="{{ c.rowStyle }}">
+                  <div style="{{ c.boxStyle }}">{{ c.boxMark }}</div>
+                  <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:2px">
+                    <div style="font-size:13.5px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ c.name }}</div>
+                    <div style="font-size:10.5px; color:#5F636B; font-family:'DM Mono', ui-monospace, monospace">{{ c.spec }}</div>
+                  </div>
+                  <sc-if value="{{ c.note }}" hint-placeholder-val="{{ true }}">
+                    <div style="{{ c.noteStyle }}">{{ c.note }}</div>
+                  </sc-if>
+                  <button onClick="{{ c.makeLeader }}" style="{{ c.starStyle }}">★</button>
+                  <div style="{{ c.fitStyle }}">{{ c.fit }}</div>
+                </div>
+              </sc-for>
+            </div>
+
+            <button style="{{ rdCtaStyle }}">{{ rdCtaLabel }}</button>
+          </div>
+        </sc-if>
       </div>
     </div>
     </sc-if>
@@ -343,11 +556,11 @@
       <div style="display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:14px">
         <div style="display:flex; flex-direction:column; gap:6px">
           <div style="display:flex; align-items:center; gap:9px">
-            <span style="background:#2A2D33; color:#EBA76B; font-size:10px; letter-spacing:1.3px; font-weight:600; padding:4px 8px; border-radius:6px; font-family:'DM Mono', ui-monospace, monospace">RESOLVED 07:00 · REPLAY</span>
-            <span style="font-size:11px; color:#6F737A; font-family:'DM Mono', ui-monospace, monospace">CLASSIC · ROLLING</span>
+            <span style="{{ raceDayStampStyle }}">{{ raceDayStamp }}</span>
+            <span style="font-size:11px; color:#6F737A; font-family:'DM Mono', ui-monospace, monospace">{{ raceDayKind }}</span>
           </div>
-          <h1 style="margin:0; font-size:29px; font-weight:600; letter-spacing:-0.9px">Grand Prix de Verrières</h1>
-          <div style="font-size:13px; color:#6F737A; font-family:'DM Mono', ui-monospace, monospace">128.4 KM · 1 840 M CLIMBING · 18 °C, LIGHT CROSSWIND</div>
+          <h1 style="margin:0; font-size:29px; font-weight:600; letter-spacing:-0.9px">{{ raceDayName }}</h1>
+          <div style="font-size:13px; color:#6F737A; font-family:'DM Mono', ui-monospace, monospace">{{ raceDayMeta }}</div>
         </div>
         <div style="display:flex; gap:10px; flex-wrap:wrap">
           <div style="background:#FFFFFF; border:1px solid #E4E6EA; border-radius:12px; padding:11px 15px; display:flex; flex-direction:column; gap:3px; min-width:110px">
@@ -379,7 +592,7 @@
           </sc-for>
         </div>
         <div style="display:flex; justify-content:space-between; font-size:10.5px; color:#666A72; font-family:'DM Mono', ui-monospace, monospace">
-          <span>0 KM</span><span>32</span><span>64</span><span>96</span><span>128.4 KM</span>
+          <sc-for list="{{ raceDayAxis }}" as="a" hint-placeholder-count="5"><span>{{ a.label }}</span></sc-for>
         </div>
         <div style="display:flex; flex-wrap:wrap; gap:8px">
           <sc-for list="{{ climbLegend }}" as="c" hint-placeholder-count="4">
@@ -486,36 +699,221 @@ const SEGMENTS = [
 ];
 
 const RIDERS = [
-  { id:"kes", name:"M. Kestrel",    role:"GC Climber", team:"Vallée", mine:true,  v:11.62, climbEdge:1.00, pos0:0 },
-  { id:"ard", name:"S. Ardant",     role:"Puncheur",   team:"Auroch", mine:false, v:11.70, climbEdge:0.62, pos0:0 },
-  { id:"berg",name:"A. Bergström",  role:"Rouleur",    team:"Vallée", mine:true,  v:11.78, climbEdge:0.20, pos0:0 },
-  { id:"oka", name:"T. Okafor",     role:"Sprinter",   team:"Vallée", mine:true,  v:11.66, climbEdge:0.02, pos0:0 },
-  { id:"hov", name:"P. Hovland",    role:"GC Climber", team:"Nordkap",mine:false, v:11.55, climbEdge:0.94, pos0:0 },
-  { id:"del", name:"J. Delacroix",  role:"Puncheur",   team:"Marchal",mine:false, v:11.68, climbEdge:0.58, pos0:0 },
-  { id:"van", name:"R. Vance",      role:"Domestique", team:"Vallée", mine:true,  v:11.60, climbEdge:0.30, pos0:0 },
-  { id:"ito", name:"K. Ito",        role:"Sprinter",   team:"Kessel", mine:false, v:11.72, climbEdge:0.05, pos0:0 }
-];
+  ["Vallée Cycling", true,  [["M. Kestrel","GC Climber",94,38,61,86,72],["A. Bergström","Rouleur",58,52,91,84,88],["T. Okafor","Sprinter",31,93,82,64,79],["R. Vance","Domestique",64,41,76,90,83]]],
+  ["Nordkap Pro",    false, [["P. Hovland","GC Climber",92,30,58,88,70],["E. Nyström","Rouleur",61,55,90,82,84],["K. Lindahl","Sprinter",32,91,84,64,80],["A. Sundby","Puncheur",77,62,72,75,78]]],
+  ["Auroch Racing",  false, [["S. Ardant","Puncheur",79,68,76,74,80],["F. Coleman","Sprinter",29,95,84,62,81],["N. Whitby","Rouleur",58,53,89,80,79],["G. Marchetti","GC Climber",89,32,59,85,69]]],
+  ["Kessel Sport",   false, [["K. Ito","Sprinter",33,90,85,63,84],["V. Tarkov","Rouleur",57,49,88,86,76],["H. Baumann","GC Climber",86,34,61,82,67],["B. Oyelaran","Puncheur",75,65,73,72,81]]],
+  ["Marchal Équipe", false, [["J. Delacroix","Puncheur",78,64,73,71,77],["L. Mercier","GC Climber",88,33,60,84,68],["P. Girard","Sprinter",31,89,83,61,82],["C. Fontaine","Rouleur",56,51,87,83,77]]],
+  ["Bergline",       false, [["G. Halvorsen","GC Climber",85,36,63,80,66],["T. Rask","Rouleur",54,58,86,78,82],["J. Eklund","Sprinter",30,87,82,60,79],["M. Dahl","Puncheur",74,63,71,73,76]]],
+  ["Cortado Pro",    false, [["A. Salvi","Puncheur",76,66,74,76,79],["M. Ferreira","Sprinter",35,88,83,65,86],["R. Bianchi","GC Climber",87,31,57,83,70],["S. Rinaldi","Rouleur",59,52,88,81,78]]],
+  ["Weslink",        false, [["O. Nkemelu","GC Climber",90,31,57,83,71],["D. Brandt","Rouleur",59,51,89,81,75],["I. Okonjo","Sprinter",34,86,81,62,83],["Y. Vasseur","Puncheur",73,61,70,74,75]]]
+].flatMap(([team, mine, list], ti) => list.map(([name, role, ...attrs], i) => ({
+  id: "p" + ti + i, name, role, team, mine, attrs
+})));
 
-const FEED = [
-  { t: 900,  title:"Break of four goes clear", body:"Riders from Kessel, Marchal and two Continental squads slip away on the opening flat." },
-  { t: 2600, title:"Côte de Bassin — first selection", body:"Pack tempo lifts to 0.82. Two sprinters lose contact on the 2.5% drag." },
-  { t: 5400, title:"Bergström pulls the chase", body:"Your rouleur takes 6 km on the front, closing the gap to 40 s." },
-  { t: 7600, title:"Break caught", body:"Everything back together with 43 km to go. Pack tempo hard." },
-  { t: 9100, title:"Kestrel attacks on the Mur", body:"7.5% gradient, finale phase. Energy 61 → surge for 20 s." },
-  { t: 9900, title:"Hovland follows", body:"Nordkap's climber is the only one able to respond. Gap to pack 34 s." },
-  { t: 10600,title:"Okafor cracks", body:"Stamina below 60 — progressive cracking. Drops from the second group." },
-  { t: 11050,title:"Kestrel takes it", body:"Wins solo by 11 s after the descent. 60 ranking points to Vallée Cycling." }
-];
+const PTS = {
+  "1.HC":[80,64,52,44,38,32,28,24,20,16,12,8],
+  "1.1": [60,48,40,34,30,26,22,18,14,10,6,4],
+  "1.2": [40,32,26,22,20,17,15,13,10,7,5,3]
+};
+const MY_TEAM = "Vallée Cycling";
+const CLIMB_POOL = ["Côte de Bassin", "Côte d'Auvel", "Col de Sault", "Mur de Sault",
+  "Côte de Ferrand", "Col de Brise", "Mur d'Envel", "Côte de Ravel"];
 
-function buildProfile(w, h, pad) {
+function hash01(a, b) {
+  let h = (a * 374761393 + b * 668265263) % 2147483647;
+  h = ((h ^ (h >> 13)) * 1274126177) % 2147483647;
+  return Math.abs(h) / 2147483647;
+}
+
+function shapeAt(p) {
+  if (p <= 0.2) return 0;
+  if (p >= 1) return 1;
+  const q = (p - 0.2) / 0.8;
+  return q * q * (3 - 2 * q);
+}
+
+function climbsOf(race) {
+  const segs = courseSegments(race.seed, race.km, race.terrain);
+  const len = segs.reduce((a, s) => a + s[0], 0);
+  const off = race.seed % 4;
+  const names = [...CLIMB_POOL.slice(off), ...CLIMB_POOL.slice(0, off)];
+  const climbs = [];
+  let acc = 0;
+  for (const [l, g] of segs) {
+    if (g >= 2.4) {
+      const n = climbs.length + 1;
+      climbs.push({ n, name: names[n - 1] || "Climb", len: l, grad: g, start: acc,
+        frac: acc / len, wfrac: l / len, tAt: (acc + l) / len * TOTAL_T });
+    }
+    acc += l;
+  }
+  return { segs, len, climbs };
+}
+
+function simulate(race, t) {
+  const { segs, len, climbs } = climbsOf(race);
+  const packV = len / TOTAL_T;
+  const w = TERRAIN_W[race.terrain] || TERRAIN_W.Hilly;
+  const scored = RIDERS.map((r, i) => ({ r,
+    score: r.attrs.reduce((a, v, k) => a + v * w[k], 0) + (hash01(race.seed, i + 1) - 0.5) * 26 }));
+  const best = Math.max(...scored.map(s => s.score));
+  const rows = scored
+    .map(s => { const d = Math.max(0, best - s.score); return { r: s.r, finalGap: +(d * 1.9 + d * d * 0.11).toFixed(1) }; })
+    .sort((a, b) => a.finalGap - b.finalGap);
+
+  const sh = shapeAt(Math.min(1, t / TOTAL_T)), shPrev = shapeAt(Math.min(1, (t - 1) / TOTAL_T));
+  const prog = Math.min(1, Math.max(0, t / TOTAL_T));
+  rows.forEach((x, i) => {
+    x.finish = TOTAL_T + x.finalGap;
+    x.fin = t >= x.finish;
+    const jitter = (hash01(race.seed, 900 + i) - 0.5) * 6;
+    x.pos = x.fin ? len : Math.max(0, Math.min(len, packV * (t - x.finalGap * sh) + jitter));
+    const prev = Math.max(0, Math.min(len, packV * (t - 1 - x.finalGap * shPrev) + jitter));
+    x.speed = x.fin ? 0 : Math.max(0, x.pos - prev);
+    x.gapS = i === 0 ? 0
+      : (x.fin && rows[0].fin) ? x.finish - rows[0].finish
+      : Math.max(0, (rows[0].pos - x.pos) / packV);
+    x.stamina = Math.max(4, 100 - prog * 56 - Math.min(28, x.finalGap * 0.5) * prog);
+    x.energy = Math.max(6, 100 - prog * 36 - (prog > 0.8 && i < 2 ? 22 : 0));
+  });
+  const simEnd = TOTAL_T + rows[rows.length - 1].finalGap;
+  return { segs, len, climbs, packV, rows, lead: rows[0], simEnd };
+}
+
+function raceFeed(race) {
+  const { climbs, len } = climbsOf(race);
+  const { rows } = simulate(race, 1e7);
+  const win = rows[0], second = rows[1], last = rows[rows.length - 1];
+  const first = climbs[0], final = climbs[climbs.length - 1];
+  const gap = (s) => s < 1 ? "in a sprint finish" : "by " + Math.round(s) + " s";
+  const out = [{ t: 900, title:"Break of four goes clear",
+    body:"Four riders from the Continental squads slip away on the opening kilometres." }];
+  if (first) out.push({ t: first.tAt, title: first.name + " — first selection",
+    body:"Pack tempo lifts on the " + first.grad + "% ramp. The pure sprinters lose contact." });
+  out.push({ t: TOTAL_T * 0.48, title:"Chase organised behind the break",
+    body:"The favourites' teams put riders on the front and the gap starts coming down." });
+  out.push({ t: TOTAL_T * 0.68, title:"Break caught",
+    body:"Everything back together with " + Math.round(len * 0.32 / 1000) + " km to go." });
+  if (final) out.push({ t: final.tAt, title: win.r.name + " attacks on " + final.name,
+    body: final.grad + "% gradient in the finale — " + win.r.team + " commit to the move." });
+  out.push({ t: TOTAL_T * 0.94, title: second.r.name + " is the only one to follow",
+    body: second.r.team + " chase across as the rest of the group fractures." });
+  out.push({ t: TOTAL_T * 0.97, title: last.r.name + " cracks",
+    body:"Stamina gone — drops out of the second group and rides in." });
+  out.push({ t: TOTAL_T, title: win.r.name + " takes it",
+    body:"Wins " + gap(second.finalGap) + ". " + ((PTS[race.tier] || PTS["1.1"])[0]) + " ranking points to " + win.r.team + "." });
+  return out;
+}
+
+const RACES = [
+  ["Omloop van Waasland","Mar 2","March","Cobbles",196,"1.1","past",8,26],
+  ["GP de Lorient","Mar 9","March","Flat",182,"1.2","past",3,40],
+  ["Trofeo Serra Nord","Mar 16","March","Hilly",174,"1.1","past",14,10],
+  ["Ronde van Kempen","Mar 23","March","Cobbles",204,"1.HC","past",5,34],
+  ["Volta a Marinha","Mar 30","March","Flat",168,"1.2","past",1,60],
+  ["Klasika Bergara","Apr 6","April","Hilly",188,"1.1","past",11,14],
+  ["Flèche d'Ardenne","Apr 13","April","Hilly",212,"1.HC","past",4,38],
+  ["Chrono de Vézère","Apr 20","April","ITT",34,"1.2","past",6,30],
+  ["Tour du Perche","Apr 27","April","Flat",176,"1.2","past",2,50],
+  ["Giro dell'Appennino","May 4","May","Mountain",198,"1.1","past",9,22],
+  ["Circuit d'Aubain","May 11","May","Flat",171,"1.2","past",3,32],
+  ["GP de Verrières","May 12","May","Hilly",128,"1.1","past",1,60],
+  ["Tour de Sancerre","May 18","May","Hilly",128,"1.1","upcoming",null,0],
+  ["Memorial Kolarski","May 25","May","Cobbles",192,"1.2","upcoming",null,0],
+  ["Subida al Naranco","Jun 1","June","Mountain",164,"1.1","upcoming",null,0],
+  ["Chrono des Deux Rives","Jun 8","June","ITT",41,"1.2","upcoming",null,0],
+  ["Ronde de l'Yonne","Jun 15","June","Flat",184,"1.2","upcoming",null,0],
+  ["Trofeo Montjuïc","Jun 22","June","Hilly",179,"1.1","upcoming",null,0],
+  ["Giro del Lario","Jun 29","June","Mountain",206,"1.HC","upcoming",null,0],
+  ["Nationale Kustprijs","Jul 6","July","Flat",190,"1.2","upcoming",null,0],
+  ["Grand Prix Thuringen","Jul 13","July","Hilly",186,"1.1","upcoming",null,0],
+  ["Tour de la Vallée","Jul 20","July","Mountain",214,"1.HC","upcoming",null,0],
+  ["Chrono d'Anjou","Jul 27","July","ITT",38,"1.2","upcoming",null,0],
+  ["Gran Premio Umbria","Aug 3","August","Hilly",181,"1.1","upcoming",null,0],
+  ["Kampioenschap Vlaams","Aug 10","August","Cobbles",198,"1.1","upcoming",null,0],
+  ["Volta ao Minho","Aug 17","August","Flat",173,"1.2","upcoming",null,0],
+  ["Subida a Peña Cabarga","Aug 24","August","Mountain",158,"1.HC","upcoming",null,0],
+  ["Tour du Léman","Aug 31","August","Hilly",193,"1.1","upcoming",null,0],
+  ["GP della Costa","Sep 7","September","Flat",178,"1.2","upcoming",null,0],
+  ["Classique des Cimes","Sep 14","September","Mountain",201,"1.HC","upcoming",null,0],
+  ["Chrono Final","Sep 21","September","ITT",44,"1.1","upcoming",null,0],
+  ["Ronde van Twente","Sep 28","September","Cobbles",188,"1.2","upcoming",null,0],
+  ["Trofeo Autunno","Oct 5","October","Hilly",184,"1.1","upcoming",null,0],
+  ["Championnat de Clôture","Oct 12","October","Mountain",209,"1.HC","upcoming",null,0]
+].map(([name, date, month, terrain, km, tier, status, pos, pts], i) => ({
+  id: "rc" + i, name, date, month, terrain, km, tier, status, pos, pts, seed: i * 977 + 13
+}));
+RACES[12].status = "next";
+RACES.splice(12, 0, { id:"rcLive", name:"Circuit des Trois Vallées", date:"May 17", month:"May",
+  terrain:"Hilly", km:128, tier:"1.1", status:"live", pos:null, pts:0, seed:4441 });
+
+const SEASON_LEN = 12;
+const CUR_SEASON = 3, CUR_WEEK = 12;
+RACES.forEach((r, i) => {
+  if (i <= 13) { r.season = 3; r.week = i <= 9 ? i + 1 : i <= 11 ? 11 : 12; }
+  else if (i <= 25) { r.season = 4; r.week = i - 13; }
+  else { r.season = 5; r.week = i - 25; }
+});
+
+const TERRAIN_W = {
+  Flat:     [0.00, 0.35, 0.40, 0.15, 0.10],
+  Hilly:    [0.35, 0.10, 0.20, 0.25, 0.10],
+  Mountain: [0.55, 0.00, 0.10, 0.30, 0.05],
+  Cobbles:  [0.10, 0.15, 0.35, 0.30, 0.10],
+  ITT:      [0.15, 0.05, 0.50, 0.30, 0.00]
+};
+
+const WEATHER = { Flat:["18 °C","Light crosswind","12%"], Hilly:["21 °C","Calm","8%"],
+  Mountain:["14 °C","Gusting on the cols","34%"], Cobbles:["11 °C","Strong headwind","58%"], ITT:["23 °C","Still air","5%"] };
+
+function courseSegments(seed, km, terrain) {
+  let s = seed;
+  const rnd = () => (s = (s * 1103515245 + 12345) % 2147483648) / 2147483648;
+  const total = km * 1000, out = [];
+  const peak = terrain === "Mountain" ? 9 : terrain === "Hilly" ? 6.5 : terrain === "Cobbles" ? 3.5 : 2;
+  const n = terrain === "ITT" ? 6 : 12;
+  let used = 0;
+  for (let i = 0; i < n; i++) {
+    const len = Math.round(total / n * (0.6 + rnd() * 0.8));
+    const r = rnd();
+    const grad = i % 3 === 1 ? +(1.5 + r * peak).toFixed(1) : i % 3 === 2 ? -+(1 + r * peak * 0.8).toFixed(1) : +((r - 0.5) * 2).toFixed(1);
+    out.push([len, grad]); used += len;
+  }
+  out.push([Math.max(4000, total - used), -1.5]);
+  return out;
+}
+
+const SEASON = (() => {
+  const totals = {};
+  for (const r of RIDERS) totals[r.team] = 0;
+  for (const r of RACES) {
+    if (r.status !== "past") continue;
+    const scale = PTS[r.tier] || PTS["1.1"];
+    let best = null, mine = 0;
+    simulate(r, 1e7).rows.forEach((x, i) => {
+      const p = scale[i] || 0;
+      totals[x.r.team] += p;
+      if (x.r.mine) { if (best === null) best = i; mine += p; }
+    });
+    r.pos = best === null ? null : best + 1;
+    r.pts = mine;
+  }
+  const table = Object.keys(totals).map(team => ({ team, pts: totals[team] })).sort((a, b) => b.pts - a.pts);
+  return { table, myPts: totals[MY_TEAM], teams: table.length,
+    rank: table.findIndex(t => t.team === MY_TEAM) + 1 };
+})();
+
+function buildProfile(w, h, pad, segs) {
   let elev = 0, x = 0, pts = [[0, 0]], min = 0, max = 0;
-  for (const [len, grad] of SEGMENTS) {
+  const source = segs || SEGMENTS, courseLen = source.reduce((a, sg) => a + sg[0], 0);
+  for (const [len, grad] of source) {
     x += len; elev += len * grad / 100;
     if (elev < min) min = elev; if (elev > max) max = elev;
     pts.push([x, elev]);
   }
   const span = Math.max(1, max - min);
-  const line = pts.map(([px, pe]) => [ (px / COURSE) * w, h - pad - ((pe - min) / span) * (h - pad * 2) ]);
+  const line = pts.map(([px, pe]) => [ (px / courseLen) * w, h - pad - ((pe - min) / span) * (h - pad * 2) ]);
   return {
     line: line.map(p => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" "),
     poly: line.map(p => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ") + " " + w + "," + h + " 0," + h
@@ -551,7 +949,8 @@ const ATTR_FULL = ["Climb", "Sprint", "Flat", "Resistance", "Positioning"];
 
 class Component extends DCLogic {
   state = { screen: "dashboard", drawer: false, w: 1280, t: 6400, playing: false, speed: 30,
-            sort: "ovr", filter: "All", picked: null };
+            sort: "ovr", filter: "All", picked: null,
+            raceId: null, seasonFilter: "All", raceMode: "replay", raceDayId: "rc11", lineup: ["r0", "r1", "r5", "r6", "r9", "r13"], leader: "r0" };
 
   componentDidMount() {
     this._onResize = () => this.setState({ w: window.innerWidth });
@@ -560,46 +959,227 @@ class Component extends DCLogic {
     this._tick = setInterval(() => {
       if (!this.state.playing) return;
       this.setState(s => {
+        const end = simulate(RACES.find(r => r.id === s.raceDayId) || RACES[11], s.t).simEnd;
         const nt = s.t + s.speed;
-        return nt >= TOTAL_T ? { t: TOTAL_T, playing: false } : { t: nt };
+        return nt >= end ? { t: end, playing: false } : { t: nt };
       });
     }, 100);
   }
   componentWillUnmount() { window.removeEventListener("resize", this._onResize); clearInterval(this._tick); }
 
-  posAt(r, t) {
-    if (t <= 0) return 0;
-    const PACK_V = 11.65;
-    let off = Math.sin(r.v * 97.3 + t * 0.008) * 5;
-    if (t > 2600) {
-      const d = Math.min(t, 4600) - 2600;
-      const slip = Math.max(0, 1 - r.climbEdge * 5) * d * 0.075;
-      const regain = t > 3600 ? Math.min(1, (t - 3600) / 1000) : 0;
-      off -= slip * (1 - regain);
-    }
-    if (t > 9100) {
-      const d = t - 9100;
-      if (r.climbEdge > 0.8) off += Math.min(d, 1400) * 0.52;
-      else if (r.climbEdge < 0.5) off -= Math.min(d, 1800) * 0.16;
-      else off -= Math.min(d, 1800) * 0.08;
-    }
-    if (t > 10200 && r.id === "kes") off += Math.min(t - 10200, 900) * 0.15;
-    if (t > 10600 && r.climbEdge < 0.1) off -= (t - 10600) * 0.85;
-    return Math.min(COURSE, Math.max(0, PACK_V * t + off));
-  }
-
-  riderAt(r, t) {
-    const pos = this.posAt(r, t);
-    const speed = pos >= COURSE ? 0 : Math.max(0, pos - this.posAt(r, t - 1));
-    const prog = t / TOTAL_T;
-    const stamina = Math.max(4, 100 - prog * 62 - (1 - r.climbEdge) * prog * 14);
-    const energy = Math.max(6, 100 - prog * 34 - (t > TOTAL_T * 0.8 ? r.climbEdge * 30 : 0));
-    return { pos, speed, stamina, energy };
+  fmtGap(s) {
+    const v = Math.round(s);
+    return v < 60 ? "+" + Math.max(0, v) + "s" : "+" + Math.floor(v / 60) + ":" + String(v % 60).padStart(2, "0");
   }
 
   fmtClock(t) {
     const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = Math.floor(t % 60);
     return h + ":" + String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+  }
+
+  raceStatusChip(status, accent) {
+    const M = {
+      past:     { label:"Result in", bg:"#F1F3F5", fg:"#565A61" },
+      live:     { label:"In progress", bg:"#2A2D33", fg:"#FFFFFF" },
+      next:     { label:"Next up", bg: accent, fg:"#2A2D33" },
+      upcoming: { label:"Upcoming", bg:"#FFFFFF", fg:"#5F636B" }
+    }[status];
+    return { label: M.label,
+      style: { fontSize:"9.5px", letterSpacing:"1px", fontWeight:700, padding:"3px 7px", borderRadius:"5px", whiteSpace:"nowrap",
+        fontFamily:"'DM Mono', ui-monospace, monospace", background: M.bg, color: M.fg,
+        border:"1px solid " + (status === "upcoming" ? "#DFE3E7" : "transparent") } };
+  }
+
+  suitability(rider, terrain) {
+    const w = TERRAIN_W[terrain] || TERRAIN_W.Hilly;
+    return Math.round(rider.attrs.reduce((a, v, i) => a + v * w[i], 0));
+  }
+
+  calRaceRow(r, accent) {
+    const chip = this.raceStatusChip(r.status, accent);
+    const hot = r.status === "next" || r.status === "live";
+    return {
+      id: r.id, name: r.name, date: r.date, km: r.km + " km",
+      meta: r.terrain.toUpperCase() + " · CLASS " + r.tier,
+      statusLabel: chip.label, statusStyle: chip.style,
+      resultLabel: r.pos ? "P" + r.pos : "—",
+      ptsLabel: r.pts ? "+" + r.pts : "",
+      open: () => this.setState({ screen: "racedetail", raceId: r.id, drawer: false }),
+      rowStyle: { display:"grid", gridTemplateColumns:"minmax(0,1fr) auto", gap:"12px", alignItems:"center",
+        width:"100%", textAlign:"left", padding:"11px 14px", borderRadius:"10px",
+        border:"1px solid " + (hot ? "#E6C9AC" : "#E9ECEF"),
+        background: r.status === "next" ? "#FDF6F1" : r.status === "live" ? "#F7F0E8" : "#FFFFFF", cursor:"pointer" },
+      resultStyle: { fontSize:"13px", fontWeight:700, fontFamily:"'DM Mono', ui-monospace, monospace",
+        color: r.pos === 1 ? "#7A4520" : r.pos ? "#2A2D33" : "#9DA1A8" }
+    };
+  }
+
+  calendarVals(accent) {
+    const { seasonFilter } = this.state;
+    const nums = [3, 4, 5];
+    const chipLabels = ["All", ...nums.map(n => "Season " + n)];
+    const shown = nums.filter(n => seasonFilter === "All" || seasonFilter === "Season " + n);
+
+    const calSeasons = shown.map(n => {
+      const all = RACES.filter(r => r.season === n);
+      const fin = all.filter(r => r.status === "past");
+      const isCurS = n === CUR_SEASON, isFuture = n > CUR_SEASON;
+      const weeks = [];
+      for (let w = 1; w <= SEASON_LEN; w++) {
+        const races = all.filter(r => r.week === w);
+        const isCur = isCurS && w === CUR_WEEK;
+        const past = n < CUR_SEASON || (isCurS && w < CUR_WEEK);
+        weeks.push({
+          w, wLabel: String(w).padStart(2, "0"), isCur, empty: races.length === 0,
+          races: races.map(r => this.calRaceRow(r, accent)),
+          emptyLabel: past ? "Training week — no race held" : "Training week — camp or recovery block",
+          dateLabel: races.length ? races[0].date.split(" ")[0].toUpperCase() : "—",
+          dateStyle: { fontSize:"9.5px", letterSpacing:"1px", fontFamily:"'DM Mono', ui-monospace, monospace",
+            opacity: 0.55, marginTop:"3px" },
+          rowStyle: { display:"grid", gridTemplateColumns:"84px minmax(0,1fr)", alignItems:"stretch",
+            borderTop: w === 1 ? "none" : "1px solid #F1F3F5",
+            background: isCur ? "#FFFBF6" : "#FFFFFF" },
+          railStyle: { display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
+            padding:"12px 0", borderRight:"1px solid " + (isCur ? "#E6C9AC" : "#EDEFF2"),
+            background: isCur ? "#F6E7D6" : past ? "#FAFBFC" : "#FFFFFF",
+            color: isCur ? "#7A4520" : past ? "#9DA1A8" : "#565A61" }
+        });
+      }
+      const ticks = [...weeks.map(wk => {
+        const past = n < CUR_SEASON || (isCurS && wk.w < CUR_WEEK);
+        return { title: "Week " + wk.w,
+          style: { width:"7px", height: wk.isCur ? "18px" : "12px", borderRadius:"2px",
+            background: wk.isCur ? "#C97B2E" : past ? "#8E939B" : "#DCE0E5" } };
+      }), { title:"Off-season week",
+        style: { width:"7px", height:"12px", borderRadius:"2px",
+          background:"repeating-linear-gradient(135deg,#D8C3AA 0 3px,#EFE4D6 3px 6px)" } }];
+
+      return {
+        n, title: "SEASON " + n, sub: "12 RACE WEEKS + 1 OFF",
+        tag: isCurS ? "IN PROGRESS" : isFuture ? "SCHEDULED" : "ARCHIVED",
+        record: isCurS ? fin.length + "/" + all.length + " ridden · " + fin.filter(r => r.pos === 1).length + " wins"
+          : all.length + " races scheduled",
+        tagStyle: { fontSize:"9.5px", letterSpacing:"1.3px", fontWeight:700, padding:"3px 8px", borderRadius:"6px",
+          fontFamily:"'DM Mono', ui-monospace, monospace",
+          background: isCurS ? "#F6E7D6" : "#F1F3F5", color: isCurS ? "#7A4520" : "#5F636B" },
+        cardStyle: { background:"#FFFFFF", borderRadius:"16px", overflow:"hidden",
+          border:"1px solid " + (isCurS ? "#E6C9AC" : "#E4E6EA"),
+          boxShadow: isCurS ? "0 1px 0 #E6C9AC, 0 10px 26px rgba(122,69,32,0.07)" : "none" },
+        headStyle: { display:"flex", flexWrap:"wrap", alignItems:"center", justifyContent:"space-between",
+          gap:"12px", padding:"15px 18px", borderBottom:"1px solid #EDEFF2",
+          background: isCurS ? "#FDF8F2" : "#FAFBFC" },
+        weeks, ticks
+      };
+    });
+
+    const done = RACES.filter(r => r.status === "past");
+    return {
+      seasonChips: chipLabels.map(m => ({ label: m,
+        go: () => this.setState({ seasonFilter: m }),
+        style: { padding:"6px 12px", borderRadius:"8px", fontSize:"12.5px", cursor:"pointer",
+          border:"1px solid " + (seasonFilter === m ? "#2A2D33" : "#DFE3E7"),
+          background: seasonFilter === m ? "#2A2D33" : "#FFFFFF",
+          color: seasonFilter === m ? "#FFFFFF" : "#565A61", fontWeight: seasonFilter === m ? 600 : 400 } })),
+      calSeasons,
+      calStats: [
+        { k:"SEASON WEEK", v: CUR_WEEK + "/" + SEASON_LEN },
+        { k:"RACES RIDDEN", v: done.length + "/" + RACES.filter(r => r.season === CUR_SEASON).length },
+        { k:"WINS", v: String(done.filter(r => r.pos === 1).length) },
+        { k:"PODIUMS", v: String(done.filter(r => r.pos <= 3).length) },
+        { k:"POINTS", v: String(SEASON.myPts) }
+      ]
+    };
+  }
+
+  raceDetailVals(accent, mobile) {
+    const race = RACES.find(r => r.id === this.state.raceId) || RACES[12];
+    const { lineup, leader } = this.state;
+    const prof = buildProfile(1000, 140, 10, courseSegments(race.seed, race.km, race.terrain));
+    const [temp, wind, rain] = WEATHER[race.terrain] || WEATHER.Hilly;
+    const chip = this.raceStatusChip(race.status, accent);
+    const upcoming = race.status === "next" || race.status === "upcoming";
+    const climbCount = courseSegments(race.seed, race.km, race.terrain).filter(s => s[1] >= 2.4).length;
+
+    const candidates = [...SQUAD]
+      .map(r => ({ r, fit: this.suitability(r, race.terrain) }))
+      .sort((a, b) => b.fit - a.fit)
+      .map(({ r, fit }) => {
+        const on = lineup.includes(r.id);
+        const isLeader = leader === r.id;
+        const full = lineup.length >= 8 && !on;
+        const blocked = r.status === "injured";
+        return {
+          id: r.id, name: r.name, spec: r.spec.toUpperCase(), fit: String(fit),
+          note: blocked ? "INJURED" : isLeader ? "LEADER" : on ? "SELECTED" : r.status === "tired" ? "FATIGUED" : "",
+          toggle: () => { if (blocked) return; this.setState(s => {
+            const has = s.lineup.includes(r.id);
+            if (!has && s.lineup.length >= 8) return null;
+            const next = has ? s.lineup.filter(x => x !== r.id) : [...s.lineup, r.id];
+            return { lineup: next, leader: has && s.leader === r.id ? (next[0] || null) : s.leader };
+          }); },
+          makeLeader: (e) => { e.stopPropagation(); if (!blocked && lineup.includes(r.id)) this.setState({ leader: r.id }); },
+          rowStyle: { display:"flex", alignItems:"center", gap:"11px", width:"100%", textAlign:"left",
+            padding:"11px 14px", borderRadius:"11px", cursor: blocked ? "not-allowed" : "pointer",
+            background: on ? "#FDF6F1" : "#FFFFFF", opacity: blocked ? 0.5 : full ? 0.55 : 1,
+            border:"1px solid " + (isLeader ? accent : on ? "#F4E2D3" : "#E4E6EA") },
+          boxStyle: { width:"20px", height:"20px", flex:"0 0 20px", borderRadius:"6px", display:"flex",
+            alignItems:"center", justifyContent:"center", fontSize:"11px", fontWeight:700, color:"#2A2D33",
+            background: on ? accent : "#F4F5F7", border:"1px solid " + (on ? accent : "#DFE3E7") },
+          boxMark: on ? "✓" : "",
+          fitStyle: { fontSize:"12px", fontWeight:700, fontFamily:"'DM Mono', ui-monospace, monospace",
+            color: fit >= 75 ? "#3E8571" : fit >= 60 ? "#7A4520" : "#6F737A" },
+          noteStyle: { fontSize:"9.5px", letterSpacing:"1px", fontWeight:700, padding:"3px 6px", borderRadius:"5px",
+            fontFamily:"'DM Mono', ui-monospace, monospace",
+            background: blocked ? "#FAECE6" : isLeader ? "#2A2D33" : "#F1F3F5",
+            color: blocked ? "#A0553F" : isLeader ? "#FFFFFF" : "#565A61" },
+          starStyle: { background:"transparent", border:"none", cursor:"pointer", fontSize:"13px", padding:"2px 4px",
+            color: isLeader ? accent : "#C9CDD4", display: on ? "block" : "none" }
+        };
+      });
+
+    const leaderRider = SQUAD.find(r => r.id === leader);
+    const finalSim = simulate(race, 1e7);
+    const pastResults = finalSim.rows.map((s, i) => ({
+      pos: String(i + 1), name: s.r.name, team: s.r.team.toUpperCase(),
+      gap: i === 0 ? "—" : this.fmtGap(s.gapS),
+      pts: (s.r.mine ? "+" : "") + ((PTS[race.tier] || PTS["1.1"])[i] || 0),
+      mine: s.r.mine,
+      rowStyle: { display:"grid", gridTemplateColumns:"34px minmax(0,1fr) auto 64px", gap:"12px", alignItems:"center",
+        padding:"12px 18px", borderBottom:"1px solid #F1F3F5", background: s.r.mine ? "#FDF6F1" : "transparent" },
+      posStyle: { fontSize:"13px", fontWeight:700, fontFamily:"'DM Mono', ui-monospace, monospace",
+        color: i === 0 ? "#7A4520" : "#565A61" }
+    }));
+
+    return {
+      rdName: race.name, rdDate: race.date, rdKm: race.km + " km",
+      rdStatusLabel: chip.label, rdStatusStyle: chip.style,
+      rdMeta: race.terrain.toUpperCase() + " · CLASS " + race.tier + " · " + climbCount + " CATEGORISED CLIMBS",
+      rdPoly: prof.poly, rdLine: prof.line,
+      rdIsUpcoming: upcoming, rdIsLive: race.status === "live", rdIsPast: race.status === "past",
+      rdFacts: [
+        { k:"DISTANCE", v: race.km + " km" }, { k:"TERRAIN", v: race.terrain },
+        { k:"CLIMBS", v: String(climbCount) }, { k:"START", v: race.date + ", 11:00" },
+        { k:"TEMPERATURE", v: temp }, { k:"WIND", v: wind },
+        { k:"RAIN CHANCE", v: rain }, { k:"WINNER POINTS", v: race.tier === "1.HC" ? "80" : race.tier === "1.1" ? "60" : "40" }
+      ],
+      rdCandidates: candidates,
+      rdCount: lineup.length + "/8 selected",
+      rdReady: lineup.length === 8,
+      rdCtaLabel: lineup.length === 8 ? "Confirm squad" : "Select " + (8 - lineup.length) + " more",
+      rdCtaStyle: { background: lineup.length === 8 ? "#2A2D33" : "#EDEFF2", color: lineup.length === 8 ? "#FFFFFF" : "#9DA1A8",
+        border:"none", borderRadius:"9px", padding:"11px 16px", fontSize:"13px", fontWeight:500,
+        cursor: lineup.length === 8 ? "pointer" : "not-allowed", width:"100%" },
+      rdLeaderName: leaderRider ? leaderRider.name : "None picked",
+      rdLeaderFit: leaderRider ? this.suitability(leaderRider, race.terrain) + " suitability" : "",
+      rdResults: pastResults,
+      rdBack: () => this.setState({ screen: "calendar" }),
+      rdWatch: () => this.setState({ screen: "race", raceMode: race.status === "live" ? "live" : "replay",
+        raceDayId: race.id, t: race.status === "live" ? 6400 : simulate(race, 1e7).simEnd,
+        playing: race.status === "live" }),
+      rdPanelStyle: mobile
+        ? { width:"100%", background:"#FFFFFF", border:"1px solid #E4E6EA", borderRadius:"14px", padding:"16px 18px" }
+        : { width:"330px", flex:"0 0 330px", background:"#FFFFFF", border:"1px solid #E4E6EA", borderRadius:"14px", padding:"16px 18px" }
+    };
   }
 
   rosterVals(accent, mobile) {
@@ -714,30 +1294,44 @@ class Component extends DCLogic {
     }));
 
     const titles = { dashboard:"Dashboard", race:"Race day", inbox:"Inbox", roster:"Roster", training:"Training", tactics:"Tactics",
-      staff:"Staff", calendar:"Calendar", results:"Results", transfers:"Transfers", scouting:"Scouting", contracts:"Contracts",
+      staff:"Staff", calendar:"Calendar", racedetail:"Race", results:"Results", transfers:"Transfers", scouting:"Scouting", contracts:"Contracts",
       league:"League table", rankings:"Rankings", finances:"Finances", sponsors:"Sponsors", facilities:"Facilities" };
 
-    const mini = buildProfile(320, 74, 6);
-    const big = buildProfile(1000, 150, 10);
+    const nextRace = RACES.find(r => r.status === "next") || RACES[12];
+    const dayRace = RACES.find(r => r.id === this.state.raceDayId) || RACES[11];
+    const sim = simulate(dayRace, t);
+    const daySegs = sim.segs, dayLen = sim.len, packV = sim.packV, simEnd = sim.simEnd;
+    const [dayTemp, dayWind] = WEATHER[dayRace.terrain] || WEATHER.Hilly;
+    const dayClimbM = daySegs.reduce((a, [len, g]) => a + (g > 0 ? len * g / 100 : 0), 0);
 
-    const snap = RIDERS.map(r => ({ r, ...this.riderAt(r, t) })).sort((a, b) => b.pos - a.pos);
-    const leader = snap[0];
+    const mini = buildProfile(320, 74, 6, courseSegments(nextRace.seed, nextRace.km, nextRace.terrain));
+    const big = buildProfile(1000, 150, 10, daySegs);
 
-    const results = [
-      { pos:"1st", rider:"M. Kestrel", role:"GC CLIMBER", race:"GP de Verrières", pts:"+60" },
-      { pos:"7th", rider:"A. Bergström", role:"ROULEUR", race:"GP de Verrières", pts:"+14" },
-      { pos:"3rd", rider:"T. Okafor", role:"SPRINTER", race:"Circuit d'Aubain", pts:"+32" },
-      { pos:"12th", rider:"R. Vance", role:"DOMESTIQUE", race:"Circuit d'Aubain", pts:"+4" }
-    ].map(r => ({ ...r, posStyle: { fontSize:"13px", fontWeight:700, fontFamily:"'DM Mono', ui-monospace, monospace",
-      color: r.pos === "1st" ? "#2A2D33" : "#6F737A", background: r.pos === "1st" ? accent : "#F4F5F7",
-      borderRadius:"7px", padding:"5px 0", textAlign:"center" } }));
+    const snap = sim.rows;
+    const leader = sim.lead;
 
-    const table = [
-      { rank:1, team:"Nordkap Pro", pts:"418" }, { rank:2, team:"Auroch Racing", pts:"390" },
-      { rank:3, team:"Kessel Sport", pts:"361" }, { rank:4, team:"Vallée Cycling", pts:"344", me:true },
-      { rank:5, team:"Marchal Équipe", pts:"330" }, { rank:6, team:"Bergline", pts:"302" }
-    ].map(r => ({ ...r, rowStyle: { display:"flex", alignItems:"center", gap:"12px", padding:"11px 20px",
-      borderBottom:"1px solid #F1F3F5", background: r.me ? "#FCF1E8" : "transparent" } }));
+    const ordinal = (n) => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th","st","nd","rd"][n % 10] || "th");
+    const recent = RACES.filter(r => r.status === "past").slice(-2);
+    const results = recent.flatMap(rc => {
+      const scale = PTS[rc.tier] || PTS["1.1"];
+      return simulate(rc, 1e7).rows
+        .map((x, i) => ({ x, i }))
+        .filter(({ x }) => x.r.mine)
+        .slice(0, 2)
+        .map(({ x, i }) => ({ idx: i, pos: ordinal(i + 1), rider: x.r.name,
+          role: x.r.role.toUpperCase(), race: rc.name, pts: "+" + (scale[i] || 0), win: i === 0 }));
+    })
+      .sort((a, b) => a.idx - b.idx)
+      .slice(0, 4)
+      .map(r => ({ ...r, posStyle: { fontSize:"13px", fontWeight:700, fontFamily:"'DM Mono', ui-monospace, monospace",
+        color:"#2A2D33", background: r.win ? accent : "#F4F5F7", borderRadius:"7px", padding:"5px 0", textAlign:"center" } }));
+
+    const table = SEASON.table.map((r, i) => {
+      const me = r.team === MY_TEAM;
+      return { rank: i + 1, team: r.team, pts: String(r.pts),
+        rowStyle: { display:"flex", alignItems:"center", gap:"12px", padding:"11px 20px",
+          borderBottom:"1px solid #F1F3F5", background: me ? "#FCF1E8" : "transparent" } };
+    });
 
     const form = [
       { name:"M. Kestrel", role:"GC CLIMBER", v:92, delta:"+6" },
@@ -764,26 +1358,16 @@ class Component extends DCLogic {
         border: l.startsWith("+") ? "1px dashed #D6DAE0" : "1px solid #EDEFF2" }
     }));
 
-    const CLIMB_NAMES = ["Côte de Bassin", "Côte d'Auvel", "Col de Sault", "Mur de Sault"];
-    let acc = 0, ci = 0;
+    const COURSE = dayLen;
     const climbBands = [], climbLegend = [];
-    for (const [len, grad] of SEGMENTS) {
-      if (grad >= 2.4) {
-        const n = ++ci;
-        climbBands.push({
-          label: String(n),
-          style: { position:"absolute", top:0, bottom:"18px", left:((acc / COURSE) * 100) + "%", width:((len / COURSE) * 100) + "%",
-            background:"rgba(235,167,107,.20)", borderLeft:"1px solid rgba(235,167,107,.85)", pointerEvents:"none", overflow:"hidden",
-            display:"flex", justifyContent:"center", paddingTop:"3px", fontSize:"9px", fontWeight:700, color:"#7A4520",
-            fontFamily:"'DM Mono', ui-monospace, monospace" }
-        });
-        climbLegend.push({
-          n: String(n),
-          name: CLIMB_NAMES[n - 1] || "Climb",
-          detail: (len / 1000).toFixed(0) + " km @ " + grad + "% · km " + (acc / 1000).toFixed(0)
-        });
-      }
-      acc += len;
+    for (const c of sim.climbs) {
+      climbBands.push({ label: String(c.n),
+        style: { position:"absolute", top:0, bottom:"18px", left:(c.frac * 100) + "%", width:(c.wfrac * 100) + "%",
+          background:"rgba(235,167,107,.20)", borderLeft:"1px solid rgba(235,167,107,.85)", pointerEvents:"none",
+          overflow:"hidden", display:"flex", justifyContent:"center", paddingTop:"3px", fontSize:"9px",
+          fontWeight:700, color:"#7A4520", fontFamily:"'DM Mono', ui-monospace, monospace" } });
+      climbLegend.push({ n: String(c.n), name: c.name,
+        detail: (c.len / 1000).toFixed(0) + " km @ " + c.grad + "% · km " + ((c.start + c.len) / 1000).toFixed(0) });
     }
 
     const markers = snap.map((s, i) => ({ name: s.r.name,
@@ -792,11 +1376,10 @@ class Component extends DCLogic {
         border:"2px solid #FFFFFF", boxShadow:"0 1px 3px rgba(0,0,0,.25)", transition:"left .1s linear", zIndex: s.r.mine ? 3 : 2 } }));
 
     const standings = snap.map((s, i) => {
-      const gapS = i === 0 ? 0 : (leader.pos - s.pos) / 11.65;
-      const st = s.pos >= COURSE ? "FINISHED" : i === 0 ? "LEADING" : gapS < 4 ? "IN GROUP" : gapS < 25 ? "CHASING" : "DROPPED";
+      const st = s.fin ? "FINISHED" : i === 0 ? "LEADING" : s.gapS < 4 ? "IN GROUP" : s.gapS < 25 ? "CHASING" : "DROPPED";
       return {
         rank: i + 1, name: s.r.name, state: s.r.team.toUpperCase() + " · " + st,
-        gap: i === 0 ? "—" : "+" + Math.round(gapS) + "s",
+        gap: i === 0 ? "—" : this.fmtGap(s.gapS),
         teamMark: { width:"4px", height:"22px", borderRadius:"2px", background: s.r.mine ? accent : "#DFE3E7", flex:"0 0 4px" },
         rowStyle: { display:"flex", alignItems:"center", gap:"11px", padding:"11px 18px", borderBottom:"1px solid #F1F3F5",
           background: s.r.mine ? "#FDF6F1" : "transparent" },
@@ -806,50 +1389,71 @@ class Component extends DCLogic {
 
     const telemetry = snap.filter(s => s.r.mine).map(s => {
       const surging = t > TOTAL_T * 0.8 && s.r.climbEdge > 0.8;
-      const st = surging ? "SURGING" : s.stamina < 40 ? "CRACKING" : "DRAFTING";
+      const st = s.fin ? "FINISHED" : surging ? "SURGING" : s.stamina < 40 ? "CRACKING" : "DRAFTING";
       return {
         name: s.r.name, state: st, kmh: (s.speed * 3.6).toFixed(1) + " km/h",
         stateStyle: { fontSize:"9.5px", letterSpacing:"1px", fontWeight:700, fontFamily:"'DM Mono', ui-monospace, monospace",
           padding:"3px 6px", borderRadius:"5px",
-          background: st === "SURGING" ? accent : st === "CRACKING" ? "#FAECE6" : "#F4F5F7",
+          background: st === "SURGING" ? accent : st === "CRACKING" ? "#FAECE6" : st === "FINISHED" ? "#E6F0EC" : "#F4F5F7",
           color: st === "CRACKING" ? "#A0553F" : "#2A2D33" },
         stamStyle: { width: s.stamina.toFixed(0) + "%", height:"100%", background:"#3E8571" },
         enStyle: { width: s.energy.toFixed(0) + "%", height:"100%", background: accent }
       };
     });
 
-    const feed = FEED.filter(e => e.t <= t).reverse().map(e => ({
-      km: Math.max(0, Math.round((COURSE - e.t * 11.65) / 1000)) + " km to go",
+    const feed = raceFeed(dayRace).filter(e => e.t <= t).reverse().map(e => ({
+      km: Math.max(0, Math.round((dayLen - e.t * packV) / 1000)) + " km to go",
       title: e.title, body: e.body
     }));
 
     return {
       sidebarStyle, scrimStyle, topbarStyle, navSections,
       screenTitle: titles[screen] || "Dashboard",
-      isDashboard: screen !== "race" && screen !== "roster",
+      isDashboard: !["race", "roster", "calendar", "racedetail"].includes(screen),
       isRace: screen === "race",
       isRoster: screen === "roster",
+      isCalendar: screen === "calendar",
+      isRaceDetail: screen === "racedetail",
       ...this.rosterVals(accent, mobile),
+      ...this.calendarVals(accent),
+      ...this.raceDetailVals(accent, mobile),
       openDrawer: () => this.setState({ drawer: true }),
       closeDrawer: () => this.setState({ drawer: false }),
-      goRace: () => this.setState({ screen: "race" }),
+      goRace: () => this.setState({ screen: "race", raceMode: "replay", raceDayId: "rc11",
+        t: simulate(RACES.find(r => r.id === "rc11"), 1e7).simEnd, playing: false }),
+      goLineup: () => this.setState({ screen: "racedetail", raceId: "rc12" }),
+      goTransfers: () => this.setState({ screen: "transfers" }),
       deadline: "5h 42m",
       profilePoints: mini.poly, profileLine: mini.line,
       racePoly: big.poly, raceLine: big.line,
       results, table, form, inbox, lineupSlots, climbBands, climbLegend, markers, standings, telemetry, feed,
       clock: this.fmtClock(t),
-      toGo: Math.max(0, (COURSE - leader.pos) / 1000).toFixed(1) + " km",
-      phase: t / TOTAL_T > 0.9 ? "FINALE" : t / TOTAL_T > 0.75 ? "TRANSIT" : "EARLY",
-      playing, playLabel: playing ? "Pause" : "Play replay",
+      toGo: Math.max(0, (dayLen - leader.pos) / 1000).toFixed(1) + " km",
+      phase: leader.fin ? "FINISHED" : t / TOTAL_T > 0.9 ? "FINALE" : t / TOTAL_T > 0.75 ? "TRANSIT" : "EARLY",
+      overnightNames: recent.map(r => r.name).reverse().join(" · "),
+      divRank: String(SEASON.rank), divTeams: String(SEASON.teams),
+      nextRaceName: nextRace.name,
+      nextRaceMeta: nextRace.km + " KM · " + nextRace.terrain.toUpperCase() + " · CLASS " + nextRace.tier,
+      raceDayName: dayRace.name,
+      raceDayKind: dayRace.terrain.toUpperCase() + " · CLASS " + dayRace.tier,
+      raceDayMeta: dayRace.km.toFixed(1) + " KM · " + Math.round(dayClimbM / 10) * 10 + " M CLIMBING · " + dayTemp + ", " + dayWind.toUpperCase(),
+      raceDayAxis: [0, 0.25, 0.5, 0.75, 1].map((f, i) => ({
+        label: (dayRace.km * f).toFixed(f === 0 || f === 1 ? 1 : 0) + (i === 0 ? " KM" : i === 4 ? " KM" : "") })),
+      raceDayStamp: this.state.raceMode === "live" ? "LIVE · ON THE ROAD" : "RESOLVED 07:00 · REPLAY",
+      raceDayStampStyle: { fontSize:"10px", letterSpacing:"1.3px", fontWeight:600, padding:"4px 8px", borderRadius:"6px",
+        fontFamily:"'DM Mono', ui-monospace, monospace",
+        background: this.state.raceMode === "live" ? accent : "#2A2D33",
+        color: this.state.raceMode === "live" ? "#2A2D33" : "#B5B9C1" },
+      playing, playLabel: playing ? "Pause" : this.state.raceMode === "live" ? "Play" : "Play replay",
       speedLabel: (speed / 10) + "×",
-      togglePlay: () => this.setState(s => ({ playing: !s.playing, t: s.t >= TOTAL_T ? 0 : s.t })),
+      togglePlay: () => this.setState(s => ({ playing: !s.playing, t: s.t >= simEnd ? 0 : s.t })),
       restart: () => this.setState({ t: 0, playing: true }),
       cycleSpeed: () => this.setState(s => ({ speed: s.speed >= 120 ? 10 : s.speed * 2 })),
       scrub: (e) => {
         const b = e.currentTarget.getBoundingClientRect();
-        this.setState({ t: Math.round(Math.min(1, Math.max(0, (e.clientX - b.left) / b.width)) * TOTAL_T) });
+        this.setState({ t: Math.round(Math.min(1, Math.max(0, (e.clientX - b.left) / b.width)) * simEnd) });
       },
-      scrubFill: { width: ((t / TOTAL_T) * 100).toFixed(1) + "%", height:"100%", background:"#2A2D33" }
+      scrubFill: { width: (Math.min(1, t / simEnd) * 100).toFixed(1) + "%", height:"100%", background:"#2A2D33" }
     };
   }
 }
