@@ -9,7 +9,14 @@ from django.utils import timezone
 
 from racing.adapters import to_engine_course, to_engine_rider, to_team_codes
 from racing.models import Race, RaceLog, RaceResult, RaceSquad, RaceSquadRider
-from racing.services import SquadError, auto_pick_squad, previous_squad, simulate_race
+from racing.services import (
+    SquadError,
+    auto_pick_squad,
+    previous_squad,
+    set_squad,
+    simulate_race,
+    suggested_squad,
+)
 from riders.models import Rider
 from schedule.models import Season, Week
 from teams.models import Team
@@ -344,3 +351,107 @@ def test_previous_squad_ignores_riders_who_left_the_team(db, team, four_riders, 
     )
 
     assert previous_squad(team, later_race) is None
+
+
+@pytest.fixture
+def scheduled_race(db) -> Race:
+    return Race.objects.create(
+        name="Scheduled Sprint",
+        course=[{"length": 500.0, "gradient": 0.0}],
+    )
+
+
+def test_set_squad_replaces_the_previous_selection(scheduled_race, team, four_riders):
+    other_four = [
+        Rider.objects.create(
+            name=f"Other Rider {i}", team=team,
+            climb=50, sprint=50, flat=50, resistance=50, positioning=50,
+        )
+        for i in range(4)
+    ]
+
+    set_squad(scheduled_race, team, [r.pk for r in four_riders], four_riders[0].pk)
+    set_squad(scheduled_race, team, [r.pk for r in other_four], other_four[0].pk)
+
+    squad = RaceSquad.objects.get(race=scheduled_race, team=team)
+    assert squad.members.count() == 4
+    assert set(squad.members.values_list("rider_id", flat=True)) == {r.pk for r in other_four}
+
+
+def test_set_squad_refuses_the_wrong_number_of_riders(scheduled_race, team, four_riders):
+    with pytest.raises(SquadError):
+        set_squad(scheduled_race, team, [r.pk for r in four_riders[:3]], four_riders[0].pk)
+
+
+def test_set_squad_refuses_a_duplicate_rider(scheduled_race, team, four_riders):
+    ids = [four_riders[0].pk, four_riders[0].pk, four_riders[1].pk, four_riders[2].pk]
+    with pytest.raises(SquadError):
+        set_squad(scheduled_race, team, ids, four_riders[0].pk)
+
+
+def test_set_squad_refuses_a_rider_from_another_team(scheduled_race, team, four_riders):
+    other_team = Team.objects.create(name="Team Gamma", code="GAM")
+    outsider = Rider.objects.create(
+        name="Outsider", team=other_team,
+        climb=50, sprint=50, flat=50, resistance=50, positioning=50,
+    )
+    ids = [r.pk for r in four_riders[:3]] + [outsider.pk]
+
+    with pytest.raises(SquadError):
+        set_squad(scheduled_race, team, ids, four_riders[0].pk)
+
+
+def test_set_squad_refuses_a_leader_not_in_the_squad(scheduled_race, team, four_riders):
+    outsider = Rider.objects.create(
+        name="Not Selected", team=team,
+        climb=50, sprint=50, flat=50, resistance=50, positioning=50,
+    )
+    with pytest.raises(SquadError):
+        set_squad(scheduled_race, team, [r.pk for r in four_riders], outsider.pk)
+
+
+def test_set_squad_refuses_a_race_that_has_started(running_race, team, four_riders):
+    with pytest.raises(SquadError):
+        set_squad(running_race, team, [r.pk for r in four_riders], four_riders[0].pk)
+
+
+def test_suggested_squad_falls_back_from_saved_to_previous_to_auto(db, team, week):
+    riders = [
+        Rider.objects.create(
+            name=f"Rider {i}", team=team, role=Rider.Role.LEADER if i == 0 else Rider.Role.SUPPORT,
+            climb=50, sprint=50, flat=50, resistance=50, positioning=50,
+        )
+        for i in range(4)
+    ]
+    race_one = Race.objects.create(
+        name="Race One",
+        course=[{"length": 500.0, "gradient": 0.0}],
+        starts_at=week.starts_at + timedelta(days=1),
+        week=week,
+    )
+    race_two = Race.objects.create(
+        name="Race Two",
+        course=[{"length": 500.0, "gradient": 0.0}],
+        starts_at=week.starts_at + timedelta(days=2),
+        week=week,
+    )
+    race_three = Race.objects.create(
+        name="Race Three",
+        course=[{"length": 500.0, "gradient": 0.0}],
+        starts_at=week.starts_at + timedelta(days=3),
+        week=week,
+    )
+
+    # No squad anywhere yet: falls all the way to the auto-pick.
+    auto_ids, auto_leader = auto_pick_squad(team)
+    assert suggested_squad(race_one, team) == (auto_ids, auto_leader)
+
+    # A squad saved for race_one: race_two, unpicked, falls back to it.
+    set_squad(race_one, team, [r.pk for r in riders], riders[0].pk)
+    assert suggested_squad(race_two, team) == ([r.pk for r in riders], riders[0].pk)
+
+    # race_two now has its own saved squad, with a different leader: that
+    # exact selection is returned, not race_one's.
+    set_squad(race_two, team, [r.pk for r in riders], riders[1].pk)
+    assert suggested_squad(race_two, team) == ([r.pk for r in riders], riders[1].pk)
+    assert suggested_squad(race_three, team) == ([r.pk for r in riders], riders[1].pk)

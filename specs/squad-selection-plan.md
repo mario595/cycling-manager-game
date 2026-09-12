@@ -693,7 +693,7 @@ leader, which is what the `pk` tiebreak makes possible),
 `::test_auto_pick_refuses_a_team_of_three`, and
 `::test_previous_squad_ignores_riders_who_left_the_team`.
 
-### W4 — `racing/services.py`: `_write_squad`, `set_squad`, `suggested_squad`
+### W4 — `racing/services.py`: `_write_squad`, `set_squad`, `suggested_squad` ✅
 
 The validation and the replace-in-one-transaction write.
 
