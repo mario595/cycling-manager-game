@@ -704,7 +704,7 @@ the squad, a race that has already started.
 `::test_suggested_squad_falls_back_from_saved_to_previous_to_auto` covers the
 three-way fallback in one test with three assertions.
 
-### W5 — `racing/adapters.py`, `racing/services.py`: the simulation races only the squads
+### W5 — `racing/adapters.py`, `racing/services.py`: the simulation races only the squads ✅
 
 The `to_engine_rider(role=...)` parameter, `ensure_squads`, and the rewritten
 field-building block in `simulate_race`.

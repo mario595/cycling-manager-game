@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone as dt_timezone
 
 import pytest
@@ -455,3 +456,95 @@ def test_suggested_squad_falls_back_from_saved_to_previous_to_auto(db, team, wee
     set_squad(race_two, team, [r.pk for r in riders], riders[1].pk)
     assert suggested_squad(race_two, team) == ([r.pk for r in riders], riders[1].pk)
     assert suggested_squad(race_three, team) == ([r.pk for r in riders], riders[1].pk)
+
+
+def test_only_selected_riders_appear_in_the_results(running_race):
+    team_one = Team.objects.create(name="Team One", code="ONE")
+    team_two = Team.objects.create(name="Team Two", code="TWO")
+    squad_one = [
+        Rider.objects.create(
+            name=f"One {i}", team=team_one,
+            role=Rider.Role.LEADER if i == 0 else Rider.Role.SUPPORT,
+            climb=60, sprint=60, flat=60, resistance=60, positioning=60,
+        )
+        for i in range(4)
+    ]
+    bench_one = [
+        Rider.objects.create(
+            name=f"One Bench {i}", team=team_one,
+            climb=40, sprint=40, flat=40, resistance=40, positioning=40,
+        )
+        for i in range(2)
+    ]
+    squad_two = [
+        Rider.objects.create(
+            name=f"Two {i}", team=team_two,
+            role=Rider.Role.LEADER if i == 0 else Rider.Role.SUPPORT,
+            climb=60, sprint=60, flat=60, resistance=60, positioning=60,
+        )
+        for i in range(4)
+    ]
+
+    # set_squad refuses a race that has already started, so pick both
+    # squads while it is still scheduled, then flip it to running the same
+    # way the tick would before simulating.
+    running_race.status = Race.Status.SCHEDULED
+    running_race.save(update_fields=["status"])
+    set_squad(running_race, team_one, [r.pk for r in squad_one], squad_one[0].pk)
+    set_squad(running_race, team_two, [r.pk for r in squad_two], squad_two[0].pk)
+    running_race.status = Race.Status.RUNNING
+    running_race.save(update_fields=["status"])
+
+    simulate_race(running_race, game_time=timezone.now())
+
+    result_rider_ids = set(RaceResult.objects.filter(race=running_race).values_list("rider_id", flat=True))
+    assert result_rider_ids == {r.pk for r in squad_one + squad_two}
+    assert RaceResult.objects.filter(race=running_race).count() == 8
+    for bench_rider in bench_one:
+        assert bench_rider.pk not in result_rider_ids
+
+
+def test_the_squad_leader_races_as_leader_regardless_of_rider_role(running_race, team, four_riders):
+    # four_riders[1] defaults to Rider.Role.SUPPORT (see the fixture); make
+    # them the squad's leader anyway. set_squad refuses a started race, so
+    # pick the squad while scheduled, then flip to running like the tick would.
+    running_race.status = Race.Status.SCHEDULED
+    running_race.save(update_fields=["status"])
+    set_squad(running_race, team, [r.pk for r in four_riders], four_riders[1].pk)
+    running_race.status = Race.Status.RUNNING
+    running_race.save(update_fields=["status"])
+
+    simulate_race(running_race, game_time=timezone.now())
+
+    log = RaceLog.objects.get(race=running_race)
+    with log.file.open("rt") as fh:
+        first_line = json.loads(fh.readline())
+    leader_entry = next(
+        e for e in first_line["riders"] if e["id"] == str(four_riders[1].pk)
+    )
+    assert leader_entry["role"] == "leader"
+    assert four_riders[1].role == Rider.Role.SUPPORT
+
+
+def test_a_team_with_no_squad_gets_one_at_race_time(running_race, four_riders):
+    assert not RaceSquad.objects.filter(race=running_race).exists()
+
+    simulate_race(running_race, game_time=timezone.now())
+
+    squad = RaceSquad.objects.get(race=running_race, team=four_riders[0].team)
+    assert squad.is_auto_picked is True
+    assert squad.members.count() == 4
+
+
+def test_a_team_of_three_is_skipped_rather_than_crashing_the_race(running_race, team, four_riders):
+    understaffed_team = Team.objects.create(name="Understaffed", code="UND")
+    for i in range(3):
+        Rider.objects.create(
+            name=f"Thin {i}", team=understaffed_team,
+            climb=50, sprint=50, flat=50, resistance=50, positioning=50,
+        )
+
+    results = simulate_race(running_race, game_time=timezone.now())
+
+    assert not RaceSquad.objects.filter(race=running_race, team=understaffed_team).exists()
+    assert len(results) == 4

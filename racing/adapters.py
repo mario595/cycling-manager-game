@@ -27,11 +27,17 @@ if TYPE_CHECKING:
     from .models import Race
 
 
-def to_engine_rider(rider: DBRider) -> EngineRider:
+def to_engine_rider(rider: DBRider, *, role: str | None = None) -> EngineRider:
     """Convert a persisted rider into the dataclass the engine simulates.
 
     The engine identifies riders by string id; we use the primary key so that
     results coming back out of the engine can be mapped to rows again.
+
+    `role` overrides the rider's own `Rider.role` — the squad selection
+    feature (#37) decides who leads *per race*, via `RaceSquadRider.is_leader`,
+    so the engine's per-race role no longer comes from the rider row.
+    Defaults to `rider.role` so existing callers (and their tests) are
+    unaffected.
     """
     attributes = RiderAttributes(
         **{name: getattr(rider, name) for name in ENGINE_ATTRIBUTES}
@@ -43,7 +49,7 @@ def to_engine_rider(rider: DBRider) -> EngineRider:
         # A rider with no team races as their own one-person team, which is
         # exactly what the engine does when team_id is None.
         team_id=str(rider.team_id) if rider.team_id else None,
-        role=rider.role,
+        role=role if role is not None else rider.role,
     )
 
 

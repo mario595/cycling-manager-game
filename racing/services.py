@@ -7,6 +7,7 @@ not read from the clock here.
 
 from __future__ import annotations
 
+import logging
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -19,6 +20,8 @@ from teams.models import Team
 
 from .adapters import run_race_via_adapter, to_engine_course, to_engine_rider, to_team_codes
 from .models import SQUAD_SIZE, Race, RaceLog, RaceResult, RaceSquad, RaceSquadRider
+
+logger = logging.getLogger(__name__)
 
 
 class SquadError(ValueError):
@@ -155,6 +158,25 @@ def set_squad(race: Race, team: Team, rider_ids: list[int], leader_id: int) -> R
     return _write_squad(race, team, rider_ids, leader_id, auto=False)
 
 
+def ensure_squads(race: Race) -> None:
+    """Give every team with enough riders a squad for this race, if it has
+    not got one. Called from simulate_race so a team whose manager never
+    chose still starts — specs/squad-selection.md, in scope item 8.
+
+    A team with fewer than SQUAD_SIZE riders is skipped with a warning, not
+    an exception: that is a broken roster (see the spec's Rules and edge
+    cases) and it must not stop every other team racing.
+    """
+    have = set(RaceSquad.objects.filter(race=race).values_list("team_id", flat=True))
+    for team in Team.objects.exclude(pk__in=have):
+        try:
+            rider_ids, leader_id = auto_pick_squad(team)
+        except SquadError as exc:
+            logger.warning("no squad for %s in %s: %s", team, race, exc)
+            continue
+        _write_squad(race, team, rider_ids, leader_id, auto=True)
+
+
 def simulate_race(race: Race, *, game_time: datetime) -> list[RaceResult]:
     """Run one race through the engine and record it.
 
@@ -169,15 +191,23 @@ def simulate_race(race: Race, *, game_time: datetime) -> list[RaceResult]:
     if race.status == Race.Status.FINISHED:
         raise ValueError(f"{race} is already finished")
 
-    db_riders = list(Rider.objects.select_related("team"))
-    if not db_riders:
-        raise ValueError("no riders to race")
-    # Every rider in the database races: there is no squad selection yet
-    # (#37) and no calendar to say who is entered. This is a deliberate
-    # placeholder, not an oversight.
-    teams = [r.team for r in db_riders if r.team_id]
+    ensure_squads(race)
 
-    engine_riders = [to_engine_rider(r) for r in db_riders]
+    members = list(
+        RaceSquadRider.objects
+        .filter(squad__race=race)
+        .select_related("rider", "squad__team")
+    )
+    if not members:
+        raise ValueError("no squads to race")
+
+    db_riders = [m.rider for m in members]
+    engine_riders = [
+        to_engine_rider(m.rider, role="leader" if m.is_leader else "support")
+        for m in members
+    ]
+    teams = list({m.squad.team.pk: m.squad.team for m in members}.values())
+
     course = to_engine_course(race)
 
     # The engine writes the log itself with a raw open(), and it may not
