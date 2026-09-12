@@ -132,6 +132,8 @@ once an hour so a race scheduled for a given hour starts near that hour. See
 | `Race` | A race to simulate: name, course JSON, wind settings, seed, plus scheduling (`starts_at`, `status`, `finished_at` — all **game** time, set and read by `world/`). `week` links it to the season it belongs to (`schedule.Week`); nullable — a race outside any season. `race_day` is derived, never authored — see *A race belongs to a week*, below. |
 | `RaceLog` | Pointer to the log file plus its metadata. One per race. |
 | `RaceResult` | One rider's finishing position. Small, queryable, stays in the DB. |
+| `RaceSquad` | One team's entry into one race — see *Squads*, below. |
+| `RaceSquadRider` | One rider's membership in a squad, and whether they lead it. |
 
 `Race.course` is stored in the same `{length, gradient}` shape the engine's
 config parser already accepts, so an existing `race_engine/configs/*.json`
@@ -195,3 +197,68 @@ Django (see *Where they live*, above), so `simulate_race` runs it into a
 `RaceLog.file` through Django's storage API afterwards — one extra copy per
 race, paid to keep both rules (no raw file writes, no Django in the engine)
 intact at once.
+
+**The field is built from squads, not the whole rider table.** `simulate_race`
+calls `ensure_squads(race)` first, then builds the engine's rider list from
+`RaceSquadRider` rows for that race — see *Squads*, below. A rider not
+selected by any team's squad simply does not appear in the log, the replay,
+or the results.
+
+## Squads
+
+Before a race, a manager picks which four of their team's riders start and
+which one leads — see `specs/squad-selection.md` (now folded in here) for the
+player-facing feature. Two models record the choice:
+
+- **`RaceSquad(race, team)`** — one row per team per race, plus
+  `is_auto_picked` (see below).
+- **`RaceSquadRider(squad, rider, is_leader)`** — one row per selected rider,
+  four per squad.
+
+**Membership is rows, not a JSON list on `RaceSquad`.** `simulate_race` joins
+against every selected rider's attributes in one query to build the engine's
+field, and a JSON array of ids would mean either N+1 lookups or a manual
+`id__in` reassembly. Rows also give a `UniqueConstraint` — `unique_rider_per_
+squad` — that stops the same rider being entered twice, which a JSON array
+cannot express. The leader flag lives on the membership row (`is_leader`),
+not as a `leader = FK(Rider)` on `RaceSquad`: a leader FK pointing at a rider
+who is not in the squad would need validating separately, and `is_leader`
+cannot represent that state at all.
+
+**Exactly four riders and exactly one leader is a service rule, not a
+database constraint.** Postgres cannot express "this parent has exactly four
+children" without a trigger or a denormalised counter, and neither is worth
+the machinery here. `racing.services.set_squad(race, team, rider_ids,
+leader_id)` is the **only sanctioned writer** — it validates (right size, no
+duplicates, every rider on the team, the leader among them), refuses a race
+that has already started, then replaces the whole squad in one transaction.
+The Django admin can save a squad that breaks this rule; that is accepted,
+and it is why the *simulation* validates again independently (see below),
+rather than trusting whatever is in the database.
+
+**A team with no squad still starts.** `ensure_squads(race)`, called at the
+top of `simulate_race`, writes an auto-picked squad (`is_auto_picked=True`)
+for every team that does not already have one for this race — a manager who
+never opened the screen still fields a squad, per the spec's item 8. The pick
+itself, `auto_pick_squad`, is deliberately naive — leaders first, then by
+total engine attributes descending, then by pk as a tiebreak — and is meant
+to lose to a manager who chooses deliberately (#45 covers a smarter fallback
+later; #39 and #44 will share this same mechanism rather than duplicate it).
+A team with fewer than four riders is skipped with a warning, not an
+exception — that is a broken roster (enforcing the floor belongs to whichever
+feature lets riders leave one), and it must not stop every other team racing.
+
+**The engine validates too, independently.** `race_engine.models.
+validate_team_leaders` (moved out of `config.py`, called from `run_race`)
+rejects a field with zero or two-plus leaders on one team regardless of how
+it got there — the Django path never went through `load_config`'s validation,
+so without this a malformed squad could reach the simulation and produce a
+race with undefined role-scaled tactics. See `race_engine/README.md`.
+
+**The engine's per-race role comes from `RaceSquadRider.is_leader`, not
+`Rider.role`.** `Rider.role` stays on the model as the rider's *default*
+disposition — what `auto_pick_squad` sorts by, what the admin and roster
+screen show — but `to_engine_rider` now takes an explicit `role` override,
+and `simulate_race` passes `"leader"` or `"support"` from the squad row. A
+manager naming a nominally-`support` rider as their squad's leader is
+respected; the rider's own `role` field is untouched.

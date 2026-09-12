@@ -29,6 +29,15 @@ DRF routers and serializers that aggregate other apps' data for the SPA.
   `status` on a race is `Race.status` verbatim (including `failed`);
   mapping it to player-facing words is the SPA's job. See
   `schedule/README.md`, *The race calendar*.
+- `GET`/`PUT /api/racing/races/<race_id>/squads/<team_id>/` — a team's squad
+  for one race (`SquadSerializer`, `SquadWriteSerializer`, `SquadView`). `GET`
+  returns the team's saved selection if it has one, else a suggestion from
+  `racing.services.suggested_squad` (`saved: false`). `PUT` replaces it via
+  `racing.services.set_squad` and returns the same shape; a `SquadError` (wrong
+  size, a rider from another team, no single leader, or a race that has
+  already started) becomes a 400. `candidates` is the team's whole roster,
+  each flagged `selected`/`is_leader`, so one response gives the squad screen
+  everything it draws. See `racing/README.md`, *Squads*.
 
 ## URL ordering
 
@@ -45,3 +54,20 @@ private, and there is no login flow in the SPA yet — an authenticated
 endpoint would render the feature invisible. Any future endpoint here should
 default to the project's `IsAuthenticated` unless it has the same reason the
 clock does not.
+
+**The squad endpoint is a known, deliberate exception, and a bigger one.**
+`SquadView` is `AllowAny` with the team id in the URL rather than derived
+from the caller — squad selection is inherently per-manager, but there is no
+login flow to derive "which manager" from. This means anyone can currently
+edit anyone's squad. It is not a stopgap awaiting an imminent fix: `specs/
+roadmap.md` places accounts (#50) two phases after squad selection, and is
+explicit that a single-manager world is what the phases before it are
+deliberately testing. **Both this hole and the endpoint's CSRF story close
+in [#50](https://github.com/mario595/cycling-manager/issues/50):**
+`<team_id>` becomes `request.user.team`, the permission class drops back to
+the project default, and the frontend's `?team=` query parameter goes away.
+
+**CSRF, in the meantime:** DRF's `SessionAuthentication` enforces CSRF only
+for *authenticated* sessions, so the squad endpoint's anonymous `PUT` passes
+`CsrfViewMiddleware` untouched — no token, no `@csrf_exempt`, nothing to do
+here until #50 makes the session authenticated.

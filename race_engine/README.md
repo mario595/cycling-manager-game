@@ -129,11 +129,17 @@ makes it easy to keep multiple reusable race configurations side by side.
   rider's own `id` (a team of one) when absent.
 - `role` — optional; `"leader"` or `"support"` when present (any other value
   is a `ConfigError`). Defaults to `"leader"` when absent.
-- **Exactly one leader per team** — `load_config` raises `ConfigError` if any
-  team has zero or more than one rider with `role: "leader"`. Silent
-  acceptance would produce races that are confusing to debug: a team with no
-  leader has nobody to protect, and one with two has no well-defined "the"
-  leader for the role-scaled tactics below.
+- **Exactly one leader per team** — enforced by `validate_team_leaders`
+  (`race_engine/models.py`), which raises `RaceSetupError` if any team has
+  zero or more than one rider with `role: "leader"`. Silent acceptance would
+  produce races that are confusing to debug: a team with no leader has nobody
+  to protect, and one with two has no well-defined "the" leader for the
+  role-scaled tactics below. **Not only a `load_config` rule**: `run_race`
+  calls it directly too, so a caller that builds `Rider` dataclasses by hand
+  and skips `load_config` entirely — as `racing/adapters.py` does for squad
+  selection (#37) — gets the same check. `ConfigError` subclasses
+  `RaceSetupError`, so `load_config`'s existing callers, who catch
+  `ConfigError`, are unaffected.
 - `teams` — optional map of team id to `{"code": "...", "name": "..."}`.
   `code` is the TV-style 3-letter uppercase team abbreviation (a UCI team
   code, e.g. `UAD` for UAE Team Emirates); `name` is the full team name
