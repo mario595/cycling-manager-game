@@ -742,7 +742,7 @@ Types, `getSquad`, `putSquad`, the hook. No polling.
 **Test:** none — this repo has no frontend test setup, and adding one is not
 this ticket's job. W8's manual verification covers it.
 
-### W8 — `frontend/src/screens/Race.tsx`, `App.tsx`, `Calendar.tsx`: the screen
+### W8 — `frontend/src/screens/Race.tsx`, `App.tsx`, `Calendar.tsx`: the screen ✅
 
 The screen, the parameterised route, the calendar link.
 

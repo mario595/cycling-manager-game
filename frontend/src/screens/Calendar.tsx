@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+
 import type { Calendar as CalendarData, CalendarRace, CalendarWeek } from '../api'
 import { Card, PageBody, PageHeading, StatTile } from '../components/primitives'
 import { raceStatusLabel, raceStatusTone } from '../raceStatus'
@@ -223,7 +225,8 @@ function RaceRow({ race }: { race: CalendarRace }) {
   const hot = race.status === 'running'
 
   return (
-    <div
+    <Link
+      to={`/race/${race.id}`}
       style={{
         display: 'grid',
         gridTemplateColumns: 'minmax(0,1fr) auto',
@@ -233,6 +236,8 @@ function RaceRow({ race }: { race: CalendarRace }) {
         borderRadius: 10,
         border: `1px solid ${hot ? calendarAccent.border : '#E9ECEF'}`,
         background: race.status === 'running' ? '#F7F0E8' : color.surface,
+        textDecoration: 'none',
+        color: 'inherit',
       }}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
@@ -258,7 +263,7 @@ function RaceRow({ race }: { race: CalendarRace }) {
           {date} · {race.distance_km.toFixed(1)} km
         </div>
       </div>
-    </div>
+    </Link>
   )
 }
 

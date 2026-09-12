@@ -5,6 +5,7 @@ import { NAV_ITEMS } from './navigation'
 import { Calendar } from './screens/Calendar'
 import { Dashboard } from './screens/Dashboard'
 import { Placeholder } from './screens/Placeholder'
+import { Race } from './screens/Race'
 import { Roster } from './screens/Roster'
 
 /**
@@ -32,6 +33,9 @@ export function App() {
               <Route key={item.path} path={item.path} element={<Screen />} />
             )
           })}
+          {/* Parameterised, so it doesn't fit the path -> component map
+              above — the /race nav item itself still lands on Placeholder. */}
+          <Route path="/race/:raceId" element={<Race />} />
           {/* Anything outside the nav — a stale bookmark, a typo — still gets
               the chrome rather than a blank page. */}
           <Route path="*" element={<Placeholder />} />
