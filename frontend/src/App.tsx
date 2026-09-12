@@ -2,6 +2,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom'
 
 import { Layout } from './components/Layout'
 import { NAV_ITEMS } from './navigation'
+import { Calendar } from './screens/Calendar'
 import { Dashboard } from './screens/Dashboard'
 import { Placeholder } from './screens/Placeholder'
 import { Roster } from './screens/Roster'
@@ -14,6 +15,7 @@ import { Roster } from './screens/Roster'
 const SCREENS: Record<string, React.ComponentType> = {
   '/': Dashboard,
   '/roster': Roster,
+  '/calendar': Calendar,
 }
 
 export function App() {

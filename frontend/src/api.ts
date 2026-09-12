@@ -29,3 +29,32 @@ export async function getPosition(): Promise<Position> {
   }
   return response.json()
 }
+
+export interface CalendarRace {
+  id: number
+  name: string
+  starts_at: string | null
+  status: 'scheduled' | 'running' | 'finished' | 'failed'
+  distance_km: number
+}
+
+export interface CalendarWeek {
+  number: number
+  starts_at: string
+  races: CalendarRace[]
+}
+
+export interface Calendar {
+  state: 'in_season' | 'off_season' | 'no_season'
+  season: number | null
+  current_week: number | null
+  weeks: CalendarWeek[]
+}
+
+export async function getCalendar(): Promise<Calendar> {
+  const response = await fetch('/api/schedule/calendar/')
+  if (!response.ok) {
+    throw new Error(`calendar request failed: ${response.status}`)
+  }
+  return response.json()
+}

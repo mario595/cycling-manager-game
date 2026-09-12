@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone as dt_timezone
 
 import pytest
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError
 from django.utils import timezone
 
 from racing.adapters import to_engine_course, to_engine_rider, to_team_codes
@@ -194,3 +195,63 @@ def test_race_at_the_exact_week_start_is_accepted(db, week):
     )
 
     assert race.week == week
+
+
+def test_race_day_is_derived_from_starts_at(db, week):
+    race = Race.objects.create(
+        name="Derived Day Race",
+        course=[{"length": 500.0, "gradient": 0.0}],
+        starts_at=week.starts_at + timedelta(days=2, hours=14),
+        week=week,
+    )
+
+    assert race.race_day == (week.starts_at + timedelta(days=2)).date()
+
+
+def test_two_races_on_one_day_of_one_week_are_rejected(db, week):
+    Race.objects.create(
+        name="First Race",
+        course=[{"length": 500.0, "gradient": 0.0}],
+        starts_at=week.starts_at + timedelta(days=2, hours=10),
+        week=week,
+    )
+
+    with pytest.raises(IntegrityError):
+        Race.objects.create(
+            name="Second Race",
+            course=[{"length": 500.0, "gradient": 0.0}],
+            starts_at=week.starts_at + timedelta(days=2, hours=15),
+            week=week,
+        )
+
+
+def test_two_races_on_different_days_of_one_week_are_accepted(db, week):
+    Race.objects.create(
+        name="Saturday Race",
+        course=[{"length": 500.0, "gradient": 0.0}],
+        starts_at=week.starts_at + timedelta(days=5),
+        week=week,
+    )
+    Race.objects.create(
+        name="Sunday Race",
+        course=[{"length": 500.0, "gradient": 0.0}],
+        starts_at=week.starts_at + timedelta(days=6),
+        week=week,
+    )
+
+    assert Race.objects.filter(week=week).count() == 2
+
+
+def test_two_weekless_races_on_the_same_date_are_accepted(db):
+    Race.objects.create(
+        name="First Weekless Race",
+        course=[{"length": 500.0, "gradient": 0.0}],
+        starts_at=MONDAY,
+    )
+    Race.objects.create(
+        name="Second Weekless Race",
+        course=[{"length": 500.0, "gradient": 0.0}],
+        starts_at=MONDAY,
+    )
+
+    assert Race.objects.filter(week__isnull=True, race_day=MONDAY.date()).count() == 2

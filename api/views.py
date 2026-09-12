@@ -7,7 +7,7 @@ from rest_framework.views import APIView
 from schedule.services import current_position
 from world.services import now
 
-from .serializers import ClockSerializer, PositionSerializer
+from .serializers import CalendarSerializer, ClockSerializer, PositionSerializer
 
 
 class ClockView(APIView):
@@ -36,4 +36,48 @@ class PositionView(APIView):
             "season": position.season.number if position.season else None,
             "week": position.week.number if position.week else None,
             "week_ends_at": position.week.ends_at if position.week else None,
+        }).data)
+
+
+def _race_payload(race) -> dict:
+    return {
+        "id": race.pk,
+        "name": race.name,
+        "starts_at": race.starts_at,
+        "status": race.status,
+        "distance_km": sum(s["length"] for s in race.course) / 1000,
+    }
+
+
+def _week_payload(week) -> dict:
+    return {
+        "number": week.number,
+        "starts_at": week.starts_at,
+        "races": [_race_payload(r) for r in sorted(week.races.all(), key=lambda r: r.starts_at)],
+    }
+
+
+class CalendarView(APIView):
+    """The current season's whole calendar: all twelve weeks, each with the
+    race(s) on it — see schedule/README.md, *The race calendar*. Public,
+    for the same reason ClockView is."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        position = current_position(now())
+        if position.season is None or position.state != "in_season":
+            return Response(CalendarSerializer({
+                "state": position.state,
+                "season": position.season.number if position.season else None,
+                "current_week": None,
+                "weeks": [],
+            }).data)
+
+        weeks = position.season.weeks.prefetch_related("races").order_by("number")
+        return Response(CalendarSerializer({
+            "state": position.state,
+            "season": position.season.number,
+            "current_week": position.week.number if position.week else None,
+            "weeks": [_week_payload(w) for w in weeks],
         }).data)
