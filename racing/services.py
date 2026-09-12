@@ -14,10 +14,93 @@ from pathlib import Path
 from django.core.files.base import ContentFile
 from django.db import transaction
 
-from riders.models import Rider
+from riders.models import ENGINE_ATTRIBUTES, Rider
+from teams.models import Team
 
 from .adapters import run_race_via_adapter, to_engine_course, to_engine_rider, to_team_codes
-from .models import Race, RaceLog, RaceResult
+from .models import SQUAD_SIZE, Race, RaceLog, RaceResult, RaceSquad, RaceSquadRider
+
+
+class SquadError(ValueError):
+    """An invalid squad: wrong size, a rider from another team, or not
+    exactly one leader. Raised by set_squad and turned into a 400 by the
+    API."""
+
+
+def auto_pick_squad(team: Team) -> tuple[list[int], int]:
+    """Four rider ids and the leader's id, chosen naively.
+
+    Leaders first, then by total engine attributes descending, then by pk
+    ascending — the pk tiebreak is what makes this deterministic and so
+    testable. Deliberately course-blind: see specs/squad-selection.md,
+    Out of scope, and #45.
+
+    Raises SquadError if the team has fewer than four riders.
+    """
+    riders = list(team.riders.all())
+    if len(riders) < SQUAD_SIZE:
+        raise SquadError(
+            f"{team} has only {len(riders)} riders; a squad needs {SQUAD_SIZE}"
+        )
+
+    ordered = sorted(
+        riders,
+        key=lambda r: (
+            r.role != Rider.Role.LEADER,
+            -sum(getattr(r, name) for name in ENGINE_ATTRIBUTES),
+            r.pk,
+        ),
+    )
+    picked = ordered[:SQUAD_SIZE]
+    return [r.pk for r in picked], picked[0].pk
+
+
+def previous_squad(team: Team, before: Race) -> tuple[list[int], int] | None:
+    """The riders and leader from this team's most recent squad in a race
+    starting before `before`, or None if there is not one.
+
+    "Most recent" is by the race's starts_at, descending. Riders no longer
+    on the team are dropped, so a squad short of four after filtering
+    returns None and the caller falls back to auto_pick_squad.
+    """
+    squad = (
+        RaceSquad.objects.filter(
+            team=team, race__starts_at__isnull=False, race__starts_at__lt=before.starts_at,
+        )
+        .order_by("-race__starts_at")
+        .prefetch_related("members__rider")
+        .first()
+    ) if before.starts_at else None
+    if squad is None:
+        return None
+
+    members = [m for m in squad.members.all() if m.rider.team_id == team.pk]
+    if len(members) != SQUAD_SIZE:
+        return None
+
+    leader = next((m.rider_id for m in members if m.is_leader), None)
+    if leader is None:
+        return None
+
+    return [m.rider_id for m in members], leader
+
+
+def suggested_squad(race: Race, team: Team) -> tuple[list[int], int]:
+    """What to pre-fill a manager's screen with: their existing squad for
+    this race if they have one, else their previous squad, else an
+    auto-pick. Reads only; writes nothing."""
+    existing = RaceSquad.objects.filter(race=race, team=team).prefetch_related("members").first()
+    if existing is not None:
+        members = list(existing.members.all())
+        leader = next((m.rider_id for m in members if m.is_leader), None)
+        if len(members) == SQUAD_SIZE and leader is not None:
+            return [m.rider_id for m in members], leader
+
+    fallback = previous_squad(team, race)
+    if fallback is not None:
+        return fallback
+
+    return auto_pick_squad(team)
 
 
 def simulate_race(race: Race, *, game_time: datetime) -> list[RaceResult]:

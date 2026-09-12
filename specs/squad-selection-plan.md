@@ -683,7 +683,7 @@ and `::test_run_race_rejects_a_team_with_no_leader`. Confirm the existing
 config-level tests for the same rule still pass unchanged — that is what proves
 the move did not narrow the rule.
 
-### W3 — `racing/services.py`: `auto_pick_squad` and `previous_squad`
+### W3 — `racing/services.py`: `auto_pick_squad` and `previous_squad` ✅
 
 Pure reads, no writers yet. `SquadError` lands here.
 

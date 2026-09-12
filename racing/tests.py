@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from racing.adapters import to_engine_course, to_engine_rider, to_team_codes
 from racing.models import Race, RaceLog, RaceResult, RaceSquad, RaceSquadRider
-from racing.services import simulate_race
+from racing.services import SquadError, auto_pick_squad, previous_squad, simulate_race
 from riders.models import Rider
 from schedule.models import Season, Week
 from teams.models import Team
@@ -272,3 +272,75 @@ def test_a_rider_cannot_appear_twice_in_a_squad(running_race, four_riders):
     with pytest.raises(IntegrityError):
         with transaction.atomic():
             RaceSquadRider.objects.create(squad=squad, rider=four_riders[0])
+
+
+def test_auto_pick_prefers_leaders_then_strength(db, team):
+    # Six riders: one weak leader, one strong support, four mid-strength
+    # support riders. The leader must win despite being weakest, and among
+    # the rest the strongest three fill the squad, tiebroken by pk.
+    weak_leader = Rider.objects.create(
+        name="Weak Leader", team=team, role=Rider.Role.LEADER,
+        climb=20, sprint=20, flat=20, resistance=20, positioning=20,
+    )
+    strong_support = Rider.objects.create(
+        name="Strong Support", team=team, role=Rider.Role.SUPPORT,
+        climb=90, sprint=90, flat=90, resistance=90, positioning=90,
+    )
+    mid_supports = [
+        Rider.objects.create(
+            name=f"Mid Support {i}", team=team, role=Rider.Role.SUPPORT,
+            climb=50, sprint=50, flat=50, resistance=50, positioning=50,
+        )
+        for i in range(4)
+    ]
+
+    rider_ids, leader_id = auto_pick_squad(team)
+
+    assert leader_id == weak_leader.pk
+    assert rider_ids[0] == weak_leader.pk
+    assert strong_support.pk in rider_ids
+    # Three of the four mid-strength riders fill the rest, tiebroken by pk —
+    # the lowest three pks among them, since they are all tied on strength.
+    expected_mids = sorted(r.pk for r in mid_supports)[:2]
+    for pk in expected_mids:
+        assert pk in rider_ids
+    assert len(rider_ids) == 4
+
+
+def test_auto_pick_refuses_a_team_of_three(db, team):
+    for i in range(3):
+        Rider.objects.create(
+            name=f"Rider {i}", team=team,
+            climb=50, sprint=50, flat=50, resistance=50, positioning=50,
+        )
+
+    with pytest.raises(SquadError):
+        auto_pick_squad(team)
+
+
+def test_previous_squad_ignores_riders_who_left_the_team(db, team, four_riders, week):
+    other_team = Team.objects.create(name="Team Beta", code="BET")
+    earlier_race = Race.objects.create(
+        name="Earlier Race",
+        course=[{"length": 500.0, "gradient": 0.0}],
+        starts_at=week.starts_at + timedelta(days=1),
+        week=week,
+    )
+    squad = RaceSquad.objects.create(race=earlier_race, team=team)
+    RaceSquadRider.objects.bulk_create([
+        RaceSquadRider(squad=squad, rider=r, is_leader=(i == 0))
+        for i, r in enumerate(four_riders)
+    ])
+
+    # One of the four riders transfers away before the next race is picked.
+    four_riders[0].team = other_team
+    four_riders[0].save()
+
+    later_race = Race.objects.create(
+        name="Later Race",
+        course=[{"length": 500.0, "gradient": 0.0}],
+        starts_at=week.starts_at + timedelta(days=2),
+        week=week,
+    )
+
+    assert previous_squad(team, later_race) is None
