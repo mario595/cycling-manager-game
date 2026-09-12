@@ -34,6 +34,14 @@ end. That is the gap Phase 1 closes.
   writing them twice.
 - **#5 Season** and **#7 race calendar** — what the clock advances *through*.
 
+**[#52](https://github.com/mario595/cycling-manager/issues/52) — sticky
+sidebar duplicates/detaches on long pages, jumps to the front of the queue.**
+A frontend layout bug, found while building #7's calendar screen (the first
+screen long enough on desktop to expose it reliably; reproduces on `/roster`
+too). Not a Phase 1 dependency, but every screen built from here on is more
+likely to be long enough to trigger it, so it is cheaper to fix now than to
+keep discovering it screen by screen.
+
 **Deliberately excluded: [#8](https://github.com/mario595/cycling-manager/issues/8),
 the admin season-configuration tool.** Use Django admin or a fixture. A
 purpose-built season editor, for a game with one season and one admin, is the
