@@ -1,7 +1,7 @@
 ---
 name: code-review
 model: opus
-description: Review the pull request for a ticket — correctness, tests, conventions and architecture — then approve it and move the ticket to Code reviewed, or request changes. Use when asked to review a ticket, a PR or a branch ("review #6", "code review the game clock PR", "is this ready to merge"). Runs the tests, the linter and the type-check itself rather than judging the diff by eye.
+description: Review the pull request for a ticket — correctness, tests, conventions and architecture — then approve it and move the ticket to Code reviewed, or request changes. Use when asked to review a ticket, a PR or a branch ("review #6", "code review the game clock PR", "is this ready to merge"). Reviews the diff and the evidence the implementer already produced; it does not re-run the app or the suite.
 ---
 
 # Code review
@@ -50,43 +50,43 @@ Then read what the change was supposed to do:
 the plan settled is not yours to reopen. If you think the plan itself is wrong,
 say so separately and plainly — do not smuggle it in as a code comment.
 
-## Step 2 — Run the checks
+## Step 2 — Take the evidence that already exists
 
-Review the branch as it actually behaves, in a scratch worktree so the user's
-working copy is untouched:
+**Do not check the branch out, start the database, or run the suite, the linter
+or the build.** `/implement-plan` does not finish until the suite is green and
+the documentation is updated, and it reports the numbers. Re-running all of it on
+every review costs minutes and proves what is already proven.
+
+Read the evidence instead:
+
+- The **PR body** carries the work items, the tests added, and the suite count
+  before and after. That is your check result.
+- **If the PR body has no test numbers**, or the author is not `/implement-plan`,
+  say so and ask before going further — you have no evidence the suite passed,
+  and inventing it is worse than asking.
+
+### The migration check, done by reading
+
+The one failure the implementer's green suite does not catch is a model change
+with no migration. You do not need to run anything to find it:
+
+> If the diff touches a `models.py` and contains **no new file under that app's
+> `migrations/`**, that is blocking.
+
+Also check the reverse — a migration in the diff with no model change behind it,
+which usually means a hand-edited migration.
+
+### The one exception
+
+If the diff makes you doubt one specific behaviour, run **that one test**, not
+the suite:
 
 ```bash
-git fetch origin
-git worktree add .claude/worktrees/review-<N> origin/<branch> --detach
-cd .claude/worktrees/review-<N>
+/home/mario/dev/cycling-manager/.venv/bin/python -m pytest -q path/to/test_file.py::test_case
 ```
 
-A worktree has no `.venv`. Use the main checkout's, from inside the worktree —
-`PYTEST` below means this:
-
-```bash
-/home/mario/dev/cycling-manager/.venv/bin/python -m pytest -q
-```
-
-Run all four. Each failure is a **blocking** finding:
-
-```bash
-docker compose up -d                                   # tests need Postgres
-
-PYTEST --durations=10                                  # the suite, slowest tests shown
-/home/mario/dev/cycling-manager/.venv/bin/python manage.py makemigrations --check --dry-run
-cd frontend && npm run lint                            # oxlint
-cd frontend && npm run build                           # tsc -b, then vite build
-```
-
-`makemigrations --check` is the one people forget: it exits non-zero when a model
-changed and no migration was written. That bug is invisible in a diff and breaks
-the next person's database.
-
-Skip the frontend commands when the diff touches no frontend file. Never skip
-the suite or the migration check.
-
-Remove the worktree when you are done (`git worktree remove`).
+That needs Postgres running, so it costs something — do it when you have a real
+doubt to settle, not as a matter of routine.
 
 ## Step 3 — Read the diff
 
@@ -134,10 +134,10 @@ Every finding gets one of three levels. Be honest about which.
 
 - wrong behaviour, or a promised `In scope` item not delivered;
 - data loss, corruption, or a migration that cannot be applied or reversed;
-- a model change with no migration;
 - new behaviour with no test, or a test that cannot fail;
 - a deleted, skipped or weakened existing test;
-- the suite, lint, type-check or migration check failing;
+- a model change with no migration in the diff;
+- the PR body reporting a failing or incomplete suite;
 - an `AGENTS.md` architecture rule broken;
 - a security problem: a secret in the repo, a missing permission check, an
   injection, user input trusted where it should not be;
@@ -286,9 +286,9 @@ by roughly how much, and on which path. "This adds one query per rider, so a
 16-rider race result page goes from 2 queries to 18" is a finding. "This feels
 slow" is not — leave it out.
 
-If `race_engine/` changed, the repo has a regression harness worth running:
-`python -m race_engine.audit --baseline audit_baseline.json`. A large swing in
-runtime is a finding even when the results are unchanged.
+If `race_engine/` changed, ask whether the author ran the audit harness
+(`python -m race_engine.audit --baseline audit_baseline.json`) and what it said.
+Do not run it yourself — it is slow, and it is the author's job to have done it.
 
 ### Tests
 
@@ -322,11 +322,9 @@ Body:
 ## Verdict
 <Approved | Changes requested> — one sentence on why.
 
-## Checks
-- Tests: <n passed, n failed>
-- Migrations: <clean | missing for X>
-- Lint: <clean | n problems>       (omit if no frontend changes)
-- Type-check / build: <clean | …>  (omit if no frontend changes)
+## Evidence
+- Suite (from the PR body): <n before, n after>
+- Migrations: <present for the model changes | missing for X>
 
 ## Blocking
 1. `path/to/file.py:42` — what is wrong, and what breaks because of it.
@@ -375,7 +373,7 @@ level, and whether the ticket moved.
 
 - More than one PR matches the ticket, or none does.
 - The PR is a draft — confirm it is meant to be reviewed.
-- You cannot start Postgres, or the suite errors before the change is involved.
+- The PR body carries no evidence that the suite passed.
 - The plan itself looks wrong, rather than the code.
 - A finding sits genuinely on the line between blocking and should-fix and the
   answer changes the verdict. Say which way you lean.

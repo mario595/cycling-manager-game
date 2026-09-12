@@ -39,7 +39,7 @@ export function Layout() {
   }, [mobile])
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: color.canvas }}>
+    <div style={{ display: 'flex', height: '100vh', background: color.canvas }}>
       <div
         onClick={() => setDrawer(false)}
         style={{
@@ -55,7 +55,16 @@ export function Layout() {
 
       <Sidebar mobile={mobile} open={drawer} onNavigate={() => setDrawer(false)} />
 
-      <main style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+      <main
+        style={{
+          flex: 1,
+          minWidth: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100vh',
+          overflowY: 'auto',
+        }}
+      >
         <header
           style={{
             display: mobile ? 'flex' : 'none',
