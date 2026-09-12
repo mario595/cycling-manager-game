@@ -723,7 +723,7 @@ the `EngineRider` handed over has `role == "leader"`.
 assert `RaceSquad` rows exist afterwards with `is_auto_picked=True`.
 `::test_a_team_of_three_is_skipped_rather_than_crashing_the_race`.
 
-### W6 — `api/serializers.py`, `api/views.py`, `api/urls.py`: the squad endpoint
+### W6 — `api/serializers.py`, `api/views.py`, `api/urls.py`: the squad endpoint ✅
 
 `SquadSerializer`, `SquadRiderSerializer`, `SquadWriteSerializer`, `SquadView`,
 the route, and the shared `distance_km` helper.

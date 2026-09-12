@@ -2,12 +2,15 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+import pytest
 from django.test import override_settings
 from rest_framework.test import APIClient
 
 import world.services as world_services
-from racing.models import Race
+from racing.models import Race, RaceSquad
+from riders.models import Rider
 from schedule.models import Season, Week
+from teams.models import Team
 from world.services import now
 
 
@@ -153,3 +156,103 @@ def test_calendar_is_public(db):
         assert client.get("/api/schedule/calendar/").status_code == 200
     finally:
         world_services._clock = None
+
+
+@pytest.fixture
+def squad_team(db) -> Team:
+    return Team.objects.create(name="Squad Team", code="SQD")
+
+
+@pytest.fixture
+def squad_riders(db, squad_team) -> list[Rider]:
+    return [
+        Rider.objects.create(
+            name=f"Squad Rider {i}", team=squad_team,
+            role=Rider.Role.LEADER if i == 0 else Rider.Role.SUPPORT,
+            climb=50, sprint=50, flat=50, resistance=50, positioning=50,
+        )
+        for i in range(4)
+    ]
+
+
+@pytest.fixture
+def squad_race(db) -> Race:
+    return Race.objects.create(
+        name="Squad Check Race",
+        course=[{"length": 40000.0, "gradient": 0.0}],
+    )
+
+
+def test_squad_endpoint_returns_a_suggestion_for_an_unpicked_race(squad_race, squad_riders):
+    team = squad_riders[0].team
+    client = APIClient()
+
+    response = client.get(f"/api/racing/races/{squad_race.pk}/squads/{team.pk}/")
+
+    assert response.status_code == 200
+    assert response.data["saved"] is False
+    selected = [c for c in response.data["candidates"] if c["selected"]]
+    assert len(selected) == 4
+
+
+def test_putting_a_squad_saves_it_and_returns_it(squad_race, squad_riders):
+    team = squad_riders[0].team
+    client = APIClient()
+    body = {
+        "rider_ids": [r.pk for r in squad_riders],
+        "leader_id": squad_riders[1].pk,
+    }
+
+    response = client.put(
+        f"/api/racing/races/{squad_race.pk}/squads/{team.pk}/", body, format="json",
+    )
+
+    assert response.status_code == 200
+    assert response.data["saved"] is True
+    squad = RaceSquad.objects.get(race=squad_race, team=team)
+    assert squad.members.count() == 4
+    assert squad.members.get(is_leader=True).rider_id == squad_riders[1].pk
+
+
+def test_putting_five_riders_is_a_400(squad_race, squad_riders):
+    team = squad_riders[0].team
+    extra = Rider.objects.create(
+        name="Extra Rider", team=team,
+        climb=50, sprint=50, flat=50, resistance=50, positioning=50,
+    )
+    client = APIClient()
+    body = {
+        "rider_ids": [r.pk for r in squad_riders] + [extra.pk],
+        "leader_id": squad_riders[0].pk,
+    }
+
+    response = client.put(
+        f"/api/racing/races/{squad_race.pk}/squads/{team.pk}/", body, format="json",
+    )
+
+    assert response.status_code == 400
+
+
+def test_putting_a_squad_for_a_finished_race_is_a_400(squad_race, squad_riders):
+    team = squad_riders[0].team
+    squad_race.status = Race.Status.FINISHED
+    squad_race.save(update_fields=["status"])
+    client = APIClient()
+    body = {
+        "rider_ids": [r.pk for r in squad_riders],
+        "leader_id": squad_riders[0].pk,
+    }
+
+    response = client.put(
+        f"/api/racing/races/{squad_race.pk}/squads/{team.pk}/", body, format="json",
+    )
+
+    assert response.status_code == 400
+
+
+def test_unknown_race_or_team_is_a_404(squad_race, squad_riders):
+    team = squad_riders[0].team
+    client = APIClient()
+
+    assert client.get(f"/api/racing/races/999999/squads/{team.pk}/").status_code == 404
+    assert client.get(f"/api/racing/races/{squad_race.pk}/squads/999999/").status_code == 404
