@@ -79,6 +79,25 @@ export const inboxTag = {
 
 export type InboxTag = keyof typeof inboxTag
 
+/**
+ * The warmer, more saturated accent wash used for "this is happening right
+ * now" emphasis on the calendar screen — the current week's rail and row,
+ * and the current season's card border/header. Distinct from `accentWash`
+ * (a lighter tint used for "your team" rows elsewhere).
+ */
+export const calendarAccent = {
+  /** Current week's row background. */
+  rowWash: '#FFFBF6',
+  /** Current week's rail background. */
+  railWash: '#F6E7D6',
+  /** Current week's rail border, and the current season's card border. */
+  border: '#E6C9AC',
+  /** Current-week rail text. */
+  ink: '#7A4520',
+  /** Current-season card header background. */
+  headerWash: '#FDF8F2',
+} as const
+
 /** Below this width the sidebar collapses into a drawer. */
 export const MOBILE_BREAKPOINT = 900
 

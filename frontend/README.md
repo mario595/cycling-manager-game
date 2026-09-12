@@ -94,6 +94,14 @@ from — the reference for spacing, colour and copy. It is a mockup in a custom
 template DSL, not runnable source, and it is not a build input. When it is
 re-exported, reconcile `src/theme.ts` against it first.
 
-The mockup also contains a third screen, **Race day**, which is not built here:
+The mockup also contains a **Race day** screen, which is not built here:
 `race_player/` already exists as a separate visualizer, and folding the two
 together is its own decision.
+
+The mockup's **Calendar** screen additionally shows things this feature does
+not have — multiple season cards with a switcher, win/podium/points stats, a
+"Next up" highlight state, race terrain/class metadata, and result positions
+that link through to a race-detail screen (#47, not built). `Calendar.tsx`
+matches the mockup's per-season card and week-row structure, but shows one
+season only (there is no multi-season history yet) and drops anything that
+needs standings or a detail screen that does not exist.
