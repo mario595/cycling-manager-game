@@ -382,7 +382,15 @@ Add `Speciality`, the nine fields, `DISPLAY_MAX`. Generate
 assert `speciality` rejects a value outside the choices via `full_clean`.
 Suite stays green because every new field has a default.
 
-### W2 — `riders/display.py`: the 0–10 mapping
+### W2 — `riders/display.py`: the 0–10 mapping — done
+
+*Note: the plan named `riders/tests.py` for W2's test but `riders/tests/test_generation.py`
+and `riders/tests/test_reset_riders.py` for W3/W4/W6 — Django cannot have both
+`riders/tests.py` and `riders/tests/`. Resolved by converting to a `tests/`
+package in W2, matching `world/`'s existing convention, with a shared
+`conftest.py` for the `team`/`rider` fixtures. Actual location:
+`riders/tests/test_display.py::test_to_display_scale`.*
+
 **Test:** `riders/tests.py::test_to_display_scale` — table-driven:
 `1 → 0`, `4 → 0`, `5 → 0` *(banker's rounding — assert whatever the
 implementation actually does and write it down)*, `50 → 5`, `94 → 9`,
