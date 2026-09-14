@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 from django.db import IntegrityError
+from rest_framework.test import APIClient
 
 from accounts.models import User
 from accounts.serializers import RegisterSerializer
@@ -61,3 +62,61 @@ def test_register_serializer_rejects_a_duplicate_email_case_insensitively(db):
 
     assert not serializer.is_valid()
     assert "email" in serializer.errors
+
+
+def test_register_creates_a_user_and_logs_them_in(db):
+    client = APIClient()
+
+    response = client.post("/api/accounts/register/", {
+        "email": "mario@example.com",
+        "password": "s0meth1ng-good",
+        "display_name": "Mario",
+    }, format="json")
+
+    assert response.status_code == 201
+    assert User.objects.filter(email="mario@example.com").exists()
+    assert "_auth_user_id" in client.session
+
+
+def test_login_succeeds_with_correct_credentials(db):
+    User.objects.create_user(email="mario@example.com", password="s0meth1ng-good", display_name="Mario")
+    client = APIClient()
+
+    response = client.post("/api/accounts/login/", {
+        "email": "mario@example.com",
+        "password": "s0meth1ng-good",
+    }, format="json")
+
+    assert response.status_code == 200
+    assert response.data["display_name"] == "Mario"
+    assert "_auth_user_id" in client.session
+
+
+def test_login_fails_identically_for_unknown_email_and_wrong_password(db):
+    User.objects.create_user(email="mario@example.com", password="s0meth1ng-good")
+
+    unknown_email = APIClient().post("/api/accounts/login/", {
+        "email": "nobody@example.com",
+        "password": "whatever-1",
+    }, format="json")
+    wrong_password = APIClient().post("/api/accounts/login/", {
+        "email": "mario@example.com",
+        "password": "wrong-password-1",
+    }, format="json")
+
+    assert unknown_email.status_code == wrong_password.status_code == 400
+    assert unknown_email.data == wrong_password.data
+
+
+def test_logout_ends_the_session(db):
+    User.objects.create_user(email="mario@example.com", password="s0meth1ng-good")
+    client = APIClient()
+    client.post("/api/accounts/login/", {
+        "email": "mario@example.com",
+        "password": "s0meth1ng-good",
+    }, format="json")
+
+    response = client.post("/api/accounts/logout/")
+
+    assert response.status_code == 204
+    assert "_auth_user_id" not in client.session

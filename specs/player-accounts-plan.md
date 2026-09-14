@@ -548,7 +548,7 @@ part), `::test_create_superuser_is_staff_and_superuser`.
 **Test:** `accounts/tests.py::test_register_serializer_rejects_a_weak_password`,
 `::test_register_serializer_rejects_a_duplicate_email_case_insensitively`.
 
-### W3 — `accounts/views.py` + `accounts/urls.py`: register, login, logout
+### W3 — `accounts/views.py` + `accounts/urls.py`: register, login, logout ✅
 Three views, wired into `api/urls.py` under `accounts/`.
 **Test:** `accounts/tests.py::test_register_creates_a_user_and_logs_them_in`,
 `::test_login_succeeds_with_correct_credentials`,
