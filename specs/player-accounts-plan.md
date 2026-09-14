@@ -614,8 +614,10 @@ register → immediate login → reload preserves the session → no-team
 spectator message on a race screen → assigning a team and saving a squad
 succeeds (the CSRF path, D4) → logout returns to the spectator view.
 
-### W11 — Documentation
+### W11 — Documentation ✅
 `accounts/README.md` (new), `api/README.md`, `frontend/README.md`. See below.
+Also updated `AGENTS.md`'s domain table and project-structure tree to mark
+`accounts/` as having a `README.md` now, per the project's own convention.
 
 ## Execution order
 

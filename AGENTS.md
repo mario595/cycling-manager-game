@@ -94,7 +94,7 @@ up front — an empty app is just noise. The table below marks which exist.
 | `race_player/` | Race Player | **built**, `README.md` | React visualizer for race logs: elevation profile, rider markers, playback. |
 | `racing/` | Racing | **built**, `README.md` | The seam between Django and the engine: race records, results, log storage, ORM↔dataclass adapter. |
 | `core/` | Core | **built** | Shared abstract models. Deliberately tiny. |
-| `accounts/` | Accounts | **built** | Custom `User`. Exists from the first migration by necessity. |
+| `accounts/` | Accounts | **built**, `README.md` | Custom `User`, login by email. Register, log in, log out. |
 | `riders/` | Riders | **built** (model only) | Persisted riders mirroring the engine's attributes. Generation, aging, form, injury still to come. |
 | `teams/` | Teams | **built** (model only) | Teams, codes, colours, manager link. Roster/staff/tactics still to come. |
 | `transfers/` | Transfers | *not yet* | Market for buying/selling riders, auctions, contracts, free agents, market value. (The youth academy is a **development squad** and lives in `riders/`.) |
@@ -163,6 +163,7 @@ cycling-manager/
 │   └── README.md          # seasons, weeks, the transition record
 ├── core/
 ├── accounts/
+│   └── README.md          # email login, session auth, what this app may import
 ├── riders/
 └── teams/
 ```

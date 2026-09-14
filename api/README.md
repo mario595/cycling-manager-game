@@ -29,15 +29,29 @@ DRF routers and serializers that aggregate other apps' data for the SPA.
   `status` on a race is `Race.status` verbatim (including `failed`);
   mapping it to player-facing words is the SPA's job. See
   `schedule/README.md`, *The race calendar*.
-- `GET`/`PUT /api/racing/races/<race_id>/squads/<team_id>/` — a team's squad
-  for one race (`SquadSerializer`, `SquadWriteSerializer`, `SquadView`). `GET`
-  returns the team's saved selection if it has one, else a suggestion from
+- `GET`/`PUT /api/racing/races/<race_id>/squad/` — the **caller's own**
+  team's squad for one race (`SquadSerializer`, `SquadWriteSerializer`,
+  `SquadView`). No team id in the URL: the team is always
+  `request.user.team`, via the `team_for()` helper below. `GET` returns the
+  team's saved selection if it has one, else a suggestion from
   `racing.services.suggested_squad` (`saved: false`). `PUT` replaces it via
   `racing.services.set_squad` and returns the same shape; a `SquadError` (wrong
   size, a rider from another team, no single leader, or a race that has
-  already started) becomes a 400. `candidates` is the team's whole roster,
-  each flagged `selected`/`is_leader`, so one response gives the squad screen
-  everything it draws. See `racing/README.md`, *Squads*.
+  already started) becomes a 400, and a caller with no team becomes a 403.
+  `candidates` is the team's whole roster, each flagged `selected`/
+  `is_leader`, so one response gives the squad screen everything it draws.
+  See `racing/README.md`, *Squads*.
+- `POST /api/accounts/register/`, `POST /api/accounts/login/`,
+  `POST /api/accounts/logout/` — owned by `accounts/`, included here under
+  `/api/accounts/`. See `accounts/README.md`.
+- `GET /api/accounts/me/` (`MeSerializer`, `MeView`) — whether anyone is
+  logged in, their display name, and their team (`id`/`name`/`code`, or
+  `null`). Lives here rather than in `accounts/` because answering "does
+  this user have a team" needs both `accounts` and `teams`, and `accounts/`
+  may import neither — see `accounts/README.md`, *What `accounts/` may
+  import*. `@ensure_csrf_cookie`: this is the request the SPA relies on to
+  guarantee it holds a CSRF token before it ever issues a write (see
+  *Authentication*, below).
 
 ## URL ordering
 
@@ -48,26 +62,27 @@ after it would silently return the SPA's `index.html` instead of JSON.
 ## Authentication
 
 The project default (`REST_FRAMEWORK["DEFAULT_PERMISSION_CLASSES"]` in
-`config/settings/base.py`) is `IsAuthenticated`. The clock endpoint
-deliberately overrides this with `AllowAny`: the world's date is not
-private, and there is no login flow in the SPA yet — an authenticated
-endpoint would render the feature invisible. Any future endpoint here should
-default to the project's `IsAuthenticated` unless it has the same reason the
-clock does not.
+`config/settings/base.py`) is `IsAuthenticated`. Three endpoints override it
+with `AllowAny`, **by design, not as a placeholder**: the clock, the season
+position, and the calendar. World data like this is the game's shop window —
+meant to be visible to a visitor deciding whether to sign up — so it stays
+public even though a login flow now exists. Any future endpoint here should
+default to the project's `IsAuthenticated` unless it has the same reason
+these three don't.
 
-**The squad endpoint is a known, deliberate exception, and a bigger one.**
-`SquadView` is `AllowAny` with the team id in the URL rather than derived
-from the caller — squad selection is inherently per-manager, but there is no
-login flow to derive "which manager" from. This means anyone can currently
-edit anyone's squad. It is not a stopgap awaiting an imminent fix: `specs/
-roadmap.md` places accounts (#50) two phases after squad selection, and is
-explicit that a single-manager world is what the phases before it are
-deliberately testing. **Both this hole and the endpoint's CSRF story close
-in [#50](https://github.com/mario595/cycling-manager/issues/50):**
-`<team_id>` becomes `request.user.team`, the permission class drops back to
-the project default, and the frontend's `?team=` query parameter goes away.
+`SquadView` is the opposite case, and used to be the exception: it is now
+plain `IsAuthenticated`, with the team always `request.user.team` rather
+than a URL parameter — see `team_for()` in `api/views.py`, and
+`accounts/README.md` for why that helper lives here instead of in
+`accounts/`. There is no more "anyone can edit anyone's squad" hole; a
+caller with no team gets a 403, not someone else's squad.
 
-**CSRF, in the meantime:** DRF's `SessionAuthentication` enforces CSRF only
-for *authenticated* sessions, so the squad endpoint's anonymous `PUT` passes
-`CsrfViewMiddleware` untouched — no token, no `@csrf_exempt`, nothing to do
-here until #50 makes the session authenticated.
+**CSRF.** DRF's `SessionAuthentication` enforces CSRF only for
+*authenticated* sessions — an anonymous request passes `CsrfViewMiddleware`
+untouched, which is why the squad endpoint needed no CSRF handling before
+login existed. Now that `SquadView` requires authentication, its `PUT`
+enforces CSRF like every other authenticated write, and the SPA sends
+`X-CSRFToken` on all of them (`frontend/src/api.ts`'s `writeJson`). The
+token itself comes from the `csrftoken` cookie, which `GET
+/api/accounts/me/`'s `@ensure_csrf_cookie` guarantees is set before the SPA
+issues its first write — see `frontend/README.md`.
