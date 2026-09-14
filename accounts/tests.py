@@ -2,10 +2,22 @@ from __future__ import annotations
 
 import pytest
 from django.db import IntegrityError
+from django.test import override_settings
 from rest_framework.test import APIClient
 
 from accounts.models import User
 from accounts.serializers import RegisterSerializer
+
+# dev.py turns password strength checking off (registering a throwaway local
+# account shouldn't mean fighting CommonPasswordValidator), so this test
+# forces the real, base.py validators back on rather than relying on
+# whatever DJANGO_SETTINGS_MODULE the test run happens to use.
+STRICT_PASSWORD_VALIDATORS = [
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+]
 
 
 def test_create_user_derives_a_username_from_the_email(db):
@@ -40,6 +52,7 @@ def test_create_superuser_is_staff_and_superuser(db):
     assert user.is_superuser
 
 
+@override_settings(AUTH_PASSWORD_VALIDATORS=STRICT_PASSWORD_VALIDATORS)
 def test_register_serializer_rejects_a_weak_password(db):
     serializer = RegisterSerializer(data={
         "email": "mario@example.com",
