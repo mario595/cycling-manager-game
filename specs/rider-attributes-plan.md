@@ -414,7 +414,14 @@ implementation actually does and write it down)*, `50 → 5`, `94 → 9`,
 `100 → 10`. **Load-bearing:** assert `71` and `74` both give `7`, which is the
 spec's "two riders can look identical" property.
 
-### W3 — `riders/generation.py`: `generate_rider`
+### W3 — `riders/generation.py`: `generate_rider` — done
+
+*Amendment during this item: `name` needed a source; see the top-of-file
+Amendment note. `_roll_potential` also needed fixing — see the commit — a
+speciality's profile weight can roll an attribute past `quality` itself, so
+`potential` is now derived from the realized best attribute, not `quality`
+alone.*
+
 Profiles, build, age, quality, hidden traits, clamping.
 **Tests:** `riders/tests/test_generation.py` —
 `test_generated_rider_is_valid` (`full_clean()` passes on 200 seeded riders —
@@ -425,7 +432,7 @@ highest attribute and `weight_kg` below the sprinter mean),
 `test_young_rider_potential_is_above_current` (a forced age of 21 never has
 `potential` below its best attribute).
 
-### W4 — `riders/generation.py`: `generate_roster`
+### W4 — `riders/generation.py`: `generate_roster` — done
 **Tests:** `test_roster_has_a_spread` — generate 12 seeded riders and assert
 the gap between best and worst total-attributes exceeds a threshold, so the
 group is not clones. **This is the test that protects #46's requirement**; if
