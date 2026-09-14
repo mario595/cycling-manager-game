@@ -8,7 +8,7 @@
  * keeping it separate.
  */
 
-import type { InboxTag, RiderStatus } from './theme'
+import type { InboxTag } from './theme'
 
 // --- Team identity --------------------------------------------------------
 
@@ -146,110 +146,3 @@ export const COURSE_SEGMENTS: ReadonlyArray<readonly [number, number]> = [
 ]
 
 export const COURSE_LENGTH_M = 128400
-
-// --- Roster ---------------------------------------------------------------
-
-/**
- * The five attributes the race engine reads, in the order the design shows
- * them. `ATTR_KEYS` are the compact card labels, `ATTR_LABELS` the full names
- * used in the detail panel.
- */
-export const ATTR_KEYS = ['CLB', 'SPR', 'FLT', 'RES', 'POS'] as const
-export const ATTR_LABELS = ['Climb', 'Sprint', 'Flat', 'Resistance', 'Positioning'] as const
-
-export type Speciality = 'Climber' | 'Sprinter' | 'Rouleur' | 'Puncheur' | 'Domestique'
-
-export interface Rider {
-  id: string
-  name: string
-  age: number
-  /** 'Leader' or 'Support' — the rider's standing in the squad. */
-  role: string
-  spec: Speciality
-  /** Five values 0-100, ordered to match `ATTR_KEYS`. */
-  attrs: number[]
-  form: number
-  condition: number
-  /** Contract years remaining. */
-  years: number
-  wage: string
-  value: string
-  status: RiderStatus
-  /** Mean of `attrs`, precomputed at module load. */
-  ovr: number
-}
-
-type RiderSeed = [
-  name: string,
-  age: number,
-  role: string,
-  spec: Speciality,
-  attrs: number[],
-  form: number,
-  condition: number,
-  years: number,
-  wage: string,
-  value: string,
-  status: RiderStatus,
-]
-
-const RIDER_SEEDS: RiderSeed[] = [
-  ['Mira Kestrel', 27, 'Leader', 'Climber', [94, 38, 61, 86, 72], 92, 97, 2, '€480k', '€2.4M', 'fit'],
-  ['Anders Bergström', 31, 'Support', 'Rouleur', [58, 52, 91, 84, 88], 78, 94, 1, '€310k', '€1.1M', 'fit'],
-  ['Tunde Okafor', 24, 'Leader', 'Sprinter', [31, 93, 82, 64, 79], 54, 88, 3, '€395k', '€2.1M', 'fit'],
-  ['Renzo Vance', 29, 'Support', 'Domestique', [64, 41, 76, 90, 83], 66, 71, 2, '€180k', '€620k', 'injured'],
-  ['Luca Duarte', 22, 'Support', 'Climber', [81, 29, 55, 68, 58], 71, 96, 4, '€120k', '€880k', 'fit'],
-  ['Jonas Hoffmann', 33, 'Support', 'Rouleur', [49, 58, 88, 79, 85], 63, 92, 1, '€240k', '€410k', 'fit'],
-  ['Émile Rouvier', 26, 'Leader', 'Puncheur', [77, 66, 74, 72, 76], 84, 95, 2, '€330k', '€1.6M', 'fit'],
-  ['Kaito Mori', 25, 'Support', 'Sprinter', [34, 84, 86, 61, 81], 69, 90, 2, '€215k', '€940k', 'fit'],
-  ['Piet Vandaele', 28, 'Support', 'Domestique', [55, 47, 83, 88, 74], 58, 86, 1, '€165k', '€520k', 'tired'],
-  ['Nikola Havel', 30, 'Support', 'Climber', [86, 26, 52, 81, 63], 75, 93, 3, '€275k', '€1.2M', 'fit'],
-  ['Sam Whitlock', 23, 'Support', 'Rouleur', [52, 61, 79, 66, 70], 61, 98, 4, '€105k', '€560k', 'fit'],
-  ['Ciro Battaglia', 34, 'Support', 'Puncheur', [70, 55, 71, 77, 80], 47, 84, 1, '€190k', '€230k', 'tired'],
-  ['Otto Lindqvist', 21, 'Support', 'Climber', [74, 33, 48, 59, 54], 66, 99, 4, '€95k', '€640k', 'fit'],
-  ['Marcel Aubin', 27, 'Support', 'Domestique', [60, 44, 80, 85, 87], 72, 91, 2, '€175k', '€580k', 'fit'],
-  ['Diego Ferrán', 29, 'Leader', 'Sprinter', [28, 89, 84, 67, 82], 80, 89, 2, '€360k', '€1.8M', 'fit'],
-  ['Tomas Brandt', 26, 'Support', 'Rouleur', [57, 50, 86, 80, 78], 64, 94, 3, '€200k', '€730k', 'fit'],
-  ['Yusuf Demir', 24, 'Support', 'Puncheur', [72, 60, 69, 70, 68], 69, 95, 3, '€150k', '€690k', 'fit'],
-  ['Erik Solheim', 32, 'Support', 'Domestique', [62, 39, 77, 89, 81], 55, 87, 1, '€170k', '€300k', 'injured'],
-]
-
-export const SQUAD: Rider[] = RIDER_SEEDS.map(
-  ([name, age, role, spec, attrs, form, condition, years, wage, value, status], i) => ({
-    id: `r${i}`,
-    name,
-    age,
-    role,
-    spec,
-    attrs,
-    form,
-    condition,
-    years,
-    wage,
-    value,
-    status,
-    ovr: Math.round(attrs.reduce((a, b) => a + b, 0) / attrs.length),
-  }),
-)
-
-export const SPEC_FILTERS: Array<'All' | Speciality> = [
-  'All',
-  'Climber',
-  'Sprinter',
-  'Rouleur',
-  'Puncheur',
-  'Domestique',
-]
-
-export type SortKey = 'ovr' | 'form' | 'age' | 'wage' | 'name'
-
-export const SORT_OPTIONS: Array<{ key: SortKey; label: string }> = [
-  { key: 'ovr', label: 'Overall' },
-  { key: 'form', label: 'Form' },
-  { key: 'age', label: 'Age' },
-  { key: 'wage', label: 'Wage' },
-  { key: 'name', label: 'Name' },
-]
-
-/** The wage bill is a fixed string in the design rather than a sum. */
-export const WAGE_BILL = '€4.0M'
