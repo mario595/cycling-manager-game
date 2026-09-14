@@ -86,6 +86,30 @@ does not pretend otherwise.
 13. None of the above changes how the race engine simulates a race. The engine
     reads the same five attributes it reads today.
 
+## Attribute reference
+
+Every attribute a rider will eventually carry, what it does for the game, and
+where it stands. "Effect" is the player-visible or simulation consequence —
+current if it already exists, intended if it's the reason the attribute is
+being added.
+
+| Attribute | Visible to player? | Effect | Status |
+|---|---|---|---|
+| Climbing | Yes (0–10) | Read by the race engine on climbs. | Implemented (engine) — display moves 1–100 → 0–10 in this ticket |
+| Sprinting | Yes (0–10) | Read by the race engine on flat finishes; also stands in for descending speed. | Implemented (engine) — display moves 1–100 → 0–10 in this ticket |
+| Flat | Yes (0–10) | Read by the race engine on flat terrain. | Implemented (engine) — display moves 1–100 → 0–10 in this ticket |
+| Resistance | Yes (0–10) | Read by the race engine; slows fatigue drain. | Implemented (engine) — display moves 1–100 → 0–10 in this ticket |
+| Positioning | Yes (0–10) | Read by the race engine; draft/shelter skill. | Implemented (engine) — display moves 1–100 → 0–10 in this ticket |
+| Speciality | Yes | Tells the player what a rider *is* — build, and later training bias — independent of current ratings. Not read by the engine. | **Planned in #57** |
+| Build (height, weight) | Yes | Cosmetic/explanatory: makes a rider's speciality visible at a glance. Not read by the engine. | **Planned in #57** |
+| Age | Yes | Today: a judgement the player makes unaided. Once #58 lands: drives growth/decline. Not read by the engine. | **Planned in #57** (static); made consequential by #58 |
+| Potential | No (hidden) | Nothing yet. Once #58 lands: the ceiling ratings grow toward. | **Stored in #57, inert until #58** |
+| Peak age | No (hidden) | Nothing yet. Once #58 lands: when growth turns to decline. | **Stored in #57, inert until #58** |
+| Decline rate | No (hidden) | Nothing yet. Once #58 lands: how fast a rider falls off after peak age. | **Stored in #57, inert until #58** |
+| Injury proneness | No (hidden) | Nothing yet. Read by injuries ([#41](https://github.com/mario595/cycling-manager/issues/41)) once that ships. | **Stored in #57, inert until #41** |
+| Training affinity | No (hidden) | Nothing yet. Read by weekly training ([#36](https://github.com/mario595/cycling-manager/issues/36)) once that ships. | **Stored in #57, inert until #36** |
+| Freshness | Not yet — planned visible | Nothing yet. Once [#59](https://github.com/mario595/cycling-manager/issues/59) lands: falls with racing, recovers with rest, gates who a manager can field. | **Not part of #57** — separate attribute added by #59 |
+
 ## Out of scope
 
 - **Riders improving or declining over time.** Split out to
