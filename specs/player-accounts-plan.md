@@ -564,7 +564,7 @@ The endpoint plus the helper. `@ensure_csrf_cookie` on the `GET`.
 test fails with `Team.DoesNotExist` if `team_for` is written naively),
 `::test_me_sets_the_csrf_cookie`.
 
-### W5 — `api/views.py` + `api/urls.py`: `SquadView` derives the team
+### W5 — `api/views.py` + `api/urls.py`: `SquadView` derives the team ✅
 Drop `team_id` from both methods and the URL, drop `AllowAny`, add the
 `team_for` guard. Remove the old path.
 **Test:** `api/tests.py::test_squad_requires_authentication` (403 anonymous),
@@ -585,7 +585,7 @@ this. Do **not** make them pass by re-adding `AllowAny`.
 Suite size is 163 before this work; expect it to grow, never shrink. A
 shrinking count means a test was deleted rather than updated.
 
-### W6 — `api/views.py`: restate the public-endpoint docstrings
+### W6 — `api/views.py`: restate the public-endpoint docstrings ✅
 Docstring-only change on `ClockView`, `PositionView`, `CalendarView`: the
 reason for `AllowAny` becomes "world data is public by design".
 **Test:** none — no behaviour changes. Covered by the existing endpoint tests

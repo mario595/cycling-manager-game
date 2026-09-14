@@ -203,8 +203,13 @@ def test_me_sets_the_csrf_cookie(db):
 
 
 @pytest.fixture
-def squad_team(db) -> Team:
-    return Team.objects.create(name="Squad Team", code="SQD")
+def squad_manager(db) -> User:
+    return User.objects.create_user(email="squad-manager@example.com", password="s0meth1ng-good")
+
+
+@pytest.fixture
+def squad_team(db, squad_manager) -> Team:
+    return Team.objects.create(name="Squad Team", code="SQD", manager=squad_manager)
 
 
 @pytest.fixture
@@ -227,11 +232,35 @@ def squad_race(db) -> Race:
     )
 
 
-def test_squad_endpoint_returns_a_suggestion_for_an_unpicked_race(squad_race, squad_riders):
-    team = squad_riders[0].team
+@pytest.fixture
+def squad_client(squad_manager) -> APIClient:
+    client = APIClient()
+    client.force_authenticate(user=squad_manager)
+    return client
+
+
+def test_squad_requires_authentication(squad_race, squad_riders):
     client = APIClient()
 
-    response = client.get(f"/api/racing/races/{squad_race.pk}/squads/{team.pk}/")
+    response = client.get(f"/api/racing/races/{squad_race.pk}/squad/")
+
+    assert response.status_code == 403
+
+
+def test_squad_forbids_a_player_with_no_team(squad_race, squad_riders):
+    manager_without_a_team = User.objects.create_user(
+        email="no-team@example.com", password="s0meth1ng-good",
+    )
+    client = APIClient()
+    client.force_authenticate(user=manager_without_a_team)
+
+    response = client.get(f"/api/racing/races/{squad_race.pk}/squad/")
+
+    assert response.status_code == 403
+
+
+def test_squad_returns_the_callers_own_team(squad_race, squad_riders, squad_client):
+    response = squad_client.get(f"/api/racing/races/{squad_race.pk}/squad/")
 
     assert response.status_code == 200
     assert response.data["saved"] is False
@@ -239,64 +268,48 @@ def test_squad_endpoint_returns_a_suggestion_for_an_unpicked_race(squad_race, sq
     assert len(selected) == 4
 
 
-def test_putting_a_squad_saves_it_and_returns_it(squad_race, squad_riders):
-    team = squad_riders[0].team
-    client = APIClient()
+def test_squad_put_saves_for_the_callers_own_team(squad_race, squad_riders, squad_team, squad_client):
     body = {
         "rider_ids": [r.pk for r in squad_riders],
         "leader_id": squad_riders[1].pk,
     }
 
-    response = client.put(
-        f"/api/racing/races/{squad_race.pk}/squads/{team.pk}/", body, format="json",
-    )
+    response = squad_client.put(f"/api/racing/races/{squad_race.pk}/squad/", body, format="json")
 
     assert response.status_code == 200
     assert response.data["saved"] is True
-    squad = RaceSquad.objects.get(race=squad_race, team=team)
+    squad = RaceSquad.objects.get(race=squad_race, team=squad_team)
     assert squad.members.count() == 4
     assert squad.members.get(is_leader=True).rider_id == squad_riders[1].pk
 
 
-def test_putting_five_riders_is_a_400(squad_race, squad_riders):
-    team = squad_riders[0].team
+def test_putting_five_riders_is_a_400(squad_race, squad_riders, squad_team, squad_client):
     extra = Rider.objects.create(
-        name="Extra Rider", team=team,
+        name="Extra Rider", team=squad_team,
         climb=50, sprint=50, flat=50, resistance=50, positioning=50,
     )
-    client = APIClient()
     body = {
         "rider_ids": [r.pk for r in squad_riders] + [extra.pk],
         "leader_id": squad_riders[0].pk,
     }
 
-    response = client.put(
-        f"/api/racing/races/{squad_race.pk}/squads/{team.pk}/", body, format="json",
-    )
+    response = squad_client.put(f"/api/racing/races/{squad_race.pk}/squad/", body, format="json")
 
     assert response.status_code == 400
 
 
-def test_putting_a_squad_for_a_finished_race_is_a_400(squad_race, squad_riders):
-    team = squad_riders[0].team
+def test_putting_a_squad_for_a_finished_race_is_a_400(squad_race, squad_riders, squad_client):
     squad_race.status = Race.Status.FINISHED
     squad_race.save(update_fields=["status"])
-    client = APIClient()
     body = {
         "rider_ids": [r.pk for r in squad_riders],
         "leader_id": squad_riders[0].pk,
     }
 
-    response = client.put(
-        f"/api/racing/races/{squad_race.pk}/squads/{team.pk}/", body, format="json",
-    )
+    response = squad_client.put(f"/api/racing/races/{squad_race.pk}/squad/", body, format="json")
 
     assert response.status_code == 400
 
 
-def test_unknown_race_or_team_is_a_404(squad_race, squad_riders):
-    team = squad_riders[0].team
-    client = APIClient()
-
-    assert client.get(f"/api/racing/races/999999/squads/{team.pk}/").status_code == 404
-    assert client.get(f"/api/racing/races/{squad_race.pk}/squads/999999/").status_code == 404
+def test_unknown_race_is_a_404(squad_client):
+    assert squad_client.get("/api/racing/races/999999/squad/").status_code == 404

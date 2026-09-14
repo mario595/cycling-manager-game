@@ -12,5 +12,5 @@ urlpatterns = [
     path("world/clock/", ClockView.as_view(), name="clock"),
     path("schedule/position/", PositionView.as_view(), name="position"),
     path("schedule/calendar/", CalendarView.as_view(), name="calendar"),
-    path("racing/races/<int:race_id>/squads/<int:team_id>/", SquadView.as_view(), name="squad"),
+    path("racing/races/<int:race_id>/squad/", SquadView.as_view(), name="squad"),
 ]
