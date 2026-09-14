@@ -13,6 +13,8 @@ from schedule.models import Season, Week
 from teams.models import Team
 from world.services import now
 
+from accounts.models import User
+
 
 @override_settings(GAME_CLOCK_CLASS="world.clocks.MockClock")
 def test_clock_endpoint_returns_current_game_time(db):
@@ -156,6 +158,48 @@ def test_calendar_is_public(db):
         assert client.get("/api/schedule/calendar/").status_code == 200
     finally:
         world_services._clock = None
+
+
+def test_me_reports_anonymous_for_a_visitor(db):
+    response = APIClient().get("/api/accounts/me/")
+
+    assert response.status_code == 200
+    assert response.data["authenticated"] is False
+    assert response.data["display_name"] is None
+    assert response.data["team"] is None
+
+
+def test_me_reports_the_logged_in_player_and_their_team(db):
+    user = User.objects.create_user(email="mario@example.com", password="s0meth1ng-good", display_name="Mario")
+    Team.objects.create(name="Squad Team", code="SQD", manager=user)
+    client = APIClient()
+    client.force_authenticate(user=user)
+
+    response = client.get("/api/accounts/me/")
+
+    assert response.status_code == 200
+    assert response.data["authenticated"] is True
+    assert response.data["display_name"] == "Mario"
+    assert response.data["team"]["name"] == "Squad Team"
+
+
+def test_me_reports_null_team_for_a_player_without_one(db):
+    user = User.objects.create_user(email="mario@example.com", password="s0meth1ng-good")
+    client = APIClient()
+    client.force_authenticate(user=user)
+
+    response = client.get("/api/accounts/me/")
+
+    assert response.status_code == 200
+    assert response.data["authenticated"] is True
+    assert response.data["team"] is None
+
+
+def test_me_sets_the_csrf_cookie(db):
+    response = APIClient(enforce_csrf_checks=True).get("/api/accounts/me/")
+
+    assert response.status_code == 200
+    assert "csrftoken" in response.cookies
 
 
 @pytest.fixture

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from django.shortcuts import get_object_or_404
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -15,10 +17,26 @@ from world.services import now
 from .serializers import (
     CalendarSerializer,
     ClockSerializer,
+    MeSerializer,
     PositionSerializer,
     SquadSerializer,
     SquadWriteSerializer,
 )
+
+
+def team_for(user):
+    """The user's team, or None. `Team.manager` is a OneToOneField, so the
+    reverse accessor raises rather than returning None when the user
+    manages nothing — see specs/player-accounts-plan.md, D5. Deliberately
+    not `getattr(user, "team", None)`: RelatedObjectDoesNotExist also
+    subclasses AttributeError, so that spelling would silently swallow a
+    genuine bug (a typo, a renamed relation) as well as the real case."""
+    if not user.is_authenticated:
+        return None
+    try:
+        return user.team
+    except Team.DoesNotExist:
+        return None
 
 
 class ClockView(APIView):
@@ -96,6 +114,30 @@ class CalendarView(APIView):
             "current_week": position.week.number if position.week else None,
             "weeks": [_week_payload(w) for w in weeks],
         }).data)
+
+
+class MeView(APIView):
+    """Who is logged in, if anyone, and what team they manage, if any. One
+    request answers both, so the SPA does not need a second round trip on
+    boot to learn its own team.
+
+    Public — an anonymous visitor is a valid answer, not an error. The
+    ensure_csrf_cookie decorator is load-bearing: this is the request that
+    guarantees the SPA holds a CSRF token before it ever issues a write —
+    see specs/player-accounts-plan.md, D4."""
+
+    permission_classes = [AllowAny]
+
+    @method_decorator(ensure_csrf_cookie)
+    def get(self, request):
+        user = request.user
+        team = team_for(user)
+        payload = {
+            "authenticated": user.is_authenticated,
+            "display_name": user.display_name if user.is_authenticated else None,
+            "team": {"id": team.pk, "name": team.name, "code": team.code} if team else None,
+        }
+        return Response(MeSerializer(payload).data)
 
 
 def _squad_payload(race, team, rider_ids: list[int], leader_id: int, *, saved: bool) -> dict:

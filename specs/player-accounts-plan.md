@@ -556,7 +556,7 @@ Three views, wired into `api/urls.py` under `accounts/`.
 the two response bodies are equal — that is what proves D7),
 `::test_logout_ends_the_session`.
 
-### W4 — `api/views.py`: `MeView` and `team_for`
+### W4 — `api/views.py`: `MeView` and `team_for` ✅
 The endpoint plus the helper. `@ensure_csrf_cookie` on the `GET`.
 **Test:** `api/tests.py::test_me_reports_anonymous_for_a_visitor`,
 `::test_me_reports_the_logged_in_player_and_their_team`,
