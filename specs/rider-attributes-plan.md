@@ -3,6 +3,18 @@
 **Spec:** `specs/rider-attributes.md` · **Issue:** #57 · **Status:** proposed
 **Apps touched:** `riders/`, `api/`, `frontend/`, `racing/` (test fixtures only)
 
+**Amendment, during W3:** the original plan never addressed how
+`generate_rider()` produces a `name` — `Rider.name` has no default, so
+generation could not run without one. Stopped and asked. Decided: a small
+first/last name pool in `generation.py`, combined randomly, plus a new
+**`nationality`** field (real `TextChoices`, one value for now — Spain —
+visible on the roster alongside speciality and age) so the name pool has
+somewhere to hang and a second country is a choices-list edit later, not a
+migration. This added a `nationality` row to *Data model*, a second migration
+(`0003_rider_nationality.py`, added after `0002` rather than reopening it),
+and `nationality`/`get_nationality_display` fields on `RiderSerializer` and
+`SquadRiderSerializer`. Everything else in the plan is unchanged.
+
 ## Context you need
 
 `riders.Rider` today is: `name`, `team` (nullable FK), `role`
@@ -142,7 +154,10 @@ When this is done:
 
 ## Data model
 
-All changes are to `riders.Rider`. One migration, `riders/migrations/0002_rider_attributes.py`.
+All changes are to `riders.Rider`. One migration, `riders/migrations/0002_rider_attributes.py`,
+plus a second, `riders/migrations/0003_rider_nationality.py`, added when W3
+turned up that `generate_rider()` has no way to name a rider without one (see
+*Amendment* below).
 
 | Field | Type | Null/blank | Default | Notes |
 |---|---|---|---|---|
@@ -155,6 +170,7 @@ All changes are to `riders.Rider`. One migration, `riders/migrations/0002_rider_
 | `decline_rate` | `PositiveSmallIntegerField` | not null | `50` | Validators 1–100. Hidden. Higher = falls away faster. |
 | `injury_proneness` | `PositiveSmallIntegerField` | not null | `50` | Validators 1–100. Hidden. Read by #41. |
 | `training_affinity` | `JSONField` | not null | `dict` (callable) | Hidden. `{attribute_name: float}` over `ENGINE_ATTRIBUTES`. Read by #36. |
+| `nationality` | `CharField(max_length=2, choices=Nationality.choices)` | not null, not blank | `Nationality.SPAIN` | **Added by amendment, not in the original plan** — see below. Visible: shown alongside speciality/age. One value today (`ES`); the choices class exists so a second country is a choices-list + name-pool edit, not a migration surprise. |
 
 `Speciality` is a `TextChoices` inner class on `Rider`, alongside the existing
 `Role`:
@@ -289,6 +305,7 @@ class RiderSerializer(serializers.Serializer):
     name = serializers.CharField()
     role = serializers.CharField()
     speciality = serializers.CharField(source="get_speciality_display")
+    nationality = serializers.CharField(source="get_nationality_display")
     age = serializers.IntegerField()
     height_cm = serializers.IntegerField()
     weight_kg = serializers.IntegerField()
