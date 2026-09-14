@@ -7,10 +7,12 @@ say what any feature does — that is each issue, and later each spec.
 The backlog is 47 open issues. This is the order to take them in, and — more
 useful — the reasons for deferring the rest.
 
-**Progress:** Phase 1 is done bar one — [#6](https://github.com/mario595/cycling-manager/issues/6)
-(clock) and [#5](https://github.com/mario595/cycling-manager/issues/5) (season)
-are merged; [#7](https://github.com/mario595/cycling-manager/issues/7) (calendar)
-is in progress.
+**Progress:** Phase 1 is merged in full. Phase 2 ([#37](https://github.com/mario595/cycling-manager/issues/37),
+squad selection) is built and open as [PR #55](https://github.com/mario595/cycling-manager/pull/55),
+pending merge. Phase 3 is **closed without new work**: [#39](https://github.com/mario595/cycling-manager/issues/39)
+and [#44](https://github.com/mario595/cycling-manager/issues/44) turned out to
+already be satisfied by #37's `ensure_squads`/`auto_pick_squad` mechanism —
+see that phase's entry below.
 
 ## The question this roadmap answers
 
@@ -75,22 +77,32 @@ It does not need [#41](https://github.com/mario595/cycling-manager/issues/41)
 (injuries) to ship. The stage-race squad lock is simply less interesting without
 it — an argument for doing #41 soon after, not for blocking on it.
 
-## Phase 3 — somebody to race against
+## Phase 3 — somebody to race against — done, as a side effect of #37
 
 **Issues: [#44](https://github.com/mario595/cycling-manager/issues/44) — unmanaged
 teams field a default squad, and
 [#39](https://github.com/mario595/cycling-manager/issues/39) — the same for an
-absent manager**
+absent manager. Both closed 2026-09-14, no new work.**
 
 A Division is full long before it has enough users — 16 teams, 6 users. Without
-this, most of the field does not start and there is nothing to simulate.
+a squad for every team, most of the field does not start and there is nothing to
+simulate.
 
-**#39 and #44 are one mechanism, not two.** Both reduce to *"a squad must exist
-for every team at every race"*; the only difference is whether a last-used squad
-is available to fall back on. Two implementations will disagree, and the
-disagreement surfaces mid-race. Build it once — ideally specced together with
-#37, as "how a squad comes to exist", with the manager's choice as the
-interesting path and the default as the fallback.
+**#39 and #44 turned out to be one mechanism, already built by #37, not a
+second thing to spec.** `racing.services.ensure_squads(race)`, called from
+`simulate_race`, writes a `RaceSquad` via `auto_pick_squad(team)` for every
+team that doesn't have one yet when the race runs — and it does this with no
+check on `team.manager` at all, so an unmanaged team and a managed-but-absent
+team hit the exact same code path. The bar both tickets set — *a squad must
+exist for every team at every race, so the game cannot stall* — was met the
+moment #37 shipped it, not by a follow-up.
+
+What #37 does **not** do: reuse an absent manager's last chosen squad at race
+time (`ensure_squads` calls `auto_pick_squad` directly rather than
+`previous_squad`, unlike the pre-fill shown on the race screen). Raised and
+deliberately not pursued — see the discussion on #39 — because the acceptance
+bar for both tickets was "the game continues," not "the fallback is good."
+Revisit only if it turns out to matter in play.
 
 [#45](https://github.com/mario595/cycling-manager/issues/45) (heuristic AI) is
 **not** here — but it has a named expiry, not an open-ended one. See the
@@ -257,3 +269,13 @@ rather than creating a fresh one moved account work from second in the order to 
 Phase 3 — a decision about how a feature works reordered the plan, which is the
 normal way this file goes stale. Re-read it after any decision of that kind, not
 only after a phase completes.
+
+**Revised 2026-09-14.** Phase 3 closed without a spec or a plan: #39 and #44
+were product-spec'd on request and both turned out to already be implemented
+by #37 (see that phase's entry). Recorded here as another way this file goes
+stale — not just "a decision reorders the plan," but "a later ticket turns out
+to have been solved by an earlier one already merged" — worth checking for
+directly, not just assumed away, the next time a Phase-3-shaped ticket comes up
+(#45 in particular sits right behind this and should be checked against #37's
+actual shipped behaviour before it is specced, not just against the backlog's
+description of it).
