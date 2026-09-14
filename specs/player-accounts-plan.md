@@ -532,7 +532,7 @@ Wrap `<BrowserRouter>` contents in `<AuthProvider>`. Register `/login` and
 
 ## Work items
 
-### W1 — `accounts/models.py` + migration: email as the login identifier
+### W1 — `accounts/models.py` + migration: email as the login identifier ✅
 Add `UserManager`, `USERNAME_FIELD`, `REQUIRED_FIELDS`, redeclare `email` as
 unique. Write `0002_email_login.py` with the backfill (see Data model) ahead
 of the `AlterField`.
