@@ -88,13 +88,15 @@ does not pretend otherwise.
 
 ## Out of scope
 
-- **Riders improving or declining over time.** Split out — the age curve,
-  potential, peak age and decline rate become *live* in a separate ticket. This
-  one gives them somewhere to live. See *Deferred*.
+- **Riders improving or declining over time.** Split out to
+  [#58](https://github.com/mario595/cycling-manager/issues/58) — the age curve,
+  potential, peak age and decline rate become *live* there. This one gives them
+  somewhere to live. See *Deferred*.
 - **Freshness** — a visible value falling with racing and recovering with rest
-  at a hidden per-rider rate. Split out: it is a mechanic rather than a stored
-  number, requiring a rule at race time and a rule on the weekly tick. See
-  *Deferred*.
+  at a hidden per-rider rate. Split out to
+  [#59](https://github.com/mario595/cycling-manager/issues/59): it is a
+  mechanic rather than a stored number, requiring a rule at race time and a
+  rule on the weekly tick. See *Deferred*.
 - **Anything reading the hidden traits.** Injury proneness is stored here and
   read by injuries ([#41](https://github.com/mario595/cycling-manager/issues/41));
   training affinity is stored here and read by training
@@ -227,13 +229,15 @@ substantial without touching the engine.
 
 ## Deferred
 
-- **Rider growth and decline.** The age curve made live: riders below their peak
-  improve toward their potential, riders past it decline at their own rate, and
-  ages advance as seasons pass. Waiting because it needs a hook on the world
-  tick that has not been designed and a balancing pass so the curve is neither
-  invisible nor absurd — and because #46 and #33 need the attributes, not the
-  movement.
-- **Freshness.** Visible, falls with racing, recovers with rest at a hidden
+- **Rider growth and decline** —
+  [#58](https://github.com/mario595/cycling-manager/issues/58). The age curve
+  made live: riders below their peak improve toward their potential, riders
+  past it decline at their own rate, and ages advance as seasons pass. Waiting
+  because it needs a hook on the world tick that has not been designed and a
+  balancing pass so the curve is neither invisible nor absurd — and because
+  #46 and #33 need the attributes, not the movement.
+- **Freshness** — [#59](https://github.com/mario595/cycling-manager/issues/59).
+  Visible, falls with racing, recovers with rest at a hidden
   per-rider rate, with a floor and a ceiling so that rest is always eventually
   sufficient and continuous racing bottoms out rather than falling forever.
   Waiting because it is the one item here that is a mechanic spanning `racing/`

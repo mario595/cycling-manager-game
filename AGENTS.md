@@ -43,6 +43,13 @@ the feature built; once it exists, the documentation that matters lives in
 `README.md`, and a spec or plan left behind is a second, aging copy of
 decisions the code and the README already record.
 
+**Opening a ticket:** every new issue must be added to the
+[Cycling Manager Game](https://github.com/users/mario595/projects/5) project
+board, whether it's filed by hand or created while speccing another ticket
+(e.g. a piece split out during `/product-spec`). An issue left off the board
+doesn't show up in any Status column and gets missed when picking up work —
+`gh project item-add 5 --owner mario595 --url <issue-url>`.
+
 `specs/roadmap.md` says **which issues to build next and why**, and which are
 deliberately deferred. Read it before picking up work.
 
