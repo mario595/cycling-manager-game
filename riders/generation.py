@@ -131,7 +131,7 @@ def _roll_potential(
     headroom = max(0, peak_age - age) * rng.uniform(1.5, 3.0)
     shortfall = max(0, age - peak_age) * rng.uniform(1.0, 2.5)
     potential = quality + headroom - shortfall
-    if age < peak_age:
+    if age <= peak_age:
         potential = max(potential, best_attribute)
     return _clamp(round(potential), _MIN_ATTRIBUTE, _MAX_ATTRIBUTE)
 

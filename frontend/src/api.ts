@@ -233,8 +233,8 @@ export interface Rider {
   positioning: number
 }
 
-export async function getRiders(teamId: number): Promise<Rider[]> {
-  const response = await fetch(`/api/riders/?team=${teamId}`)
+export async function getRiders(): Promise<Rider[]> {
+  const response = await fetch('/api/riders/')
   if (!response.ok) {
     throw new Error(`riders request failed: ${response.status}`)
   }

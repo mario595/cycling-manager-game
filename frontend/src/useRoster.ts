@@ -9,12 +9,13 @@ interface RosterState {
 }
 
 /**
- * Polls a team's roster every 60s, same lifecycle as useCalendar. Renders
- * nothing while loading or on error rather than a fabricated roster — a
- * screen showing invented riders mid-fetch is indistinguishable from a real
- * roster with a bug in it, the same discipline useSeason.ts established.
+ * Polls the caller's own team's roster every 60s, same lifecycle as
+ * useCalendar. Renders nothing while loading or on error rather than a
+ * fabricated roster — a screen showing invented riders mid-fetch is
+ * indistinguishable from a real roster with a bug in it, the same
+ * discipline useSeason.ts established.
  */
-export function useRoster(teamId: number): RosterState {
+export function useRoster(): RosterState {
   const [riders, setRiders] = useState<Rider[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
@@ -23,7 +24,7 @@ export function useRoster(teamId: number): RosterState {
     let cancelled = false
 
     const fetchRiders = () => {
-      getRiders(teamId)
+      getRiders()
         .then((data) => {
           if (cancelled) return
           setRiders(data)
@@ -44,7 +45,7 @@ export function useRoster(teamId: number): RosterState {
       cancelled = true
       clearInterval(pollInterval)
     }
-  }, [teamId])
+  }, [])
 
   return { riders, loading, error }
 }

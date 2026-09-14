@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
 
 import type { Rider } from '../api'
 import { Bar, Card, PageBody, PageHeading, StatTile } from '../components/primitives'
 import { barColor, color, font } from '../theme'
+import { useAuth } from '../useAuth'
 import { useRoster } from '../useRoster'
 
 type AttrKey = 'climb' | 'sprint' | 'flat' | 'resistance' | 'positioning'
@@ -36,15 +36,11 @@ const SORT_OPTIONS: Array<{ key: SortKey; label: string }> = [
   { key: 'positioning', label: 'Positioning' },
 ]
 
-/**
- * The team id is a temporary stand-in for identity, same as Race.tsx — see
- * that file's comment and api/README.md. Disappears once #50 lands.
- */
 export function Roster() {
-  const [searchParams] = useSearchParams()
-  const teamId = Number(searchParams.get('team') ?? 1)
+  const { me, loading: authLoading } = useAuth()
+  const hasTeam = me?.team != null
 
-  const { riders, loading, error } = useRoster(teamId)
+  const { riders, loading, error } = useRoster()
   const [filter, setFilter] = useState<'All' | string>('All')
   const [sort, setSort] = useState<SortKey>('name')
   const [picked, setPicked] = useState<number | null>(null)
@@ -64,7 +60,20 @@ export function Roster() {
     })
   }, [riders, filter, sort])
 
-  if (loading) return null
+  if (authLoading || loading) return null
+
+  if (!hasTeam) {
+    return (
+      <PageBody gap={18} paddingTop={26}>
+        <Card style={{ padding: '18px 20px' }}>
+          <div style={{ fontSize: 13.5, color: color.muted }}>
+            You do not manage a team, so there is no roster to show here.
+          </div>
+        </Card>
+      </PageBody>
+    )
+  }
+
   if (error || !riders) {
     return (
       <PageBody gap={18} paddingTop={26}>

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import random
 
-from riders.generation import BUILD_PROFILES, generate_rider, generate_roster
+from riders.generation import BUILD_PROFILES, _roll_potential, generate_rider, generate_roster
 from riders.models import ENGINE_ATTRIBUTES, Rider
 
 
@@ -43,6 +43,18 @@ def test_young_rider_potential_is_above_current():
         rider = generate_rider(age=21, rng=rng)
         best_attribute = max(getattr(rider, name) for name in ENGINE_ATTRIBUTES)
         assert rider.potential >= best_attribute
+
+
+def test_potential_at_peak_age_is_above_current():
+    """Regression: age < peak_age used to exclude age == peak_age, where
+    headroom and shortfall are both 0 and potential collapsed to quality —
+    which a high profile-weight roll can push below best_attribute."""
+    rng = random.Random(6)
+    for _ in range(100):
+        quality = rng.randint(1, 95)
+        best_attribute = min(100, round(quality * 1.45))
+        potential = _roll_potential(quality, best_attribute, age=27, peak_age=27, rng=rng)
+        assert potential >= best_attribute
 
 
 def test_roster_has_a_spread(db):
