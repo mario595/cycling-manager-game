@@ -8,6 +8,7 @@ from riders.models import Rider
 
 def test_rider_has_speciality_and_hidden_traits(rider):
     assert rider.speciality == Rider.Speciality.ROULEUR
+    assert rider.nationality == Rider.Nationality.SPAIN
     assert rider.height_cm == 178
     assert rider.weight_kg == 70
     assert rider.age == 25

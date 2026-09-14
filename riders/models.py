@@ -61,7 +61,19 @@ class Rider(TimeStampedModel):
         PUNCHEUR = "puncheur", "Puncheur"
         DOMESTIQUE = "domestique", "Domestique"
 
+    class Nationality(models.TextChoices):
+        SPAIN = "ES", "Spain"
+
     name = models.CharField(max_length=100)
+    nationality = models.CharField(
+        max_length=2,
+        choices=Nationality.choices,
+        default=Nationality.SPAIN,
+        help_text=(
+            "Only Spain exists today; the choices class exists so a second "
+            "country is a choices-list and name-pool edit, not a migration."
+        ),
+    )
 
     team = models.ForeignKey(
         "teams.Team",

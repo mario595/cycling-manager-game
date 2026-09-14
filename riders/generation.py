@@ -56,6 +56,28 @@ QUALITY_SPREAD: list[tuple[int, int, int]] = [
     (5, 83, 95),    # a standout
 ]
 
+#: First/last name pools, per nationality. Only Spain exists today; adding a
+#: second nationality is a new key in each dict, not a code change — see
+#: Rider.Nationality.
+FIRST_NAMES: dict[str, list[str]] = {
+    Rider.Nationality.SPAIN: [
+        "Alejandro", "Carlos", "Daniel", "Diego", "Enrique", "Fernando",
+        "Gonzalo", "Hugo", "Ignacio", "Javier", "Jorge", "Jose", "Juan",
+        "Luis", "Manuel", "Marcos", "Mario", "Miguel", "Pablo", "Pedro",
+        "Rafael", "Raul", "Ruben", "Santiago", "Sergio", "Victor",
+    ],
+}
+
+LAST_NAMES: dict[str, list[str]] = {
+    Rider.Nationality.SPAIN: [
+        "Alonso", "Alvarez", "Blanco", "Castro", "Diaz", "Dominguez",
+        "Fernandez", "Garcia", "Gimenez", "Gomez", "Gonzalez", "Hernandez",
+        "Jimenez", "Lopez", "Martin", "Martinez", "Moreno", "Munoz",
+        "Navarro", "Ortiz", "Perez", "Ramirez", "Rodriguez", "Ruiz",
+        "Sanchez", "Torres",
+    ],
+}
+
 _MIN_ATTRIBUTE = 1
 _MAX_ATTRIBUTE = 100
 _ATTRIBUTE_SPREAD = 12  # +/- roll applied to each weighted attribute
@@ -94,15 +116,30 @@ def _roll_build(speciality: str, rng: random.Random) -> tuple[int, int]:
     return height, weight
 
 
-def _roll_potential(quality: int, age: int, peak_age: int, rng: random.Random) -> int:
-    """Potential consistent with age: a young rider's potential sits above
-    their current quality (they have room to grow); an old rider's may sit
-    below it (they have already declined past it). See the plan's Design
-    decisions, item 7's clamping rule."""
+def _roll_potential(
+    quality: int, best_attribute: int, age: int, peak_age: int, rng: random.Random
+) -> int:
+    """Potential consistent with age: a young rider's potential sits at or
+    above their current best attribute (they have room to grow, and cannot
+    already have exceeded their own ceiling); an old rider's may sit below
+    it (they have already declined past it). See the plan's Design
+    decisions, item 7's clamping rule.
+
+    Driven off `best_attribute`, not `quality` — a speciality's profile
+    weight (e.g. a Climber's 1.45 on climb) can roll an attribute well past
+    `quality` itself, so quality alone is not a safe floor."""
     headroom = max(0, peak_age - age) * rng.uniform(1.5, 3.0)
     shortfall = max(0, age - peak_age) * rng.uniform(1.0, 2.5)
     potential = quality + headroom - shortfall
+    if age < peak_age:
+        potential = max(potential, best_attribute)
     return _clamp(round(potential), _MIN_ATTRIBUTE, _MAX_ATTRIBUTE)
+
+
+def _roll_name(nationality: str, rng: random.Random) -> str:
+    first = rng.choice(FIRST_NAMES[nationality])
+    last = rng.choice(LAST_NAMES[nationality])
+    return f"{first} {last}"
 
 
 def _roll_training_affinity(speciality: str, rng: random.Random) -> dict[str, float]:
@@ -120,6 +157,7 @@ def _roll_training_affinity(speciality: str, rng: random.Random) -> dict[str, fl
 def generate_rider(
     *,
     speciality: str | None = None,
+    nationality: str | None = None,
     quality: int | None = None,
     age: int | None = None,
     rng: random.Random | None = None,
@@ -133,15 +171,18 @@ def generate_rider(
     rng = rng or random.Random()
 
     speciality = speciality or rng.choice(list(Rider.Speciality.values))
+    nationality = nationality or rng.choice(list(Rider.Nationality.values))
     quality = quality if quality is not None else _roll_quality(rng)
     age = age if age is not None else rng.randint(*_AGE_RANGE)
     peak_age = rng.randint(*_PEAK_AGE_RANGE)
 
     attributes = _roll_attributes(speciality, quality, rng)
     height_cm, weight_kg = _roll_build(speciality, rng)
-    potential = _roll_potential(quality, age, peak_age, rng)
+    potential = _roll_potential(quality, max(attributes.values()), age, peak_age, rng)
 
     return Rider(
+        name=_roll_name(nationality, rng),
+        nationality=nationality,
         speciality=speciality,
         age=age,
         height_cm=height_cm,
