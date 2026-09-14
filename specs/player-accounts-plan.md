@@ -591,22 +591,28 @@ reason for `AllowAny` becomes "world data is public by design".
 **Test:** none — no behaviour changes. Covered by the existing endpoint tests
 continuing to pass anonymously.
 
-### W7 — `frontend/src/api.ts`: CSRF plumbing and account calls
+### W7 — `frontend/src/api.ts`: CSRF plumbing and account calls ✅
 `readCookie`, `ensureCsrfToken`, `post`. `getMe`, `register`, `login`,
 `logout`. `getSquad`/`putSquad` lose `teamId` and route to the new path;
 `putSquad` goes through the token path.
 **Test:** none (no frontend test harness in this repo). Proven in
 Verification.
 
-### W8 — `frontend/src/useAuth.tsx`: the auth context
+### W8 — `frontend/src/useAuth.tsx`: the auth context ✅
 Provider + hook, `getMe()` on mount.
 
-### W9 — `frontend/src/screens/Login.tsx` + `Register.tsx` + `App.tsx`
+### W9 — `frontend/src/screens/Login.tsx` + `Register.tsx` + `App.tsx` ✅
 The two forms, `AuthProvider` wrapping the router, two explicit routes.
 
-### W10 — `frontend/src/screens/Race.tsx` + `components/Layout.tsx`
+### W10 — `frontend/src/screens/Race.tsx` + `components/Layout.tsx` ✅
 Drop `?team=`, drop `placeholderData.TEAM` from the layout, render the real
-identity and the no-team state.
+identity and the no-team state. Also touched `Sidebar.tsx` and `useSquad.ts`
+(the design section for this item covers both; `useSquad.ts` needed its
+signature updated to match D8's `getSquad`/`putSquad` change) — not named in
+the work-item heading but required by it. Verified end to end in the browser:
+register → immediate login → reload preserves the session → no-team
+spectator message on a race screen → assigning a team and saving a squad
+succeeds (the CSRF path, D4) → logout returns to the spectator view.
 
 ### W11 — Documentation
 `accounts/README.md` (new), `api/README.md`, `frontend/README.md`. See below.

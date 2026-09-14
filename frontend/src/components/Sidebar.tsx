@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom'
 import { NAV_SECTIONS } from '../navigation'
 import { TEAM } from '../placeholderData'
 import { color, font } from '../theme'
+import { useAuth } from '../useAuth'
 import { useClock } from '../useClock'
 
 // No per-user timezone setting exists yet, so every player sees the game
@@ -41,6 +42,8 @@ interface SidebarProps {
 export function Sidebar({ mobile, open, onNavigate }: SidebarProps) {
   const { now, error } = useClock()
   const dateLabel = now && !error ? formatGameDate(now) : TEAM.season
+  const { me, logout } = useAuth()
+  const team = me?.team ?? null
 
   const style: React.CSSProperties = mobile
     ? {
@@ -86,12 +89,14 @@ export function Sidebar({ mobile, open, onNavigate }: SidebarProps) {
             letterSpacing: '-0.5px',
           }}
         >
-          {TEAM.code}
+          {team ? team.code : '—'}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-          <div style={{ fontWeight: 600, fontSize: 14.5, letterSpacing: '-0.2px' }}>{TEAM.name}</div>
+          <div style={{ fontWeight: 600, fontSize: 14.5, letterSpacing: '-0.2px' }}>
+            {team ? team.name : 'No team'}
+          </div>
           <div style={{ color: color.mutedStrong, fontSize: 11, fontFamily: font.mono }}>
-            {TEAM.tier}
+            {team ? TEAM.tier : 'SPECTATING'}
           </div>
         </div>
       </div>
@@ -196,27 +201,51 @@ export function Sidebar({ mobile, open, onNavigate }: SidebarProps) {
           gap: 10,
         }}
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <div style={{ fontSize: 13, fontWeight: 500 }}>{TEAM.manager}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {me?.authenticated ? me.display_name || 'Manager' : 'Not logged in'}
+          </div>
           <div style={{ color: color.mutedStrong, fontSize: 11, fontFamily: font.mono }}>
             {dateLabel}
           </div>
         </div>
-        <button
-          type="button"
-          className="hover-accent-border"
-          style={{
-            background: 'transparent',
-            border: '1px solid #D3D7DC',
-            color: color.mutedStrong,
-            borderRadius: 8,
-            padding: '6px 10px',
-            fontSize: 11.5,
-            cursor: 'pointer',
-          }}
-        >
-          Settings
-        </button>
+        {me?.authenticated ? (
+          <button
+            type="button"
+            className="hover-accent-border"
+            onClick={() => void logout()}
+            style={{
+              background: 'transparent',
+              border: '1px solid #D3D7DC',
+              color: color.mutedStrong,
+              borderRadius: 8,
+              padding: '6px 10px',
+              fontSize: 11.5,
+              cursor: 'pointer',
+              flex: '0 0 auto',
+            }}
+          >
+            Log out
+          </button>
+        ) : (
+          <NavLink
+            to="/login"
+            onClick={onNavigate}
+            className="hover-accent-border"
+            style={{
+              background: 'transparent',
+              border: '1px solid #D3D7DC',
+              color: color.mutedStrong,
+              borderRadius: 8,
+              padding: '6px 10px',
+              fontSize: 11.5,
+              textDecoration: 'none',
+              flex: '0 0 auto',
+            }}
+          >
+            Log in
+          </NavLink>
+        )}
       </div>
     </aside>
   )
