@@ -508,7 +508,23 @@ was deliberately reintroduced, then reverted), `test_squad_candidates_use_displa
 `test_rider_list_requires_team_param` (400), `test_rider_list_unknown_team`
 (404).
 
-### W9 — `frontend/`: roster screen on real data, placeholder rider data deleted
+### W9 — `frontend/`: roster screen on real data, placeholder rider data deleted — done
+
+*Also removed `ATTR_KEYS`/`ATTR_LABELS` from `placeholderData.ts` (not in
+the plan's original deletion list) — `Roster.tsx` now defines its own
+narrower versions typed to the five numeric attribute keys, since TypeScript
+rejected `rider[key] * 10` when `key` was typed as `keyof Rider` (the API's
+`Rider`, which also has string fields). `theme.ts`'s `riderStatus`/`RiderStatus`
+are now unused but left in place — out of this ticket's scope.*
+
+*Environment note for future sessions: the Browser pane's `preview_start`
+with a named launch.json config runs from the **main checkout**, not the
+current worktree, even when the session is inside one — confirmed by
+`preview_list`'s `cwd`. Verifying a worktree's frontend changes needs Vite
+run manually from the worktree's `frontend/` (`npx vite`, a free port via
+`PORT=`), with `vite.config.ts`'s hardcoded `:8000` proxy targets pointed
+at a locally-started Django instance for the duration of verification only
+— never committed.*
 `api.ts`, `useRoster.ts`, `Roster.tsx`, and the removal of the rider half of
 `placeholderData.ts` (`Rider`, `RiderSeed`, `RIDER_SEEDS`, `SQUAD`,
 `SPEC_FILTERS`, `SortKey`, `SORT_OPTIONS`, `WAGE_BILL`). **`Roster.tsx` is the
@@ -520,7 +536,7 @@ deletion is contained; the rest of `placeholderData.ts` stays.
 **Test:** `npm run build` and the browser verification below. There is no
 frontend test runner in this project; do not add one as part of this ticket.
 
-### W10 — `frontend/src/screens/Race.tsx`: squad screen on the display scale
+### W10 — `frontend/src/screens/Race.tsx`: squad screen on the display scale — done
 Whatever W7 changed under it, plus the `Bar`/`barColor` scaling check.
 **Test:** browser verification.
 
