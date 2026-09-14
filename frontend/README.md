@@ -11,19 +11,45 @@ The React SPA. Currently a **scaffold**: it reproduces the mockup in
 | `/roster` | Roster | Built — filter, sort and rider detail panel all work |
 | `/calendar` | Calendar | Built — twelve weeks from the API, no fixture data |
 | `/race/:raceId` | Race | Built — squad selection, no fixture data |
+| `/login`, `/register` | Login, Register | Built — real accounts, no fixture data |
 | everything else, including the `/race` sidebar item itself | `Placeholder` | Renders the route name and path |
 
 `/race/:raceId` is the first **parameterised** route, so it is registered as
 an explicit `<Route>` in `App.tsx` rather than through `SCREENS` — that map
 generates one route per nav item by path, which has nowhere to put a
 `:raceId`. The sidebar's own `/race` item still lands on `Placeholder`;
-`Race.tsx` is reached only by clicking a race on the calendar.
+`Race.tsx` is reached only by clicking a race on the calendar. `/login` and
+`/register` are explicit routes for the same reason: neither is a nav item,
+so neither belongs in the sidebar.
 
-The team a manager is picking a squad for is read from `?team=<id>` on the
-URL, defaulting to `1` — there is no login flow to derive it from yet. This
-is a deliberately visible stand-in, not a hidden default: see `api/README.md`
-and [#50](https://github.com/mario595/cycling-manager/issues/50), which is
-what removes the query parameter entirely.
+## Identity
+
+`useAuth.tsx`'s `AuthProvider` learns who is logged in **once**, on mount,
+via `GET /api/accounts/me/`, and shares it through `useAuth()` — the
+sidebar, the race screen, and the login/register screens all read the same
+`me` rather than each fetching it themselves. This is also what makes a
+session survive a page reload: the browser still holds the session cookie,
+so `getMe()` on the next mount re-learns the same identity without the
+player logging in again.
+
+`me.team` is what used to be the `?team=<id>` URL parameter described in an
+earlier version of this file. That parameter is gone — squad selection now
+derives the team from the session on the server (`api/README.md`), so
+`Race.tsx` no longer needs to pass one. A team-less `me` (anonymous, or
+logged in but not managing a team — see `specs/player-accounts.md`) is not
+an error state: the race screen shows a plain "you do not manage a team"
+message instead of an empty picker, and the sidebar shows "No team /
+SPECTATING" instead of a team name.
+
+**Writes need a CSRF token.** DRF's `SessionAuthentication` enforces CSRF
+for authenticated sessions, so any `POST`/`PUT` issued while logged in must
+carry `X-CSRFToken`, or it 403s — a case nothing hit before login existed,
+because every write used to run anonymously. `api.ts`'s `writeJson` (used by
+`register`, `login`, `logout`, and `putSquad`) handles this: `ensureCsrfToken`
+reads the `csrftoken` cookie, fetching `/api/accounts/me/` first if it isn't
+set yet (that endpoint's `@ensure_csrf_cookie` guarantees it will be after).
+Anything that issues a write should go through `writeJson`, not a bare
+`fetch`.
 
 Every sidebar item routes somewhere real. Items without a screen land on
 `Placeholder`, which prints the path it resolved — so a click that "does
@@ -41,6 +67,13 @@ Most screens still read from it. Keeping every fake value in one module
 means the screens already have their real shapes, and wiring them up later
 is a matter of replacing that module with fetches rather than hunting
 literals through JSX.
+
+`TEAM` is now **partly real**: `Layout.tsx`/`Sidebar.tsx` read team identity
+(name, code) and the manager's name from `useAuth()`'s `me` when a session
+exists, and only fall back to `TEAM`'s fake values for fields nothing
+real supplies yet — budget (`economy/` doesn't exist) and tier
+(`competitions/` doesn't exist). A future economy/competitions feature
+replaces those two fields the same way this one replaced the rest.
 
 `/calendar` is the first screen with **no placeholder data at all** —
 `src/useCalendar.ts` polls `GET /api/schedule/calendar/` and nothing else.

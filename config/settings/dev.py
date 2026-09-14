@@ -30,3 +30,10 @@ CORS_ALLOWED_ORIGINS = ["http://localhost:5173"]
 # code path to override it is wanted. See world/README.md, "Which clock runs
 # where".
 GAME_CLOCK_CLASS = os.environ.get("GAME_CLOCK_CLASS", "world.clocks.RealClock")
+
+# No password strength requirements locally — testing registration
+# shouldn't mean fighting CommonPasswordValidator for a throwaway account.
+# prod.py never overrides AUTH_PASSWORD_VALIDATORS, so this has no way to
+# leak into production; it only ever applies when DJANGO_SETTINGS_MODULE
+# points at this file.
+AUTH_PASSWORD_VALIDATORS: list[dict] = []

@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 
 import type { Squad, SquadRider } from '../api'
 import { Bar, Button, Card, PageBody, PageHeading, StatTile } from '../components/primitives'
 import { raceStatusLabel } from '../raceStatus'
 import { barColor, color, font } from '../theme'
+import { useAuth } from '../useAuth'
 import { useSquad } from '../useSquad'
 
 const SQUAD_SIZE = 4
@@ -17,21 +18,27 @@ const ATTRS: { key: keyof SquadRider & string; label: string }[] = [
   { key: 'positioning', label: 'Positioning' },
 ]
 
-/**
- * The team id is a temporary stand-in for identity: there is no login flow
- * in the SPA yet, so a manager is whichever ?team= is in the URL, defaulting
- * to the first team the squad's own candidate list contains. Deliberately
- * obvious rather than hidden — it disappears once #50 lands, at which point
- * this becomes request.user.team and this query param goes away.
- */
 export function Race() {
   const { raceId } = useParams<{ raceId: string }>()
-  const [searchParams] = useSearchParams()
-  const teamId = Number(searchParams.get('team') ?? 1)
+  const { me, loading: authLoading } = useAuth()
+  const hasTeam = me?.team != null
 
-  const { squad, loading, error, save, saving, saveError } = useSquad(Number(raceId), teamId)
+  const { squad, loading, error, save, saving, saveError } = useSquad(Number(raceId))
 
-  if (loading) return null
+  if (authLoading || loading) return null
+
+  if (!hasTeam) {
+    return (
+      <PageBody gap={18} paddingTop={26}>
+        <Card style={{ padding: '18px 20px' }}>
+          <div style={{ fontSize: 13.5, color: color.muted }}>
+            You do not manage a team, so there is no squad for you to pick here.
+          </div>
+        </Card>
+      </PageBody>
+    )
+  }
+
   if (error || !squad) {
     return (
       <PageBody gap={18} paddingTop={26}>

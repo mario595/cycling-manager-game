@@ -5,6 +5,7 @@ import { titleForPath } from '../navigation'
 import { TEAM } from '../placeholderData'
 import { seasonLabel } from '../seasonLabel'
 import { MOBILE_BREAKPOINT, color, font } from '../theme'
+import { useAuth } from '../useAuth'
 import { useSeason } from '../useSeason'
 import { Sidebar } from './Sidebar'
 
@@ -31,6 +32,8 @@ export function Layout() {
   const { pathname } = useLocation()
   const { position } = useSeason()
   const label = seasonLabel(position)
+  const { me } = useAuth()
+  const teamName = me?.team?.name ?? 'No team'
 
   // Growing the window past the breakpoint while the drawer is open would
   // otherwise leave `drawer` stuck true behind the now-static sidebar.
@@ -105,7 +108,7 @@ export function Layout() {
               {titleForPath(pathname)}
             </div>
             <div style={{ fontSize: 11, color: color.muted, fontFamily: font.mono }}>
-              {TEAM.name.toUpperCase()}
+              {teamName.toUpperCase()}
               {label ? ` · ${label}` : ''}
             </div>
           </div>

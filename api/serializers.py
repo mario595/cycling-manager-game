@@ -69,3 +69,15 @@ class SquadSerializer(serializers.Serializer):
 class SquadWriteSerializer(serializers.Serializer):
     rider_ids = serializers.ListField(child=serializers.IntegerField())
     leader_id = serializers.IntegerField()
+
+
+class MeTeamSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    code = serializers.CharField()
+
+
+class MeSerializer(serializers.Serializer):
+    authenticated = serializers.BooleanField()
+    display_name = serializers.CharField(allow_null=True)
+    team = MeTeamSerializer(allow_null=True)
