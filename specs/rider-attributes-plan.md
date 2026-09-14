@@ -15,6 +15,34 @@ migration. This added a `nationality` row to *Data model*, a second migration
 and `nationality`/`get_nationality_display` fields on `RiderSerializer` and
 `SquadRiderSerializer`. Everything else in the plan is unchanged.
 
+**Amendment, during W6:** the shared dev Postgres container
+(`game-clock-db-1`, left running by an unrelated worktree — every worktree's
+`docker-compose.yml` targets the same fixed host port 5433) turned out to be
+under sustained concurrent use by another active session, causing repeated
+`test_cycling_manager` collisions and one run with 105 spurious errors.
+Stopped and asked twice as the collisions recurred; on the second occasion,
+rather than keep dropping another session's test database, started a
+**second, isolated Postgres container** for this worktree only:
+
+```bash
+docker run -d --name rider-attributes-db \
+  -e POSTGRES_DB=cycling_manager -e POSTGRES_USER=cycling -e POSTGRES_PASSWORD=cycling \
+  -p 127.0.0.1:5434:5432 postgres:16-alpine
+POSTGRES_PORT=5434 /home/mario/dev/cycling-manager/.venv/bin/python manage.py migrate
+```
+
+`config/settings/dev.py` already reads `POSTGRES_PORT` from the environment,
+so no code changed. From W6 onward, `PYTEST` in this plan means:
+
+```bash
+POSTGRES_PORT=5434 /home/mario/dev/cycling-manager/.venv/bin/python -m pytest
+```
+
+This container (`rider-attributes-db`) is scratch infrastructure for this
+worktree's implementation session, not a repo change — it is not listed in
+`docker-compose.yml` and should be `docker rm -f rider-attributes-db`'d once
+the branch merges or the worktree is discarded.
+
 ## Context you need
 
 `riders.Rider` today is: `name`, `team` (nullable FK), `role`
@@ -446,7 +474,7 @@ prominent.
 **Test:** none — admin config with no logic. Say so in the commit message
 rather than writing a test that asserts a tuple's contents.
 
-### W6 — `riders/management/commands/reset_riders.py` (new): population replacement
+### W6 — `riders/management/commands/reset_riders.py` (new): population replacement — done
 Requires `--yes`. Deletes `RaceResult`, `RaceSquad` (and cascaded
 `RaceSquadRider`) and all `Rider` rows, then generates a roster per team.
 `--per-team` defaults to 12, matching #46. Imports `racing.models` **inside
