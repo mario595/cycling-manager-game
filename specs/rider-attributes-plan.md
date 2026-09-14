@@ -439,7 +439,7 @@ group is not clones. **This is the test that protects #46's requirement**; if
 it is weak, #46 inherits a flat roster. `test_roster_size_and_team` — all
 riders get the team, count matches.
 
-### W5 — `riders/admin.py`: show the new fields
+### W5 — `riders/admin.py`: show the new fields — done
 `list_display` gains speciality and age; `list_filter` gains speciality;
 hidden traits go in a collapsed fieldset so they are inspectable without being
 prominent.
