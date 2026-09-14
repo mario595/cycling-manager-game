@@ -58,3 +58,57 @@ export async function getCalendar(): Promise<Calendar> {
   }
   return response.json()
 }
+
+export interface SquadRider {
+  id: number
+  name: string
+  role: 'leader' | 'support'
+  climb: number
+  sprint: number
+  flat: number
+  resistance: number
+  positioning: number
+  selected: boolean
+  is_leader: boolean
+}
+
+export interface Squad {
+  race: number
+  race_name: string
+  race_status: 'scheduled' | 'running' | 'finished' | 'failed'
+  starts_at: string | null
+  distance_km: number
+  team: number
+  team_name: string
+  editable: boolean
+  saved: boolean
+  squad_size: number
+  candidates: SquadRider[]
+}
+
+async function squadResponseOrThrow(response: Response): Promise<Squad> {
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new Error(body?.detail ?? `squad request failed: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function getSquad(raceId: number, teamId: number): Promise<Squad> {
+  const response = await fetch(`/api/racing/races/${raceId}/squads/${teamId}/`)
+  return squadResponseOrThrow(response)
+}
+
+export async function putSquad(
+  raceId: number,
+  teamId: number,
+  riderIds: number[],
+  leaderId: number,
+): Promise<Squad> {
+  const response = await fetch(`/api/racing/races/${raceId}/squads/${teamId}/`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rider_ids: riderIds, leader_id: leaderId }),
+  })
+  return squadResponseOrThrow(response)
+}

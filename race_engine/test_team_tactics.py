@@ -7,8 +7,18 @@ chase a break made up solely of its own teammates).
 
 from __future__ import annotations
 
+import pytest
+
 from race_engine.formulas import BREAK_CLEAR_DISTANCE
-from race_engine.models import Course, RaceState, Rider, RiderAttributes, Segment
+from race_engine.models import (
+    Course,
+    RaceSetupError,
+    RaceState,
+    Rider,
+    RiderAttributes,
+    Segment,
+    run_race,
+)
 
 ATTRS = RiderAttributes(climb=50, sprint=50, flat=50, resistance=50, positioning=60)
 
@@ -94,3 +104,28 @@ def test_break_of_teammates_only_does_not_trigger_full_chase_in_tick():
     rival_break_speed = _pack_speed_with_break_ahead("t1", "t2")
 
     assert teammate_break_speed < rival_break_speed
+
+
+def test_run_race_rejects_a_team_with_two_leaders():
+    """load_config has always enforced this; run_race must too, since the
+    Django path (racing/adapters.py) builds Rider dataclasses directly and
+    never goes through load_config — see racing/README.md, *Squads*."""
+    riders = [
+        _rider("c1", "t1", "leader"),
+        _rider("c2", "t1", "leader"),
+    ]
+    course = Course(segments=[Segment(length=1000.0, gradient=0.0)])
+
+    with pytest.raises(RaceSetupError, match="2 leaders"):
+        run_race(riders, course)
+
+
+def test_run_race_rejects_a_team_with_no_leader():
+    riders = [
+        _rider("c1", "t1", "support"),
+        _rider("c2", "t1", "support"),
+    ]
+    course = Course(segments=[Segment(length=1000.0, gradient=0.0)])
+
+    with pytest.raises(RaceSetupError, match="no leader"):
+        run_race(riders, course)

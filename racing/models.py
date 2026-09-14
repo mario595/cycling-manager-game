@@ -5,6 +5,10 @@ from django.db import models
 
 from core.models import TimeStampedModel
 
+#: A squad is exactly this many riders — see racing/README.md, *Squads*.
+#: Imported by services, serializers and tests so the number appears once.
+SQUAD_SIZE = 4
+
 
 class Race(TimeStampedModel):
     """A race that has been or will be simulated.
@@ -158,3 +162,65 @@ class RaceResult(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.position}. {self.rider} in {self.race}"
+
+
+class RaceSquad(TimeStampedModel):
+    """One team's entry into one race: which riders, and who leads them.
+
+    The four/one-leader rule is enforced by `racing.services.set_squad`
+    (the only sanctioned writer), not by a database constraint — Postgres
+    cannot express "this parent has exactly four children" without a
+    trigger. See `racing/README.md`, *Squads*.
+    """
+
+    race = models.ForeignKey(Race, on_delete=models.CASCADE, related_name="squads")
+    team = models.ForeignKey(
+        "teams.Team",
+        on_delete=models.CASCADE,
+        related_name="race_squads",
+        help_text="String reference so racing/models.py needs no import of teams/.",
+    )
+    is_auto_picked = models.BooleanField(
+        default=False,
+        help_text="True when written by ensure_squads/auto_pick_squad, false when a manager saved it.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["race", "team"], name="one_squad_per_team_per_race"),
+        ]
+        indexes = [
+            models.Index(fields=["team", "race"], name="squad_team_race_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.team}'s squad for {self.race}"
+
+
+class RaceSquadRider(models.Model):
+    """One rider's membership in a squad.
+
+    Not a `TimeStampedModel`: these rows are written and deleted as a set by
+    `set_squad`, never individually amended, so per-row audit columns are
+    noise — the same reasoning `schedule.Week` records.
+    """
+
+    squad = models.ForeignKey(RaceSquad, on_delete=models.CASCADE, related_name="members")
+    rider = models.ForeignKey(
+        "riders.Rider",
+        on_delete=models.CASCADE,
+        related_name="squad_entries",
+        help_text="String reference so racing/models.py needs no import of riders/.",
+    )
+    is_leader = models.BooleanField(
+        default=False,
+        help_text="Exactly one per squad — enforced in set_squad, not by the database.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["squad", "rider"], name="unique_rider_per_squad"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.rider} in {self.squad}"

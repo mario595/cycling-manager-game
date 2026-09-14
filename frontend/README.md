@@ -10,7 +10,20 @@ The React SPA. Currently a **scaffold**: it reproduces the mockup in
 | `/` | Dashboard | Built — full layout from the design, fixture data |
 | `/roster` | Roster | Built — filter, sort and rider detail panel all work |
 | `/calendar` | Calendar | Built — twelve weeks from the API, no fixture data |
-| everything else | `Placeholder` | Renders the route name and path |
+| `/race/:raceId` | Race | Built — squad selection, no fixture data |
+| everything else, including the `/race` sidebar item itself | `Placeholder` | Renders the route name and path |
+
+`/race/:raceId` is the first **parameterised** route, so it is registered as
+an explicit `<Route>` in `App.tsx` rather than through `SCREENS` — that map
+generates one route per nav item by path, which has nowhere to put a
+`:raceId`. The sidebar's own `/race` item still lands on `Placeholder`;
+`Race.tsx` is reached only by clicking a race on the calendar.
+
+The team a manager is picking a squad for is read from `?team=<id>` on the
+URL, defaulting to `1` — there is no login flow to derive it from yet. This
+is a deliberately visible stand-in, not a hidden default: see `api/README.md`
+and [#50](https://github.com/mario595/cycling-manager/issues/50), which is
+what removes the query parameter entirely.
 
 Every sidebar item routes somewhere real. Items without a screen land on
 `Placeholder`, which prints the path it resolved — so a click that "does
@@ -94,9 +107,18 @@ from — the reference for spacing, colour and copy. It is a mockup in a custom
 template DSL, not runnable source, and it is not a build input. When it is
 re-exported, reconcile `src/theme.ts` against it first.
 
-The mockup also contains a **Race day** screen, which is not built here:
-`race_player/` already exists as a separate visualizer, and folding the two
-together is its own decision.
+The mockup's **Race day** screen is now **partly** built, as `Race.tsx` —
+folding it together with `race_player/` (the separate tick-by-tick
+visualizer) is still its own undecided question (#47). What is built is only
+the squad-selection widget the mockup shows, and only what `specs/squad-
+selection.md` (now folded into `racing/README.md`) actually specifies.
+Deliberately dropped, because the spec doesn't cover it: the mockup's
+eight-rider squads (the spec fixes four), per-rider suitability scores
+(course-aware assessment is #45), `INJURED`/`FATIGUED` states (#41), the
+course profile SVG, terrain/temperature/wind/tier/points facts, and the
+final classification table for a past race. `Race.tsx` shows only name,
+date, distance and status, and reuses the mockup's checkbox-row and
+★-to-set-leader interaction for the part that is in scope.
 
 The mockup's **Calendar** screen additionally shows things this feature does
 not have — multiple season cards with a switcher, win/podium/points stats, a

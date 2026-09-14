@@ -5,6 +5,12 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 
+class RaceSetupError(ValueError):
+    """A field of riders the simulation cannot run — e.g. a team without
+    exactly one leader. Raised by run_race, and by load_config via
+    ConfigError, which subclasses this."""
+
+
 @dataclass
 class RiderAttributes:
     climb: int  # 1-100
@@ -806,6 +812,37 @@ class RaceState:
         return None
 
 
+def validate_team_leaders(riders: list[Rider]) -> None:
+    """Exactly one leader per team — zero or two+ is a race-setup error.
+
+    Silent acceptance here would produce races that are confusing to debug:
+    a team with no leader has nobody to protect, and a team with two has an
+    undefined "the" leader for role-scaled tactics. Called by run_race, so
+    every caller of the engine gets this check — not only load_config,
+    which enforced it alone until squad selection (#37) needed the Django
+    path covered too.
+    """
+    leaders_by_team: dict[str, list[str]] = {}
+    for r in riders:
+        if r.role == "leader":
+            leaders_by_team.setdefault(r.team_id, []).append(r.id)
+
+    for team_id, leader_ids in leaders_by_team.items():
+        if len(leader_ids) > 1:
+            raise RaceSetupError(
+                f"team {team_id!r} has {len(leader_ids)} leaders {leader_ids}; "
+                "exactly one leader is required per team"
+            )
+
+    all_teams = {r.team_id for r in riders}
+    teams_without_leader = sorted(all_teams - leaders_by_team.keys())
+    if teams_without_leader:
+        raise RaceSetupError(
+            f"team(s) {teams_without_leader} have no leader; "
+            "exactly one leader is required per team"
+        )
+
+
 def run_race(
     riders: list[Rider],
     course: Course,
@@ -817,6 +854,8 @@ def run_race(
     wind_band: str | None = None,
 ) -> list[RiderState]:
     from .race_logger import RaceLogger
+
+    validate_team_leaders(riders)
 
     if seed is not None:
         import random
