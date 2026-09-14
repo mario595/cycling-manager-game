@@ -373,7 +373,7 @@ it passes attribute values to a bar or a colour threshold, scale them.
 
 ## Work items
 
-### W1 — `riders/models.py` + migration: the new fields
+### W1 — `riders/models.py` + migration: the new fields — done
 Add `Speciality`, the nine fields, `DISPLAY_MAX`. Generate
 `riders/migrations/0002_rider_attributes.py` with `makemigrations`. Update the
 `Rider` docstring.
