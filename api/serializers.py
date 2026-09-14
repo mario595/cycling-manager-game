@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
+from riders.display import to_display_scale
+from riders.models import ENGINE_ATTRIBUTES
+
 
 class ClockSerializer(serializers.Serializer):
     current = serializers.DateTimeField()
@@ -35,21 +38,56 @@ class CalendarSerializer(serializers.Serializer):
     weeks = CalendarWeekSerializer(many=True)
 
 
+def _display_scale_attributes(obj) -> dict[str, int]:
+    """The five engine attributes on the 0-10 scale the player sees, never
+    the stored 1-100 — see riders/display.py. `obj` is a dict (the squad
+    endpoint's candidate payload) or a Rider instance (the roster endpoint);
+    both support the same attribute lookup via getattr, since dict has no
+    attribute access but Rider does, so branch on the object's type once
+    here rather than in every caller."""
+    get = (lambda name: obj[name]) if isinstance(obj, dict) else (lambda name: getattr(obj, name))
+    return {name: to_display_scale(get(name)) for name in ENGINE_ATTRIBUTES}
+
+
 class SquadRiderSerializer(serializers.Serializer):
-    """One rider as the squad screen needs them: identity, the five engine
-    attributes for the manager to compare on, and whether they are in the
-    squad and leading it."""
+    """One rider as the squad screen needs them: identity, speciality and
+    age, the five engine attributes on the 0-10 display scale (never the
+    stored 1-100 — see riders/display.py) for the manager to compare on, and
+    whether they are in the squad and leading it."""
 
     id = serializers.IntegerField()
     name = serializers.CharField()
     role = serializers.CharField()  # the rider's default, not the squad's
-    climb = serializers.IntegerField()
-    sprint = serializers.IntegerField()
-    flat = serializers.IntegerField()
-    resistance = serializers.IntegerField()
-    positioning = serializers.IntegerField()
+    speciality = serializers.CharField()
+    age = serializers.IntegerField()
     selected = serializers.BooleanField()
     is_leader = serializers.BooleanField()
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data.update(_display_scale_attributes(instance))
+        return data
+
+
+class RiderSerializer(serializers.Serializer):
+    """One rider as the roster screen needs them. Attributes are the 0-10
+    display scale, never the stored 1-100 — see riders/display.py. Hidden
+    traits (potential, peak age, decline rate, injury proneness, training
+    affinity) are deliberately absent: the player must not see them."""
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    role = serializers.CharField()
+    speciality = serializers.CharField(source="get_speciality_display")
+    nationality = serializers.CharField(source="get_nationality_display")
+    age = serializers.IntegerField()
+    height_cm = serializers.IntegerField()
+    weight_kg = serializers.IntegerField()
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data.update(_display_scale_attributes(instance))
+        return data
 
 
 class SquadSerializer(serializers.Serializer):

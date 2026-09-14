@@ -313,3 +313,88 @@ def test_putting_a_squad_for_a_finished_race_is_a_400(squad_race, squad_riders, 
 
 def test_unknown_race_is_a_404(squad_client):
     assert squad_client.get("/api/racing/races/999999/squad/").status_code == 404
+
+
+def test_squad_candidates_use_display_scale(squad_race, squad_riders, squad_client):
+    """Load-bearing: the squad screen shows 0-10, not the stored 1-100 —
+    see specs/rider-attributes.md, *Display scale*."""
+    rider = squad_riders[0]
+    rider.climb = 94
+    rider.save(update_fields=["climb"])
+
+    response = squad_client.get(f"/api/racing/races/{squad_race.pk}/squad/")
+
+    candidate = next(c for c in response.data["candidates"] if c["id"] == rider.pk)
+    assert candidate["climb"] == 9
+
+
+@pytest.fixture
+def roster_manager(db) -> User:
+    return User.objects.create_user(email="roster-manager@example.com", password="s0meth1ng-good")
+
+
+@pytest.fixture
+def roster_team(db, roster_manager) -> Team:
+    return Team.objects.create(name="Roster Team", code="ROS", manager=roster_manager)
+
+
+@pytest.fixture
+def roster_rider(db, roster_team) -> Rider:
+    return Rider.objects.create(
+        name="Roster Rider", team=roster_team,
+        speciality=Rider.Speciality.CLIMBER, age=24,
+        height_cm=170, weight_kg=60,
+        climb=94, sprint=30, flat=40, resistance=80, positioning=52,
+    )
+
+
+@pytest.fixture
+def roster_client(roster_manager) -> APIClient:
+    client = APIClient()
+    client.force_authenticate(user=roster_manager)
+    return client
+
+
+def test_rider_list_requires_authentication(roster_rider):
+    client = APIClient()
+
+    assert client.get("/api/riders/").status_code == 403
+
+
+def test_rider_list_forbids_a_player_with_no_team(db):
+    manager_without_a_team = User.objects.create_user(
+        email="no-team-roster@example.com", password="s0meth1ng-good",
+    )
+    client = APIClient()
+    client.force_authenticate(user=manager_without_a_team)
+
+    assert client.get("/api/riders/").status_code == 403
+
+
+def test_rider_list_returns_the_callers_own_team(roster_rider, roster_client):
+    response = roster_client.get("/api/riders/")
+
+    assert response.status_code == 200
+    assert len(response.data) == 1
+    rider_data = response.data[0]
+    assert rider_data["id"] == roster_rider.pk
+    assert rider_data["name"] == "Roster Rider"
+    assert rider_data["speciality"] == "Climber"
+    assert rider_data["age"] == 24
+    assert rider_data["height_cm"] == 170
+    assert rider_data["weight_kg"] == 60
+    assert rider_data["climb"] == 9  # display scale, not the stored 94
+
+
+def test_rider_serializer_hides_traits(roster_rider, roster_client):
+    """Load-bearing: the hidden traits must never reach the player. A test
+    asserting only the visible fields would pass even if this leaked —
+    assert on absence."""
+    response = roster_client.get("/api/riders/")
+
+    rider_data = response.data[0]
+    for hidden_field in (
+        "potential", "peak_age", "decline_rate",
+        "injury_proneness", "training_affinity",
+    ):
+        assert hidden_field not in rider_data
