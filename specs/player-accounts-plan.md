@@ -542,7 +542,7 @@ of the `AlterField`.
 part), `::test_create_superuser_is_staff_and_superuser`.
 **Load-bearing:** the collision loop. The third test is the one that proves it.
 
-### W2 — `accounts/serializers.py`: register and login serializers
+### W2 — `accounts/serializers.py`: register and login serializers ✅
 `RegisterSerializer` with case-insensitive email uniqueness and
 `validate_password` wired to Django's validators; `LoginSerializer`.
 **Test:** `accounts/tests.py::test_register_serializer_rejects_a_weak_password`,

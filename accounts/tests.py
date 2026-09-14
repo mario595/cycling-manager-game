@@ -4,6 +4,7 @@ import pytest
 from django.db import IntegrityError
 
 from accounts.models import User
+from accounts.serializers import RegisterSerializer
 
 
 def test_create_user_derives_a_username_from_the_email(db):
@@ -36,3 +37,27 @@ def test_create_superuser_is_staff_and_superuser(db):
 
     assert user.is_staff
     assert user.is_superuser
+
+
+def test_register_serializer_rejects_a_weak_password(db):
+    serializer = RegisterSerializer(data={
+        "email": "mario@example.com",
+        "password": "password",
+        "display_name": "Mario",
+    })
+
+    assert not serializer.is_valid()
+    assert "password" in serializer.errors
+
+
+def test_register_serializer_rejects_a_duplicate_email_case_insensitively(db):
+    User.objects.create_user(email="mario@example.com", password="s0meth1ng-good")
+
+    serializer = RegisterSerializer(data={
+        "email": "Mario@Example.com",
+        "password": "s0meth1ng-else",
+        "display_name": "Mario Two",
+    })
+
+    assert not serializer.is_valid()
+    assert "email" in serializer.errors
