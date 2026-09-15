@@ -369,9 +369,10 @@ what makes every later item testable by hand.
 `full_clean()`).
 
 ### W2 — `teams/tests/` package
-`teams/` has no tests directory today (only the `startapp` stub `teams/tests.py`,
-if present). Create the package the way `riders/tests/` is laid out, with a
-`conftest.py` providing a `team` fixture. Delete the stub.
+`teams/tests.py` today is the untouched `startapp` stub (an empty `TestCase`
+import, no tests). Replace it with a `teams/tests/` package laid out like
+`riders/tests/` — `__init__.py` plus a `conftest.py` providing a `team`
+fixture — and delete the stub file.
 **Test:** the package itself; W1's tests land in it. If W1 and W2 are done
 together, commit W2 first so W1's tests have somewhere to go.
 
