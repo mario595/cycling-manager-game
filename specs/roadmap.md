@@ -1,18 +1,11 @@
 # Roadmap
 
-**Status:** agreed 2026-09-11, revised 2026-09-12
+**Status:** agreed 2026-09-11, revised 2026-09-12, revised 2026-09-15
 **Scope:** ordering only. This file says *what to build next and why*; it does not
 say what any feature does — that is each issue, and later each spec.
 
-The backlog is 47 open issues. This is the order to take them in, and — more
-useful — the reasons for deferring the rest.
-
-**Progress:** Phase 1 is merged in full. Phase 2 ([#37](https://github.com/mario595/cycling-manager/issues/37),
-squad selection) is built and open as [PR #55](https://github.com/mario595/cycling-manager/pull/55),
-pending merge. Phase 3 is **closed without new work**: [#39](https://github.com/mario595/cycling-manager/issues/39)
-and [#44](https://github.com/mario595/cycling-manager/issues/44) turned out to
-already be satisfied by #37's `ensure_squads`/`auto_pick_squad` mechanism —
-see that phase's entry below.
+43 open issues. This is the order to take them in, and — more useful — the
+reasons for deferring the rest.
 
 ## The question this roadmap answers
 
@@ -26,154 +19,109 @@ elegant economy for a game nobody is playing yet.
 
 ---
 
-## Phase 1 — a race happens on its own
+## Done
 
-**Issues: [#6](https://github.com/mario595/cycling-manager/issues/6) ✅,
-[#5](https://github.com/mario595/cycling-manager/issues/5) ✅,
-[#7](https://github.com/mario595/cycling-manager/issues/7) — in progress**
-
-Today a race is simulated because somebody runs a command. Until races happen
-*because time passed*, there is no game — there is a simulator with a web front
-end. That is the gap Phase 1 closes.
-
-- **#6 game clock — genuinely first.** Every timed thing reads it. Building #25
-  (weekly salaries) or #36 (weekly training) before the clock exists means
-  writing them twice.
-- **#5 Season** and **#7 race calendar** — what the clock advances *through*.
-
-**[#52](https://github.com/mario595/cycling-manager/issues/52) — sticky
-sidebar duplicates/detaches on long pages, jumps to the front of the queue.**
-A frontend layout bug, found while building #7's calendar screen (the first
-screen long enough on desktop to expose it reliably; reproduces on `/roster`
-too). Not a Phase 1 dependency, but every screen built from here on is more
-likely to be long enough to trigger it, so it is cheaper to fix now than to
-keep discovering it screen by screen.
-
-**Deliberately excluded: [#8](https://github.com/mario595/cycling-manager/issues/8),
-the admin season-configuration tool.** Use Django admin or a fixture. A
-purpose-built season editor, for a game with one season and one admin, is the
-definition of premature.
-
-**Caveat to settle when speccing #6.** A fast-forwardable clock is a development
-convenience, but "simulate months in minutes" collides with simulation cost the
-moment a single race takes real minutes to run. Measure per-race wall-clock time
-before committing to that requirement.
-
-## Phase 2 — the player makes a decision that matters
-
-**Issue: [#37](https://github.com/mario595/cycling-manager/issues/37) — squad selection**
-
-The highest-value single item in the backlog, and under-rated when it was first
-written up. It is the **only** item in Phases 1–3 where a player choice changes
-an outcome. Everything before it is plumbing; everything after it is depth.
-
-[#7](https://github.com/mario595/cycling-manager/issues/7)'s spec sharpened this:
-it enters **every team in every race, unconditionally**, and explicitly punts
-"what happens when a manager hasn't prepared a squad" to #37. So the first race
-day after the calendar lands needs a squad for every team in the game — which is
-why the next phase is not optional.
-
-It does not need [#41](https://github.com/mario595/cycling-manager/issues/41)
-(injuries) to ship. The stage-race squad lock is simply less interesting without
-it — an argument for doing #41 soon after, not for blocking on it.
-
-## Phase 3 — somebody to race against — done, as a side effect of #37
-
-**Issues: [#44](https://github.com/mario595/cycling-manager/issues/44) — unmanaged
-teams field a default squad, and
-[#39](https://github.com/mario595/cycling-manager/issues/39) — the same for an
-absent manager. Both closed 2026-09-14, no new work.**
-
-A Division is full long before it has enough users — 16 teams, 6 users. Without
-a squad for every team, most of the field does not start and there is nothing to
-simulate.
-
-**#39 and #44 turned out to be one mechanism, already built by #37, not a
-second thing to spec.** `racing.services.ensure_squads(race)`, called from
-`simulate_race`, writes a `RaceSquad` via `auto_pick_squad(team)` for every
-team that doesn't have one yet when the race runs — and it does this with no
-check on `team.manager` at all, so an unmanaged team and a managed-but-absent
-team hit the exact same code path. The bar both tickets set — *a squad must
-exist for every team at every race, so the game cannot stall* — was met the
-moment #37 shipped it, not by a follow-up.
-
-What #37 does **not** do: reuse an absent manager's last chosen squad at race
-time (`ensure_squads` calls `auto_pick_squad` directly rather than
-`previous_squad`, unlike the pre-fill shown on the race screen). Raised and
-deliberately not pursued — see the discussion on #39 — because the acceptance
-bar for both tickets was "the game continues," not "the fallback is good."
-Revisit only if it turns out to matter in play.
-
-[#45](https://github.com/mario595/cycling-manager/issues/45) (heuristic AI) is
-**not** here — but it has a named expiry, not an open-ended one. See the
-deferrals below.
-
-## Phase 4 — a player can exist
-
-**Issues: [#50](https://github.com/mario595/cycling-manager/issues/50) — register,
-log in, log out, and
-[#46](https://github.com/mario595/cycling-manager/issues/46) — what a claim gives
-you. Plus [#14](https://github.com/mario595/cycling-manager/issues/14) if signups
-can arrive mid-Season.**
-
-Added 2026-09-12, after the gap was noticed directly rather than by working
-through the backlog: **there is currently no way for a player to exist.**
-`accounts.User` is a model with nothing behind it — no registration, no login,
-no views. Users are created with `createsuperuser`.
-
-It hid because every item that needs it starts *after* signup. `api/README.md`
-already records the symptom — endpoints given `AllowAny` because the SPA has no
-login flow, a workaround that had no ticket behind it until now.
-
-**Why this sits after Phase 3 rather than near the start** (it was briefly
-placed second, and that was wrong): registration ends in **claiming an
-unmanaged team**, decided 2026-09-12. That makes #50 depend on unmanaged teams
-existing (#44) and on rules for what a claim hands over (#46). Signup cannot be
-built before the thing being signed up *for*.
-
-The phases before this run fine on a superuser account. That is not a
-compromise — a single-manager world is exactly what Phases 1–3 are testing.
-
-[#51](https://github.com/mario595/cycling-manager/issues/51) (password reset and
-the rest) is deliberately **not** here — see the deferrals.
-
-## Phase 5 — the loop closes
-
-**Issues: [#15](https://github.com/mario595/cycling-manager/issues/15),
-[#12](https://github.com/mario595/cycling-manager/issues/12), and a slice of
-[#10](https://github.com/mario595/cycling-manager/issues/10)**
-
-Points from results, accumulating into a standings table.
-
-**Take only the slice of #10 that #12 needs — "one Group exists".** The doubling
-pyramid, promotion, relegation and new-Division-opening (#11, #13) are not
-required to have a league table, and building them now means balancing a
-structure nobody is in yet.
+| Phase | Issues | What it bought |
+|---|---|---|
+| **1 — a race happens on its own** | [#6](https://github.com/mario595/cycling-manager/issues/6) clock, [#5](https://github.com/mario595/cycling-manager/issues/5) season, [#7](https://github.com/mario595/cycling-manager/issues/7) calendar | Races arrive because time passed, not because somebody ran a command. |
+| **2 — a decision that matters** | [#37](https://github.com/mario595/cycling-manager/issues/37) squad selection | A manager picks four riders and a leader per race. The first player choice that changes an outcome. |
+| **3 — somebody to race against** | [#44](https://github.com/mario595/cycling-manager/issues/44), [#39](https://github.com/mario595/cycling-manager/issues/39) | Every team fields a squad, managed or not. Built once, shared — as planned. |
+| **4a — a player can exist** | [#50](https://github.com/mario595/cycling-manager/issues/50) accounts | Register, log in, log out. |
+| **(unplanned)** | [#1](https://github.com/mario595/cycling-manager/issues/1)/[#57](https://github.com/mario595/cycling-manager/issues/57) rider attributes | Age, speciality, build, hidden potential/peak/decline. Not in the original phases — pulled forward, and it makes the rider work below cheaper. |
 
 ---
 
-## After Phase 5, the game is playable
+## Phase 4b — finish the signup path *(in progress)*
 
-Races happen weekly. The player picks who rides. Results accumulate. There is a
-table. A player can sign up and take over a team. Ten issues, plus a slice of an
-eleventh.
+**Issues: [#46](https://github.com/mario595/cycling-manager/issues/46) — specced,
+not built. Then [#56](https://github.com/mario595/cycling-manager/issues/56),
+and [#14](https://github.com/mario595/cycling-manager/issues/14) if wanted.**
 
-Everything past this point makes the game *better* rather than making it *exist*,
-and the order becomes a matter of taste rather than dependency.
+[#50](https://github.com/mario595/cycling-manager/issues/50) shipped accounts;
+`specs/claiming-a-team.md` is written and waiting on a plan. Until it lands, a
+registered player has no team — the half-open state.
+
+- **#46** — claim an unmanaged team: keep its table position, points and history;
+  release its riders as free agents; hand it twelve newly generated riders of
+  equal total strength; player renames it and picks a code.
+- **[#56](https://github.com/mario595/cycling-manager/issues/56)** falls directly
+  out of #46's decision to skip uniqueness checks on team codes. Small, and it
+  only bites once two claimed teams collide — but that is a first-playtest bug,
+  not a later one.
+- **[#14](https://github.com/mario595/cycling-manager/issues/14)** (mid-Season
+  placement) is largely answered by #46's "claim happens immediately, whenever in
+  the Season" — check whether anything is left before speccing it.
+
+## Phase 5 — the loop closes
+
+**Issues: [#15](https://github.com/mario595/cycling-manager/issues/15) points,
+[#12](https://github.com/mario595/cycling-manager/issues/12) standings, and a
+slice of [#10](https://github.com/mario595/cycling-manager/issues/10).**
+
+Unchanged, and now the last thing between here and a playable game. Races happen,
+squads are picked, results exist — nothing yet accumulates.
+
+**Take only the slice of #10 that #12 needs — "one Group exists".** The doubling
+pyramid, promotion and relegation ([#11](https://github.com/mario595/cycling-manager/issues/11),
+[#13](https://github.com/mario595/cycling-manager/issues/13)) are not required
+for a league table, and building them now means balancing a structure nobody is
+in yet.
+
+**#46 raises the stakes here.** Claiming preserves a team's table position and
+points, so there must *be* a table with points in it for that promise to mean
+anything. Today it carries over an empty record.
+
+## Phase 6 — riders stop being static
+
+**Issues: [#58](https://github.com/mario595/cycling-manager/issues/58) growth and
+decline, [#59](https://github.com/mario595/cycling-manager/issues/59) freshness.**
+
+Both split out of #57's spec pass. The attributes exist and nothing moves them:
+riders have a hidden potential, peak age and decline rate that never fire, and a
+freshness value that never falls.
+
+Not in the original roadmap, and a genuine addition to it rather than a
+reordering. The argument for doing them straight after Phase 5:
+
+- **#59 freshness makes squad selection a real decision.** Right now the best
+  four riders are the best four riders, every race, forever. Freshness is what
+  turns a repeated trivial choice into rotation and planning — it cashes in the
+  value of Phase 2 rather than adding a new system.
+- **#58 growth and decline is what makes keeping a rider interesting**, and it is
+  the prerequisite for anything downstream that prices a rider
+  ([#26](https://github.com/mario595/cycling-manager/issues/26) salary
+  renegotiation, [#31](https://github.com/mario595/cycling-manager/issues/31)
+  market value, [#42](https://github.com/mario595/cycling-manager/issues/42)
+  retirement).
+
+If only one gets built, **#59 first** — it changes what the player does weekly;
+#58 changes what they think about across Seasons, and there are not yet enough
+Seasons for that to land.
+
+---
+
+## After Phase 6
+
+Races happen weekly, a stranger can sign up and take over a team, squads are
+picked under fatigue pressure, results accumulate into a table, riders improve
+and decline.
+
+That is a game. Everything past it makes the game *better* rather than making it
+*exist*, and the order becomes a matter of taste rather than dependency.
 
 ---
 
 ## Explicit deferrals
 
-Recorded because each of these has a plausible-sounding case for going first.
+Recorded because each has a plausible-sounding case for going first.
 
 ### The entire economy — #20–#27
 
 Deferred **as a group**, including
-[#21](https://github.com/mario595/cycling-manager/issues/21) (fanbase), which is
-flagged in the backlog as a sleeper prerequisite. It is — *within the economy*.
-That is a statement about internal ordering, not about priority against the rest
-of the board.
+[#21](https://github.com/mario595/cycling-manager/issues/21) (fanbase), flagged
+in the backlog as a sleeper prerequisite. It is — *within the economy*. That is a
+statement about internal ordering, not about priority against the rest of the
+board.
 
 Money is only interesting when there is something to spend it on, and the things
 to spend it on — [#28](https://github.com/mario595/cycling-manager/issues/28)
@@ -188,9 +136,9 @@ offers price off fanbase.
 
 ### Sprint and mountain points — #16, #17
 
-Engine changes with a stated cost: new log event types, and per
-`specs/rider-attributes.md`, any new in-race input invalidates the verified
-realism balance across all six bundled courses and requires re-deriving it.
+Engine changes with a stated cost: new log event types, and any new in-race input
+invalidates the verified realism balance across all six bundled courses and
+requires re-deriving it.
 
 High cost, and they add **texture** rather than a loop. Do them when the work is
 about making racing better, not while making it exist.
@@ -201,53 +149,44 @@ Deferred, but **with a hard expiry rather than an open-ended one: the first full
 Season played with real users.**
 
 [#44](https://github.com/mario595/cycling-manager/issues/44) leaves unmanaged
-teams weak in a predictable, unchanging way. Human teams train and buy; these do
-not, so the gap widens every Season. For a six-user playtest that is fine —
-arguably useful, as a stable baseline to measure human teams against. For a real
-league it is fatal: a Season ending with every human team above every unmanaged
-one is not a competition, and it makes promotion and relegation
-([#13](https://github.com/mario595/cycling-manager/issues/13)) meaningless,
-because teams move by headcount rather than merit.
+teams weak in a predictable, unchanging way. Human teams will train and buy;
+these do not, so the gap widens every Season. For a small playtest that is fine —
+arguably useful, as a stable baseline. For a real league it is fatal: a Season
+ending with every human team above every unmanaged one is not a competition, and
+it makes promotion and relegation (#13) meaningless, because teams move by
+headcount rather than merit.
 
-So this is not "when we get round to it". It is a prerequisite for the first
-Season that counts.
+**Phase 6 moves this expiry closer.** Once riders improve (#58) and human
+managers rotate squads on freshness (#59), unmanaged teams fall behind *faster*
+than they do today.
 
 ### Divisions beyond one Group — #11, #13
 
 Deferred with Phase 5's slice of #10: a league table needs one Group, not a
-pyramid. Promotion and relegation (#13) are also meaningless until
-[#45](https://github.com/mario595/cycling-manager/issues/45) exists — see that
-deferral.
+pyramid. #13 is also meaningless until #45 exists — see above.
 
 ### Account self-service — #51
 
-Password reset, change password, change email, delete account. Split from
-[#50](https://github.com/mario595/cycling-manager/issues/50) so the blocking half
-ships without it.
+Password reset, change password, change email, delete account. Split from #50 so
+the blocking half could ship, which it has.
 
-A player who can register and log in can play. Password reset in particular
-drags in **email delivery**, which is a deployment and cost decision — and
-`CLAUDE.md` still has deployment as TBD, targeting low-cost/free hosting.
-Resolving that while deciding how accounts work would be answering two unrelated
-questions at once.
+A player who can register and log in can play. Password reset drags in **email
+delivery**, a deployment and cost decision — and deployment is still TBD,
+targeting low-cost/free hosting. **Revisit before any playtest with real users
+who can lock themselves out**, which is a nearer horizon than it was.
 
 ### Team tactics — #38
 
-Still unsizeable, and the most expensive item on the board for the same
-engine-balance reason as #16/#17. It is the right thing to build after #37, but
-it needs its own spec session before it can be estimated at all.
+Still the most expensive item on the board, for the same engine-balance reason as
+#16/#17. It is the right thing to build after #37, but it needs its own spec
+session before it can be estimated at all.
 
----
+### Race detail view — #47
 
-## A correction to an earlier reading
-
-An earlier pass through this backlog named the dependency roots — the items
-nothing else waits on — as #5, #6, #10, #20 and #41, and implied those were the
-starting points.
-
-That is structurally true and strategically misleading. #20 and #41 are roots of
-**subtrees that should not be started yet**. Being a dependency root only matters
-if you want the tree.
+A per-race screen, split out of #7. Blocked in content terms rather than
+technically: "who is racing" became answerable when #37 landed, so this is now
+*buildable* — but it displays the game rather than advancing it. After Phase 5,
+when there are standings and points worth showing on it.
 
 ---
 
@@ -256,26 +195,14 @@ if you want the tree.
 Work the phases in order. For each issue, the next step is a spec, not code:
 
 ```
-/product-spec <the issue, in a sentence>
+/product-spec #<issue>
 ```
 
-Order of work remains **spec → plan → code** (`specs/README.md`).
+Order of work is **spec → plan → code → review** (`specs/README.md`,
+`.claude/ticket-workflow.md`).
 
-Revisit this file whenever a phase completes, or whenever an assumption in it
-turns out to be wrong.
-
-**Revised 2026-09-12.** Deciding that registration *claims* an unmanaged team
-rather than creating a fresh one moved account work from second in the order to after
-Phase 3 — a decision about how a feature works reordered the plan, which is the
-normal way this file goes stale. Re-read it after any decision of that kind, not
-only after a phase completes.
-
-**Revised 2026-09-14.** Phase 3 closed without a spec or a plan: #39 and #44
-were product-spec'd on request and both turned out to already be implemented
-by #37 (see that phase's entry). Recorded here as another way this file goes
-stale — not just "a decision reorders the plan," but "a later ticket turns out
-to have been solved by an earlier one already merged" — worth checking for
-directly, not just assumed away, the next time a Phase-3-shaped ticket comes up
-(#45 in particular sits right behind this and should be checked against #37's
-actual shipped behaviour before it is specced, not just against the backlog's
-description of it).
+Revisit this file whenever a phase completes, **or whenever a decision about how
+a feature works reorders it** — that is the normal way it goes stale, not the
+passage of time. Two precedents: deciding registration *claims* a team rather
+than creating one moved account work later; #57's spec pass split out #58 and
+#59, which added a phase that was not here before.
