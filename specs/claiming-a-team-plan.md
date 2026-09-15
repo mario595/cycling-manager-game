@@ -358,7 +358,7 @@ each screen.
 
 ## Work items
 
-### W1 — `teams/management/commands/seed_teams.py`: create a claimable world
+### W1 — `teams/management/commands/seed_teams.py`: create a claimable world ✅
 New command per the section above, plus `teams/management/__init__.py` and
 `teams/management/commands/__init__.py`. Nothing else depends on it, and it is
 what makes every later item testable by hand.
@@ -368,7 +368,7 @@ what makes every later item testable by hand.
 `--reset`), `test_codes_are_three_uppercase_letters` (every seeded team passes
 `full_clean()`).
 
-### W2 — `teams/tests/` package
+### W2 — `teams/tests/` package ✅
 `teams/tests.py` today is the untouched `startapp` stub (an empty `TestCase`
 import, no tests). Replace it with a `teams/tests/` package laid out like
 `riders/tests/` — `__init__.py` plus a `conftest.py` providing a `team`
