@@ -386,7 +386,7 @@ creating two teams with code `"ARD"` succeeds; and
 **Load-bearing:** the validator must keep working after uniqueness goes. A
 migration that drops the whole field and re-adds it would lose the validator.
 
-### W4 — `teams/services.py`: `claim_team`
+### W4 — `teams/services.py`: `claim_team` ✅
 The service per Design decision 5.
 **Test:** `teams/tests/test_services.py` —
 `test_claim_assigns_lowest_pk_unmanaged_team`,
