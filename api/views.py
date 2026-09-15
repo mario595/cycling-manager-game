@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import IntegrityError
 from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -12,12 +14,15 @@ from racing.services import SquadError, set_squad, suggested_squad
 from riders.models import ENGINE_ATTRIBUTES, Rider
 from schedule.services import current_position
 from teams.models import Team
+from teams.services import NoTeamAvailable, claim_team
 from world.services import now
 
 from .serializers import (
     CalendarSerializer,
+    ClaimTeamSerializer,
     ClockSerializer,
     MeSerializer,
+    MeTeamSerializer,
     PositionSerializer,
     RiderSerializer,
     SquadSerializer,
@@ -221,6 +226,41 @@ class SquadView(APIView):
             race, team, write.validated_data["rider_ids"], write.validated_data["leader_id"], saved=True,
         )
         return Response(SquadSerializer(payload).data)
+
+
+class ClaimTeamView(APIView):
+    """Assign the caller an unmanaged team, renamed and recoded to their
+    choosing, with a fresh roster. Falls back to the project default,
+    IsAuthenticated — do not re-add AllowAny.
+
+    409 for both "already managing" and "no team available": the request is
+    well-formed, but the world's state refuses it. 400 is reserved for a
+    malformed name or code.
+    """
+
+    def post(self, request):
+        if team_for(request.user) is not None:
+            return Response({"detail": "You already manage a team."}, status=409)
+
+        serializer = ClaimTeamSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            team = claim_team(
+                request.user,
+                name=serializer.validated_data["name"],
+                code=serializer.validated_data["code"],
+            )
+        except NoTeamAvailable as exc:
+            return Response({"detail": str(exc)}, status=409)
+        except DjangoValidationError as exc:
+            return Response({"detail": exc.messages[0]}, status=400)
+        except IntegrityError:
+            return Response({"detail": "That team name is already taken."}, status=400)
+
+        return Response(
+            MeTeamSerializer({"id": team.pk, "name": team.name, "code": team.code}).data,
+            status=201,
+        )
 
 
 class RiderListView(APIView):

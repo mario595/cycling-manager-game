@@ -402,7 +402,7 @@ the transaction rolls back),
 `test_claim_preserves_race_results` (a `RaceResult` for a released rider still
 resolves after the claim).
 
-### W5 — `api/`: serializer, view, route
+### W5 — `api/`: serializer, view, route ✅
 `ClaimTeamSerializer`, `ClaimTeamView`, the `urls.py` entry.
 **Test:** `api/tests.py` — `test_claim_requires_authentication` (403/401 for
 anonymous), `test_claim_returns_the_new_team`,

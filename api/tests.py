@@ -398,3 +398,84 @@ def test_rider_serializer_hides_traits(roster_rider, roster_client):
         "injury_proneness", "training_affinity",
     ):
         assert hidden_field not in rider_data
+
+
+@pytest.fixture
+def claimant(db) -> User:
+    return User.objects.create_user(email="claimant@example.com", password="s0meth1ng-good")
+
+
+@pytest.fixture
+def claim_client(claimant) -> APIClient:
+    client = APIClient()
+    client.force_authenticate(user=claimant)
+    return client
+
+
+def test_claim_requires_authentication(db):
+    Team.objects.create(name="Unclaimed Team", code="UNC")
+    client = APIClient()
+
+    response = client.post("/api/teams/claim/", {"name": "New Name", "code": "NEW"}, format="json")
+
+    assert response.status_code == 403
+
+
+def test_claim_returns_the_new_team(db, claim_client):
+    Team.objects.create(name="Unclaimed Team", code="UNC")
+
+    response = claim_client.post(
+        "/api/teams/claim/", {"name": "Mountain Goats", "code": "MGO"}, format="json",
+    )
+
+    assert response.status_code == 201
+    assert response.data["name"] == "Mountain Goats"
+    assert response.data["code"] == "MGO"
+
+
+def test_claim_twice_is_409(db, claim_client):
+    Team.objects.create(name="Unclaimed Team", code="UNC")
+    Team.objects.create(name="Another Team", code="ANO")
+
+    first = claim_client.post(
+        "/api/teams/claim/", {"name": "Mountain Goats", "code": "MGO"}, format="json",
+    )
+    second = claim_client.post(
+        "/api/teams/claim/", {"name": "Second Try", "code": "SEC"}, format="json",
+    )
+
+    assert first.status_code == 201
+    assert second.status_code == 409
+
+
+def test_claim_with_no_teams_available_is_409(db, claim_client):
+    response = claim_client.post(
+        "/api/teams/claim/", {"name": "Mountain Goats", "code": "MGO"}, format="json",
+    )
+
+    assert response.status_code == 409
+
+
+def test_claim_lowercase_code_is_accepted_and_uppercased(db, claim_client):
+    Team.objects.create(name="Unclaimed Team", code="UNC")
+
+    response = claim_client.post(
+        "/api/teams/claim/", {"name": "Mountain Goats", "code": "mgo"}, format="json",
+    )
+
+    assert response.status_code == 201
+    assert response.data["code"] == "MGO"
+
+
+def test_claim_duplicate_name_is_400(db, claim_client):
+    other_manager = User.objects.create_user(
+        email="other-manager@example.com", password="s0meth1ng-good",
+    )
+    Team.objects.create(name="Taken Name", code="TKN", manager=other_manager)
+    Team.objects.create(name="Unclaimed Team", code="UNC")
+
+    response = claim_client.post(
+        "/api/teams/claim/", {"name": "Taken Name", "code": "MGO"}, format="json",
+    )
+
+    assert response.status_code == 400
