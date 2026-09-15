@@ -4,7 +4,7 @@
 **Scope:** ordering only. This file says *what to build next and why*; it does not
 say what any feature does — that is each issue, and later each spec.
 
-43 open issues. This is the order to take them in, and — more useful — the
+45 open issues. This is the order to take them in, and — more useful — the
 reasons for deferring the rest.
 
 ## The question this roadmap answers
@@ -140,6 +140,10 @@ is a scoreboard.
 fanbase → #22/#23 sponsorship. #21 before #22/#23 is not negotiable; sponsor
 offers price off fanbase.
 
+**#27 (insolvency) is the last thing in this group, not an afterthought.** Its
+ladder — embargo, then forced sales, then losing the team — needs wages (#25) and
+a market with buyers (#28/#29) before any rung can fire.
+
 ### Sprint and mountain points — #16, #17
 
 Engine changes with a stated cost: new log event types, and any new in-race input
@@ -165,6 +169,30 @@ headcount rather than merit.
 **Phase 6 moves this expiry closer.** Once riders improve (#58) and human
 managers rotate squads on freshness (#59), unmanaged teams fall behind *faster*
 than they do today.
+
+### Losing a team — #62, #63
+
+Added 2026-09-15. A manager stops managing; the team returns to the unmanaged
+pool and is re-claimable. Split from its triggers because they have very
+different dependencies.
+
+**[#62](https://github.com/mario595/cycling-manager/issues/62), the mechanism, is
+buildable now** — it depends only on
+[#46](https://github.com/mario595/cycling-manager/issues/46) and closes that
+spec's deferred question about abandoned teams. It is deferred not because it is
+blocked but because **nothing yet triggers it**: with no inactivity rule and no
+money, a mechanism for losing a team would never fire.
+
+**[#63](https://github.com/mario595/cycling-manager/issues/63), inactivity, is the
+trigger to build first** when this area comes up — it needs a timestamp and the
+clock, both of which exist. Bankruptcy
+([#27](https://github.com/mario595/cycling-manager/issues/27)) is the other
+trigger and is deferred with the whole economy; it has nothing to operate on
+until wages and a market exist.
+
+**Worth pulling forward once there is a real playtest**, since inactivity is the
+condition that will actually occur: players sign up, drift away, and hold a place
+in a fixed-size Division while #44 races their team badly forever.
 
 ### Team code disambiguation — #56
 
