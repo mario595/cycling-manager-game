@@ -410,7 +410,7 @@ anonymous), `test_claim_returns_the_new_team`,
 `test_claim_lowercase_code_is_accepted_and_uppercased`,
 `test_claim_duplicate_name_is_400`.
 
-### W6 — `frontend/src/api.ts` + `screens/ClaimTeam.tsx`
+### W6 — `frontend/src/api.ts` + `screens/ClaimTeam.tsx` ✅
 The client function and the screen.
 **Test:** no frontend test framework is configured in this repo, so this item
 is proven by the Verification section's browser pass, not by a unit test. Say so
