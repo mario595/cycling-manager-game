@@ -114,7 +114,7 @@ Keep this one-way; it is what stops the apps tangling:
 accounts      -> (nothing)
 core          -> (nothing)
 riders        -> core, teams
-teams         -> core, accounts
+teams         -> core, accounts, riders
 staff         -> core, teams, riders
 schedule      -> core
 racing        -> riders, teams, race_engine, schedule

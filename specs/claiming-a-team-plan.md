@@ -376,7 +376,7 @@ fixture — and delete the stub file.
 **Test:** the package itself; W1's tests land in it. If W1 and W2 are done
 together, commit W2 first so W1's tests have somewhere to go.
 
-### W3 — `teams/migrations/0002`: drop `unique=True` from `Team.code`
+### W3 — `teams/migrations/0002`: drop `unique=True` from `Team.code` ✅
 Model change plus migration, and update the dependency line in `AGENTS.md`
 (`teams -> core, accounts, riders`) in this same commit, since W4 relies on it.
 **Test:** `teams/tests/test_models.py::test_two_teams_may_share_a_code` —
