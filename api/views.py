@@ -9,7 +9,7 @@ from rest_framework.views import APIView
 
 from racing.models import SQUAD_SIZE, Race
 from racing.services import SquadError, set_squad, suggested_squad
-from riders.models import ENGINE_ATTRIBUTES
+from riders.models import ENGINE_ATTRIBUTES, Rider
 from schedule.services import current_position
 from teams.models import Team
 from world.services import now
@@ -19,6 +19,7 @@ from .serializers import (
     ClockSerializer,
     MeSerializer,
     PositionSerializer,
+    RiderSerializer,
     SquadSerializer,
     SquadWriteSerializer,
 )
@@ -146,6 +147,8 @@ def _squad_payload(race, team, rider_ids: list[int], leader_id: int, *, saved: b
             "id": rider.pk,
             "name": rider.name,
             "role": rider.role,
+            "speciality": rider.get_speciality_display(),
+            "age": rider.age,
             **{name: getattr(rider, name) for name in ENGINE_ATTRIBUTES},
             "selected": rider.pk in selected,
             "is_leader": rider.pk == leader_id,
@@ -218,3 +221,22 @@ class SquadView(APIView):
             race, team, write.validated_data["rider_ids"], write.validated_data["leader_id"], saved=True,
         )
         return Response(SquadSerializer(payload).data)
+
+
+class RiderListView(APIView):
+    """The caller's own team's roster.
+
+    No team id in the URL: the team is always the caller's own, from
+    request.user via team_for() — same pattern as SquadView, added after
+    #50 closed the anyone-can-view-anyone's-roster hole this endpoint
+    would otherwise have. Falls back to the project default,
+    IsAuthenticated — do not re-add AllowAny.
+    """
+
+    def get(self, request):
+        team = team_for(request.user)
+        if team is None:
+            return Response({"detail": "You do not manage a team."}, status=403)
+
+        riders = Rider.objects.filter(team=team)
+        return Response(RiderSerializer(riders, many=True).data)

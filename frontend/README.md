@@ -8,7 +8,7 @@ The React SPA. Currently a **scaffold**: it reproduces the mockup in
 | Route | Screen | State |
 |-------|--------|-------|
 | `/` | Dashboard | Built — full layout from the design, fixture data |
-| `/roster` | Roster | Built — filter, sort and rider detail panel all work |
+| `/roster` | Roster | Built — filter, sort and rider detail panel, from the API, no fixture data |
 | `/calendar` | Calendar | Built — twelve weeks from the API, no fixture data |
 | `/race/:raceId` | Race | Built — squad selection, no fixture data |
 | `/login`, `/register` | Login, Register | Built — real accounts, no fixture data |
@@ -26,20 +26,21 @@ so neither belongs in the sidebar.
 
 `useAuth.tsx`'s `AuthProvider` learns who is logged in **once**, on mount,
 via `GET /api/accounts/me/`, and shares it through `useAuth()` — the
-sidebar, the race screen, and the login/register screens all read the same
-`me` rather than each fetching it themselves. This is also what makes a
-session survive a page reload: the browser still holds the session cookie,
-so `getMe()` on the next mount re-learns the same identity without the
-player logging in again.
+sidebar, the race screen, the roster screen, and the login/register screens
+all read the same `me` rather than each fetching it themselves. This is
+also what makes a session survive a page reload: the browser still holds
+the session cookie, so `getMe()` on the next mount re-learns the same
+identity without the player logging in again.
 
 `me.team` is what used to be the `?team=<id>` URL parameter described in an
-earlier version of this file. That parameter is gone — squad selection now
-derives the team from the session on the server (`api/README.md`), so
-`Race.tsx` no longer needs to pass one. A team-less `me` (anonymous, or
-logged in but not managing a team — see `specs/player-accounts.md`) is not
-an error state: the race screen shows a plain "you do not manage a team"
-message instead of an empty picker, and the sidebar shows "No team /
-SPECTATING" instead of a team name.
+earlier version of this file. That parameter is gone — squad selection and
+the roster both derive the team from the session on the server
+(`api/README.md`), so neither `Race.tsx` nor `Roster.tsx` needs to pass
+one. A team-less `me` (anonymous, or logged in but not managing a team —
+see `specs/player-accounts.md`) is not an error state: the race screen
+shows a plain "you do not manage a team" message instead of an empty
+picker, `Roster.tsx` does the same instead of an empty grid, and the
+sidebar shows "No team / SPECTATING" instead of a team name.
 
 **Writes need a CSRF token.** DRF's `SessionAuthentication` enforces CSRF
 for authenticated sessions, so any `POST`/`PUT` issued while logged in must
@@ -63,9 +64,9 @@ in `src/App.tsx`. Its placeholder disappears automatically.
 ## Where the data comes from
 
 `src/placeholderData.ts` — **all of it invented**, copied from the mockup.
-Most screens still read from it. Keeping every fake value in one module
-means the screens already have their real shapes, and wiring them up later
-is a matter of replacing that module with fetches rather than hunting
+`Dashboard.tsx` is now the main consumer; keeping every fake value in one
+module means the screens already have their real shapes, and wiring them up
+later is a matter of replacing that module with fetches rather than hunting
 literals through JSX.
 
 `TEAM` is now **partly real**: `Layout.tsx`/`Sidebar.tsx` read team identity
@@ -75,12 +76,18 @@ real supplies yet — budget (`economy/` doesn't exist) and tier
 (`competitions/` doesn't exist). A future economy/competitions feature
 replaces those two fields the same way this one replaced the rest.
 
-`/calendar` is the first screen with **no placeholder data at all** —
-`src/useCalendar.ts` polls `GET /api/schedule/calendar/` and nothing else.
-Its loading and error states render nothing rather than inventing a
-season's shape, the same discipline `useSeason.ts` already established:
-a screen showing twelve empty weeks while genuinely mid-fetch would be
-indistinguishable from an off-season with a bug in it.
+The rider half of this file (`Rider`, `RIDER_SEEDS`, `SQUAD`, `SPEC_FILTERS`,
+`SortKey`, `SORT_OPTIONS`, `WAGE_BILL`) is **gone**, not just unused —
+`/roster` reads real riders via `src/useRoster.ts` and `GET /api/riders/`
+(see `api/README.md`), and the fixture shape it used to have (an invented
+"overall rating", form, condition, wage) does not exist in the real data
+at all; see `specs/rider-attributes.md`, which cuts an overall rating
+outright.
+
+`/calendar` and `/roster` render nothing while loading or on error, rather
+than inventing a shape — `src/useCalendar.ts` and `src/useRoster.ts` both
+follow the discipline `useSeason.ts` established: a screen showing invented
+data mid-fetch is indistinguishable from a real one with a bug in it.
 
 ## How it is served
 

@@ -246,13 +246,16 @@ function RiderRow({
 
       <div style={{ flex: 1, minWidth: 0, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         {ATTRS.map(({ key, label }) => {
+          // rider[key] is the 0-10 display scale (see riders/display.py);
+          // Bar/barColor expect 0-100, so scale up for the bar only — the
+          // printed number stays 0-10.
           const value = rider[key] as number
           return (
             <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 90 }}>
               <span style={{ fontSize: 9.5, color: color.muted, fontFamily: font.mono, width: 18 }}>
                 {label.slice(0, 3).toUpperCase()}
               </span>
-              <Bar value={value} fill={barColor(value)} />
+              <Bar value={value * 10} fill={barColor(value * 10)} />
             </div>
           )
         })}

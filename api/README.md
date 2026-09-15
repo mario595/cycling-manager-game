@@ -40,7 +40,15 @@ DRF routers and serializers that aggregate other apps' data for the SPA.
   already started) becomes a 400, and a caller with no team becomes a 403.
   `candidates` is the team's whole roster, each flagged `selected`/
   `is_leader`, so one response gives the squad screen everything it draws.
-  See `racing/README.md`, *Squads*.
+  Its five engine attributes are the 0-10 display scale, same as the riders
+  endpoint below — see `racing/README.md`, *Squads*.
+- `GET /api/riders/` — the **caller's own** team's roster (`RiderSerializer`,
+  `RiderListView`). Same `team_for()` pattern as the squad endpoint: no team
+  id in the URL, a caller with no team gets a 403. Attributes are shipped
+  through `riders.display.to_display_scale` (0-10, never the stored 1-100);
+  the hidden traits (`potential`, `peak_age`, `decline_rate`,
+  `injury_proneness`, `training_affinity`) never appear in this or any
+  other payload — see `riders/README.md`.
 - `POST /api/accounts/register/`, `POST /api/accounts/login/`,
   `POST /api/accounts/logout/` — owned by `accounts/`, included here under
   `/api/accounts/`. See `accounts/README.md`.
@@ -70,12 +78,12 @@ public even though a login flow now exists. Any future endpoint here should
 default to the project's `IsAuthenticated` unless it has the same reason
 these three don't.
 
-`SquadView` is the opposite case, and used to be the exception: it is now
-plain `IsAuthenticated`, with the team always `request.user.team` rather
-than a URL parameter — see `team_for()` in `api/views.py`, and
-`accounts/README.md` for why that helper lives here instead of in
-`accounts/`. There is no more "anyone can edit anyone's squad" hole; a
-caller with no team gets a 403, not someone else's squad.
+`SquadView` and `RiderListView` are both plain `IsAuthenticated`, with the
+team always `request.user.team` rather than a URL parameter or query string —
+see `team_for()` in `api/views.py`, and `accounts/README.md` for why that
+helper lives here instead of in `accounts/`. Neither has an "anyone can view
+or edit anyone's squad/roster" hole; a caller with no team gets a 403, not
+someone else's data.
 
 **CSRF.** DRF's `SessionAuthentication` enforces CSRF only for
 *authenticated* sessions — an anonymous request passes `CsrfViewMiddleware`

@@ -1,50 +1,93 @@
 import { useMemo, useState } from 'react'
 
+import type { Rider } from '../api'
 import { Bar, Card, PageBody, PageHeading, StatTile } from '../components/primitives'
-import {
-  ATTR_KEYS,
-  ATTR_LABELS,
-  SORT_OPTIONS,
-  SPEC_FILTERS,
-  SQUAD,
-  WAGE_BILL,
-  type Rider,
-  type SortKey,
-  type Speciality,
-} from '../placeholderData'
-import { barColor, color, font, formColor, riderStatus } from '../theme'
+import { barColor, color, font } from '../theme'
+import { useAuth } from '../useAuth'
+import { useRoster } from '../useRoster'
 
-/** Wages read "€480k" / "€2.4M" — parse enough to sort by them. */
-function wageValue(wage: string): number {
-  const n = parseFloat(wage.replace(/[^\d.]/g, ''))
-  return wage.includes('M') ? n * 1000 : n
-}
+type AttrKey = 'climb' | 'sprint' | 'flat' | 'resistance' | 'positioning'
+
+const ATTR_KEYS: { key: AttrKey; label: string }[] = [
+  { key: 'climb', label: 'CLM' },
+  { key: 'sprint', label: 'SPR' },
+  { key: 'flat', label: 'FLT' },
+  { key: 'resistance', label: 'RES' },
+  { key: 'positioning', label: 'POS' },
+]
+
+const ATTR_LABELS: { key: AttrKey; label: string }[] = [
+  { key: 'climb', label: 'Climbing' },
+  { key: 'sprint', label: 'Sprinting' },
+  { key: 'flat', label: 'Flat' },
+  { key: 'resistance', label: 'Resistance' },
+  { key: 'positioning', label: 'Positioning' },
+]
+
+type SortKey = 'name' | 'age' | 'climb' | 'sprint' | 'flat' | 'resistance' | 'positioning'
+
+const SORT_OPTIONS: Array<{ key: SortKey; label: string }> = [
+  { key: 'name', label: 'Name' },
+  { key: 'age', label: 'Age' },
+  { key: 'climb', label: 'Climbing' },
+  { key: 'sprint', label: 'Sprinting' },
+  { key: 'flat', label: 'Flat' },
+  { key: 'resistance', label: 'Resistance' },
+  { key: 'positioning', label: 'Positioning' },
+]
 
 export function Roster() {
-  const [filter, setFilter] = useState<'All' | Speciality>('All')
-  const [sort, setSort] = useState<SortKey>('ovr')
-  const [picked, setPicked] = useState<string | null>(null)
+  const { me, loading: authLoading } = useAuth()
+  const hasTeam = me?.team != null
 
-  const riders = useMemo(() => {
-    const list = SQUAD.filter((r) => filter === 'All' || r.spec === filter)
+  const { riders, loading, error } = useRoster()
+  const [filter, setFilter] = useState<'All' | string>('All')
+  const [sort, setSort] = useState<SortKey>('name')
+  const [picked, setPicked] = useState<number | null>(null)
+
+  const specialities = useMemo(() => {
+    if (!riders) return []
+    return Array.from(new Set(riders.map((r) => r.speciality))).sort()
+  }, [riders])
+
+  const sorted = useMemo(() => {
+    if (!riders) return []
+    const list = riders.filter((r) => filter === 'All' || r.speciality === filter)
     return [...list].sort((a, b) => {
-      switch (sort) {
-        case 'name':
-          return a.name.localeCompare(b.name)
-        case 'age':
-          return a.age - b.age
-        case 'wage':
-          return wageValue(b.wage) - wageValue(a.wage)
-        default:
-          return b[sort] - a[sort]
-      }
+      if (sort === 'name') return a.name.localeCompare(b.name)
+      if (sort === 'age') return a.age - b.age
+      return b[sort] - a[sort]
     })
-  }, [filter, sort])
+  }, [riders, filter, sort])
 
-  const selected = picked ? (SQUAD.find((r) => r.id === picked) ?? null) : null
+  if (authLoading || loading) return null
 
-  const avgOverall = Math.round(SQUAD.reduce((a, r) => a + r.ovr, 0) / SQUAD.length)
-  const avgAge = (SQUAD.reduce((a, r) => a + r.age, 0) / SQUAD.length).toFixed(1)
+  if (!hasTeam) {
+    return (
+      <PageBody gap={18} paddingTop={26}>
+        <Card style={{ padding: '18px 20px' }}>
+          <div style={{ fontSize: 13.5, color: color.muted }}>
+            You do not manage a team, so there is no roster to show here.
+          </div>
+        </Card>
+      </PageBody>
+    )
+  }
+
+  if (error || !riders) {
+    return (
+      <PageBody gap={18} paddingTop={26}>
+        <Card style={{ padding: '18px 20px' }}>
+          <div style={{ fontSize: 13.5, color: color.muted }}>Couldn't load the roster.</div>
+        </Card>
+      </PageBody>
+    )
+  }
+
+  const selected = picked !== null ? (riders.find((r) => r.id === picked) ?? null) : null
+  const avgAge = riders.length
+    ? (riders.reduce((a, r) => a + r.age, 0) / riders.length).toFixed(1)
+    : '—'
 
   return (
     <PageBody gap={18} paddingTop={26}>
@@ -55,18 +98,16 @@ export function Roster() {
         subtitle="Tap a rider for the full profile. Attributes are the five the race engine reads."
         aside={
           <>
-            <StatTile label="SQUAD SIZE" value={String(SQUAD.length)} minWidth={104} />
-            <StatTile label="AVG OVERALL" value={String(avgOverall)} minWidth={104} />
+            <StatTile label="SQUAD SIZE" value={String(riders.length)} minWidth={104} />
             <StatTile label="AVG AGE" value={avgAge} minWidth={104} />
-            <StatTile label="WAGE BILL" value={WAGE_BILL} minWidth={104} />
           </>
         }
       />
 
       <Card style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '14px 16px' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
-          <ChipLabel>ROLE</ChipLabel>
-          {SPEC_FILTERS.map((f) => (
+          <ChipLabel>SPECIALITY</ChipLabel>
+          {['All', ...specialities].map((f) => (
             <Chip key={f} active={filter === f} onClick={() => setFilter(f)}>
               {f}
             </Chip>
@@ -87,7 +128,7 @@ export function Roster() {
               fontFamily: font.mono,
             }}
           >
-            {riders.length} of {SQUAD.length} riders
+            {sorted.length} of {riders.length} riders
           </span>
         </div>
       </Card>
@@ -102,7 +143,7 @@ export function Roster() {
             gap: 12,
           }}
         >
-          {riders.map((rider) => (
+          {sorted.map((rider) => (
             <RiderCard
               key={rider.id}
               rider={rider}
@@ -173,8 +214,6 @@ function RiderCard({
   selected: boolean
   onPick: () => void
 }) {
-  const status = riderStatus[rider.status]
-
   return (
     <button
       type="button"
@@ -203,15 +242,15 @@ function RiderCard({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: 15,
+            fontSize: 14,
             fontWeight: 700,
             fontFamily: font.mono,
-            background: rider.ovr >= 80 ? color.accent : color.canvas,
+            background: color.canvas,
             color: color.ink,
             flex: '0 0 40px',
           }}
         >
-          {rider.ovr}
+          {rider.speciality.slice(0, 2).toUpperCase()}
         </div>
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
           <div
@@ -227,52 +266,43 @@ function RiderCard({
             {rider.name}
           </div>
           <div style={{ fontSize: 11, color: color.mutedStrong, fontFamily: font.mono }}>
-            {rider.spec.toUpperCase()} · {rider.age} yrs · {rider.role}
+            {rider.speciality.toUpperCase()} · {rider.age} yrs · {rider.role}
           </div>
-        </div>
-        <div
-          style={{
-            fontSize: 9.5,
-            letterSpacing: '1px',
-            fontWeight: 700,
-            padding: '3px 6px',
-            borderRadius: 5,
-            fontFamily: font.mono,
-            background: status.bg,
-            color: status.fg,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {status.label}
         </div>
       </div>
 
+      {/* rider[key] is the 0-10 display scale (riders/display.py); Bar/
+          barColor expect 0-100, so scale for the bar only — see
+          specs/rider-attributes-plan.md, Design decisions, item 12. */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0,1fr))', gap: 7 }}>
-        {rider.attrs.map((value, i) => (
-          <div key={ATTR_KEYS[i]} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'baseline',
-                gap: 2,
-              }}
-            >
-              <span
+        {ATTR_KEYS.map(({ key, label }) => {
+          const value = rider[key]
+          return (
+            <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div
                 style={{
-                  fontSize: 9.5,
-                  letterSpacing: '0.6px',
-                  color: color.mutedStrong,
-                  fontFamily: font.mono,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'baseline',
+                  gap: 2,
                 }}
               >
-                {ATTR_KEYS[i]}
-              </span>
-              <span style={{ fontSize: 11, fontWeight: 600, fontFamily: font.mono }}>{value}</span>
+                <span
+                  style={{
+                    fontSize: 9.5,
+                    letterSpacing: '0.6px',
+                    color: color.mutedStrong,
+                    fontFamily: font.mono,
+                  }}
+                >
+                  {label}
+                </span>
+                <span style={{ fontSize: 11, fontWeight: 600, fontFamily: font.mono }}>{value}</span>
+              </div>
+              <Bar value={value * 10} fill={barColor(value * 10)} />
             </div>
-            <Bar value={value} fill={barColor(value)} />
-          </div>
-        ))}
+          )
+        })}
       </div>
 
       <div
@@ -284,52 +314,20 @@ function RiderCard({
           paddingTop: 10,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
-          <MiniLabel>FRM</MiniLabel>
-          <Bar value={rider.form} fill={formColor(rider.form)} />
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
-          <MiniLabel>CND</MiniLabel>
-          <Bar value={rider.condition} fill={color.muted} />
-        </div>
-        <span
-          style={{
-            fontSize: 11,
-            color: color.muted,
-            fontFamily: font.mono,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {rider.years} {rider.years === 1 ? 'yr left' : 'yrs left'} · {rider.wage}
+        <span style={{ fontSize: 11, color: color.muted, fontFamily: font.mono }}>
+          {rider.height_cm} cm · {rider.weight_kg} kg
         </span>
       </div>
     </button>
   )
 }
 
-function MiniLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <span
-      style={{
-        fontSize: 9.5,
-        letterSpacing: '0.8px',
-        color: color.mutedStrong,
-        fontFamily: font.mono,
-      }}
-    >
-      {children}
-    </span>
-  )
-}
-
 function RiderPanel({ rider, onClose }: { rider: Rider; onClose: () => void }) {
   const facts: Array<[string, string]> = [
-    ['Contract', `${rider.years} ${rider.years === 1 ? 'yr' : 'yrs'}`],
-    ['Wage', rider.wage],
-    ['Market value', rider.value],
-    ['Form', String(rider.form)],
-    ['Condition', String(rider.condition)],
-    ['Overall', String(rider.ovr)],
+    ['Age', `${rider.age} yrs`],
+    ['Height', `${rider.height_cm} cm`],
+    ['Weight', `${rider.weight_kg} kg`],
+    ['Speciality', rider.speciality],
   ]
 
   return (
@@ -350,7 +348,7 @@ function RiderPanel({ rider, onClose }: { rider: Rider; onClose: () => void }) {
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
           <div style={{ fontSize: 18, fontWeight: 600, letterSpacing: '-0.4px' }}>{rider.name}</div>
           <div style={{ fontSize: 11, color: color.mutedStrong, fontFamily: font.mono }}>
-            {rider.spec} · {rider.age} yrs · {rider.role}
+            {rider.speciality} · {rider.age} yrs · {rider.role}
           </div>
         </div>
         <button
@@ -375,25 +373,28 @@ function RiderPanel({ rider, onClose }: { rider: Rider; onClose: () => void }) {
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginBottom: 16 }}>
-        {rider.attrs.map((value, i) => (
-          <div key={ATTR_LABELS[i]} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ width: 88, flex: '0 0 88px', fontSize: 12.5, color: '#565A61' }}>
-              {ATTR_LABELS[i]}
-            </span>
-            <Bar value={value} fill={barColor(value)} height={7} />
-            <span
-              style={{
-                width: 26,
-                textAlign: 'right',
-                fontSize: 12,
-                fontWeight: 600,
-                fontFamily: font.mono,
-              }}
-            >
-              {value}
-            </span>
-          </div>
-        ))}
+        {ATTR_LABELS.map(({ key, label }) => {
+          const value = rider[key]
+          return (
+            <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ width: 88, flex: '0 0 88px', fontSize: 12.5, color: '#565A61' }}>
+                {label}
+              </span>
+              <Bar value={value * 10} fill={barColor(value * 10)} height={7} />
+              <span
+                style={{
+                  width: 26,
+                  textAlign: 'right',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  fontFamily: font.mono,
+                }}
+              >
+                {value}
+              </span>
+            </div>
+          )
+        })}
       </div>
 
       <div

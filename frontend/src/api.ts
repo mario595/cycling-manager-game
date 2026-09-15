@@ -173,6 +173,8 @@ export interface SquadRider {
   id: number
   name: string
   role: 'leader' | 'support'
+  speciality: string
+  age: number
   climb: number
   sprint: number
   flat: number
@@ -210,4 +212,31 @@ export async function putSquad(raceId: number, riderIds: number[], leaderId: num
     rider_ids: riderIds,
     leader_id: leaderId,
   })
+}
+
+/** Ratings are the 0-10 display scale — see riders/display.py. The five
+ * hidden traits (potential, peak age, decline rate, injury proneness,
+ * training affinity) never reach this client at all. */
+export interface Rider {
+  id: number
+  name: string
+  role: 'leader' | 'support'
+  speciality: string
+  nationality: string
+  age: number
+  height_cm: number
+  weight_kg: number
+  climb: number
+  sprint: number
+  flat: number
+  resistance: number
+  positioning: number
+}
+
+export async function getRiders(): Promise<Rider[]> {
+  const response = await fetch('/api/riders/')
+  if (!response.ok) {
+    throw new Error(`riders request failed: ${response.status}`)
+  }
+  return response.json()
 }
