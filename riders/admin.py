@@ -6,13 +6,13 @@ from .models import Rider
 @admin.register(Rider)
 class RiderAdmin(admin.ModelAdmin):
     list_display = (
-        "name", "team", "role", "speciality", "age",
+        "name", "team", "speciality", "age",
         "climb", "sprint", "flat", "resistance", "positioning",
     )
-    list_filter = ("team", "role", "speciality", "nationality")
+    list_filter = ("team", "speciality", "nationality")
     search_fields = ("name",)
     fieldsets = (
-        (None, {"fields": ("name", "nationality", "team", "role")}),
+        (None, {"fields": ("name", "nationality", "team")}),
         ("Engine attributes", {
             "fields": ("climb", "sprint", "flat", "resistance", "positioning"),
         }),

@@ -21,7 +21,6 @@ def four_riders(db, team) -> list[Rider]:
         Rider.objects.create(
             name=f"Rider {i}",
             team=team,
-            role=Rider.Role.LEADER if i == 0 else Rider.Role.SUPPORT,
             climb=60, sprint=60, flat=60, resistance=60, positioning=60,
         )
         for i in range(4)
