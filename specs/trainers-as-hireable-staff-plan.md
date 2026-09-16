@@ -565,7 +565,7 @@ this is what makes two trainers on one team impossible.
 - `test_skill_below_one_is_rejected` / `test_skill_above_100_is_rejected` —
   `full_clean()` raises `ValidationError`.
 
-### W3 — `staff/generation.py`: generating trainers
+### W3 — `staff/generation.py`: generating trainers ✅
 `generate_trainer`, `generate_trainer_pool`, and the band constants per
 **`staff/generation.py`**.
 
