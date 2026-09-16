@@ -57,7 +57,6 @@ class SquadRiderSerializer(serializers.Serializer):
 
     id = serializers.IntegerField()
     name = serializers.CharField()
-    role = serializers.CharField()  # the rider's default, not the squad's
     speciality = serializers.CharField()
     age = serializers.IntegerField()
     selected = serializers.BooleanField()
@@ -77,7 +76,6 @@ class RiderSerializer(serializers.Serializer):
 
     id = serializers.IntegerField()
     name = serializers.CharField()
-    role = serializers.CharField()
     speciality = serializers.CharField(source="get_speciality_display")
     nationality = serializers.CharField(source="get_nationality_display")
     age = serializers.IntegerField()

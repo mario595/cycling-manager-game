@@ -172,7 +172,6 @@ export async function logout(): Promise<void> {
 export interface SquadRider {
   id: number
   name: string
-  role: 'leader' | 'support'
   speciality: string
   age: number
   climb: number
@@ -220,7 +219,6 @@ export async function putSquad(raceId: number, riderIds: number[], leaderId: num
 export interface Rider {
   id: number
   name: string
-  role: 'leader' | 'support'
   speciality: string
   nationality: string
   age: number

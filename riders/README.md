@@ -125,12 +125,6 @@ command is an entry point, the same latitude
 
 ## Future work / possible improvements
 
-- **Role assignment.** `generate_rider` never sets `role`; every generated
-  rider defaults to `Rider.Role.LEADER`. Squad selection
-  (`racing.services.auto_pick_squad`) still works — it sorts on total
-  attributes, not on this field — but a generated roster reading as "twelve
-  leaders" is not addressed by this ticket. Revisit if it turns out to
-  matter in play.
 - **A second nationality.** `Rider.Nationality` and the name pools in
   `generation.py` are structured as one entry per country specifically so
   that adding one is a choices-list and name-pool edit, not a migration or

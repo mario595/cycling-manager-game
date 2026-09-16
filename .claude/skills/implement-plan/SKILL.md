@@ -75,6 +75,12 @@ Run it once now. It must match your baseline. If it errors, stop and ask.
 
 For the rest of this document, `PYTEST` means that command.
 
+**You do not have to do anything about other agents.** Each worktree gets its
+own test database, named after the worktree, so a suite running in another
+worktree at the same time cannot drop yours mid-run. `config/worktree.py` has
+the scheme. Never set `POSTGRES_DB` to work around a database problem — that
+opts you back into sharing.
+
 ---
 
 ## The loop
@@ -241,15 +247,19 @@ are the ones that get broken:
 1. Run the full suite one last time. It must be green.
 2. Do the plan's **Documentation update** section. It is not optional.
 3. Commit that documentation change.
-4. **Open the PR and move the ticket.** Follow `.claude/ticket-workflow.md`:
+4. **Leave it running for review** — see below.
+5. **Open the PR and move the ticket.** Follow `.claude/ticket-workflow.md`:
    confirm in one line and wait for a yes, then push the branch and open the pull
    request, then set the board's Status field to **Implemented**. That file has
-   the PR body template and the exact `gh` commands.
+   the PR body template and the exact `gh` commands. Put the scenarios from step
+   4 into the PR body under **How to try it**.
 
    The PR body ends with `Closes #<N>`. That is deliberate — the ticket stays at
    **Implemented** through review and testing, and merging to master is the last
    step.
-5. Report, briefly:
+6. Report, briefly:
+   - the URL the app is running on, and that you saw it respond;
+   - the scenarios to try;
    - the pull request URL, and the branch name;
    - which work items are done (and any that are not, and why);
    - tests added, and the baseline count versus the final count;
@@ -260,5 +270,137 @@ are the ones that get broken:
 happen on the PR, and the user merges it.
 
 **If you stopped part-way** — a work item unfinished, a question unanswered, the
-suite not green — do not open the PR and do not move the ticket. Commit what is
-finished, say exactly where you got to, and stop.
+suite not green — do not start the server, do not open the PR and do not move the
+ticket. Commit what is finished, say exactly where you got to, and stop.
+
+---
+
+## Leaving it running for review
+
+The user checks this by hand before it merges. Set it up so they can, and tell
+them exactly what to try. Everything here runs **from inside the worktree**, so
+what they see is the branch's code and not master's.
+
+### 1. Database and migrations
+
+```bash
+docker compose up -d                                    # Postgres, host port 5433
+/home/mario/dev/cycling-manager/.venv/bin/python scripts/dev_db.py   # this worktree's own database
+/home/mario/dev/cycling-manager/.venv/bin/python manage.py migrate
+```
+
+`dev_db.py` creates the database for **this worktree** if it is not there yet.
+`migrate` creates tables, not databases, so without it a fresh worktree fails
+with "database ... does not exist", which reads like a misconfiguration rather
+than a missing step.
+
+Migrating matters too: your branch almost certainly added migrations, and
+without it the app runs against the old schema and the feature looks broken.
+
+The database is this worktree's alone, so seeding it cannot disturb another
+agent's review, and the user's main checkout keeps its own data.
+
+### 2. Give it something to look at
+
+A feature with an empty database is not reviewable. Before starting the server,
+make sure there is data to see.
+
+- Check what already exists: `manage.py help` lists the project's own commands.
+  There are already commands for setting a world up — `load_season`,
+  `mock_clock`, `tick`. **Prefer an existing command to inventing data.**
+- If you must create data, do it with a short script through `manage.py shell`,
+  and say exactly what you created.
+- **If logging in is needed, do not invent credentials.** Ask the user to run
+  `manage.py createsuperuser`, or tell them which existing account to use.
+
+### 3. Build the frontend, if the frontend changed
+
+Django serves the built bundle from `frontend/dist/`, so without this the user
+sees the *old* UI and reports a bug that is not there:
+
+```bash
+cd frontend && npm run build
+```
+
+Skip it when the diff touches no frontend file.
+
+### 4. Start the server in the background
+
+This worktree has its own port, so it does not fight another agent's server.
+Ask for it rather than guessing:
+
+```bash
+PORT=$(/home/mario/dev/cycling-manager/.venv/bin/python -c \
+  'from config.worktree import runserver_port; print(runserver_port())')
+
+/home/mario/dev/cycling-manager/.venv/bin/python manage.py runserver "$PORT" \
+  > /tmp/runserver-<slug>.log 2>&1 &
+```
+
+The port is derived from the worktree name, so it is the same every time and
+the user can bookmark it.
+
+Then **confirm it is actually up before you tell the user it is**:
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' "http://127.0.0.1:$PORT/"
+```
+
+Anything other than a 200 means read the log. **Never report a URL you have not
+seen respond.**
+
+Two worktrees can rarely hash to the same port. If the log says the address is
+in use, step up by one and say which port you ended on. **Never kill whatever is
+already there** — it is another agent's review server.
+
+### 5. Write the scenarios
+
+Give a short numbered list of things to try — **only the flows this ticket added
+or changed**. Not a tour of the app, not a regression sweep.
+
+Derive them from the spec's `In scope` and the plan's work items: every in-scope
+item should either be reachable by a scenario, or you should say why it is not
+visible from the outside.
+
+Each scenario is a few lines:
+
+1. **Do this** — the exact URL, click or command.
+2. **You should see** — the observable result.
+3. **Then this** — the edge case worth poking, where there is one.
+
+The shape, for a registration ticket:
+
+```
+1. Register — http://127.0.0.1:<port>/register, any email and password.
+   You should land on the dashboard, and the account shows in /admin/.
+2. Log out. You should be back at sign-in, and the dashboard should now
+   bounce you there too.
+3. Log in again with the same details. Same dashboard, same team.
+4. Register again with an email already used. The form should say so, and
+   there should still be only one account.
+```
+
+Rules for the list:
+
+- **Say what state to start from**, and start from a clean one where you can.
+- **Include at least one unhappy path** — the validation failure, the empty
+  list, the double submit. That is where hand-testing earns its keep; the happy
+  path already has a unit test.
+- **Name the URL.** "Go to the dashboard" is not a scenario.
+- **If the change has no UI, say so and give the equivalent** — a `manage.py
+  shell` snippet, a management command, or a `curl http://127.0.0.1:<port>/api/...`.
+  A clock or engine ticket is tried with `mock_clock` and `tick`, not by
+  clicking.
+- **Name anything from the ticket you could not make reachable**, and why.
+
+### 6. Hand it over
+
+Tell the user, in this order: the URL and that you saw it respond; what data you
+created; the numbered scenarios; and how to stop it when they are done —
+
+```bash
+kill %1                # or the PID from the log
+```
+
+Leave Postgres running — `docker compose down` would stop it for every other
+worktree too, and another agent is probably using it.

@@ -50,10 +50,6 @@ class Rider(TimeStampedModel):
     see riders/README.md.
     """
 
-    class Role(models.TextChoices):
-        LEADER = "leader", "Leader"
-        SUPPORT = "support", "Support"
-
     class Speciality(models.TextChoices):
         CLIMBER = "climber", "Climber"
         SPRINTER = "sprinter", "Sprinter"
@@ -83,13 +79,6 @@ class Rider(TimeStampedModel):
         related_name="riders",
         help_text="Null means a free agent — no team.",
     )
-    role = models.CharField(
-        max_length=10,
-        choices=Role.choices,
-        default=Role.LEADER,
-        help_text="Matches the engine's role. The engine reads this, it does not derive it.",
-    )
-
     # --- Engine attributes (1-100) ---
     climb = _attribute_field("Speed uphill and ability to attack climbs.")
     sprint = _attribute_field("Top-end finishing power; also blends into descending speed.")

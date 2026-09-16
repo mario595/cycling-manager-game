@@ -33,7 +33,6 @@ def rider(db, team) -> Rider:
     return Rider.objects.create(
         name="Climber One",
         team=team,
-        role=Rider.Role.LEADER,
         climb=94,
         sprint=30,
         flat=40,
@@ -43,7 +42,7 @@ def rider(db, team) -> Rider:
 
 
 def test_rider_converts_to_engine_dataclass(rider):
-    engine_rider = to_engine_rider(rider)
+    engine_rider = to_engine_rider(rider, role="leader")
 
     assert engine_rider.name == "Climber One"
     assert engine_rider.id == str(rider.pk)
@@ -62,7 +61,7 @@ def test_teamless_rider_becomes_own_team(db):
         positioning=50,
     )
 
-    engine_rider = to_engine_rider(free_agent)
+    engine_rider = to_engine_rider(free_agent, role="support")
 
     # The engine's own default: a rider with no team rides as a team of one.
     assert engine_rider.team_id == engine_rider.id
@@ -105,7 +104,6 @@ def four_riders(db, team) -> list[Rider]:
         Rider.objects.create(
             name=f"Rider {i}",
             team=team,
-            role=Rider.Role.LEADER if i == 0 else Rider.Role.SUPPORT,
             climb=60,
             sprint=60,
             flat=60,
@@ -282,34 +280,34 @@ def test_a_rider_cannot_appear_twice_in_a_squad(running_race, four_riders):
             RaceSquadRider.objects.create(squad=squad, rider=four_riders[0])
 
 
-def test_auto_pick_prefers_leaders_then_strength(db, team):
-    # Six riders: one weak leader, one strong support, four mid-strength
-    # support riders. The leader must win despite being weakest, and among
-    # the rest the strongest three fill the squad, tiebroken by pk.
-    weak_leader = Rider.objects.create(
-        name="Weak Leader", team=team, role=Rider.Role.LEADER,
-        climb=20, sprint=20, flat=20, resistance=20, positioning=20,
-    )
-    strong_support = Rider.objects.create(
-        name="Strong Support", team=team, role=Rider.Role.SUPPORT,
+def test_auto_pick_takes_the_strongest_four_tiebroken_by_pk(db, team):
+    # Six riders: one strong, four mid-strength, one weak. The strong rider
+    # must be picked and lead; the weak rider must be excluded; three of the
+    # four mid-strength riders fill the rest, tiebroken by pk.
+    strong = Rider.objects.create(
+        name="Strong", team=team,
         climb=90, sprint=90, flat=90, resistance=90, positioning=90,
     )
-    mid_supports = [
+    mids = [
         Rider.objects.create(
-            name=f"Mid Support {i}", team=team, role=Rider.Role.SUPPORT,
+            name=f"Mid {i}", team=team,
             climb=50, sprint=50, flat=50, resistance=50, positioning=50,
         )
         for i in range(4)
     ]
+    weak = Rider.objects.create(
+        name="Weak", team=team,
+        climb=20, sprint=20, flat=20, resistance=20, positioning=20,
+    )
 
     rider_ids, leader_id = auto_pick_squad(team)
 
-    assert leader_id == weak_leader.pk
-    assert rider_ids[0] == weak_leader.pk
-    assert strong_support.pk in rider_ids
+    assert leader_id == strong.pk
+    assert rider_ids[0] == strong.pk
+    assert weak.pk not in rider_ids
     # Three of the four mid-strength riders fill the rest, tiebroken by pk —
     # the lowest three pks among them, since they are all tied on strength.
-    expected_mids = sorted(r.pk for r in mid_supports)[:2]
+    expected_mids = sorted(r.pk for r in mids)[:3]
     for pk in expected_mids:
         assert pk in rider_ids
     assert len(rider_ids) == 4
@@ -419,7 +417,7 @@ def test_set_squad_refuses_a_race_that_has_started(running_race, team, four_ride
 def test_suggested_squad_falls_back_from_saved_to_previous_to_auto(db, team, week):
     riders = [
         Rider.objects.create(
-            name=f"Rider {i}", team=team, role=Rider.Role.LEADER if i == 0 else Rider.Role.SUPPORT,
+            name=f"Rider {i}", team=team,
             climb=50, sprint=50, flat=50, resistance=50, positioning=50,
         )
         for i in range(4)
@@ -464,7 +462,6 @@ def test_only_selected_riders_appear_in_the_results(running_race):
     squad_one = [
         Rider.objects.create(
             name=f"One {i}", team=team_one,
-            role=Rider.Role.LEADER if i == 0 else Rider.Role.SUPPORT,
             climb=60, sprint=60, flat=60, resistance=60, positioning=60,
         )
         for i in range(4)
@@ -479,7 +476,6 @@ def test_only_selected_riders_appear_in_the_results(running_race):
     squad_two = [
         Rider.objects.create(
             name=f"Two {i}", team=team_two,
-            role=Rider.Role.LEADER if i == 0 else Rider.Role.SUPPORT,
             climb=60, sprint=60, flat=60, resistance=60, positioning=60,
         )
         for i in range(4)
@@ -504,10 +500,10 @@ def test_only_selected_riders_appear_in_the_results(running_race):
         assert bench_rider.pk not in result_rider_ids
 
 
-def test_the_squad_leader_races_as_leader_regardless_of_rider_role(running_race, team, four_riders):
-    # four_riders[1] defaults to Rider.Role.SUPPORT (see the fixture); make
-    # them the squad's leader anyway. set_squad refuses a started race, so
-    # pick the squad while scheduled, then flip to running like the tick would.
+def test_the_squad_leader_races_as_leader(running_race, team, four_riders):
+    # Name a rider other than the first as this race's leader. set_squad
+    # refuses a started race, so pick the squad while scheduled, then flip
+    # to running like the tick would.
     running_race.status = Race.Status.SCHEDULED
     running_race.save(update_fields=["status"])
     set_squad(running_race, team, [r.pk for r in four_riders], four_riders[1].pk)
@@ -523,7 +519,6 @@ def test_the_squad_leader_races_as_leader_regardless_of_rider_role(running_race,
         e for e in first_line["riders"] if e["id"] == str(four_riders[1].pk)
     )
     assert leader_entry["role"] == "leader"
-    assert four_riders[1].role == Rider.Role.SUPPORT
 
 
 def test_a_team_with_no_squad_gets_one_at_race_time(running_race, four_riders):

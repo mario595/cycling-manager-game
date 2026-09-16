@@ -4,7 +4,7 @@
 **Scope:** ordering only. This file says *what to build next and why*; it does not
 say what any feature does — that is each issue, and later each spec.
 
-43 open issues. This is the order to take them in, and — more useful — the
+45 open issues. This is the order to take them in, and — more useful — the
 reasons for deferring the rest.
 
 ## The question this roadmap answers
@@ -33,24 +33,30 @@ elegant economy for a game nobody is playing yet.
 
 ## Phase 4b — finish the signup path *(in progress)*
 
-**Issues: [#46](https://github.com/mario595/cycling-manager/issues/46) — specced,
-not built. Then [#56](https://github.com/mario595/cycling-manager/issues/56),
-and [#14](https://github.com/mario595/cycling-manager/issues/14) if wanted.**
+**One issue: [#46](https://github.com/mario595/cycling-manager/issues/46) —
+specced, not built.**
 
 [#50](https://github.com/mario595/cycling-manager/issues/50) shipped accounts;
 `specs/claiming-a-team.md` is written and waiting on a plan. Until it lands, a
-registered player has no team — the half-open state.
+registered player has no team — the half-open state, and the only thing between
+here and a stranger being able to play.
 
-- **#46** — claim an unmanaged team: keep its table position, points and history;
-  release its riders as free agents; hand it twelve newly generated riders of
-  equal total strength; player renames it and picks a code.
-- **[#56](https://github.com/mario595/cycling-manager/issues/56)** falls directly
-  out of #46's decision to skip uniqueness checks on team codes. Small, and it
-  only bites once two claimed teams collide — but that is a first-playtest bug,
-  not a later one.
-- **[#14](https://github.com/mario595/cycling-manager/issues/14)** (mid-Season
-  placement) is largely answered by #46's "claim happens immediately, whenever in
-  the Season" — check whether anything is left before speccing it.
+Claim an unmanaged team: keep its table position, points and history; release its
+riders as free agents; hand it twelve newly generated riders of equal total
+strength; the player renames it and picks a code.
+
+**Nothing else is in this phase.** Both candidates were cleared on 2026-09-15:
+
+- **[#56](https://github.com/mario595/cycling-manager/issues/56)** (team code
+  collisions) — **deferred.** Two teams sharing a code is confusing but liveable,
+  accepted explicitly rather than fixed pre-emptively. See the deferrals.
+- **[#14](https://github.com/mario595/cycling-manager/issues/14)** — **answered by
+  #46 and reduced to one blocked question.** #46 settled both halves: the team is
+  *assigned, not chosen*, and the claim applies *immediately*, mid-Season, with
+  the player free to enter the next race. All that survives is which Division a
+  new player lands in when there is more than one — trivial today, and blocked on
+  [#11](https://github.com/mario595/cycling-manager/issues/11). Retitled and
+  shrunk rather than closed, so the "bottom Division" rule is not lost.
 
 ## Phase 5 — the loop closes
 
@@ -134,6 +140,10 @@ is a scoreboard.
 fanbase → #22/#23 sponsorship. #21 before #22/#23 is not negotiable; sponsor
 offers price off fanbase.
 
+**#27 (insolvency) is the last thing in this group, not an afterthought.** Its
+ladder — embargo, then forced sales, then losing the team — needs wages (#25) and
+a market with buyers (#28/#29) before any rung can fire.
+
 ### Sprint and mountain points — #16, #17
 
 Engine changes with a stated cost: new log event types, and any new in-race input
@@ -160,10 +170,49 @@ headcount rather than merit.
 managers rotate squads on freshness (#59), unmanaged teams fall behind *faster*
 than they do today.
 
+### Losing a team — #62, #63
+
+Added 2026-09-15. A manager stops managing; the team returns to the unmanaged
+pool and is re-claimable. Split from its triggers because they have very
+different dependencies.
+
+**[#62](https://github.com/mario595/cycling-manager/issues/62), the mechanism, is
+buildable now** — it depends only on
+[#46](https://github.com/mario595/cycling-manager/issues/46) and closes that
+spec's deferred question about abandoned teams. It is deferred not because it is
+blocked but because **nothing yet triggers it**: with no inactivity rule and no
+money, a mechanism for losing a team would never fire.
+
+**[#63](https://github.com/mario595/cycling-manager/issues/63), inactivity, is the
+trigger to build first** when this area comes up — it needs a timestamp and the
+clock, both of which exist. Bankruptcy
+([#27](https://github.com/mario595/cycling-manager/issues/27)) is the other
+trigger and is deferred with the whole economy; it has nothing to operate on
+until wages and a market exist.
+
+**Worth pulling forward once there is a real playtest**, since inactivity is the
+condition that will actually occur: players sign up, drift away, and hold a place
+in a fixed-size Division while #44 races their team badly forever.
+
+### Team code disambiguation — #56
+
+**Deferred 2026-09-15.** #46 deliberately drops the uniqueness check on team
+codes so a player is never told their choice is taken; #56 is the consequence —
+making two identical codes readable side by side.
+
+Accepted as liveable rather than fixed pre-emptively. Two teams sharing a code is
+confusing, not broken, and the collision is theoretical until Groups exist and
+put clashing codes in the same table. Revisit if it actually bites during play.
+
 ### Divisions beyond one Group — #11, #13
 
 Deferred with Phase 5's slice of #10: a league table needs one Group, not a
 pyramid. #13 is also meaningless until #45 exists — see above.
+
+**#11 now also gates [#14](https://github.com/mario595/cycling-manager/issues/14)**
+(which Division a new player lands in) and
+[#56](https://github.com/mario595/cycling-manager/issues/56) (code collisions).
+Both are questions that cannot even be asked with a single Division.
 
 ### Account self-service — #51
 

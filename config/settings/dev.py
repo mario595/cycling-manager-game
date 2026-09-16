@@ -7,13 +7,31 @@ before running migrations or the server.
 Override any of `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` /
 `POSTGRES_HOST` / `POSTGRES_PORT` in the environment to point at a different
 database (a natively installed one, say) without touching this file.
+
+Each git worktree gets its own database and its own dev-server port, so
+parallel agents do not collide. `scripts/dev_db.py` creates the database;
+`config/worktree.py` explains the scheme.
 """
 
 from __future__ import annotations
 
 import os
 
+from config.worktree import database_name, test_database_name
+
 from .base import *  # noqa: F403
+
+# One Postgres, one database per worktree. Several agents work in parallel in
+# separate worktrees; without this they share `cycling_manager` and
+# `test_cycling_manager`, and drop each other's test database mid-run or apply
+# two branches' migrations to one schema. The name comes from the worktree
+# directory, so there is nothing to remember and nothing to pass. The main
+# checkout keeps the plain names — see `config/worktree.py`.
+#
+# An explicit POSTGRES_DB still wins, for pointing at a database by hand.
+if "POSTGRES_DB" not in os.environ:
+    DATABASES["default"]["NAME"] = database_name()  # noqa: F405
+DATABASES["default"]["TEST"] = {"NAME": test_database_name()}  # noqa: F405
 
 DEBUG = True
 ALLOWED_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0"]
