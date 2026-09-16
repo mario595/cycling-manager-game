@@ -103,7 +103,7 @@ up front — an empty app is just noise. The table below marks which exist.
 | `core/` | Core | **built** | Shared abstract models. Deliberately tiny. |
 | `accounts/` | Accounts | **built**, `README.md` | Custom `User`, login by email. Register, log in, log out. |
 | `riders/` | Riders | **built**, `README.md` | Persisted riders: engine attributes plus speciality, build, age and generation. Growth/decline (#58) and freshness (#59) still to come. |
-| `teams/` | Teams | **built** (model only) | Teams, codes, colours, manager link. Roster/staff/tactics still to come. |
+| `teams/` | Teams | **built**, `README.md` | Teams, codes, colours, manager link, and claiming an unmanaged team. Staff/tactics still to come. |
 | `transfers/` | Transfers | *not yet* | Market for buying/selling riders, auctions, contracts, free agents, market value. (The youth academy is a **development squad** and lives in `riders/`.) |
 | `competitions/` | Competitions | **built**, `README.md` | Race points and season standings, one Group. Divisions, multiple Groups, promotion/relegation, classifications and season history still to come. A **Division** is a tier; a **Group** is a parallel section within one. |
 | `schedule/` | Schedule | **built**, `README.md` | Seasons, their twelve weeks, and the race calendar declared within them. **Not** `calendar/` — that shadows the stdlib module. |
@@ -121,7 +121,7 @@ Keep this one-way; it is what stops the apps tangling:
 accounts      -> (nothing)
 core          -> (nothing)
 riders        -> core, teams
-teams         -> core, accounts
+teams         -> core, accounts, riders
 staff         -> core, teams, riders
 schedule      -> core
 racing        -> riders, teams, race_engine, schedule
@@ -175,7 +175,9 @@ cycling-manager/
 ├── accounts/
 │   └── README.md          # email login, session auth, what this app may import
 ├── riders/
+│   └── README.md          # attributes, display scale, generation
 └── teams/
+    └── README.md          # codes, colours, claiming an unmanaged team
 ```
 
 ## Development Principles

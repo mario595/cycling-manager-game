@@ -4,6 +4,7 @@ from django.urls import include, path
 
 from .views import (
     CalendarView,
+    ClaimTeamView,
     ClockView,
     MeView,
     PositionView,
@@ -25,4 +26,5 @@ urlpatterns = [
     path("racing/races/<int:race_id>/results/", RaceResultsView.as_view(), name="race-results"),
     path("competitions/standings/", StandingsView.as_view(), name="standings"),
     path("riders/", RiderListView.as_view(), name="riders"),
+    path("teams/claim/", ClaimTeamView.as_view(), name="claim-team"),
 ]

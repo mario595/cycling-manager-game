@@ -113,6 +113,14 @@ class MeTeamSerializer(serializers.Serializer):
     code = serializers.CharField()
 
 
+class ClaimTeamSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=100)
+    code = serializers.CharField(min_length=3, max_length=3)
+
+    def validate_code(self, value):
+        return value.upper()
+
+
 class MeSerializer(serializers.Serializer):
     authenticated = serializers.BooleanField()
     display_name = serializers.CharField(allow_null=True)

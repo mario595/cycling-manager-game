@@ -169,6 +169,10 @@ export async function logout(): Promise<void> {
   return writeJson('/api/accounts/logout/', 'POST')
 }
 
+export async function claimTeam(name: string, code: string): Promise<MeTeam> {
+  return writeJson('/api/teams/claim/', 'POST', { name, code })
+}
+
 export interface SquadRider {
   id: number
   name: string

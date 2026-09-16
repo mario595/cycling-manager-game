@@ -8,7 +8,7 @@ and the three endpoints that make it reachable: register, log in, log out.
 Not team ownership (`teams.Team.manager` owns that relationship — see
 *What `accounts/` may import*, below) and not anything about *what* a new
 account gets (an unmanaged team to claim, a starting roster) — that is
-`specs/claiming-a-team.md` / #46.
+`teams/README.md`, *Claiming a team*.
 
 ## Email as the login identifier
 

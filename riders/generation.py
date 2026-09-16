@@ -49,11 +49,22 @@ BUILD_PROFILES: dict[str, tuple[int, int]] = {
 #: Quality levels drawn for a generated roster, as (weight, low, high).
 #: Skewed so most riders are unremarkable: a spread, not a bell curve
 #: centred on "good" — the property spec item 11 and #46 depend on.
+#:
+#: The top of this range is deliberately well below 100 — a new team starts
+#: in the bottom division and the game is climbing from there, so a
+#: starting roster reading as already-elite undercuts the whole arc. A
+#: speciality's profile weight (up to 1.45, see SPECIALITY_PROFILES) is
+#: applied on top of quality, so this range is tuned against the display
+#: scale (round(stored/10)): "most of a roster" keeps even a signature
+#: attribute in the display 3-6 band, and "standout" only occasionally
+#: touches display 7 — the ceiling _MAX_STARTING_ATTRIBUTE enforces as a
+#: hard backstop, not the everyday outcome. See _MAX_STARTING_ATTRIBUTE's
+#: comment for that half of the guarantee.
 QUALITY_SPREAD: list[tuple[int, int, int]] = [
-    (15, 20, 40),   # clearly not worth keeping
-    (55, 41, 65),   # most of a roster: unremarkable
-    (25, 66, 82),   # clearly worth building around
-    (5, 83, 95),    # a standout
+    (15, 10, 20),   # clearly not worth keeping
+    (55, 21, 35),   # most of a roster: unremarkable
+    (25, 36, 45),   # clearly worth building around
+    (5, 46, 55),    # a standout — still a long way from elite
 ]
 
 #: First/last name pools, per nationality. Only Spain exists today; adding a
@@ -80,6 +91,18 @@ LAST_NAMES: dict[str, list[str]] = {
 
 _MIN_ATTRIBUTE = 1
 _MAX_ATTRIBUTE = 100
+
+#: A freshly generated rider's *visible* attributes never display above
+#: 7/10 (to_display_scale rounds 75-100 down to 8+ — 74 is the highest
+#: stored value that still rounds to 7). The point of a starting roster is
+#: a low-division team with real room to grow into the top division through
+#: training and racing; an 8, 9 or 10 read as "already elite" and undercut
+#: that arc on day one. Applied only in _roll_attributes; _roll_potential
+#: still clamps to _MAX_ATTRIBUTE — potential is the hidden ceiling a rider
+#: may eventually reach through training (#58), not something they start
+#: anywhere near.
+_MAX_STARTING_ATTRIBUTE = 74
+
 _ATTRIBUTE_SPREAD = 12  # +/- roll applied to each weighted attribute
 _AGE_RANGE = (18, 36)
 _PEAK_AGE_RANGE = (24, 32)
@@ -105,7 +128,7 @@ def _roll_attributes(
     for name in ENGINE_ATTRIBUTES:
         base = quality * profile[name]
         rolled = base + rng.uniform(-_ATTRIBUTE_SPREAD, _ATTRIBUTE_SPREAD)
-        attributes[name] = _clamp(round(rolled), _MIN_ATTRIBUTE, _MAX_ATTRIBUTE)
+        attributes[name] = _clamp(round(rolled), _MIN_ATTRIBUTE, _MAX_STARTING_ATTRIBUTE)
     return attributes
 
 

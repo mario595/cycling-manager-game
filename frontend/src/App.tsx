@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { NAV_ITEMS } from './navigation'
 import { Calendar } from './screens/Calendar'
+import { ClaimTeam } from './screens/ClaimTeam'
 import { Dashboard } from './screens/Dashboard'
 import { League } from './screens/League'
 import { Login } from './screens/Login'
@@ -48,6 +49,7 @@ export function App() {
                 not appear in the sidebar. */}
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/claim" element={<ClaimTeam />} />
             {/* Anything outside the nav — a stale bookmark, a typo — still gets
                 the chrome rather than a blank page. */}
             <Route path="*" element={<Placeholder />} />

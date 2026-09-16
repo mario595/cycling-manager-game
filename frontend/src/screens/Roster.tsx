@@ -85,9 +85,6 @@ export function Roster() {
   }
 
   const selected = picked !== null ? (riders.find((r) => r.id === picked) ?? null) : null
-  const avgAge = riders.length
-    ? (riders.reduce((a, r) => a + r.age, 0) / riders.length).toFixed(1)
-    : '—'
 
   return (
     <PageBody gap={18} paddingTop={26}>
@@ -96,12 +93,7 @@ export function Roster() {
         title="Squad"
         titleSize={29}
         subtitle="Tap a rider for the full profile. Attributes are the five the race engine reads."
-        aside={
-          <>
-            <StatTile label="SQUAD SIZE" value={String(riders.length)} minWidth={104} />
-            <StatTile label="AVG AGE" value={avgAge} minWidth={104} />
-          </>
-        }
+        aside={<StatTile label="SQUAD SIZE" value={String(riders.length)} minWidth={104} />}
       />
 
       <Card style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '14px 16px' }}>
@@ -430,46 +422,6 @@ function RiderPanel({ rider, onClose }: { rider: Rider; onClose: () => void }) {
             <span style={{ fontSize: 14, fontWeight: 600, fontFamily: font.mono }}>{v}</span>
           </div>
         ))}
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <button
-          type="button"
-          className="hover-dark"
-          style={{
-            background: color.ink,
-            color: '#FFFFFF',
-            border: 'none',
-            borderRadius: 9,
-            padding: '10px 14px',
-            fontSize: 13,
-            fontWeight: 500,
-            cursor: 'pointer',
-          }}
-        >
-          Add to next lineup
-        </button>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {['Training', 'Transfer list'].map((label) => (
-            <button
-              key={label}
-              type="button"
-              className="hover-light"
-              style={{
-                flex: 1,
-                background: color.canvas,
-                color: color.ink,
-                border: `1px solid ${color.borderButton}`,
-                borderRadius: 9,
-                padding: '9px 12px',
-                fontSize: 12.5,
-                cursor: 'pointer',
-              }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
       </div>
     </div>
   )

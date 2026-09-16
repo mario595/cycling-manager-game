@@ -74,7 +74,13 @@ def main() -> int:
         print("Is it running? `docker compose up -d`", file=sys.stderr)
         return 1
 
-    with connection, connection.cursor() as cursor:
+    # Not `with connection, ...`: psycopg2's connection context manager wraps
+    # the block in a transaction on __enter__ (committing or rolling back on
+    # exit), which overrides the autocommit mode CREATE DATABASE needs —
+    # Postgres refuses to run it inside a transaction block. Autocommit alone
+    # is both necessary and sufficient here; the connection is closed
+    # implicitly when the process exits.
+    with connection.cursor() as cursor:
         if args.drop:
             if not exists(cursor, name):
                 print(f"{name} does not exist; nothing to drop.")

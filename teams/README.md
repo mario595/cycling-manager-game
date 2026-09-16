@@ -1,0 +1,124 @@
+# Teams
+
+## What this app owns
+
+`Team` — name, code, colours, and the `manager` link to `accounts.User`.
+`services.claim_team()`, the only writer of that link. The `seed_teams`
+management command, which populates a claimable world. Not rosters (`riders/`
+owns `Rider`), not standings (the unbuilt `competitions/`), not money (the
+unbuilt `economy/`).
+
+## Claiming a team
+
+A registered user with no team calls `claim_team(user, name=..., code=...)`
+(exposed as `POST /api/teams/claim/`, `api/README.md`). One transaction:
+
+1. Locks the lowest-`pk` unmanaged team with `select_for_update(skip_locked=True)`
+   — deterministic and testable, and `skip_locked` means a concurrent claimer
+   takes the *next* free team instead of blocking on this one.
+2. Sets `manager`, `name`, `code` on it, and calls `full_clean(exclude=["manager"])`
+   before saving — **`team_code_validator` is a field validator and does not
+   run on `.save()`**; without the explicit `full_clean()` a malformed code
+   would reach the database.
+3. Releases every rider currently on the team (`team.riders.update(team=None)`)
+   — they become free agents, not deleted. Deleting them would cascade-delete
+   their `racing.RaceResult` and `racing.RaceSquadRider` rows, silently
+   erasing the team's race history.
+4. Generates a fresh roster via `riders.generation.generate_roster()` and
+   assigns it to the team.
+
+If no unmanaged team exists, `claim_team` raises `NoTeamAvailable`. A second
+claim by an already-managing user is not checked here — `Team.manager` is a
+`OneToOneField`, so it raises `IntegrityError`; the caller
+(`api.views.ClaimTeamView`) checks first via `team_for()` so the happy path
+never relies on that exception. See `specs/claiming-a-team.md` (deleted once
+this closed — see git history) for the product reasoning: the team's
+position, points and race history carry over unchanged (inherit the past),
+while its roster does not (reset the present).
+
+**A claim is atomic or it does not happen.** A half-claimed team — renamed
+but with no roster — must never be observable. Everything above runs inside
+one `transaction.atomic()`.
+
+## Codes are not unique
+
+`Team.code` has **no** `unique=True` constraint. A code is a display label,
+not the team's identity — `Team.pk` is the identity everywhere it matters
+(FKs, the manager relationship). Two teams may share a code; a player is
+never told their choice is taken.
+
+This is deliberate, not an oversight: forcing uniqueness on a manager-chosen
+three-letter code means asking a new player to guess which of ~17,576
+combinations are free, for a field whose only job is being a short label
+next to a name.
+
+**The cost of this decision is [#56](https://github.com/mario595/cycling-manager/issues/56)**,
+not yet built: two teams sharing a code in the same Group is confusing in a
+classification table or a race startlist. The fix belongs at *display* time —
+whatever renders a clashing pair of codes disambiguates them (`MGO-A`,
+`MGO-B`), and the stored code is never mutated to do it. A stored suffix
+would go stale the moment Group membership changed (promotion, relegation,
+another team renaming), and race logs bake a team's code in at simulation
+time as a permanent record — `racing/README.md` — so writing a suffix into
+one would freeze a collision into history that may no longer exist.
+
+`Team.name` **is** still unique — the fairness argument for dropping
+uniqueness is specific to a three-letter label with a small combination
+space; a world with two teams both named the same thing is a worse and
+different problem, and names are the primary identifier everywhere they
+appear.
+
+## What `teams/` may import
+
+`core`, `accounts`, and **`riders`** — widened by claiming, which generates
+and assigns a roster. See `AGENTS.md`'s dependency graph.
+
+This does not create a cycle with `riders -> core, teams`: that edge is a
+**model-level** string reference (`Rider.team = ForeignKey("teams.Team", ...)`),
+and `riders.generation` (what `teams/services.py` actually imports) only
+imports `riders.models` — no module that imports `teams/` at runtime. If this
+ever changes, the suite catches it immediately: a real cycle surfaces as an
+`ImportError` at Django startup, not a subtle bug.
+
+## `seed_teams` — populating a claimable world
+
+```bash
+python manage.py seed_teams [--count=16] [--per-team=12] [--reset]
+```
+
+Creates `--count` unmanaged teams, each with a freshly generated `--per-team`
+roster via `riders.generation.generate_roster`. Without `--reset` it *adds*
+teams; with `--reset` it first deletes every **unmanaged** team (and their
+riders, results and squads).
+
+**Never touches a managed team, `--reset` or not.** Filters strictly on
+`manager__isnull=True` throughout — a `--reset` that could orphan a real
+player's account by deleting their team is a footgun this command refuses to
+be.
+
+Names and codes come from a fixed list in the command (seed data, not game
+logic); once `--count` exceeds the list, names and codes get a generation
+suffix (`"Ardennes Racing 2"`, code `"ARX"` — a letter, not a digit, since
+`team_code_validator` requires three uppercase letters).
+
+Imports `racing.models` inside `handle()`, not at module scope — same rule
+and reason as `riders/management/commands/reset_riders.py`: a management
+command is an entry point, and `teams/`'s library code (`models.py`,
+`services.py`) must not import `racing/`.
+
+## Future work / possible improvements
+
+- **Team-code disambiguation.** [#56](https://github.com/mario595/cycling-manager/issues/56),
+  see *Codes are not unique* above.
+- **Resetting a claimed team's money to a fixed starting amount.** Decided
+  (`specs/claiming-a-team.md`'s reasoning, now in git history) but not built —
+  the game has no money at all yet; `economy/` doesn't exist.
+- **Inheriting a claimed team's classification position and Season points.**
+  Same story: decided, but there is no standings table for it to apply to
+  until `competitions/` exists.
+- **A manager choosing the team's colours at claim time.** Currently the
+  claimed team's jersey colours carry over unchanged; changing them is a
+  team-settings feature, not part of claiming.
+- **What happens when a player abandons a team.** Nothing in the game can
+  currently remove a manager from a team — no account deletion, no
+  inactivity rule — so this has nowhere to attach yet.

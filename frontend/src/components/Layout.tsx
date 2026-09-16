@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Outlet, useLocation } from 'react-router-dom'
+import { Navigate, Outlet, useLocation } from 'react-router-dom'
 
 import { titleForPath } from '../navigation'
 import { TEAM } from '../placeholderData'
@@ -8,6 +8,12 @@ import { MOBILE_BREAKPOINT, color, font } from '../theme'
 import { useAuth } from '../useAuth'
 import { useSeason } from '../useSeason'
 import { Sidebar } from './Sidebar'
+
+/** Routes that a logged-in, team-less user must still be able to reach —
+ * the auth flow itself, and /claim, the destination of the redirect below.
+ * Without this list a team-less user landing on /claim would be bounced
+ * straight back to itself. */
+const TEAM_LESS_ALLOWED_PATHS = new Set(['/login', '/register', '/claim'])
 
 /** True while the viewport is narrow enough to want the drawer layout. */
 function useIsMobile(): boolean {
@@ -40,6 +46,13 @@ export function Layout() {
   useEffect(() => {
     if (!mobile) setDrawer(false)
   }, [mobile])
+
+  // A logged-in user with no team cannot use /roster or a squad screen —
+  // both 403 and render an error. Redirect to /claim instead of letting
+  // each screen handle the 403 individually.
+  if (me?.authenticated && !me.team && !TEAM_LESS_ALLOWED_PATHS.has(pathname)) {
+    return <Navigate to="/claim" replace />
+  }
 
   return (
     <div style={{ display: 'flex', height: '100vh', background: color.canvas }}>

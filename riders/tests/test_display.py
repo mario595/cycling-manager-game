@@ -10,10 +10,14 @@ from riders.display import to_display_scale
     [
         (1, 0),
         (4, 0),
-        (5, 0),  # round-half-to-even: 0.5 -> 0
-        (45, 4),  # round-half-to-even: 4.5 -> 4
+        (5, 0),
+        (9, 0),
+        (10, 1),
+        (45, 4),
         (50, 5),
-        (55, 6),  # round-half-to-even: 5.5 -> 6
+        (55, 5),  # floors, not rounds: not yet a 6
+        (59, 5),
+        (60, 6),
         (94, 9),
         (100, 10),
     ],

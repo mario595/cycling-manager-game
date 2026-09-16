@@ -67,6 +67,14 @@ DRF routers and serializers that aggregate other apps' data for the SPA.
 - `POST /api/accounts/register/`, `POST /api/accounts/login/`,
   `POST /api/accounts/logout/` — owned by `accounts/`, included here under
   `/api/accounts/`. See `accounts/README.md`.
+- `POST /api/teams/claim/` (`ClaimTeamSerializer`, `ClaimTeamView`) — assigns
+  the caller an unmanaged team, renamed and recoded to their choosing
+  (`name`, `code` in the body; a lowercase code is uppercased, not rejected).
+  Plain `IsAuthenticated`. Returns the new team (`id`/`name`/`code`, the same
+  shape as `me`'s `team`) with 201. A caller who already manages a team, or a
+  world with no unmanaged team left, both return 409 — the request is
+  well-formed but the world's state refuses it. A malformed code or a name
+  already taken returns 400. See `teams/README.md`, *Claiming a team*.
 - `GET /api/accounts/me/` (`MeSerializer`, `MeView`) — whether anyone is
   logged in, their display name, and their team (`id`/`name`/`code`, or
   `null`). Lives here rather than in `accounts/` because answering "does

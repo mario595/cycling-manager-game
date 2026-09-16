@@ -30,9 +30,13 @@ class Team(TimeStampedModel):
     name = models.CharField(max_length=100, unique=True)
     code = models.CharField(
         max_length=3,
-        unique=True,
         validators=[team_code_validator],
-        help_text="Three-letter TV-style abbreviation, e.g. 'MOV'.",
+        help_text=(
+            "Three-letter TV-style abbreviation, e.g. 'MOV'. Deliberately "
+            "not unique — a code is a display label, not an identity. Two "
+            "teams may share one; disambiguating them within a Group is "
+            "#56, not this field. See teams/README.md, Codes are not unique."
+        ),
     )
 
     manager = models.OneToOneField(

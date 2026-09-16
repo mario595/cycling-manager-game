@@ -1,7 +1,14 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 
-import { getMe, login as apiLogin, logout as apiLogout, register as apiRegister, type Me } from './api'
+import {
+  claimTeam as apiClaimTeam,
+  getMe,
+  login as apiLogin,
+  logout as apiLogout,
+  register as apiRegister,
+  type Me,
+} from './api'
 
 interface AuthState {
   me: Me | null
@@ -9,6 +16,7 @@ interface AuthState {
   register: (email: string, password: string, displayName: string) => Promise<void>
   login: (email: string, password: string) => Promise<void>
   logout: () => Promise<void>
+  claim: (name: string, code: string) => Promise<void>
 }
 
 const AuthContext = createContext<AuthState | null>(null)
@@ -61,8 +69,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setMe({ authenticated: false, display_name: null, team: null })
   }
 
+  const claim = async (name: string, code: string) => {
+    await apiClaimTeam(name, code)
+    setMe(await getMe())
+  }
+
   return (
-    <AuthContext.Provider value={{ me, loading, register, login, logout }}>
+    <AuthContext.Provider value={{ me, loading, register, login, logout, claim }}>
       {children}
     </AuthContext.Provider>
   )
