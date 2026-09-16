@@ -46,15 +46,17 @@ to meet.
 The five engine attributes are stored 1-100 — the same range the engine
 validates and the same range its six bundled courses are balanced against.
 **That range never changes.** What the player sees is coarser: `display.
-to_display_scale(value)` maps it onto 0-10 with `round(value / 10)`, and it
-is the **only** place that mapping happens. Every serializer that ships an
-attribute calls it; nothing else should reimplement it.
+to_display_scale(value)` maps it onto 0-10 with `value // 10` — it floors,
+it does not round — and it is the **only** place that mapping happens.
+Every serializer that ships an attribute calls it; nothing else should
+reimplement it.
 
 This is deliberate lossiness, not a rounding bug: two riders at 71 and 74
-both show 7, so the roster cannot offer a meaningful sort on a raw attribute
-number, and growth (once #58 lands) arrives as an occasional visible jump
-rather than a number that visibly creeps every week. See
-`specs/rider-attributes.md`, *Display scale*.
+both show 7, and a rider is not shown to have reached a level until their
+stored value actually gets there (58 shows 5, not 6). The roster cannot
+offer a meaningful sort on a raw attribute number, and growth (see
+`specs/rider-growth-and-decline.md`, #58) arrives as an occasional visible
+jump rather than a number that visibly creeps every week.
 
 **Do not rescale the stored values to make display simpler.** A stored
 range change invalidates the verified realism balance across all six
