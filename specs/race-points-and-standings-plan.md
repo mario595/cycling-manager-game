@@ -385,7 +385,7 @@ Mirror `world/tests/test_app.py` for the app check.
 full table, asserted value by value — a typo in a constant is exactly what a
 table test is for) and `test_position_outside_table_scores_zero` (11, 50).
 
-### W3 — `competitions/services.py`: `score_race`
+### W3 — `competitions/services.py`: `score_race` ✅ done
 **Load-bearing: the `finish_time__isnull=False` filter (D3).**
 **Tests:** `competitions/tests/test_services.py` —
 - `test_best_finisher_scores_for_the_team`
