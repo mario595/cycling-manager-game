@@ -131,6 +131,9 @@ Implements #<N>.
 ## Tests
 <what was added, and the suite count before and after>
 
+## How to try it
+<the numbered scenarios: what to do, what you should see>
+
 ## Not in here
 <anything the plan deferred, so a reviewer does not look for it>
 

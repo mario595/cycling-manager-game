@@ -74,10 +74,17 @@ HTML. See `design/README.md` before touching a screen's layout or colours.
 ## Running it
 
 ```bash
+.venv/bin/python scripts/dev_db.py     # create this checkout's database
 .venv/bin/python manage.py migrate
 .venv/bin/python manage.py runserver
 .venv/bin/python -m pytest
 ```
+
+**Each git worktree gets its own database, test database and dev-server port**,
+derived from the worktree's directory name, so agents working in parallel do not
+drop each other's test database or mix two branches' migrations into one schema.
+The main checkout keeps the plain `cycling_manager` and port 8000. See
+`config/worktree.py`; `python config/worktree.py` prints what this checkout gets.
 
 Settings are split: `config/settings/base.py` holds what is shared, with
 `dev.py` (DEBUG, local Postgres defaults) and `prod.py` (env-driven credentials) on top.
