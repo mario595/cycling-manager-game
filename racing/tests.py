@@ -104,7 +104,6 @@ def four_riders(db, team) -> list[Rider]:
         Rider.objects.create(
             name=f"Rider {i}",
             team=team,
-            role=Rider.Role.LEADER if i == 0 else Rider.Role.SUPPORT,
             climb=60,
             sprint=60,
             flat=60,
@@ -418,7 +417,7 @@ def test_set_squad_refuses_a_race_that_has_started(running_race, team, four_ride
 def test_suggested_squad_falls_back_from_saved_to_previous_to_auto(db, team, week):
     riders = [
         Rider.objects.create(
-            name=f"Rider {i}", team=team, role=Rider.Role.LEADER if i == 0 else Rider.Role.SUPPORT,
+            name=f"Rider {i}", team=team,
             climb=50, sprint=50, flat=50, resistance=50, positioning=50,
         )
         for i in range(4)
@@ -463,7 +462,6 @@ def test_only_selected_riders_appear_in_the_results(running_race):
     squad_one = [
         Rider.objects.create(
             name=f"One {i}", team=team_one,
-            role=Rider.Role.LEADER if i == 0 else Rider.Role.SUPPORT,
             climb=60, sprint=60, flat=60, resistance=60, positioning=60,
         )
         for i in range(4)
@@ -478,7 +476,6 @@ def test_only_selected_riders_appear_in_the_results(running_race):
     squad_two = [
         Rider.objects.create(
             name=f"Two {i}", team=team_two,
-            role=Rider.Role.LEADER if i == 0 else Rider.Role.SUPPORT,
             climb=60, sprint=60, flat=60, resistance=60, positioning=60,
         )
         for i in range(4)
@@ -503,10 +500,10 @@ def test_only_selected_riders_appear_in_the_results(running_race):
         assert bench_rider.pk not in result_rider_ids
 
 
-def test_the_squad_leader_races_as_leader_regardless_of_rider_role(running_race, team, four_riders):
-    # four_riders[1] defaults to Rider.Role.SUPPORT (see the fixture); make
-    # them the squad's leader anyway. set_squad refuses a started race, so
-    # pick the squad while scheduled, then flip to running like the tick would.
+def test_the_squad_leader_races_as_leader(running_race, team, four_riders):
+    # Name a rider other than the first as this race's leader. set_squad
+    # refuses a started race, so pick the squad while scheduled, then flip
+    # to running like the tick would.
     running_race.status = Race.Status.SCHEDULED
     running_race.save(update_fields=["status"])
     set_squad(running_race, team, [r.pk for r in four_riders], four_riders[1].pk)
@@ -522,7 +519,6 @@ def test_the_squad_leader_races_as_leader_regardless_of_rider_role(running_race,
         e for e in first_line["riders"] if e["id"] == str(four_riders[1].pk)
     )
     assert leader_entry["role"] == "leader"
-    assert four_riders[1].role == Rider.Role.SUPPORT
 
 
 def test_a_team_with_no_squad_gets_one_at_race_time(running_race, four_riders):
