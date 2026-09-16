@@ -1,6 +1,6 @@
 # Backlog — brain dump session 2026-09-11
 
-**41 items, tracked as GitHub issues #5–#51.** This file is the index and the
+**43 items, tracked as GitHub issues #5–#63.** This file is the index and the
 reasoning record; the issues are the tracker. Each item below is prefixed with
 its issue number.
 
@@ -224,14 +224,29 @@ Conventions:
 - **Open:** can a rider refuse and leave? Is there a contract length at all, or
   is it a rolling weekly deal?
 
-### [#27] D7. Insolvency rules
+### [#27] D7. Insolvency: the escalation ladder
 **Domains:** `economy` NEW
-- Define what happens to a team that cannot pay its wage bill.
-- **Open:** forced sales, transfer embargo, points deduction, AI takeover?
-- *Not mentioned in the dump — flagged as a gap, since every other economy item
-  assumes money can run out.*
-
----
+- **Not raised in the dump — flagged as a gap.** Open questions answered 2026-09-15.
+- **Insolvent is a state, not a punishment:** cannot pay this week's wage bill.
+  Visible, warned, and **survivable if the manager acts** — if it is not, the
+  middle rungs are theatre and the game may as well take the team at once.
+- **The ladder:** week 1 warning + transfer embargo → weeks 2–3 forced sales →
+  week 4+ team lost, via [#62].
+- **Transfer embargo** blocks *acquiring* — no buying, no free agents, no staff.
+  Goes first because it is preventive and costs nothing already held, and because
+  forced sales alone are gameable (sell, respend, insolvent again next week).
+- **Forced sales — the listing is the commitment.** The manager is told how much
+  weekly wage to shed and picks who to list. Listed riders leave **whether or not
+  they sell**: a buyer means money, no buyer means a free agent and nothing. The
+  wage stops either way. Collapses sell-and-release into one rule with no thin-
+  market fallback — an unsold rider is a sale at zero — and makes listing risky,
+  since a rider cannot be pulled back when the rescue bid does not come.
+- **Rejected:** points deductions (punishes sport for finance, compounds the
+  problem, collides with [#46] preserving points); instant loss on a negative
+  balance (illegible — a team can look fine a week from disaster); AI takeover
+  while the manager watches ([#44] already covers unmanaged teams).
+- **Genuinely deferred, not merely unscheduled:** it has nothing to operate on.
+  Needs wages ([#25]), a market ([#28]/[#29]) and a ledger ([#20]).
 
 ## E. Transfers & squad building
 
@@ -511,6 +526,46 @@ and [#46] both begin at "a user signs up", an event the game cannot produce.
 - **Open:** which email provider, and does a free tier cover it? What happens to
   a deleted user's team — presumably back to the unmanaged pool, which makes this
   depend on [#44]/[#46]. Is email verified at registration at all?
+
+---
+
+## L. Losing a team *(added 2026-09-15)*
+
+A manager can stop managing. The team returns to the unmanaged pool and is
+re-claimable. `specs/claiming-a-team.md` deferred "what happens to an abandoned
+team" explicitly, waiting for *anything in the game that can remove a manager
+from a team* — this is that thing.
+
+**Split three ways because the mechanism and its triggers have wildly different
+dependencies.** The mechanism is buildable now; one trigger needs only a
+timestamp; the other needs an entire economy.
+
+### [#62] L1. Losing a team: the mechanism
+**Domains:** `teams`, `accounts`, `world` NEW
+- A team is taken from its manager and returned to the unmanaged pool,
+  re-claimable through the normal [#46] path.
+- **Buildable now** — depends only on [#46], and closes its deferred question.
+- **Decided 2026-09-15:** re-claiming confers **no advantage and no penalty** over
+  a first-time signup — assigned team, fresh roster, same starting position. The
+  **account keeps a record** of teams previously managed, so losing a team is a
+  setback with a story rather than an erasure. Consistent with [#46] deciding a
+  team's past is worth inheriting.
+- **Open:** what is on the record, and who sees it? Grace period before removal?
+
+### [#63] L2. Losing a team: inactivity
+**Domains:** `accounts`, `world` NEW
+- A manager who has not accessed the game for a defined period loses the team.
+- A Division has fixed places; an absent manager occupies one while [#44] races
+  their team badly forever.
+- **The easier trigger, and the one to build first:** needs a timestamp and the
+  clock, both of which exist. No dependency on money or a market.
+- **Open:** how long — a Season is the natural unit? Does *access* mean logging
+  in or actually picking a squad? How is the warning delivered with [#51]
+  deferred and no email?
+
+### L3. Losing a team: bankruptcy
+Not a separate item — it is the last rung of [#27]'s ladder. Recorded here so the
+two triggers are findable together.
 
 ---
 
