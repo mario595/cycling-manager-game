@@ -240,7 +240,7 @@ function RiderRow({
           {rider.name}
         </div>
         <div style={{ fontSize: 10.5, color: color.mutedStrong, fontFamily: font.mono }}>
-          {rider.role.toUpperCase()}
+          {rider.speciality.toUpperCase()}
         </div>
       </div>
 
