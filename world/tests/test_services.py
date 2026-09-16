@@ -4,6 +4,8 @@ from datetime import timedelta
 
 import pytest
 
+import world.services as world_services
+from competitions.models import RacePoints
 from racing.models import Race, RaceResult
 from riders.models import Rider
 from schedule.models import Season, SeasonTransition
@@ -149,6 +151,41 @@ def test_race_failure_marks_failed_and_continues(db, four_riders):
     assert bad.status == Race.Status.FAILED
     assert good.status == Race.Status.FINISHED
     assert RaceResult.objects.filter(race=good).count() == len(four_riders)
+
+
+def test_tick_scores_finished_races(db, four_riders, team):
+    clock: MockClock = get_clock()
+    race = make_scheduled_race("Due Race", now() + timedelta(hours=1))
+    clock.advance_to_next_due()
+
+    tick()
+
+    assert RacePoints.objects.filter(race=race, team=team).exists()
+
+
+def test_a_race_that_fails_to_score_is_marked_failed(db, four_riders, monkeypatch):
+    clock: MockClock = get_clock()
+    due_at = now() + timedelta(hours=1)
+    bad = make_scheduled_race("Bad At Scoring", due_at)
+    good = make_scheduled_race("Good Race", due_at)
+    clock.set(due_at)
+
+    original_score_race = world_services.score_race
+
+    def _raise_for_bad(race):
+        if race.pk == bad.pk:
+            raise RuntimeError("scoring exploded")
+        return original_score_race(race)
+
+    monkeypatch.setattr("world.services.score_race", _raise_for_bad)
+
+    tick()
+
+    bad.refresh_from_db()
+    good.refresh_from_db()
+    assert bad.status == Race.Status.FAILED
+    assert good.status == Race.Status.FINISHED
+    assert RacePoints.objects.filter(race=good).exists()
 
 
 def test_tick_records_a_season_opening(db):

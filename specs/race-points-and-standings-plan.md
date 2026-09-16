@@ -408,7 +408,7 @@ table test is for) and `test_position_outside_table_scores_zero` (11, 50).
 - `test_races_outside_a_season_are_excluded` (a race with `week=None`)
 - `test_table_resets_between_seasons`
 
-### W5 — `world/services.py`: call `score_race` from the tick
+### W5 — `world/services.py`: call `score_race` from the tick ✅ done
 **Test:** `world/tests/test_services.py::test_tick_scores_finished_races` — run
 a tick over a due race and assert `RacePoints` rows exist afterwards. Also
 `test_a_race_that_fails_to_score_is_marked_failed` (monkeypatch `score_race` to
