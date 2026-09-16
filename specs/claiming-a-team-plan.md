@@ -416,7 +416,7 @@ The client function and the screen.
 is proven by the Verification section's browser pass, not by a unit test. Say so
 in the commit message rather than leaving it implied.
 
-### W7 — `frontend/`: routing and the team-less redirect
+### W7 — `frontend/`: routing and the team-less redirect ✅
 `App.tsx` route, the `Register.tsx`/`Login.tsx` redirect change, and the
 `Layout.tsx` gate.
 **Test:** as W6 — browser verification.

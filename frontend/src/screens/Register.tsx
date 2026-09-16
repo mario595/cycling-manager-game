@@ -15,7 +15,7 @@ export function Register() {
   const [error, setError] = useState<string | null>(null)
 
   if (loading) return null
-  if (me?.authenticated) return <Navigate to="/" replace />
+  if (me?.authenticated) return <Navigate to={me.team ? '/' : '/claim'} replace />
 
   const submit = async () => {
     setSubmitting(true)
