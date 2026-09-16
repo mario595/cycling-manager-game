@@ -62,6 +62,10 @@ bundled courses (`race_engine/README.md`) and requires re-deriving it —
 that cost is exactly why the display scale exists as a read-time mapping
 instead.
 
+**`staff.Trainer` shares this exact convention** — a trainer's five skills
+are stored 1-100 and shown 0-10 through this same `to_display_scale`, not a
+second mapping. See `staff/README.md`, *Stored 1-100, displayed 0-10*.
+
 ## Generation
 
 `generation.generate_rider()` builds one unsaved, internally consistent

@@ -75,6 +75,24 @@ DRF routers and serializers that aggregate other apps' data for the SPA.
   world with no unmanaged team left, both return 409 — the request is
   well-formed but the world's state refuses it. A malformed code or a name
   already taken returns 400. See `teams/README.md`, *Claiming a team*.
+- `GET /api/staff/` (`StaffSerializer`, `StaffView`) — the **caller's own**
+  team's staff: `trainer` (null when the slot is empty) and `pool` (every
+  unemployed trainer, but only populated when the slot is empty — a team
+  with a trainer has nothing to hire, so the pool is `[]`). Same `team_for()`
+  pattern as the squad and roster endpoints: no team id in the URL, a
+  caller with no team gets a 403. A trainer's five skills are shipped
+  through `to_display_scale`, same as a rider's attributes. See
+  `staff/README.md`.
+- `POST /api/staff/trainer/hire/` (`HireTrainerSerializer`,
+  `HireTrainerView`) — hire the pool trainer named by `trainer_id` into the
+  caller's empty slot. `204` on success. `409` (not `400`) when that
+  trainer was hired by someone else a moment earlier, or when the caller's
+  slot is already filled — the request is well-formed, but the world's
+  state refuses it, the same split `ClaimTeamView` documents.
+- `POST /api/staff/trainer/fire/` (`FireTrainerView`) — return the caller's
+  trainer to the shared pool. `204` on success, `409` if the caller has no
+  trainer to fire. `POST`, not `DELETE`: nothing is destroyed, the trainer
+  survives in the pool.
 - `GET /api/accounts/me/` (`MeSerializer`, `MeView`) — whether anyone is
   logged in, their display name, and their team (`id`/`name`/`code`, or
   `null`). Lives here rather than in `accounts/` because answering "does
