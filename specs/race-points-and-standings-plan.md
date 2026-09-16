@@ -414,11 +414,11 @@ a tick over a due race and assert `RacePoints` rows exist afterwards. Also
 `test_a_race_that_fails_to_score_is_marked_failed` (monkeypatch `score_race` to
 raise; assert `Race.status == FAILED` and the tick's other races still ran).
 
-### W6 — `api/`: the race results endpoint
+### W6 — `api/`: the race results endpoint ✅ done (committed together with W7)
 **Tests:** `api/tests.py` — `test_race_results_returns_order_and_points`,
 `test_unfinished_race_results_404`, `test_race_results_requires_login`.
 
-### W7 — `api/`: the standings endpoint
+### W7 — `api/`: the standings endpoint ✅ done (committed together with W6)
 **Tests:** `api/tests.py` — `test_standings_returns_ranked_table`,
 `test_standings_no_season_returns_empty`, `test_standings_requires_login`.
 

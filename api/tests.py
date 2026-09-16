@@ -7,9 +7,10 @@ from django.test import override_settings
 from rest_framework.test import APIClient
 
 import world.services as world_services
-from racing.models import Race, RaceSquad
+from competitions.services import score_race
+from racing.models import Race, RaceResult, RaceSquad
 from riders.models import Rider
-from schedule.models import Season, Week
+from schedule.models import SEASON_WEEKS, Season, Week
 from teams.models import Team
 from world.services import now
 
@@ -398,3 +399,121 @@ def test_rider_serializer_hides_traits(roster_rider, roster_client):
         "injury_proneness", "training_affinity",
     ):
         assert hidden_field not in rider_data
+
+
+@pytest.fixture
+def finished_race_with_points(db) -> Race:
+    team = Team.objects.create(name="Results Team", code="RES")
+    rider = Rider.objects.create(
+        name="Winner", team=team,
+        climb=50, sprint=50, flat=50, resistance=50, positioning=50,
+    )
+    race = Race.objects.create(
+        name="Results Check Race",
+        course=[{"length": 40000.0, "gradient": 0.0}],
+        status=Race.Status.FINISHED,
+    )
+    RaceResult.objects.create(race=race, rider=rider, position=1, finish_time=1000.0)
+    score_race(race)
+    return race
+
+
+def test_race_results_returns_order_and_points(finished_race_with_points):
+    client = APIClient()
+    user = User.objects.create_user(email="viewer@example.com", password="s0meth1ng-good")
+    client.force_authenticate(user=user)
+
+    response = client.get(f"/api/racing/races/{finished_race_with_points.pk}/results/")
+
+    assert response.status_code == 200
+    assert response.data["race"]["status"] == "finished"
+    assert response.data["results"][0]["position"] == 1
+    assert response.data["results"][0]["finished"] is True
+    assert response.data["points"][0]["points"] == 20
+
+
+def test_unfinished_race_results_404(db):
+    race = Race.objects.create(
+        name="Not Yet Run", course=[{"length": 40000.0, "gradient": 0.0}],
+        status=Race.Status.SCHEDULED,
+    )
+    client = APIClient()
+    user = User.objects.create_user(email="viewer2@example.com", password="s0meth1ng-good")
+    client.force_authenticate(user=user)
+
+    response = client.get(f"/api/racing/races/{race.pk}/results/")
+
+    assert response.status_code == 404
+
+
+def test_race_results_requires_login(finished_race_with_points):
+    client = APIClient()
+
+    response = client.get(f"/api/racing/races/{finished_race_with_points.pk}/results/")
+
+    assert response.status_code == 403
+
+
+def make_season_with_weeks(number: int, starts_at) -> Season:
+    season = Season.objects.create(number=number, starts_at=starts_at)
+    for week_number in range(1, SEASON_WEEKS + 1):
+        week_start = season.starts_at + timedelta(weeks=week_number - 1)
+        Week.objects.create(
+            season=season, number=week_number,
+            starts_at=week_start, ends_at=week_start + timedelta(weeks=1),
+        )
+    return season
+
+
+@override_settings(GAME_CLOCK_CLASS="world.clocks.MockClock")
+def test_standings_returns_ranked_table(db):
+    world_services._clock = None
+    try:
+        season = make_season_with_weeks(1, now().replace(hour=0, minute=0, second=0, microsecond=0))
+        week = season.weeks.get(number=1)
+        team = Team.objects.create(name="Standings Team", code="STA")
+        rider = Rider.objects.create(
+            name="Winner", team=team,
+            climb=50, sprint=50, flat=50, resistance=50, positioning=50,
+        )
+        race = Race.objects.create(
+            name="Standings Check Race",
+            course=[{"length": 40000.0, "gradient": 0.0}],
+            status=Race.Status.FINISHED, week=week, starts_at=week.starts_at,
+        )
+        RaceResult.objects.create(race=race, rider=rider, position=1, finish_time=1000.0)
+        score_race(race)
+
+        client = APIClient()
+        user = User.objects.create_user(email="viewer3@example.com", password="s0meth1ng-good")
+        client.force_authenticate(user=user)
+
+        response = client.get("/api/competitions/standings/")
+
+        assert response.status_code == 200
+        assert response.data["state"] == "in_season"
+        assert response.data["standings"][0]["rank"] == 1
+        assert response.data["standings"][0]["team"]["code"] == "STA"
+        assert response.data["standings"][0]["points"] == 20
+    finally:
+        world_services._clock = None
+
+
+def test_standings_no_season_returns_empty(db):
+    client = APIClient()
+    user = User.objects.create_user(email="viewer4@example.com", password="s0meth1ng-good")
+    client.force_authenticate(user=user)
+
+    response = client.get("/api/competitions/standings/")
+
+    assert response.status_code == 200
+    assert response.data["state"] == "no_season"
+    assert response.data["standings"] == []
+
+
+def test_standings_requires_login(db):
+    client = APIClient()
+
+    response = client.get("/api/competitions/standings/")
+
+    assert response.status_code == 403
