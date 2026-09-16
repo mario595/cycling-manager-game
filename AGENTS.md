@@ -105,7 +105,7 @@ up front — an empty app is just noise. The table below marks which exist.
 | `riders/` | Riders | **built**, `README.md` | Persisted riders: engine attributes plus speciality, build, age and generation. Growth/decline (#58) and freshness (#59) still to come. |
 | `teams/` | Teams | **built** (model only) | Teams, codes, colours, manager link. Roster/staff/tactics still to come. |
 | `transfers/` | Transfers | *not yet* | Market for buying/selling riders, auctions, contracts, free agents, market value. (The youth academy is a **development squad** and lives in `riders/`.) |
-| `competitions/` | Competitions | *not yet* | Divisions and Groups, standings, points, promotion/relegation, classifications, season history. A **Division** is a tier; a **Group** is a parallel section within one. |
+| `competitions/` | Competitions | **built**, `README.md` | Race points and season standings, one Group. Divisions, multiple Groups, promotion/relegation, classifications and season history still to come. A **Division** is a tier; a **Group** is a parallel section within one. |
 | `schedule/` | Schedule | **built**, `README.md` | Seasons, their twelve weeks, and the race calendar declared within them. **Not** `calendar/` — that shadows the stdlib module. |
 | `economy/` | Economy | *not yet* | Budgets, sponsorships, prize money, fanbase/merchandise. Use an append-only ledger, not a mutable balance field. |
 | `staff/` | Staff | *not yet* | Hired trainers, physios and scouts. Fixed slots, one per role per team. |
@@ -125,6 +125,7 @@ teams         -> core, accounts
 staff         -> core, teams, riders
 schedule      -> core
 racing        -> riders, teams, race_engine, schedule
+competitions  -> core, racing, teams, schedule
 world, api    -> everything (orchestration / presentation)
 ```
 
@@ -166,6 +167,8 @@ cycling-manager/
 ├── racing/
 │   ├── README.md          # the Django<->engine seam, log storage
 │   └── adapters.py        # the ONLY importer of race_engine
+├── competitions/
+│   └── README.md          # race points, standings, what may import back
 ├── schedule/
 │   └── README.md          # seasons, weeks, the transition record
 ├── core/

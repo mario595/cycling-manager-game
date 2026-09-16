@@ -117,3 +117,58 @@ class MeSerializer(serializers.Serializer):
     authenticated = serializers.BooleanField()
     display_name = serializers.CharField(allow_null=True)
     team = MeTeamSerializer(allow_null=True)
+
+
+class RaceResultTeamSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    code = serializers.CharField()
+
+
+class RaceResultRiderSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+
+
+class RaceResultEntrySerializer(serializers.Serializer):
+    position = serializers.IntegerField()
+    rider = RaceResultRiderSerializer()
+    team = RaceResultTeamSerializer(allow_null=True)
+    finish_time = serializers.FloatField(allow_null=True)
+    finished = serializers.BooleanField()
+
+
+class RaceResultPointsEntrySerializer(serializers.Serializer):
+    team = RaceResultTeamSerializer()
+    position = serializers.IntegerField()
+    points = serializers.IntegerField()
+
+
+class RaceResultRaceSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    status = serializers.CharField()
+
+
+class RaceResultsSerializer(serializers.Serializer):
+    race = RaceResultRaceSerializer()
+    results = RaceResultEntrySerializer(many=True)
+    points = RaceResultPointsEntrySerializer(many=True)
+
+
+class StandingsTeamSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    code = serializers.CharField()
+
+
+class StandingsEntrySerializer(serializers.Serializer):
+    rank = serializers.IntegerField()
+    team = StandingsTeamSerializer()
+    points = serializers.IntegerField()
+
+
+class StandingsSerializer(serializers.Serializer):
+    state = serializers.CharField()
+    season = serializers.IntegerField(allow_null=True)
+    standings = StandingsEntrySerializer(many=True)

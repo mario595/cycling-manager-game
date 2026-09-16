@@ -18,6 +18,7 @@ from django.db import transaction
 from django.utils import timezone
 from django.utils.module_loading import import_string
 
+from competitions.services import score_race
 from racing.models import Race
 from racing.services import simulate_race
 from schedule.models import SeasonTransition
@@ -86,6 +87,7 @@ def _execute(race_ids: list[int], tick: TickRun, at: datetime) -> None:
         race = Race.objects.get(pk=race_id)
         try:
             simulate_race(race, game_time=at)
+            score_race(race)
             tick.races_finished += 1
         except Exception:
             race.status = Race.Status.FAILED
