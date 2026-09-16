@@ -1,18 +1,20 @@
 #!/usr/bin/env python
-"""Create this checkout's development database if it is not there yet.
+"""Create or drop this checkout's development database.
 
 `manage.py migrate` needs the database to exist already — it creates tables,
 not databases. In a fresh worktree there is nothing to migrate into, and the
 error Postgres gives ("database ... does not exist") looks like a
 misconfiguration rather than a missing step.
 
-Test databases need nothing from this script: Django builds and drops
-`test_*` itself.
-
 Usage, from the root of any checkout:
 
-    .venv/bin/python scripts/dev_db.py           # create if missing
-    .venv/bin/python scripts/dev_db.py --drop    # delete it (data is lost)
+    .venv/bin/python scripts/dev_db.py            # create if missing
+    .venv/bin/python scripts/dev_db.py --drop     # delete it, and its test database
+
+`--drop` is for tidying up a worktree once its branch is in review: it removes
+this worktree's database so finished work does not leave databases behind. It
+refuses to run in the main checkout, where the database is the one you actually
+use, unless you pass `--force`.
 
 Connection details come from the same environment variables as
 `config/settings/base.py`, with the same defaults.
@@ -31,7 +33,12 @@ import psycopg2  # noqa: E402
 from psycopg2 import sql  # noqa: E402
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT  # noqa: E402
 
-from config.worktree import database_name, runserver_port, worktree_name  # noqa: E402
+from config.worktree import (  # noqa: E402
+    database_name,
+    runserver_port,
+    test_database_name,
+    worktree_name,
+)
 
 
 def connect_to_maintenance_db():
@@ -56,16 +63,43 @@ def exists(cursor, name: str) -> bool:
     return cursor.fetchone() is not None
 
 
+def drop(cursor, name: str) -> bool:
+    """Drop `name` if it is there. Returns whether anything was dropped.
+
+    WITH (FORCE) disconnects anything still attached — a dev server that was
+    not stopped cleanly, or a psql left open — rather than failing with
+    "database is being accessed by other users". Postgres 13+.
+    """
+    if not exists(cursor, name):
+        return False
+    cursor.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(name)))
+    return True
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--drop",
         action="store_true",
-        help="Delete this checkout's development database instead of creating it.",
+        help="Delete this checkout's development and test databases.",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Allow --drop in the main checkout. You almost never want this.",
     )
     args = parser.parse_args()
 
     name = os.environ.get("POSTGRES_DB") or database_name()
+
+    if args.drop and worktree_name() is None and not args.force:
+        print(
+            f"Refusing to drop {name}: this is the main checkout, not a worktree.\n"
+            "That is the database you work in day to day. Pass --force if you "
+            "really mean it.",
+            file=sys.stderr,
+        )
+        return 2
 
     try:
         connection = connect_to_maintenance_db()
@@ -82,11 +116,8 @@ def main() -> int:
     # implicitly when the process exits.
     with connection.cursor() as cursor:
         if args.drop:
-            if not exists(cursor, name):
-                print(f"{name} does not exist; nothing to drop.")
-                return 0
-            cursor.execute(sql.SQL("DROP DATABASE {}").format(sql.Identifier(name)))
-            print(f"Dropped {name}.")
+            for target in (name, test_database_name()):
+                print(f"Dropped {target}." if drop(cursor, target) else f"{target} was not there.")
             return 0
 
         if exists(cursor, name):

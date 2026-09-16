@@ -248,19 +248,24 @@ are the ones that get broken:
 2. Do the plan's **Documentation update** section. It is not optional.
 3. Commit that documentation change.
 4. **Leave it running for review** — see below.
-5. **Open the PR and move the ticket.** Follow `.claude/ticket-workflow.md`:
-   confirm in one line and wait for a yes, then push the branch and open the pull
-   request, then set the board's Status field to **Implemented**. That file has
-   the PR body template and the exact `gh` commands. Put the scenarios from step
-   4 into the PR body under **How to try it**.
+5. **Open the PR, move the ticket, then tear the environment down.** Follow
+   `.claude/ticket-workflow.md`: confirm in one line and wait for a yes, then
+   push the branch and open the pull request, then set the board's Status field
+   to **Implemented**. That file has the PR body template and the exact `gh`
+   commands. Put the scenarios from step 4 into the PR body under **How to try
+   it**.
+
+   **The user's yes is the signal that they have finished trying it**, so it is
+   also the signal to shut the environment down — see **Tearing it down** below.
+   Do that only after the PR and the status move have both succeeded.
 
    The PR body ends with `Closes #<N>`. That is deliberate — the ticket stays at
    **Implemented** through review and testing, and merging to master is the last
    step.
 6. Report, briefly:
-   - the URL the app is running on, and that you saw it respond;
-   - the scenarios to try;
-   - the pull request URL, and the branch name;
+   - the pull request URL, and that the server and database are now shut down;
+   - the scenarios, so they stay in the conversation as well as the PR;
+   - the branch name;
    - which work items are done (and any that are not, and why);
    - tests added, and the baseline count versus the final count;
    - anything you had to stop and ask about;
@@ -396,11 +401,49 @@ Rules for the list:
 ### 6. Hand it over
 
 Tell the user, in this order: the URL and that you saw it respond; what data you
-created; the numbered scenarios; and how to stop it when they are done —
+created; and the numbered scenarios.
+
+Then say that you will shut the server and its database down when they give the
+go-ahead for the PR, and **wait**. Do not tear anything down before that: they
+are about to click through it.
+
+Note the server's PID from the background job now, so you can stop it later
+without hunting for it.
+
+---
+
+## Tearing it down
+
+Run this **after** the PR is open and the ticket has moved, not before. The
+user's go-ahead means they have finished trying it by hand.
 
 ```bash
-kill %1                # or the PID from the log
+kill <the runserver PID>                       # the server you started
+/home/mario/dev/cycling-manager/.venv/bin/python scripts/dev_db.py --drop
 ```
 
-Leave Postgres running — `docker compose down` would stop it for every other
-worktree too, and another agent is probably using it.
+`--drop` removes this worktree's development database and its test database. It
+refuses to run in the main checkout, so it cannot take the user's own database
+with it.
+
+Then confirm the port is actually free, so nothing is left holding it:
+
+```bash
+curl -sS -o /dev/null -m 2 "http://127.0.0.1:$PORT/" && echo "STILL UP" || echo "down"
+```
+
+What **not** to touch:
+
+- **Postgres itself.** `docker compose down` stops it for every other worktree,
+  and another agent is probably mid-run.
+- **The worktree and the branch.** Review happens on the PR, and the reviewer
+  may want the branch. Deleting them is the user's call.
+- **Anything in the main checkout.**
+
+If the PR step failed, or the user has not said yes, **leave everything
+running**. A half-finished handoff with the environment torn down leaves them
+nothing to look at.
+
+Say in one line what you stopped and dropped. If they want it back later, it is
+`scripts/dev_db.py`, `manage.py migrate`, the seed step, and `runserver` again —
+the same four commands as before.
