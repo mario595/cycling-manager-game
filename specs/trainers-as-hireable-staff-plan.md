@@ -613,7 +613,7 @@ All five functions and the three exceptions per **`staff/services.py`**.
   `TRAINERS_PER_SEASON_BOUNDARY`; no existing trainer is modified and no
   hired trainer is touched.
 
-### W5 — `world/services.py`: top up at a season boundary
+### W5 — `world/services.py`: top up at a season boundary ✅
 The loop over `transitions` per **`world/services.py`**.
 
 **Load-bearing:** iterate the **returned** transitions, not a size check
