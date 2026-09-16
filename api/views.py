@@ -146,7 +146,6 @@ def _squad_payload(race, team, rider_ids: list[int], leader_id: int, *, saved: b
         {
             "id": rider.pk,
             "name": rider.name,
-            "role": rider.role,
             "speciality": rider.get_speciality_display(),
             "age": rider.age,
             **{name: getattr(rider, name) for name in ENGINE_ATTRIBUTES},

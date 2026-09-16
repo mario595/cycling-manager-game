@@ -217,7 +217,6 @@ def squad_riders(db, squad_team) -> list[Rider]:
     return [
         Rider.objects.create(
             name=f"Squad Rider {i}", team=squad_team,
-            role=Rider.Role.LEADER if i == 0 else Rider.Role.SUPPORT,
             climb=50, sprint=50, flat=50, resistance=50, positioning=50,
         )
         for i in range(4)
@@ -398,3 +397,19 @@ def test_rider_serializer_hides_traits(roster_rider, roster_client):
         "injury_proneness", "training_affinity",
     ):
         assert hidden_field not in rider_data
+
+
+def test_rider_serializer_has_no_role(roster_rider, roster_client):
+    """Leadership is a per-race property, not a fact about a rider — see
+    specs/leadership-is-per-race.md."""
+    response = roster_client.get("/api/riders/")
+
+    assert "role" not in response.data[0]
+
+
+def test_squad_candidates_have_no_role(squad_race, squad_riders, squad_client):
+    """Leadership is a per-race property, held by is_leader — see
+    specs/leadership-is-per-race.md."""
+    response = squad_client.get(f"/api/racing/races/{squad_race.pk}/squad/")
+
+    assert "role" not in response.data["candidates"][0]
