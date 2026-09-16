@@ -49,11 +49,20 @@ BUILD_PROFILES: dict[str, tuple[int, int]] = {
 #: Quality levels drawn for a generated roster, as (weight, low, high).
 #: Skewed so most riders are unremarkable: a spread, not a bell curve
 #: centred on "good" — the property spec item 11 and #46 depend on.
+#:
+#: The top of this range is deliberately well below 100. A speciality's
+#: profile weight (up to 1.45, see SPECIALITY_PROFILES) is applied on top of
+#: quality, so a bucket topping out near 95 routinely clips a matching
+#: attribute — and, via _roll_potential's floor rule, locks potential at
+#: 100 too, leaving a brand-new rider with zero room to grow. Capped so
+#: even the strongest weight at the top of the standout bucket rarely
+#: reaches 100 — a rare stand-out attribute stays possible, a roster where
+#: a fifth of the riders are already maxed does not.
 QUALITY_SPREAD: list[tuple[int, int, int]] = [
-    (15, 20, 40),   # clearly not worth keeping
-    (55, 41, 65),   # most of a roster: unremarkable
-    (25, 66, 82),   # clearly worth building around
-    (5, 83, 95),    # a standout
+    (15, 15, 30),   # clearly not worth keeping
+    (55, 31, 50),   # most of a roster: unremarkable
+    (25, 51, 65),   # clearly worth building around
+    (5, 66, 75),    # a standout, with real room left to grow
 ]
 
 #: First/last name pools, per nationality. Only Spain exists today; adding a
