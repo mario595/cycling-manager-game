@@ -22,6 +22,16 @@ ALLOWED_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0"]
 # of being served from Django's static files.
 CORS_ALLOWED_ORIGINS = ["http://localhost:5173"]
 
+# frontend/'s dev server proxies /api to Django on a different port, so a
+# browser sees the frontend's origin (localhost:5174) on an authenticated
+# write, not Django's own. DRF's SessionAuthentication only enforces CSRF
+# once a session exists, so an anonymous write (register) never exercised
+# this — the first authenticated one (e.g. teams/claim/, racing/squad/) does,
+# and Django's origin check 403s without this. Production is unaffected:
+# frontend/dist/ is served same-origin there, so no cross-port origin ever
+# appears — see frontend/README.md, "How it is served".
+CSRF_TRUSTED_ORIGINS = ["http://localhost:5174"]
+
 # RealClock by default, same as prod, so a normal dev session just shows the
 # actual time with no manual resyncing. Switch to the mock clock only for a
 # session where you deliberately want to fast-forward a season:
