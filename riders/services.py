@@ -8,6 +8,8 @@ run and how many weeks to apply.
 
 from __future__ import annotations
 
+from django.db.models import F
+
 from .generation import SPECIALITY_PROFILES
 from .models import ENGINE_ATTRIBUTES, Rider
 
@@ -75,3 +77,60 @@ def weekly_deltas(rider: Rider, weeks: int = 1) -> dict[str, float]:
             deltas[name] = -per_week * weeks
 
     return deltas
+
+
+def _settle(current: int, debt: float, delta: float) -> tuple[int, float]:
+    """Fold `delta` into the accumulated `debt` and move out whole points.
+
+    int() truncates toward zero, which is what both directions need: a
+    debt of 2.7 yields +2 with 0.7 carried, and a debt of -2.7 yields -2
+    with -0.7 carried. Using round() or floor() here would leak a point
+    in one direction and is the likeliest bug in this file.
+    """
+    total = debt + delta
+    whole = int(total)
+    remainder = total - whole
+    new_value = max(MIN_ATTRIBUTE, min(MAX_ATTRIBUTE, current + whole))
+    # Clamped at the boundary: drop the carried remainder so it cannot
+    # accumulate into a debt that never applies.
+    if new_value != current + whole:
+        remainder = 0.0
+    return new_value, remainder
+
+
+def apply_weekly_growth(weeks: int = 1) -> int:
+    """Move every rider along their age curve by `weeks` weeks.
+
+    Fractional movement accumulates in each rider's growth_debt rather
+    than being rounded away each call — see Design decision 5. Returns
+    how many riders had a stored attribute actually change.
+    """
+    changed = 0
+    riders_to_update: list[Rider] = []
+    for rider in Rider.objects.all():
+        deltas = weekly_deltas(rider, weeks=weeks)
+        debt = dict(rider.growth_debt)
+        rider_changed = False
+        for name in ENGINE_ATTRIBUTES:
+            current = getattr(rider, name)
+            new_value, remainder = _settle(current, debt.get(name, 0.0), deltas[name])
+            debt[name] = remainder
+            if new_value != current:
+                setattr(rider, name, new_value)
+                rider_changed = True
+        rider.growth_debt = debt
+        riders_to_update.append(rider)
+        if rider_changed:
+            changed += 1
+
+    Rider.objects.bulk_update(riders_to_update, [*ENGINE_ATTRIBUTES, "growth_debt"])
+    return changed
+
+
+def advance_ages() -> int:
+    """Advance every rider's age by one, capped at the model's maximum.
+
+    A rider at the cap holds there until retirement (#42) exists. One
+    UPDATE statement via F(), not a per-row loop.
+    """
+    return Rider.objects.filter(age__lt=40).update(age=F("age") + 1)

@@ -441,7 +441,7 @@ constants. Pure functions on unsaved riders — no database writes yet.
 **Load-bearing:** the last test is what proves the catch-up shortcut in
 Design decision 7 is exact, not approximate. Assert to a tolerance of 1e-9.
 
-### W4 — `riders/services.py`: applying growth and ageing
+### W4 — `riders/services.py`: applying growth and ageing — done
 Add `_settle`, `apply_weekly_growth(weeks)` and `advance_ages()`.
 **Test:** `riders/tests/test_services.py` —
 `test_fractional_growth_accumulates_across_weeks_instead_of_being_lost`,
