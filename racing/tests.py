@@ -281,34 +281,34 @@ def test_a_rider_cannot_appear_twice_in_a_squad(running_race, four_riders):
             RaceSquadRider.objects.create(squad=squad, rider=four_riders[0])
 
 
-def test_auto_pick_prefers_leaders_then_strength(db, team):
-    # Six riders: one weak leader, one strong support, four mid-strength
-    # support riders. The leader must win despite being weakest, and among
-    # the rest the strongest three fill the squad, tiebroken by pk.
-    weak_leader = Rider.objects.create(
-        name="Weak Leader", team=team, role=Rider.Role.LEADER,
-        climb=20, sprint=20, flat=20, resistance=20, positioning=20,
-    )
-    strong_support = Rider.objects.create(
-        name="Strong Support", team=team, role=Rider.Role.SUPPORT,
+def test_auto_pick_takes_the_strongest_four_tiebroken_by_pk(db, team):
+    # Six riders: one strong, four mid-strength, one weak. The strong rider
+    # must be picked and lead; the weak rider must be excluded; three of the
+    # four mid-strength riders fill the rest, tiebroken by pk.
+    strong = Rider.objects.create(
+        name="Strong", team=team,
         climb=90, sprint=90, flat=90, resistance=90, positioning=90,
     )
-    mid_supports = [
+    mids = [
         Rider.objects.create(
-            name=f"Mid Support {i}", team=team, role=Rider.Role.SUPPORT,
+            name=f"Mid {i}", team=team,
             climb=50, sprint=50, flat=50, resistance=50, positioning=50,
         )
         for i in range(4)
     ]
+    weak = Rider.objects.create(
+        name="Weak", team=team,
+        climb=20, sprint=20, flat=20, resistance=20, positioning=20,
+    )
 
     rider_ids, leader_id = auto_pick_squad(team)
 
-    assert leader_id == weak_leader.pk
-    assert rider_ids[0] == weak_leader.pk
-    assert strong_support.pk in rider_ids
+    assert leader_id == strong.pk
+    assert rider_ids[0] == strong.pk
+    assert weak.pk not in rider_ids
     # Three of the four mid-strength riders fill the rest, tiebroken by pk —
     # the lowest three pks among them, since they are all tied on strength.
-    expected_mids = sorted(r.pk for r in mid_supports)[:2]
+    expected_mids = sorted(r.pk for r in mids)[:3]
     for pk in expected_mids:
         assert pk in rider_ids
     assert len(rider_ids) == 4
