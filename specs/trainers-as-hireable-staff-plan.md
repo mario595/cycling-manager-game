@@ -628,7 +628,7 @@ The loop over `transitions` per **`world/services.py`**.
   top-up and nothing would fail.
 - `test_tick_with_no_boundary_crossed_does_not_top_up` — pool unchanged.
 
-### W6 — `staff/management/commands/seed_trainers.py`: the initial pool
+### W6 — `staff/management/commands/seed_trainers.py`: the initial pool ✅
 A command creating `INITIAL_POOL_SIZE` pool trainers, with `--count` to
 override and `--rng-seed` for reproducibility. Non-destructive: it **adds**
 and never deletes, so unlike `reset_riders` it needs no `--yes`.
