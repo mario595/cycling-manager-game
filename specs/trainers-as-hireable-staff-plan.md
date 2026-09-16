@@ -549,7 +549,7 @@ path("staff/trainer/fire/", FireTrainerView.as_view(), name="fire-trainer"),
 `django.apps.apps.is_installed("staff")`. Thin on purpose; W1 exists so
 everything after it has somewhere to land.
 
-### W2 — `staff/models.py`: the `Trainer` model
+### W2 — `staff/models.py`: the `Trainer` model ✅
 The model and fields per **Data model**, plus the `speciality` property and
 migration `0001_initial`.
 
