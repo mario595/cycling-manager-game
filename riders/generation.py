@@ -89,6 +89,15 @@ LAST_NAMES: dict[str, list[str]] = {
 
 _MIN_ATTRIBUTE = 1
 _MAX_ATTRIBUTE = 100
+
+#: A freshly generated rider's *visible* attributes never reach the
+#: player-facing 10/10 (to_display_scale rounds 95-100 to 10) — a 10 is
+#: reserved for a rider who has actually trained to it, once growth (#58)
+#: exists. Applied only in _roll_attributes; _roll_potential still clamps
+#: to _MAX_ATTRIBUTE, since potential is the hidden ceiling a rider may
+#: eventually reach through training, not something they start at.
+_MAX_STARTING_ATTRIBUTE = 94
+
 _ATTRIBUTE_SPREAD = 12  # +/- roll applied to each weighted attribute
 _AGE_RANGE = (18, 36)
 _PEAK_AGE_RANGE = (24, 32)
@@ -114,7 +123,7 @@ def _roll_attributes(
     for name in ENGINE_ATTRIBUTES:
         base = quality * profile[name]
         rolled = base + rng.uniform(-_ATTRIBUTE_SPREAD, _ATTRIBUTE_SPREAD)
-        attributes[name] = _clamp(round(rolled), _MIN_ATTRIBUTE, _MAX_ATTRIBUTE)
+        attributes[name] = _clamp(round(rolled), _MIN_ATTRIBUTE, _MAX_STARTING_ATTRIBUTE)
     return attributes
 
 
