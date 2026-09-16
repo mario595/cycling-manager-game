@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from racing.models import Race, RaceResult
+from schedule.models import Season
 
 from .models import RacePoints
-from .scoring import points_for
+from .scoring import POINTS_BY_POSITION, points_for
 
 
 def score_race(race: Race) -> list[RacePoints]:
@@ -42,3 +43,40 @@ def score_race(race: Race) -> list[RacePoints]:
         if points_for(position) > 0
     ]
     return RacePoints.objects.bulk_create(to_create, ignore_conflicts=True)
+
+
+def _countback_key(entry: dict) -> tuple:
+    """Sort key for standings(): most points first, then most 1st places,
+    then most 2nd places, and so on down the scoring positions. Negated
+    throughout: Python sorts ascending, and more is better for every
+    component here."""
+    counts = entry["positions"]
+    return (-entry["points"],) + tuple(
+        -counts.get(position, 0) for position in sorted(POINTS_BY_POSITION)
+    )
+
+
+def standings(season: Season) -> list[dict]:
+    """The season's table: every team, total points, and countback.
+
+    Ordered by total points descending, then by most 1st places, then most
+    2nd places, and so on down the scoring positions. A team with no points
+    sorts last.
+
+    Each entry: {"team": Team, "points": int, "positions": {pos: count}}.
+    """
+    rows = (
+        RacePoints.objects
+        .filter(race__week__season=season)
+        .select_related("team")
+    )
+
+    by_team: dict[int, dict] = {}
+    for row in rows:
+        entry = by_team.setdefault(row.team_id, {
+            "team": row.team, "points": 0, "positions": {},
+        })
+        entry["points"] += row.points
+        entry["positions"][row.position] = entry["positions"].get(row.position, 0) + 1
+
+    return sorted(by_team.values(), key=_countback_key)

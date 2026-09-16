@@ -399,7 +399,7 @@ table test is for) and `test_position_outside_table_scores_zero` (11, 50).
   count is unchanged)
 - `test_unfinished_race_raises`
 
-### W4 — `competitions/services.py`: `standings`
+### W4 — `competitions/services.py`: `standings` ✅ done
 **Tests:** `competitions/tests/test_standings.py` —
 - `test_totals_accumulate_across_races`
 - `test_team_with_no_points_appears_on_zero` (D9 — the left join)
