@@ -176,7 +176,6 @@ export async function claimTeam(name: string, code: string): Promise<MeTeam> {
 export interface SquadRider {
   id: number
   name: string
-  role: 'leader' | 'support'
   speciality: string
   age: number
   climb: number
@@ -224,7 +223,6 @@ export async function putSquad(raceId: number, riderIds: number[], leaderId: num
 export interface Rider {
   id: number
   name: string
-  role: 'leader' | 'support'
   speciality: string
   nationality: string
   age: number
@@ -241,6 +239,59 @@ export async function getRiders(): Promise<Rider[]> {
   const response = await fetch('/api/riders/')
   if (!response.ok) {
     throw new Error(`riders request failed: ${response.status}`)
+  }
+  return response.json()
+}
+
+export interface RaceResultTeam {
+  id: number
+  name: string
+  code: string
+}
+
+export interface RaceResultEntry {
+  position: number
+  rider: { id: number; name: string }
+  team: RaceResultTeam | null
+  finish_time: number | null
+  finished: boolean
+}
+
+export interface RaceResultPointsEntry {
+  team: RaceResultTeam
+  position: number
+  points: number
+}
+
+export interface RaceResults {
+  race: { id: number; name: string; status: string }
+  results: RaceResultEntry[]
+  points: RaceResultPointsEntry[]
+}
+
+export async function getRaceResults(raceId: number): Promise<RaceResults> {
+  const response = await fetch(`/api/racing/races/${raceId}/results/`)
+  if (!response.ok) {
+    throw new Error(`race results request failed: ${response.status}`)
+  }
+  return response.json()
+}
+
+/** Same state vocabulary as Calendar/Position — see api/README.md. */
+export interface Standings {
+  state: 'in_season' | 'off_season' | 'no_season'
+  season: number | null
+  standings: Array<{
+    rank: number
+    team: RaceResultTeam
+    points: number
+  }>
+}
+
+export async function getStandings(): Promise<Standings> {
+  const response = await fetch('/api/competitions/standings/')
+  if (!response.ok) {
+    throw new Error(`standings request failed: ${response.status}`)
   }
   return response.json()
 }

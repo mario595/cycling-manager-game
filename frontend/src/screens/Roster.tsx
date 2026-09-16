@@ -258,7 +258,7 @@ function RiderCard({
             {rider.name}
           </div>
           <div style={{ fontSize: 11, color: color.mutedStrong, fontFamily: font.mono }}>
-            {rider.speciality.toUpperCase()} · {rider.age} yrs · {rider.role}
+            {rider.speciality.toUpperCase()} · {rider.age} yrs
           </div>
         </div>
       </div>
@@ -340,7 +340,7 @@ function RiderPanel({ rider, onClose }: { rider: Rider; onClose: () => void }) {
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
           <div style={{ fontSize: 18, fontWeight: 600, letterSpacing: '-0.4px' }}>{rider.name}</div>
           <div style={{ fontSize: 11, color: color.mutedStrong, fontFamily: font.mono }}>
-            {rider.speciality} · {rider.age} yrs · {rider.role}
+            {rider.speciality} · {rider.age} yrs
           </div>
         </div>
         <button

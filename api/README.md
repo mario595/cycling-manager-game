@@ -49,6 +49,21 @@ DRF routers and serializers that aggregate other apps' data for the SPA.
   the hidden traits (`potential`, `peak_age`, `decline_rate`,
   `injury_proneness`, `training_affinity`) never appear in this or any
   other payload — see `riders/README.md`.
+- `GET /api/racing/races/<race_id>/results/` — a finished race's finishing
+  order plus each team's points from it (`RaceResultsSerializer`,
+  `RaceResultsView`). A race that has not reached `FINISHED` is a `404`, not
+  a `200` with an empty list — "no results yet" and "no such race" would
+  otherwise look the same to the SPA. `IsAuthenticated`, the project
+  default — unlike the clock/position/calendar endpoints, a race result has
+  no "shop window" reason to be public.
+- `GET /api/competitions/standings/` — the current season's points table
+  (`StandingsSerializer`, `StandingsView`, serializing
+  `competitions.services.standings`). Same `state` vocabulary as
+  `PositionView`/`CalendarView`: `in_season`, `off_season` (the season that
+  just finished, with its final table), or `no_season` (`standings: []`).
+  `rank` is computed server-side from the sorted order — two teams level on
+  points and countback are genuinely joint, and the server is where that is
+  known. `IsAuthenticated`, same reasoning as the results endpoint above.
 - `POST /api/accounts/register/`, `POST /api/accounts/login/`,
   `POST /api/accounts/logout/` — owned by `accounts/`, included here under
   `/api/accounts/`. See `accounts/README.md`.

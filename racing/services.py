@@ -33,9 +33,9 @@ class SquadError(ValueError):
 def auto_pick_squad(team: Team) -> tuple[list[int], int]:
     """Four rider ids and the leader's id, chosen naively.
 
-    Leaders first, then by total engine attributes descending, then by pk
-    ascending — the pk tiebreak is what makes this deterministic and so
-    testable. Deliberately course-blind: see specs/squad-selection.md,
+    By total engine attributes descending, then by pk ascending — the pk
+    tiebreak is what makes this deterministic and so testable. The strongest
+    rider leads. Deliberately course-blind: see specs/squad-selection.md,
     Out of scope, and #45.
 
     Raises SquadError if the team has fewer than four riders.
@@ -49,7 +49,6 @@ def auto_pick_squad(team: Team) -> tuple[list[int], int]:
     ordered = sorted(
         riders,
         key=lambda r: (
-            r.role != Rider.Role.LEADER,
             -sum(getattr(r, name) for name in ENGINE_ATTRIBUTES),
             r.pk,
         ),

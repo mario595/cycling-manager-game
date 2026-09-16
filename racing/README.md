@@ -139,6 +139,14 @@ once an hour so a race scheduled for a given hour starts near that hour. See
 config parser already accepts, so an existing `race_engine/configs/*.json`
 can seed a Race without a translation step.
 
+**`RaceResult.position` is assigned to every rider, including one who never
+finished.** `simulate_race` sorts non-finishers (`finish_time is None`) to
+the back of the field but still numbers them — there is no "did not
+finish" position, only a lower one. Anything that scores or ranks off
+`RaceResult` must filter on `finish_time` first; see `competitions/README.md`
+for the rule this protects (a team whose whole squad abandoned must not be
+credited for wherever those riders were numbered).
+
 ### A race belongs to a week
 
 `Race.week` is a `ForeignKey("schedule.Week", ...)`, declared as a string so
@@ -240,8 +248,8 @@ rather than trusting whatever is in the database.
 top of `simulate_race`, writes an auto-picked squad (`is_auto_picked=True`)
 for every team that does not already have one for this race — a manager who
 never opened the screen still fields a squad, per the spec's item 8. The pick
-itself, `auto_pick_squad`, is deliberately naive — leaders first, then by
-total engine attributes descending, then by pk as a tiebreak — and is meant
+itself, `auto_pick_squad`, is deliberately naive — by total engine attributes
+descending, then by pk as a tiebreak, with the strongest rider leading — and is meant
 to lose to a manager who chooses deliberately (#45 covers a smarter fallback
 later; #39 and #44 will share this same mechanism rather than duplicate it).
 A team with fewer than four riders is skipped with a warning, not an
@@ -255,10 +263,8 @@ it got there — the Django path never went through `load_config`'s validation,
 so without this a malformed squad could reach the simulation and produce a
 race with undefined role-scaled tactics. See `race_engine/README.md`.
 
-**The engine's per-race role comes from `RaceSquadRider.is_leader`, not
-`Rider.role`.** `Rider.role` stays on the model as the rider's *default*
-disposition — what `auto_pick_squad` sorts by, what the admin and roster
-screen show — but `to_engine_rider` now takes an explicit `role` override,
-and `simulate_race` passes `"leader"` or `"support"` from the squad row. A
-manager naming a nominally-`support` rider as their squad's leader is
-respected; the rider's own `role` field is untouched.
+**The engine's per-race role comes only from `RaceSquadRider.is_leader`.**
+A rider has no leadership of their own — `Rider` carries no `role` field —
+so `to_engine_rider`'s `role` argument is required, not defaulted, and
+`simulate_race` passes `"leader"` or `"support"` from the squad row for
+every rider it converts. See `specs/leadership-is-per-race.md`.

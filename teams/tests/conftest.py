@@ -16,7 +16,6 @@ def rider(db, team) -> Rider:
     return Rider.objects.create(
         name="Climber One",
         team=team,
-        role=Rider.Role.LEADER,
         climb=94,
         sprint=30,
         flat=40,

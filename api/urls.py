@@ -8,8 +8,10 @@ from .views import (
     ClockView,
     MeView,
     PositionView,
+    RaceResultsView,
     RiderListView,
     SquadView,
+    StandingsView,
 )
 
 app_name = "api"
@@ -21,6 +23,8 @@ urlpatterns = [
     path("schedule/position/", PositionView.as_view(), name="position"),
     path("schedule/calendar/", CalendarView.as_view(), name="calendar"),
     path("racing/races/<int:race_id>/squad/", SquadView.as_view(), name="squad"),
+    path("racing/races/<int:race_id>/results/", RaceResultsView.as_view(), name="race-results"),
+    path("competitions/standings/", StandingsView.as_view(), name="standings"),
     path("riders/", RiderListView.as_view(), name="riders"),
     path("teams/claim/", ClaimTeamView.as_view(), name="claim-team"),
 ]

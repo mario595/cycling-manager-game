@@ -21,7 +21,7 @@ def test_reset_leaves_managed_teams_alone(db):
     user = User.objects.create_user(email="a@b.com", password="x", display_name="A")
     managed = Team.objects.create(name="Managed Team", code="MGT", manager=user)
     Rider.objects.create(
-        name="Managed Rider", team=managed, role=Rider.Role.LEADER,
+        name="Managed Rider", team=managed,
         climb=60, sprint=60, flat=60, resistance=60, positioning=60,
     )
 

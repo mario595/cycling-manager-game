@@ -78,8 +78,16 @@ reads `now()` once, then finds and processes whatever is due, in three steps:
    rows themselves (not a clock row — there is no longer one to lock in
    production): every `scheduled` race whose `starts_at` is at or before
    `now()` is flipped to `running`, up to `catch_up_max_races` at a time.
-2. **Execute** — outside any transaction: simulate each claimed race and
-   record its result.
+2. **Execute** — outside any transaction: simulate each claimed race,
+   record its result, then score it (`competitions.services.score_race`).
+
+**Scoring happens here, not inside `racing.services.simulate_race`.**
+`racing/` may not import `competitions/` — that would invert the
+dependency graph (`AGENTS.md`) — so the tick, which already imports both
+to orchestrate them, is where a finished race's points are awarded. A race
+that simulates but fails to score is treated as a broken race: the
+existing per-race `try`/`except` in `_execute` marks it `FAILED` and
+records the traceback, without stopping the rest of the tick.
 
 `now()` is read once at the top of `tick()` and threaded through every step
 as `at`, rather than re-read at each one — against `RealClock` those would

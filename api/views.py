@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError
+from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -9,6 +10,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from competitions.services import standings
 from racing.models import SQUAD_SIZE, Race
 from racing.services import SquadError, set_squad, suggested_squad
 from riders.models import ENGINE_ATTRIBUTES, Rider
@@ -24,9 +26,11 @@ from .serializers import (
     MeSerializer,
     MeTeamSerializer,
     PositionSerializer,
+    RaceResultsSerializer,
     RiderSerializer,
     SquadSerializer,
     SquadWriteSerializer,
+    StandingsSerializer,
 )
 
 
@@ -151,7 +155,6 @@ def _squad_payload(race, team, rider_ids: list[int], leader_id: int, *, saved: b
         {
             "id": rider.pk,
             "name": rider.name,
-            "role": rider.role,
             "speciality": rider.get_speciality_display(),
             "age": rider.age,
             **{name: getattr(rider, name) for name in ENGINE_ATTRIBUTES},
@@ -280,3 +283,78 @@ class RiderListView(APIView):
 
         riders = Rider.objects.filter(team=team)
         return Response(RiderSerializer(riders, many=True).data)
+
+
+class RaceResultsView(APIView):
+    """A finished race's order, plus each team's points from it.
+
+    A race that has not reached FINISHED has no results to show — a 404,
+    not a 200 with an empty list, so the SPA cannot mistake "not run yet"
+    for "nobody scored". See competitions/README.md for what a team's
+    points are computed from.
+    """
+
+    def get(self, request, race_id: int):
+        race = get_object_or_404(Race, pk=race_id)
+        if race.status != Race.Status.FINISHED:
+            raise Http404("race has not finished")
+
+        results = race.results.select_related("rider__team").order_by("position")
+        points = race.points.select_related("team").order_by("position")
+
+        payload = {
+            "race": {"id": race.pk, "name": race.name, "status": race.status},
+            "results": [
+                {
+                    "position": r.position,
+                    "rider": {"id": r.rider.pk, "name": r.rider.name},
+                    "team": {
+                        "id": r.rider.team.pk, "name": r.rider.team.name, "code": r.rider.team.code,
+                    } if r.rider.team_id else None,
+                    "finish_time": r.finish_time,
+                    "finished": r.finish_time is not None,
+                }
+                for r in results
+            ],
+            "points": [
+                {
+                    "team": {"id": p.team.pk, "name": p.team.name, "code": p.team.code},
+                    "position": p.position,
+                    "points": p.points,
+                }
+                for p in points
+            ],
+        }
+        return Response(RaceResultsSerializer(payload).data)
+
+
+class StandingsView(APIView):
+    """The current season's standings table — see competitions/README.md
+    for how points accumulate and how ties are broken.
+
+    Same state vocabulary as PositionView/CalendarView: in_season,
+    off_season (the season that just finished, with its final table), or
+    no_season (before any season has ever been declared).
+    """
+
+    def get(self, request):
+        position = current_position(now())
+        if position.season is None:
+            return Response(StandingsSerializer({
+                "state": position.state, "season": None, "standings": [],
+            }).data)
+
+        table = standings(position.season)
+        payload = {
+            "state": position.state,
+            "season": position.season.number,
+            "standings": [
+                {
+                    "rank": rank,
+                    "team": {"id": entry["team"].pk, "name": entry["team"].name, "code": entry["team"].code},
+                    "points": entry["points"],
+                }
+                for rank, entry in enumerate(table, start=1)
+            ],
+        }
+        return Response(StandingsSerializer(payload).data)

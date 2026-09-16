@@ -5,10 +5,12 @@ import { NAV_ITEMS } from './navigation'
 import { Calendar } from './screens/Calendar'
 import { ClaimTeam } from './screens/ClaimTeam'
 import { Dashboard } from './screens/Dashboard'
+import { League } from './screens/League'
 import { Login } from './screens/Login'
 import { Placeholder } from './screens/Placeholder'
 import { Race } from './screens/Race'
 import { Register } from './screens/Register'
+import { Results } from './screens/Results'
 import { Roster } from './screens/Roster'
 import { AuthProvider } from './useAuth'
 
@@ -21,6 +23,8 @@ const SCREENS: Record<string, React.ComponentType> = {
   '/': Dashboard,
   '/roster': Roster,
   '/calendar': Calendar,
+  '/league': League,
+  '/results': Results,
 }
 
 export function App() {
