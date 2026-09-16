@@ -241,15 +241,19 @@ are the ones that get broken:
 1. Run the full suite one last time. It must be green.
 2. Do the plan's **Documentation update** section. It is not optional.
 3. Commit that documentation change.
-4. **Open the PR and move the ticket.** Follow `.claude/ticket-workflow.md`:
+4. **Leave it running for review** — see below.
+5. **Open the PR and move the ticket.** Follow `.claude/ticket-workflow.md`:
    confirm in one line and wait for a yes, then push the branch and open the pull
    request, then set the board's Status field to **Implemented**. That file has
-   the PR body template and the exact `gh` commands.
+   the PR body template and the exact `gh` commands. Put the scenarios from step
+   4 into the PR body under **How to try it**.
 
    The PR body ends with `Closes #<N>`. That is deliberate — the ticket stays at
    **Implemented** through review and testing, and merging to master is the last
    step.
-5. Report, briefly:
+6. Report, briefly:
+   - the URL the app is running on, and that you saw it respond;
+   - the scenarios to try;
    - the pull request URL, and the branch name;
    - which work items are done (and any that are not, and why);
    - tests added, and the baseline count versus the final count;
@@ -260,5 +264,116 @@ are the ones that get broken:
 happen on the PR, and the user merges it.
 
 **If you stopped part-way** — a work item unfinished, a question unanswered, the
-suite not green — do not open the PR and do not move the ticket. Commit what is
-finished, say exactly where you got to, and stop.
+suite not green — do not start the server, do not open the PR and do not move the
+ticket. Commit what is finished, say exactly where you got to, and stop.
+
+---
+
+## Leaving it running for review
+
+The user checks this by hand before it merges. Set it up so they can, and tell
+them exactly what to try. Everything here runs **from inside the worktree**, so
+what they see is the branch's code and not master's.
+
+### 1. Database and migrations
+
+```bash
+docker compose up -d                                    # Postgres, host port 5433
+/home/mario/dev/cycling-manager/.venv/bin/python manage.py migrate
+```
+
+Migrating matters: your branch almost certainly added migrations, and without
+this the app runs against the old schema and the feature looks broken.
+
+### 2. Give it something to look at
+
+A feature with an empty database is not reviewable. Before starting the server,
+make sure there is data to see.
+
+- Check what already exists: `manage.py help` lists the project's own commands.
+  There are already commands for setting a world up — `load_season`,
+  `mock_clock`, `tick`. **Prefer an existing command to inventing data.**
+- If you must create data, do it with a short script through `manage.py shell`,
+  and say exactly what you created.
+- **If logging in is needed, do not invent credentials.** Ask the user to run
+  `manage.py createsuperuser`, or tell them which existing account to use.
+
+### 3. Build the frontend, if the frontend changed
+
+Django serves the built bundle from `frontend/dist/`, so without this the user
+sees the *old* UI and reports a bug that is not there:
+
+```bash
+cd frontend && npm run build
+```
+
+Skip it when the diff touches no frontend file.
+
+### 4. Start the server in the background
+
+```bash
+/home/mario/dev/cycling-manager/.venv/bin/python manage.py runserver \
+  > /tmp/runserver-<slug>.log 2>&1 &
+```
+
+Then **confirm it is actually up before you tell the user it is**:
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8000/
+```
+
+Anything other than a 200 means read the log. **Never report a URL you have not
+seen respond.**
+
+If port 8000 is already taken, use another (`runserver 8001`) and say which.
+Never kill whatever is already on it.
+
+### 5. Write the scenarios
+
+Give a short numbered list of things to try — **only the flows this ticket added
+or changed**. Not a tour of the app, not a regression sweep.
+
+Derive them from the spec's `In scope` and the plan's work items: every in-scope
+item should either be reachable by a scenario, or you should say why it is not
+visible from the outside.
+
+Each scenario is a few lines:
+
+1. **Do this** — the exact URL, click or command.
+2. **You should see** — the observable result.
+3. **Then this** — the edge case worth poking, where there is one.
+
+The shape, for a registration ticket:
+
+```
+1. Register — http://127.0.0.1:8000/register, any email and password.
+   You should land on the dashboard, and the account shows in /admin/.
+2. Log out. You should be back at sign-in, and the dashboard should now
+   bounce you there too.
+3. Log in again with the same details. Same dashboard, same team.
+4. Register again with an email already used. The form should say so, and
+   there should still be only one account.
+```
+
+Rules for the list:
+
+- **Say what state to start from**, and start from a clean one where you can.
+- **Include at least one unhappy path** — the validation failure, the empty
+  list, the double submit. That is where hand-testing earns its keep; the happy
+  path already has a unit test.
+- **Name the URL.** "Go to the dashboard" is not a scenario.
+- **If the change has no UI, say so and give the equivalent** — a `manage.py
+  shell` snippet, a management command, or a `curl http://127.0.0.1:8000/api/...`.
+  A clock or engine ticket is tried with `mock_clock` and `tick`, not by
+  clicking.
+- **Name anything from the ticket you could not make reachable**, and why.
+
+### 6. Hand it over
+
+Tell the user, in this order: the URL and that you saw it respond; what data you
+created; the numbered scenarios; and how to stop it when they are done —
+
+```bash
+kill %1                # or the PID from the log
+docker compose down    # data survives
+```
