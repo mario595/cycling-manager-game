@@ -11,6 +11,8 @@ The React SPA. Currently a **scaffold**: it reproduces the mockup in
 | `/roster` | Roster | Built — filter, sort and rider detail panel, from the API, no fixture data |
 | `/calendar` | Calendar | Built — twelve weeks from the API, no fixture data |
 | `/race/:raceId` | Race | Built — squad selection, no fixture data |
+| `/league` | League | Built — season standings table from the API, no fixture data |
+| `/results` | Results | Built — the most recently finished race's order and points, from the API, no fixture data |
 | `/login`, `/register` | Login, Register | Built — real accounts, no fixture data |
 | everything else, including the `/race` sidebar item itself | `Placeholder` | Renders the route name and path |
 

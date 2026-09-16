@@ -431,7 +431,7 @@ repo yet; do not add one as part of this ticket.
 `screens/Results.tsx`, route in `App.tsx`.
 **Verification:** manual.
 
-### W10 — Documentation
+### W10 — Documentation ✅ done
 `competitions/README.md` (written in W1, completed here with the final
 behaviour), plus updates to `AGENTS.md`, `racing/README.md`, `world/README.md`,
 `api/README.md`, `frontend/README.md`. See *Documentation update*.

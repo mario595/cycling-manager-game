@@ -139,6 +139,14 @@ once an hour so a race scheduled for a given hour starts near that hour. See
 config parser already accepts, so an existing `race_engine/configs/*.json`
 can seed a Race without a translation step.
 
+**`RaceResult.position` is assigned to every rider, including one who never
+finished.** `simulate_race` sorts non-finishers (`finish_time is None`) to
+the back of the field but still numbers them — there is no "did not
+finish" position, only a lower one. Anything that scores or ranks off
+`RaceResult` must filter on `finish_time` first; see `competitions/README.md`
+for the rule this protects (a team whose whole squad abandoned must not be
+credited for wherever those riders were numbered).
+
 ### A race belongs to a week
 
 `Race.week` is a `ForeignKey("schedule.Week", ...)`, declared as a string so
