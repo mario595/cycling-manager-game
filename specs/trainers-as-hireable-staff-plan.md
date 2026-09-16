@@ -663,7 +663,7 @@ raw. A test must assert the response contains no value above
   another team returns 409, not 200. The authorisation case worth an
   explicit test.
 
-### W8 — `frontend/`: the Staff screen
+### W8 — `frontend/`: the Staff screen ✅
 `api.ts` additions, `useStaff.ts`, `screens/Staff.tsx`, and the `App.tsx`
 wiring, per **`frontend/`**.
 

@@ -12,6 +12,7 @@ import { Race } from './screens/Race'
 import { Register } from './screens/Register'
 import { Results } from './screens/Results'
 import { Roster } from './screens/Roster'
+import { Staff } from './screens/Staff'
 import { AuthProvider } from './useAuth'
 
 /**
@@ -22,6 +23,7 @@ import { AuthProvider } from './useAuth'
 const SCREENS: Record<string, React.ComponentType> = {
   '/': Dashboard,
   '/roster': Roster,
+  '/staff': Staff,
   '/calendar': Calendar,
   '/league': League,
   '/results': Results,
