@@ -379,7 +379,7 @@ and its `0001_initial` migration.
 `IntegrityError` on a duplicate `(race, team)`).
 Mirror `world/tests/test_app.py` for the app check.
 
-### W2 — `competitions/scoring.py`: the points table
+### W2 — `competitions/scoring.py`: the points table ✅ done
 `POINTS_BY_POSITION` and `points_for`.
 **Test:** `competitions/tests/test_scoring.py::test_points_by_position` (the
 full table, asserted value by value — a typo in a constant is exactly what a
