@@ -60,9 +60,9 @@ right training focus start to pull ahead of the ones who didn't.
    forward automatically — there is always a value in effect, never a gap
    week with no selection.
 4. At rollover, every non-injured rider on the team's roster gets a
-   training effect on the focus skill. The size of the effect is larger when
-   the focus skill matches the trainer's speciality, smaller (but never
-   zero) otherwise.
+   training effect on the focus skill. The size of the effect scales with
+   the trainer's own score in that skill (see #35) — larger when the focus
+   is the trainer's speciality, smaller but never zero otherwise.
 5. Riders respond to identical training differently depending on a hidden
    trait the player cannot see directly — only inferable from how much they
    improve.
@@ -115,9 +115,11 @@ right training focus start to pull ahead of the ones who didn't.
   week purely from forgetting — a manager who never touches the picker keeps
   training the same skill indefinitely, which is itself a valid (if
   suboptimal) strategy.
-- **Off-speciality training is always worth something.** A trainer whose
-  speciality is climb still improves sprint when asked to, just less than a
-  sprint-specialist trainer would. No selection is ever wasted outright.
+- **Off-speciality training is always worth something.** A trainer's score in
+  the focused skill drives the effect size directly; a trainer generated
+  with no skill at the bottom of the range (see #35) always improves
+  something, just less than a specialist in that skill would. No selection
+  is ever wasted outright.
 - **Race-based training is separate from and additive to trainer-based
   training**, not a substitute for it — a rider who both raced a hilly
   course and had climb as the week's focus gets both effects, not the
