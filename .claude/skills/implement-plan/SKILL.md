@@ -75,6 +75,12 @@ Run it once now. It must match your baseline. If it errors, stop and ask.
 
 For the rest of this document, `PYTEST` means that command.
 
+**You do not have to do anything about other agents.** Each worktree gets its
+own test database, named after the worktree, so a suite running in another
+worktree at the same time cannot drop yours mid-run. `config/worktree.py` has
+the scheme. Never set `POSTGRES_DB` to work around a database problem — that
+opts you back into sharing.
+
 ---
 
 ## The loop
@@ -279,11 +285,20 @@ what they see is the branch's code and not master's.
 
 ```bash
 docker compose up -d                                    # Postgres, host port 5433
+/home/mario/dev/cycling-manager/.venv/bin/python scripts/dev_db.py   # this worktree's own database
 /home/mario/dev/cycling-manager/.venv/bin/python manage.py migrate
 ```
 
-Migrating matters: your branch almost certainly added migrations, and without
-this the app runs against the old schema and the feature looks broken.
+`dev_db.py` creates the database for **this worktree** if it is not there yet.
+`migrate` creates tables, not databases, so without it a fresh worktree fails
+with "database ... does not exist", which reads like a misconfiguration rather
+than a missing step.
+
+Migrating matters too: your branch almost certainly added migrations, and
+without it the app runs against the old schema and the feature looks broken.
+
+The database is this worktree's alone, so seeding it cannot disturb another
+agent's review, and the user's main checkout keeps its own data.
 
 ### 2. Give it something to look at
 
@@ -311,22 +326,32 @@ Skip it when the diff touches no frontend file.
 
 ### 4. Start the server in the background
 
+This worktree has its own port, so it does not fight another agent's server.
+Ask for it rather than guessing:
+
 ```bash
-/home/mario/dev/cycling-manager/.venv/bin/python manage.py runserver \
+PORT=$(/home/mario/dev/cycling-manager/.venv/bin/python -c \
+  'from config.worktree import runserver_port; print(runserver_port())')
+
+/home/mario/dev/cycling-manager/.venv/bin/python manage.py runserver "$PORT" \
   > /tmp/runserver-<slug>.log 2>&1 &
 ```
+
+The port is derived from the worktree name, so it is the same every time and
+the user can bookmark it.
 
 Then **confirm it is actually up before you tell the user it is**:
 
 ```bash
-curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8000/
+curl -sS -o /dev/null -w '%{http_code}\n' "http://127.0.0.1:$PORT/"
 ```
 
 Anything other than a 200 means read the log. **Never report a URL you have not
 seen respond.**
 
-If port 8000 is already taken, use another (`runserver 8001`) and say which.
-Never kill whatever is already on it.
+Two worktrees can rarely hash to the same port. If the log says the address is
+in use, step up by one and say which port you ended on. **Never kill whatever is
+already there** — it is another agent's review server.
 
 ### 5. Write the scenarios
 
@@ -346,7 +371,7 @@ Each scenario is a few lines:
 The shape, for a registration ticket:
 
 ```
-1. Register — http://127.0.0.1:8000/register, any email and password.
+1. Register — http://127.0.0.1:<port>/register, any email and password.
    You should land on the dashboard, and the account shows in /admin/.
 2. Log out. You should be back at sign-in, and the dashboard should now
    bounce you there too.
@@ -363,7 +388,7 @@ Rules for the list:
   path already has a unit test.
 - **Name the URL.** "Go to the dashboard" is not a scenario.
 - **If the change has no UI, say so and give the equivalent** — a `manage.py
-  shell` snippet, a management command, or a `curl http://127.0.0.1:8000/api/...`.
+  shell` snippet, a management command, or a `curl http://127.0.0.1:<port>/api/...`.
   A clock or engine ticket is tried with `mock_clock` and `tick`, not by
   clicking.
 - **Name anything from the ticket you could not make reachable**, and why.
@@ -375,5 +400,7 @@ created; the numbered scenarios; and how to stop it when they are done —
 
 ```bash
 kill %1                # or the PID from the log
-docker compose down    # data survives
 ```
+
+Leave Postgres running — `docker compose down` would stop it for every other
+worktree too, and another agent is probably using it.
