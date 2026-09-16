@@ -1,6 +1,6 @@
 # Roadmap
 
-**Status:** agreed 2026-09-11, revised 2026-09-12, revised 2026-09-15
+**Status:** agreed 2026-09-11, revised 2026-09-12, revised 2026-09-15, revised 2026-09-16
 **Scope:** ordering only. This file says *what to build next and why*; it does not
 say what any feature does — that is each issue, and later each spec.
 
@@ -80,11 +80,21 @@ anything. Today it carries over an empty record.
 ## Phase 6 — riders stop being static
 
 **Issues: [#58](https://github.com/mario595/cycling-manager/issues/58) growth and
-decline, [#59](https://github.com/mario595/cycling-manager/issues/59) freshness.**
+decline, [#59](https://github.com/mario595/cycling-manager/issues/59) freshness,
+[#35](https://github.com/mario595/cycling-manager/issues/35) trainers.**
 
-Both split out of #57's spec pass. The attributes exist and nothing moves them:
-riders have a hidden potential, peak age and decline rate that never fire, and a
-freshness value that never falls.
+#58 and #59 split out of #57's spec pass. The attributes exist and nothing moves
+them: riders have a hidden potential, peak age and decline rate that never fire,
+and a freshness value that never falls.
+
+**#35 joined this phase on 2026-09-16, moved out of the deferred economy
+group.** Its spec found no reason to wait on the ledger (#20): a team can hire a
+free trainer into its one fixed slot today, and pricing the hire is split out as
+[#69](https://github.com/mario595/cycling-manager/issues/69) for whenever #20
+lands. #35 is what [#36](https://github.com/mario595/cycling-manager/issues/36)
+(weekly training focus, already specced) has been waiting on — building it here
+turns that spec into playable game rather than a document sitting on a
+dependency.
 
 Not in the original roadmap, and a genuine addition to it rather than a
 reordering. The argument for doing them straight after Phase 5:
@@ -132,9 +142,14 @@ board.
 Money is only interesting when there is something to spend it on, and the things
 to spend it on — [#28](https://github.com/mario595/cycling-manager/issues/28)
 transfers, [#32](https://github.com/mario595/cycling-manager/issues/32)
-development squad, [#35](https://github.com/mario595/cycling-manager/issues/35)
-trainers — are all further out. A ledger with income and no meaningful outgoings
-is a scoreboard.
+development squad — are further out. A ledger with income and no meaningful
+outgoings is a scoreboard.
+
+**[#35](https://github.com/mario595/cycling-manager/issues/35) (trainers) is no
+longer in this group.** Its spec pass on 2026-09-16 found the mechanism didn't
+need to wait on money at all — hiring is free until the ledger exists, priced
+later as its own follow-up ([#69](https://github.com/mario595/cycling-manager/issues/69)).
+See Phase 6.
 
 **When the economy does start, the internal order is fixed:** #20 ledger → #21
 fanbase → #22/#23 sponsorship. #21 before #22/#23 is not negotiable; sponsor
@@ -252,6 +267,8 @@ Order of work is **spec → plan → code → review** (`specs/README.md`,
 
 Revisit this file whenever a phase completes, **or whenever a decision about how
 a feature works reorders it** — that is the normal way it goes stale, not the
-passage of time. Two precedents: deciding registration *claims* a team rather
+passage of time. Three precedents: deciding registration *claims* a team rather
 than creating one moved account work later; #57's spec pass split out #58 and
-#59, which added a phase that was not here before.
+#59, which added a phase that was not here before; #35's spec pass found its
+economy dependency was avoidable, pulling it out of the deferred group and into
+Phase 6.
