@@ -454,7 +454,7 @@ apply twelve single weeks to a rider whose weekly delta is under 1.0 and
 assert the attribute moved by roughly 12× the weekly amount, not by 0 and
 not by 12.
 
-### W5 — `world/services.py`: wire it into the tick
+### W5 — `world/services.py`: wire it into the tick — done
 Call `process_week_transitions` and `apply_weekly_growth` / `advance_ages`
 from `tick()`, and record the two new `TickRun` counters (with their
 migration).
