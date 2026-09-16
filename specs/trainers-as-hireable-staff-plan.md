@@ -538,7 +538,7 @@ path("staff/trainer/fire/", FireTrainerView.as_view(), name="fire-trainer"),
 
 ## Work items
 
-### W1 — `staff/`: the app skeleton
+### W1 — `staff/`: the app skeleton ✅
 `.venv/bin/python manage.py startapp staff`; delete the unused
 `views.py`/`tests.py` stubs and add a `tests/` package with
 `__init__.py`; add `"staff"` to `LOCAL_APPS` in
