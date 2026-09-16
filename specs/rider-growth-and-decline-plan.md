@@ -178,7 +178,9 @@ young rider already at their ceiling does not fall just for being there.
 
 | Field | Type | Null/blank | Default | Notes |
 |---|---|---|---|---|
-| `growth_debt` | `JSONField` | not null, not blank | `dict` (callable) | Hidden. `{attribute_name: float}` over `ENGINE_ATTRIBUTES`. Accumulated fractional growth not yet applied to the integer attribute. Missing keys read as `0.0`. |
+| `growth_debt` | `JSONField` | not null, blank=True | `dict` (callable) | Hidden. `{attribute_name: float}` over `ENGINE_ATTRIBUTES`. Accumulated fractional growth not yet applied to the integer attribute. Missing keys read as `0.0`. |
+
+**Deviation from the table above:** `blank=True`, not `blank=False` as originally planned. `generate_rider()` never sets `growth_debt` (there is nothing to roll — a new rider starts with none), so it is left at its `{}` default; `full_clean()` then rejects an empty `JSONField` unless `blank=True`. `training_affinity` avoids this only because `generate_rider` always fills it with a non-empty dict. Caught by `riders/tests/test_generation.py::test_generated_rider_is_valid`, which already existed and calls `full_clean()` on 200 generated riders.
 
 No index, no constraint — it is read and written only by the rider that owns
 it, always by primary key.
@@ -418,7 +420,7 @@ yet.
 **Load-bearing:** the duplicate test must assert on row *count*, not on the
 return value — the guarantee is the constraint, not the `exclude()`.
 
-### W2 — `riders/`: the `growth_debt` field
+### W2 — `riders/`: the `growth_debt` field — done (see note)
 Add the field, its migration, and update the `Rider` docstring plus the
 `help_text` on `age`, `potential`, `peak_age` and `decline_rate` (all of
 which currently say "once #58 lands").

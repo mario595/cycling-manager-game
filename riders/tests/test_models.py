@@ -19,6 +19,10 @@ def test_rider_has_speciality_and_hidden_traits(rider):
     assert rider.training_affinity == {}
 
 
+def test_growth_debt_defaults_to_an_empty_dict(rider):
+    assert rider.growth_debt == {}
+
+
 def test_rider_speciality_rejects_value_outside_choices(rider):
     rider.speciality = "time-trialist"
     with pytest.raises(ValidationError):
