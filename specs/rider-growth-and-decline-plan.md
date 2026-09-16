@@ -406,7 +406,7 @@ would extend exactly the starvation window `world/README.md` warns about.
 
 ## Work items
 
-### W1 — `schedule/`: the week transition record
+### W1 — `schedule/`: the week transition record — done
 Add `WeekTransition` to `schedule/models.py`, its migration, and
 `process_week_transitions(at)` to `schedule/services.py`. Nothing calls it
 yet.

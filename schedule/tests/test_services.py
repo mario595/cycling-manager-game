@@ -4,8 +4,8 @@ from datetime import datetime, timedelta, timezone as dt_timezone
 
 import pytest
 
-from schedule.models import SEASON_WEEKS, Season, SeasonTransition, Week
-from schedule.services import current_position, process_transitions
+from schedule.models import SEASON_WEEKS, Season, SeasonTransition, Week, WeekTransition
+from schedule.services import current_position, process_transitions, process_week_transitions
 
 MONDAY = datetime(2027, 3, 1, 0, 0, 0, tzinfo=dt_timezone.utc)
 
@@ -113,3 +113,45 @@ def test_catch_up_records_every_missed_boundary_in_order(db):
     assert past_transitions[SeasonTransition.Kind.OPENED].occurred_at == past_season.starts_at
     assert past_transitions[SeasonTransition.Kind.CLOSED].occurred_at == past_season.ends_at
     assert running_transitions[SeasonTransition.Kind.OPENED].occurred_at == running_season.starts_at
+
+
+def test_a_week_transition_is_recorded_once_per_week(db):
+    season = make_season_with_weeks(1, MONDAY)
+    week_one = season.weeks.get(number=1)
+
+    written = process_week_transitions(week_one.starts_at + timedelta(hours=1))
+
+    assert len(written) == 1
+    assert written[0].week == week_one
+    assert written[0].occurred_at == week_one.starts_at
+
+
+def test_a_late_tick_records_every_missed_week(db):
+    season = make_season_with_weeks(1, MONDAY)
+    at = season.starts_at + timedelta(weeks=3, hours=1)
+
+    written = process_week_transitions(at)
+
+    assert [t.week.number for t in written] == [1, 2, 3, 4]
+
+
+def test_recording_the_same_week_twice_writes_one_row(db):
+    season = make_season_with_weeks(1, MONDAY)
+    week_one = season.weeks.get(number=1)
+    at = week_one.starts_at + timedelta(hours=1)
+
+    process_week_transitions(at)
+    process_week_transitions(at)
+
+    assert WeekTransition.objects.filter(week=week_one).count() == 1
+
+
+def test_occurred_at_is_the_weeks_own_start_not_the_tick_time(db):
+    season = make_season_with_weeks(1, MONDAY)
+    week_one = season.weeks.get(number=1)
+    late_tick_time = week_one.starts_at + timedelta(days=2)
+
+    written = process_week_transitions(late_tick_time)
+
+    assert written[0].occurred_at == week_one.starts_at
+    assert written[0].occurred_at != late_tick_time
