@@ -591,7 +591,7 @@ spec promises about a legible speciality rests on that.
   contains all five specialities.
 - `test_generated_trainers_are_unsaved` — `pk is None`.
 
-### W4 — `staff/services.py`: hire, fire, read, top up
+### W4 — `staff/services.py`: hire, fire, read, top up ✅
 All five functions and the three exceptions per **`staff/services.py`**.
 
 **Load-bearing:** the `trainer.team_id is not None` re-check **after**
