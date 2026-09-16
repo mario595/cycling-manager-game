@@ -422,12 +422,12 @@ raise; assert `Race.status == FAILED` and the tick's other races still ran).
 **Tests:** `api/tests.py` — `test_standings_returns_ranked_table`,
 `test_standings_no_season_returns_empty`, `test_standings_requires_login`.
 
-### W8 — `frontend/`: the League table screen
+### W8 — `frontend/`: the League table screen ✅ done, verified in browser
 `api.ts` additions, `useStandings.ts`, `screens/League.tsx`, route in `App.tsx`.
 **Verification:** manual — see below. No frontend test harness exists in this
 repo yet; do not add one as part of this ticket.
 
-### W9 — `frontend/`: the Results screen
+### W9 — `frontend/`: the Results screen ✅ done, verified in browser
 `screens/Results.tsx`, route in `App.tsx`.
 **Verification:** manual.
 
