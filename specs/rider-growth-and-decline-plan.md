@@ -427,7 +427,7 @@ which currently say "once #58 lands").
 **Test:** `riders/tests/test_models.py` —
 `test_growth_debt_defaults_to_an_empty_dict`.
 
-### W3 — `riders/services.py`: ceilings and the curve
+### W3 — `riders/services.py`: ceilings and the curve — done
 Add the new module with `attribute_ceilings`, `weekly_deltas` and the tuning
 constants. Pure functions on unsaved riders — no database writes yet.
 **Test:** new `riders/tests/test_services.py` —
