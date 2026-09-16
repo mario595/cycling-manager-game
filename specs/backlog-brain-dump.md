@@ -1,6 +1,6 @@
 # Backlog — brain dump session 2026-09-11
 
-**43 items, tracked as GitHub issues #5–#63.** This file is the index and the
+**45 items, tracked as GitHub issues #5–#70.** This file is the index and the
 reasoning record; the issues are the tracker. Each item below is prefixed with
 its issue number.
 
@@ -122,28 +122,59 @@ Conventions:
 - Stage races award points per stage *and* for the final general classification.
 - **Open:** points tables; do bigger races award more? does Division affect it?
 
-### [#16] C2. Intermediate sprints and sprint points
+### [#70] C2a. Course markers — named points a race records crossings at
 **Domains:** `race_engine`, `racing`
-- Each race/stage has sprint points at defined locations on the course; the
-  first riders across score.
-- **Open:** how many riders score, how many points; engine must record who
-  crossed a given distance first.
-- **Tech concern (parked):** the engine must emit crossing events at arbitrary
-  course positions — likely new log event types.
+- A **marker** is a named point on a course at a chosen distance, authored with
+  the course. A race records the first N riders across it, in order.
+- Two kinds — **sprint** and **mountain** — identical in mechanism, differing in
+  name and in what consumes them. A marker knows nothing about points.
+- Each marker carries a **weight**: a summit finish outranks a small hill, a
+  final sprint outranks an early one.
+- **Placed, not derived** — this answers C3's original open question. Deriving
+  climbs from gradient would hand scoring control to the terrain model, make
+  every lump a scoring opportunity, and rescore old courses whenever that model
+  changed. Same principle as the season file: race design is authored.
+- **Tech (parked):** the engine has no event concept at all — it emits per-tick
+  positions. The log format grows to carry events, and `racing/README.md` already
+  wants it slimmed; do both at once. Courses are flat `{length, gradient}` lists
+  authored inline by [#7]'s season file, so that format changes too. Crossing
+  order needs resolving within a tick. Adds no rider attribute, so it should
+  avoid the six-course rebalance — confirm.
 
-### [#17] C3. Categorised climbs and mountain points
+### [#16] C2. Sprint points
 **Domains:** `race_engine`, `racing`
-- Climbs are classified by difficulty (HC, 1st, 2nd, 3rd category).
-- Points awarded at the summit, scaled by category.
-- **Open:** does the classification derive automatically from gradient/length, or
-  is it authored per course?
+- The first N riders across a sprint marker score, declining down the order,
+  scaled by the marker's weight.
+- **Open:** how many places and how much? Do sprint points feed Division points
+  ([#15]) or money ([#19]), or stay separate? Is the finish line itself a sprint
+  marker or a special case?
 
-### [#18] C4. Secondary classifications (mountains and points jerseys)
+### [#17] C3. Mountain points
+**Domains:** `race_engine`, `racing`
+- The twin of C2: first N over a mountain marker score, scaled by weight.
+- **Tracked separately from sprint points and never pooled.** The separation is
+  the point — a sprinter and a climber should be able to have good seasons doing
+  entirely different things.
+- **Resolved:** climbs are authored with a weight, not derived from gradient (see
+  C2a). Named categories (HC, 1st, 2nd, 3rd) may survive as a *presentation* of
+  weight — familiar, and better than a bare number — but that is display, not
+  scoring.
+- **Open:** how many places? Traditionally fewer than a sprint.
+
+### [#18] C4. Sprinters' and climbers' classifications
 **Domains:** `competitions` NEW, `racing`
-- Stage races carry a mountains classification and a points classification
-  alongside the GC, each with a leader.
-- **Open:** do these award Division points, money, or only prestige? Are jerseys
-  shown in the race player?
+- A stage race accumulates sprint and mountain points across its stages into two
+  standings, each with a visible leader *during* the race.
+- **The winner of each earns extra points for their team at the end of the stage
+  race**, over and above the individual crossings.
+- **That bonus is the design point.** Without it a classification is arithmetic
+  nobody rides for. With it, "we cannot win this race but we can win the
+  mountains" becomes a plan made at squad selection, before stage 1.
+- **Open:** how large a bonus — enough to build a squad around, not enough to
+  outweigh the race itself? Money too ([#19])? Tie-breaking (it will come up).
+  Do one-day races have classifications at all? Jerseys in the race player? Does
+  an abandoning rider keep accumulated points — [#37] locks the squad after stage
+  1, so abandons happen.
 
 ### [#19] C5. Prize money for race results
 **Domains:** `economy` NEW, `racing`

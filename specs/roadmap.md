@@ -4,7 +4,7 @@
 **Scope:** ordering only. This file says *what to build next and why*; it does not
 say what any feature does — that is each issue, and later each spec.
 
-45 open issues. This is the order to take them in, and — more useful — the
+47 open issues. This is the order to take them in, and — more useful — the
 reasons for deferring the rest.
 
 ## The question this roadmap answers
@@ -159,14 +159,28 @@ offers price off fanbase.
 ladder — embargo, then forced sales, then losing the team — needs wages (#25) and
 a market with buyers (#28/#29) before any rung can fire.
 
-### Sprint and mountain points — #16, #17
+### Sprint and mountain points — #70, #16, #17, #18
 
-Engine changes with a stated cost: new log event types, and any new in-race input
-invalidates the verified realism balance across all six bundled courses and
-requires re-deriving it.
+Rewritten 2026-09-16 and now four issues, with
+[#70](https://github.com/mario595/cycling-manager/issues/70) (course markers)
+split out as the foundation the other three sit on. Nothing above it can start
+until a course can say *"something happens here"* and a race can record who got
+there first.
 
-High cost, and they add **texture** rather than a loop. Do them when the work is
-about making racing better, not while making it exist.
+**Order within the group is fixed:** #70 markers → #16/#17 points → #18
+classifications. #18 additionally needs
+[#9](https://github.com/mario595/cycling-manager/issues/9) (stage races), since
+there is nothing to accumulate across without them.
+
+Still deferred, and the cost is real: `race_engine` has **no event concept at
+all** — it emits per-tick positions, so markers mean a new kind of log record and
+a change to the season declaration format. Worth pairing with the log slimming
+`racing/README.md` already wants, rather than touching the format twice.
+
+They add **texture** rather than a loop. Do them when the work is about making
+racing better, not while making it exist — but note #18 is the first feature that
+would make a *squad of specialists* worth assembling, so it earns its place sooner
+than its position here suggests.
 
 ### Heuristic AI for unmanaged teams — #45
 
