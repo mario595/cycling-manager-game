@@ -636,7 +636,7 @@ and never deletes, so unlike `reset_riders` it needs no `--yes`.
 **Test:** `staff/tests/test_seed_trainers.py::test_seed_creates_a_pool` —
 `call_command("seed_trainers", count=5)` creates five unemployed trainers.
 
-### W7 — `api/`: serializers, views, urls
+### W7 — `api/`: serializers, views, urls ✅
 `TrainerSerializer`, `StaffSerializer`, `HireTrainerSerializer`,
 `StaffView`, `HireTrainerView`, `FireTrainerView`, and the three url
 patterns.
