@@ -33,7 +33,6 @@ def rider(db, team) -> Rider:
     return Rider.objects.create(
         name="Climber One",
         team=team,
-        role=Rider.Role.LEADER,
         climb=94,
         sprint=30,
         flat=40,
@@ -43,7 +42,7 @@ def rider(db, team) -> Rider:
 
 
 def test_rider_converts_to_engine_dataclass(rider):
-    engine_rider = to_engine_rider(rider)
+    engine_rider = to_engine_rider(rider, role="leader")
 
     assert engine_rider.name == "Climber One"
     assert engine_rider.id == str(rider.pk)
@@ -62,7 +61,7 @@ def test_teamless_rider_becomes_own_team(db):
         positioning=50,
     )
 
-    engine_rider = to_engine_rider(free_agent)
+    engine_rider = to_engine_rider(free_agent, role="support")
 
     # The engine's own default: a rider with no team rides as a team of one.
     assert engine_rider.team_id == engine_rider.id
