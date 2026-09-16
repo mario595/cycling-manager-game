@@ -12,6 +12,7 @@ The React SPA. Currently a **scaffold**: it reproduces the mockup in
 | `/calendar` | Calendar | Built — twelve weeks from the API, no fixture data |
 | `/race/:raceId` | Race | Built — squad selection, no fixture data |
 | `/login`, `/register` | Login, Register | Built — real accounts, no fixture data |
+| `/claim` | ClaimTeam | Built — real claim, no fixture data |
 | everything else, including the `/race` sidebar item itself | `Placeholder` | Renders the route name and path |
 
 `/race/:raceId` is the first **parameterised** route, so it is registered as
@@ -36,11 +37,17 @@ identity without the player logging in again.
 earlier version of this file. That parameter is gone — squad selection and
 the roster both derive the team from the session on the server
 (`api/README.md`), so neither `Race.tsx` nor `Roster.tsx` needs to pass
-one. A team-less `me` (anonymous, or logged in but not managing a team —
-see `specs/player-accounts.md`) is not an error state: the race screen
-shows a plain "you do not manage a team" message instead of an empty
-picker, `Roster.tsx` does the same instead of an empty grid, and the
-sidebar shows "No team / SPECTATING" instead of a team name.
+one.
+
+**A logged-in user with no team is redirected to `/claim`, not shown an
+error state.** `Login.tsx` and `Register.tsx` send an authenticated user
+straight to `/claim` instead of the dashboard when `me.team` is null;
+`Layout.tsx` applies the same redirect to every other route (`/roster`, a
+squad screen, anything else inside the app chrome) so a team-less user
+cannot reach a screen that would otherwise 403. `TEAM_LESS_ALLOWED_PATHS`
+in `Layout.tsx` is the escape hatch — `/login`, `/register` and `/claim`
+itself must stay reachable, or the redirect would bounce `/claim` back to
+itself. See `teams/README.md`, *Claiming a team*.
 
 **Writes need a CSRF token.** DRF's `SessionAuthentication` enforces CSRF
 for authenticated sessions, so any `POST`/`PUT` issued while logged in must

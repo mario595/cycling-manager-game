@@ -98,6 +98,11 @@ Every generation function takes an optional `rng: random.Random` so tests
 (and anything that wants a reproducible roster) can seed it; callers that
 do not care can omit it.
 
+`generate_roster` has two callers: `reset_riders` below, and
+`teams.services.claim_team` — a newly claimed team's roster is generated the
+same way, with the same quality spread, as a full population reset. See
+`teams/README.md`, *Claiming a team*.
+
 ## `reset_riders` — replacing the population
 
 ```bash
