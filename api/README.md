@@ -53,9 +53,7 @@ DRF routers and serializers that aggregate other apps' data for the SPA.
   order plus each team's points from it (`RaceResultsSerializer`,
   `RaceResultsView`). A race that has not reached `FINISHED` is a `404`, not
   a `200` with an empty list — "no results yet" and "no such race" would
-  otherwise look the same to the SPA. `IsAuthenticated`, the project
-  default — unlike the clock/position/calendar endpoints, a race result has
-  no "shop window" reason to be public.
+  otherwise look the same to the SPA. `IsAuthenticated`, the project default.
 - `GET /api/competitions/standings/` — the current season's points table
   (`StandingsSerializer`, `StandingsView`, serializing
   `competitions.services.standings`). Same `state` vocabulary as
@@ -63,7 +61,7 @@ DRF routers and serializers that aggregate other apps' data for the SPA.
   just finished, with its final table), or `no_season` (`standings: []`).
   `rank` is computed server-side from the sorted order — two teams level on
   points and countback are genuinely joint, and the server is where that is
-  known. `IsAuthenticated`, same reasoning as the results endpoint above.
+  known. `IsAuthenticated`, like every endpoint the SPA reads.
 - `POST /api/accounts/register/`, `POST /api/accounts/login/`,
   `POST /api/accounts/logout/` — owned by `accounts/`, included here under
   `/api/accounts/`. See `accounts/README.md`.
@@ -111,13 +109,20 @@ after it would silently return the SPA's `index.html` instead of JSON.
 ## Authentication
 
 The project default (`REST_FRAMEWORK["DEFAULT_PERMISSION_CLASSES"]` in
-`config/settings/base.py`) is `IsAuthenticated`. Three endpoints override it
-with `AllowAny`, **by design, not as a placeholder**: the clock, the season
-position, and the calendar. World data like this is the game's shop window —
-meant to be visible to a visitor deciding whether to sign up — so it stays
-public even though a login flow now exists. Any future endpoint here should
-default to the project's `IsAuthenticated` unless it has the same reason
-these three don't.
+`config/settings/base.py`) is `IsAuthenticated`. The game exposes nothing to
+an anonymous visitor: the clock, season position and calendar endpoints used
+to override the default with `AllowAny`, but that is **deliberately
+reversed** — a visitor who is not logged in gets a 403 from every data
+endpoint here. If a future landing page wants shop-window world data for
+visitors again, reopen that deliberately, not by assuming today's
+auth-on-everything is an oversight.
+
+`MeView` is the single exception, and it **must remain** `AllowAny`. It is
+the endpoint that answers "nobody is logged in": the SPA fetches it on mount
+and the route guard depends on that answer, so making it `IsAuthenticated`
+would 403 the one request that tells the app to show the login screen, and
+the app would never boot for a visitor. Its `@ensure_csrf_cookie` is
+likewise load-bearing for writes (see *CSRF* below).
 
 `SquadView` and `RiderListView` are both plain `IsAuthenticated`, with the
 team always `request.user.team` rather than a URL parameter or query string —

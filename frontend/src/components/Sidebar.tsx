@@ -1,7 +1,6 @@
 import { NavLink } from 'react-router-dom'
 
 import { NAV_SECTIONS } from '../navigation'
-import { TEAM } from '../placeholderData'
 import { color, font } from '../theme'
 import { useAuth } from '../useAuth'
 import { useClock } from '../useClock'
@@ -41,7 +40,7 @@ interface SidebarProps {
 
 export function Sidebar({ mobile, open, onNavigate }: SidebarProps) {
   const { now, error } = useClock()
-  const dateLabel = now && !error ? formatGameDate(now) : TEAM.season
+  const dateLabel = now && !error ? formatGameDate(now) : ''
   const { me, logout } = useAuth()
   const team = me?.team ?? null
 
@@ -94,9 +93,6 @@ export function Sidebar({ mobile, open, onNavigate }: SidebarProps) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
           <div style={{ fontWeight: 600, fontSize: 14.5, letterSpacing: '-0.2px' }}>
             {team ? team.name : 'No team'}
-          </div>
-          <div style={{ color: color.mutedStrong, fontSize: 11, fontFamily: font.mono }}>
-            {team ? TEAM.tier : 'SPECTATING'}
           </div>
         </div>
       </div>
@@ -163,26 +159,6 @@ export function Sidebar({ mobile, open, onNavigate }: SidebarProps) {
                       />
                       <span>{item.name}</span>
                     </span>
-                    {item.badge ? (
-                      <span
-                        style={{
-                          background: color.accent,
-                          color: color.ink,
-                          fontSize: 10,
-                          fontWeight: 700,
-                          minWidth: 18,
-                          height: 18,
-                          borderRadius: 9,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          padding: '0 5px',
-                          fontFamily: font.mono,
-                        }}
-                      >
-                        {item.badge}
-                      </span>
-                    ) : null}
                   </>
                 )}
               </NavLink>

@@ -1,13 +1,13 @@
 # Frontend
 
-The React SPA. Currently a **scaffold**: it reproduces the mockup in
-`design/` and proves navigation works. No screen talks to the database.
+The React SPA, served by Django from `frontend/dist/`: seven built screens,
+all reading the real API. No screen renders invented data.
 
 ## What exists
 
 | Route | Screen | State |
 |-------|--------|-------|
-| `/` | Dashboard | Built — full layout from the design, fixture data |
+| `/` | Dashboard | Built — season, standings, next race and squad status from the API, no fixture data |
 | `/roster` | Roster | Built — filter, sort and rider detail panel, from the API, no fixture data |
 | `/staff` | Staff | Built — hire/fire a trainer, from the API, no fixture data |
 | `/calendar` | Calendar | Built — twelve weeks from the API, no fixture data |
@@ -16,13 +16,13 @@ The React SPA. Currently a **scaffold**: it reproduces the mockup in
 | `/results` | Results | Built — the most recently finished race's order and points, from the API, no fixture data |
 | `/login`, `/register` | Login, Register | Built — real accounts, no fixture data |
 | `/claim` | ClaimTeam | Built — real claim, no fixture data |
-| everything else, including the `/race` sidebar item itself | `Placeholder` | Renders the route name and path |
+| anything else | — | Redirects to `/` |
 
 `/race/:raceId` is the first **parameterised** route, so it is registered as
 an explicit `<Route>` in `App.tsx` rather than through `SCREENS` — that map
 generates one route per nav item by path, which has nowhere to put a
-`:raceId`. The sidebar's own `/race` item still lands on `Placeholder`;
-`Race.tsx` is reached only by clicking a race on the calendar. `/login` and
+`:raceId`. It is reached by clicking a race on the calendar or the next-race
+card on the dashboard. `/login` and
 `/register` are explicit routes for the same reason: neither is a nav item,
 so neither belongs in the sidebar.
 
@@ -42,15 +42,35 @@ the roster both derive the team from the session on the server
 (`api/README.md`), so neither `Race.tsx` nor `Roster.tsx` needs to pass
 one.
 
-**A logged-in user with no team is redirected to `/claim`, not shown an
-error state.** `Login.tsx` and `Register.tsx` send an authenticated user
-straight to `/claim` instead of the dashboard when `me.team` is null;
-`Layout.tsx` applies the same redirect to every other route (`/roster`, a
-squad screen, anything else inside the app chrome) so a team-less user
-cannot reach a screen that would otherwise 403. `TEAM_LESS_ALLOWED_PATHS`
-in `Layout.tsx` is the escape hatch — `/login`, `/register` and `/claim`
-itself must stay reachable, or the redirect would bounce `/claim` back to
-itself. See `teams/README.md`, *Claiming a team*.
+**An unknown visitor and a team-less manager are both bounced out of the
+app chrome by `Layout.tsx`.** Two guards compose there, in a fixed order,
+and `loading` gates both:
+
+```tsx
+if (loading) return null          // identity not yet established — redirect nothing
+if (!me?.authenticated && !ANON_ALLOWED_PATHS.has(pathname)) {
+  return <Navigate to="/login" replace state={{ from: pathname }} />
+}
+if (me?.authenticated && !me.team && !TEAM_LESS_ALLOWED_PATHS.has(pathname)) {
+  return <Navigate to="/claim" replace />
+}
+```
+
+Order is load-bearing. `useAuth` starts with `me === null, loading === true`,
+so on the very first render of a hard page refresh `!me?.authenticated` is
+true for *everyone*, including a logged-in manager. Without the `loading`
+check first, a refresh would bounce a logged-in manager to `/login` before
+`getMe()` returns. A failed `getMe()` leaves `me === null` after loading
+settles, which correctly falls through to the login redirect.
+
+`ANON_ALLOWED_PATHS` (`/login`, `/register`) is the escape hatch for
+visitors, and `TEAM_LESS_ALLOWED_PATHS` (`/login`, `/register`, `/claim`)
+for managers with no team — `/claim` must stay reachable or its own
+redirect bounces back to itself. See `teams/README.md`, *Claiming a team*.
+The guard passes the attempted path to the login screen in router location
+state (`state: { from: pathname }`), and `Login.tsx` reads it, so login
+returns the manager where they were headed; someone who visits `/login`
+directly has no `from` and lands on `/`.
 
 **Writes need a CSRF token.** DRF's `SessionAuthentication` enforces CSRF
 for authenticated sessions, so any `POST`/`PUT` issued while logged in must
@@ -62,37 +82,22 @@ set yet (that endpoint's `@ensure_csrf_cookie` guarantees it will be after).
 Anything that issues a write should go through `writeJson`, not a bare
 `fetch`.
 
-Every sidebar item routes somewhere real. Items without a screen land on
-`Placeholder`, which prints the path it resolved — so a click that "does
-nothing" is visibly distinguishable from a broken route. That is deliberate:
-the alternative (falling back to the dashboard, as the mockup does) hides
-whether routing worked at all.
+Every sidebar item routes somewhere real, and an unknown path redirects to
+`/` — there is no `Placeholder` screen left to catch one. The redirect is
+deliberate: the alternative (trying to render a non-existent screen) is a
+blank page that hides whether routing worked at all.
 
 Adding a screen is one line: write the component and register it in `SCREENS`
-in `src/App.tsx`. Its placeholder disappears automatically.
+in `src/App.tsx`.
 
 ## Where the data comes from
 
-`src/placeholderData.ts` — **all of it invented**, copied from the mockup.
-`Dashboard.tsx` is now the main consumer; keeping every fake value in one
-module means the screens already have their real shapes, and wiring them up
-later is a matter of replacing that module with fetches rather than hunting
-literals through JSX.
-
-`TEAM` is now **partly real**: `Layout.tsx`/`Sidebar.tsx` read team identity
-(name, code) and the manager's name from `useAuth()`'s `me` when a session
-exists, and only fall back to `TEAM`'s fake values for fields nothing
-real supplies yet — budget (`economy/` doesn't exist) and tier
-(`competitions/` doesn't exist). A future economy/competitions feature
-replaces those two fields the same way this one replaced the rest.
-
-The rider half of this file (`Rider`, `RIDER_SEEDS`, `SQUAD`, `SPEC_FILTERS`,
-`SortKey`, `SORT_OPTIONS`, `WAGE_BILL`) is **gone**, not just unused —
-`/roster` reads real riders via `src/useRoster.ts` and `GET /api/riders/`
-(see `api/README.md`), and the fixture shape it used to have (an invented
-"overall rating", form, condition, wage) does not exist in the real data
-at all; see `specs/rider-attributes.md`, which cuts an overall rating
-outright.
+`src/placeholderData.ts` is **gone** — it was the mockup's invented values,
+and this ticket deleted it along with the last screen that consumed it. No
+screen renders an invented value. `Dashboard.tsx` composes the same live
+hooks everyone else uses: `useSeason` for the week label, `useStandings` for
+the manager's own rank and points, `useCalendar` (via `src/nextRace.ts`) for
+the next race, and `useNextRaceSquad` for whether that race's squad is set.
 
 `/calendar` and `/roster` render nothing while loading or on error, rather
 than inventing a shape — `src/useCalendar.ts` and `src/useRoster.ts` both
@@ -149,6 +154,22 @@ npm --prefix frontend run build && .venv/bin/python manage.py runserver
   design repeats its hex codes inline; they are named once there instead.
 - **`src/navigation.ts` is the single source of truth** for the sidebar and
   the router both. A nav item cannot exist without a route.
+
+## Testing
+
+Vitest + React Testing Library + jsdom, configured in `vite.config.ts`'s
+`test` block (jsdom environment, `@testing-library/jest-dom` matchers via
+`src/setupTests.ts`). Tests live beside the code as `*.test.ts`/`*.test.tsx`
+in the flat `src/` layout. Run them with:
+
+```bash
+npm --prefix frontend test
+```
+
+The four hooks outside the components are pure or near-pure, which is
+deliberate: `src/nextRace.ts` is tested as a function with no rendering,
+`src/setupTests.ts` stubs `window.matchMedia`, and screens mock their data
+hooks rather than the `api.ts` fetch layer.
 
 ## Relationship to `design/`
 
