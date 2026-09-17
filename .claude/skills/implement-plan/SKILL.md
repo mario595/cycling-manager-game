@@ -328,15 +328,24 @@ agent's review, and the user's main checkout keeps its own data.
 ### 2. Give it something to look at
 
 A feature with an empty database is not reviewable. Before starting the server,
-make sure there is data to see.
+seed this worktree's database — see **AGENTS.md, *Seeding a world for testing***
+for the canonical list. The usual order:
 
-- Check what already exists: `manage.py help` lists the project's own commands.
-  There are already commands for setting a world up — `load_season`,
-  `mock_clock`, `tick`. **Prefer an existing command to inventing data.**
-- If you must create data, do it with a short script through `manage.py shell`,
-  and say exactly what you created.
-- **If logging in is needed, do not invent credentials.** Ask the user to run
-  `manage.py createsuperuser`, or tell them which existing account to use.
+```bash
+manage.py seed_user             # demo account: test@mail.com / 123456789
+manage.py seed_teams            # unmanaged teams with rosters, ready to claim
+manage.py seed_trainers         # hireable trainers in the pool
+manage.py load_season seasons/season-1.example.json   # season 1 and its races
+```
+
+Run the ones the feature touches (`seed_user` is idempotent; the others only
+add). If the feature needs data none of them provide, **extend the relevant
+domain's seed command and add it to AGENTS.md** — do not invent data by hand in
+the database. World-clock features additionally need
+`mock_clock set <season start>` and a `tick`.
+
+- **Logging in? Use the demo account `test@mail.com` / `123456789`.** Do not
+  invent credentials.
 
 ### 3. Build the frontend, if the frontend changed
 

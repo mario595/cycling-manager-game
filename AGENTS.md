@@ -90,6 +90,31 @@ Settings are split: `config/settings/base.py` holds what is shared, with
 `dev.py` (DEBUG, local Postgres defaults) and `prod.py` (env-driven credentials) on top.
 `manage.py` defaults to `config.settings.dev`.
 
+## Seeding a world for testing
+
+Before a feature can be tried by hand, the database needs data. Each domain owns
+its own seed script, which is additive and safe to re-run. From a worktree's
+root, in dependency order:
+
+```bash
+.venv/bin/python manage.py seed_user      # accounts: test@mail.com / 123456789
+.venv/bin/python manage.py seed_teams     # teams: unmanaged rosters ready to claim
+.venv/bin/python manage.py seed_trainers  # staff: hireable trainers in the pool
+.venv/bin/python manage.py load_season seasons/season-1.example.json  # schedule: season 1's twelve weeks and races
+```
+
+`seed_user` is idempotent; the others only add (`load_season` errors if the
+season is already declared — pass `--replace` while it has not started).
+`mock_clock set <season start>` and `tick` then settle the world, but only under
+`GAME_CLOCK_CLASS=world.clocks.MockClock`.
+
+**If a feature needs more data to be visible, extend the relevant domain's seed
+script and note it here**, rather than inventing data by hand in a database.
+
+**Agent setup when building the review environment:** create the worktree's
+database and migrations, then run these seeds before starting the server. See
+`.opencode/skills/implement-plan/SKILL.md` (and its `.claude/` twin).
+
 ## Game Domains
 
 Each domain is a Django app. **Apps are created when a feature needs them**, not
