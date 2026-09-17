@@ -100,9 +100,11 @@ strength. Nothing announces the difference in words; the results do.
 ## Rules and edge cases
 
 **Recovery happens on the weekly tick, not continuously.** A rider's
-freshness updates when a game week opens, for however many weeks were
-missed if the world fell behind — the same batching the age curve already
-uses for weekly growth. There is no freshness change mid-week.
+freshness updates when a game week opens, one week at a time if the world
+fell behind and several weeks need applying — the same per-week handling
+weekly training ([#36](https://github.com/mario595/cycling-manager/issues/36))
+now uses, since recovery, like training, has to reflect what actually
+happened in each individual week. There is no freshness change mid-week.
 
 **Racing and recovering in the same week.** A rider who races this week
 loses freshness for the race; whether they also recover that same week is
