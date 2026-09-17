@@ -4,10 +4,10 @@
 
 `Rider` — persisted riders mirroring the race engine's attributes, plus
 everything the engine does not know about: speciality, build, age, and a set
-of currently-inert hidden traits. Generation (`generation.py`), the display
-mapping (`display.py`), and the `reset_riders` management command. Not
-squads or race results (`racing/`), not the race simulation itself
-(`race_engine/`).
+of hidden traits. Generation (`generation.py`), the display mapping
+(`display.py`), the age curve (`services.py`), and the `reset_riders`
+management command. Not squads or race results (`racing/`), not the race
+simulation itself (`race_engine/`).
 
 ## Visible vs hidden
 
@@ -18,28 +18,26 @@ Every rider carries two kinds of attribute:
   `positioning`). These are what `api.RiderSerializer` and
   `api.SquadRiderSerializer` ship to the player.
 - **Hidden**: `potential`, `peak_age`, `decline_rate`, `injury_proneness`,
-  `training_affinity`. **Never add one of these to a serializer.** The
-  whole premise of `specs/rider-attributes.md` is that the player cannot
-  see them — a hidden trait leaking onto a screen is a defect, not a
-  convenience for debugging. Look at them in Django admin instead.
+  `training_affinity`, `growth_debt`. **Never add one of these to a
+  serializer.** The whole premise of the hidden-trait design is that the
+  player cannot see them — a hidden trait leaking onto a screen is a
+  defect, not a convenience for debugging. Look at them in Django admin
+  instead.
 
-As of this ticket ([#57](https://github.com/mario595/cycling-manager/issues/57))
-the hidden traits are generated and stored, but **nothing reads them yet**.
-They exist so a rider generated today does not need regenerating when a
-later feature starts reading one:
+`potential`, `peak_age` and `decline_rate` are live: `services.py` reads
+them every week to grow or decline a rider's attributes, and `age`
+advances once per season — see *The age curve*, below.
+`injury_proneness` and `training_affinity` are still inert, waiting on
+injuries ([#41](https://github.com/mario595/cycling-manager/issues/41))
+and weekly training
+([#36](https://github.com/mario595/cycling-manager/issues/36))
+respectively. `growth_debt` is an implementation detail of the age curve,
+not a game concept — see below.
 
-- `potential`, `peak_age`, `decline_rate` become live in growth/decline
-  ([#58](https://github.com/mario595/cycling-manager/issues/58)).
-- `injury_proneness` becomes live in injuries
-  ([#41](https://github.com/mario595/cycling-manager/issues/41)).
-- `training_affinity` becomes live in weekly training
-  ([#36](https://github.com/mario595/cycling-manager/issues/36)).
-
-`specs/rider-attributes.md`'s rule that *every hidden trait must be
-inferable* — a hidden value with no observable consequence is an unfair
-dice roll, not depth — applies from the point each trait goes live, not
-before. It is a bar #58/#41/#36 must each clear, not one this ticket claims
-to meet.
+The rule that *every hidden trait must be inferable* — a hidden value with
+no observable consequence is an unfair dice roll, not depth — applies from
+the point each trait goes live, not before. It is a bar #41 and #36 must
+each clear when they land; growth/decline (#58) clears it now.
 
 ## Display scale: stored 1-100, shown 0-10
 
@@ -54,9 +52,9 @@ reimplement it.
 This is deliberate lossiness, not a rounding bug: two riders at 71 and 74
 both show 7, and a rider is not shown to have reached a level until their
 stored value actually gets there (58 shows 5, not 6). The roster cannot
-offer a meaningful sort on a raw attribute number, and growth (see
-`specs/rider-growth-and-decline.md`, #58) arrives as an occasional visible
-jump rather than a number that visibly creeps every week.
+offer a meaningful sort on a raw attribute number, and growth (see *The
+age curve*, below) arrives as an occasional visible jump rather than a
+number that visibly creeps every week.
 
 **Do not rescale the stored values to make display simpler.** A stored
 range change invalidates the verified realism balance across all six
@@ -67,6 +65,58 @@ instead.
 **`staff.Trainer` shares this exact convention** — a trainer's five skills
 are stored 1-100 and shown 0-10 through this same `to_display_scale`, not a
 second mapping. See `staff/README.md`, *Stored 1-100, displayed 0-10*.
+
+## The age curve
+
+`services.py` moves every rider's five attributes a little each week, along
+a curve individual to that rider — driven entirely by their existing
+`potential`, `peak_age` and `decline_rate`, with no new hidden trait
+([#58](https://github.com/mario595/cycling-manager/issues/58)). No new API
+field or frontend surface exists for this: the player only ever sees the
+changed numbers, never a report of what moved.
+
+**Two halves, joined at `peak_age`, not one polynomial.** Below `peak_age`,
+`weekly_deltas` closes a fraction of the remaining gap to a per-attribute
+ceiling; at or above it, attributes fall at a rate scaled by
+`decline_rate` and by years past peak, capped at `DECLINE_YEARS_CAP` (3)
+so decline keeps accelerating for a rider newly past their peak — where it
+matters for a manager's decision — without compounding without bound the
+longer a rider has been retired-in-all-but-name. Growth speed and decline
+speed are governed by different hidden traits and must be tunable apart —
+a rider's `potential` says nothing about how fast they fall once they're
+past their best. Both constants are tuned so a season of growth or
+decline for the *representative* case — a young rider well below
+potential, or an average-`decline_rate` veteran comfortably past peak —
+lands at roughly one to two points on the display scale (10-20 stored
+points), the band `specs/rider-growth-and-decline.md` promised before it
+was deleted post-implementation (see `AGENTS.md`, *Closing a ticket*); a
+rider with a near-maximum `decline_rate` can still lose somewhat more.
+
+**The ceiling is per-attribute, not `potential` itself.** `potential` is
+one number; a rider has five attributes. `attribute_ceilings()` scales it
+by the same `SPECIALITY_PROFILES` weights that shaped the rider's starting
+attributes (`generation.py`), so a Climber's climb ceiling sits well above
+their sprint ceiling. Growing every attribute toward `potential` directly
+would flatten every rider into the same profile by their peak age and
+destroy speciality — this is the load-bearing decision of the whole
+feature.
+
+**`growth_debt` carries the fraction a week doesn't round to.** A week's
+movement is usually well under one stored point. `apply_weekly_growth`
+adds each week's delta into `growth_debt`, moves out whole points, and
+keeps the remainder — so twelve weeks of 0.6 becomes 7 stored points
+instead of being rounded to 0 every week or inflated to 12. It is hidden
+and never serialized, like every other trait in this section.
+
+`riders/` knows nothing about weeks, seasons or the clock — `apply_weekly_growth(weeks)`
+and `advance_ages()` are pure with respect to time; `world.services.tick()`
+is what decides when to call them and how many weeks have passed. This
+keeps the dependency direction in `AGENTS.md` intact: `riders/` may not
+import `schedule/` or `world/`.
+
+**Decline has no floor, and there is no retirement.** A rider can decline
+indefinitely toward the bottom of the range and sit on a roster, unusable,
+forever — deliberately out of scope here. See *Future work*, below.
 
 ## Generation
 
@@ -140,3 +190,12 @@ command is an entry point, the same latitude
   `generation.py` are structured as one entry per country specifically so
   that adding one is a choices-list and name-pool edit, not a migration or
   a `generate_rider` signature change.
+- **Retirement.** Decline has no floor and no exit today — a rider can
+  fall indefinitely and stay on the roster, unusable, forever. Belongs to
+  a dedicated retirement feature ([#42](https://github.com/mario595/cycling-manager/issues/42)),
+  not to the age curve itself.
+- **A visible "what moved" summary.** Growth and decline currently surface
+  only as changed numbers a player has to notice for themselves. Fold this
+  into weekly training's ([#36](https://github.com/mario595/cycling-manager/issues/36))
+  Training-page summary once it exists, so both weekly mechanisms report
+  through one list rather than two.

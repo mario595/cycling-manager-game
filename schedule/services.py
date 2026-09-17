@@ -14,7 +14,7 @@ from datetime import datetime
 
 from django.db import IntegrityError, transaction
 
-from .models import Season, SeasonTransition, Week
+from .models import Season, SeasonTransition, Week, WeekTransition
 
 
 @dataclass(frozen=True)
@@ -81,4 +81,33 @@ def process_transitions(at: datetime) -> list[SeasonTransition]:
             except IntegrityError:
                 # Another tick got there first. Correct outcome, not an error.
                 continue
+    return written
+
+
+def process_week_transitions(at: datetime) -> list[WeekTransition]:
+    """Record every week boundary opened at or before `at` that has not
+    been recorded yet, oldest first.
+
+    Exactly-once comes from the unique constraint on `week`, NOT from the
+    exclude() below — that only keeps the common case cheap. A concurrent
+    tick loses the race at the INSERT and moves on. One atomic() per
+    create, never one around the loop: an IntegrityError poisons the
+    enclosing transaction in Django. Same shape as process_transitions;
+    see schedule/README.md, *Week transitions*.
+    """
+    written: list[WeekTransition] = []
+    weeks = (
+        Week.objects.filter(starts_at__lte=at)
+        .exclude(transitions__isnull=False)
+        .order_by("starts_at")
+    )
+    for week in weeks:
+        try:
+            with transaction.atomic():
+                written.append(
+                    WeekTransition.objects.create(week=week, occurred_at=week.starts_at)
+                )
+        except IntegrityError:
+            # Another tick got there first. Correct outcome, not an error.
+            continue
     return written

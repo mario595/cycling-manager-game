@@ -122,3 +122,36 @@ class SeasonTransition(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.season} {self.kind}"
+
+
+class WeekTransition(models.Model):
+    """The exactly-once record of a week opening.
+
+    Written only by `schedule.services.process_week_transitions()`, called
+    from `world.services.tick()`. The weekly counterpart of
+    `SeasonTransition` — see `schedule/README.md`, *Week transitions* — but
+    a week has only one kind of boundary (it opens; nothing closes it), so
+    the unique constraint is on `week` alone, not `(week, kind)`.
+
+    Not a `TimeStampedModel`, matching `Week` itself: created only once,
+    alongside the tick that first notices the boundary, and never touched
+    again.
+    """
+
+    week = models.ForeignKey(Week, on_delete=models.CASCADE, related_name="transitions")
+    occurred_at = models.DateTimeField(
+        help_text="Game time the week opened — the week's own starts_at, not the moment the tick noticed.",
+    )
+    recorded_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="Real time the tick wrote this row.",
+    )
+
+    class Meta:
+        ordering = ["-occurred_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["week"], name="unique_week_transition"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.week} opened"

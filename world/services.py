@@ -21,8 +21,9 @@ from django.utils.module_loading import import_string
 from competitions.services import score_race
 from racing.models import Race
 from racing.services import simulate_race
+from riders.services import advance_ages, apply_weekly_growth
 from schedule.models import SeasonTransition
-from schedule.services import process_transitions
+from schedule.services import process_transitions, process_week_transitions
 from staff.services import top_up_pool
 
 from .clocks import Clock
@@ -115,6 +116,17 @@ def tick() -> TickRun:
     for _ in transitions:
         top_up_pool()
 
+    # Ageing before growth, so a rider who turned 33 at this boundary is
+    # evaluated against their new age this same tick.
+    closed = [t for t in transitions if t.kind == SeasonTransition.Kind.CLOSED]
+    riders_aged = 0
+    for _ in closed:
+        riders_aged = advance_ages()
+
+    weeks = process_week_transitions(at)
+    if weeks:
+        apply_weekly_growth(weeks=len(weeks))
+
     reclaimed = _reclaim_unfinished()
     claimed = _claim(limit=max(0, max_races - len(reclaimed)), at=at)
     capped = len(reclaimed) + len(claimed) >= max_races
@@ -123,6 +135,8 @@ def tick() -> TickRun:
         races_started=len(claimed),
         seasons_opened=sum(1 for t in transitions if t.kind == SeasonTransition.Kind.OPENED),
         seasons_closed=sum(1 for t in transitions if t.kind == SeasonTransition.Kind.CLOSED),
+        weeks_processed=len(weeks),
+        riders_aged=riders_aged,
     )
     _execute(reclaimed + claimed, run, at=at)
     run.capped = capped

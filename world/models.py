@@ -57,6 +57,14 @@ class TickRun(models.Model):
     )
     seasons_opened = models.PositiveSmallIntegerField(default=0)
     seasons_closed = models.PositiveSmallIntegerField(default=0)
+    weeks_processed = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="How many week boundaries this tick recorded (#58).",
+    )
+    riders_aged = models.PositiveIntegerField(
+        default=0,
+        help_text="How many riders had their age advanced this tick (#58).",
+    )
     error = models.TextField(
         blank=True, default="",
         help_text="Traceback if the run failed. Empty on success.",

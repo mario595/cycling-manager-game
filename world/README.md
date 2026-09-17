@@ -19,9 +19,14 @@ that finds and processes due work: `world/clocks.py` (`Clock`, `RealClock`,
 management commands. No calendar, no AI decisions — later work for this app
 (see `AGENTS.md`).
 
-The tick also records season boundaries as they're crossed, via
-`schedule.services.process_transitions()` — see `schedule/README.md` for
-what a season transition is and why it's a row rather than an action.
+The tick also records season and week boundaries as they're crossed, via
+`schedule.services.process_transitions()` and
+`process_week_transitions()` — see `schedule/README.md` for what a
+transition is and why it's a row rather than an action — and, off the back
+of those, advances every rider's age at a season close and every rider's
+attributes each week
+([#58](https://github.com/mario595/cycling-manager/issues/58); see
+`riders/README.md`, *The age curve*).
 
 ## The clock discipline rule
 
@@ -67,7 +72,7 @@ a millisecond apart would almost never compare equal.
 ## How a tick works
 
 `manage.py tick` — the only entry point cron, or a developer, ever calls —
-reads `now()` once, then finds and processes whatever is due, in three steps:
+reads `now()` once, then finds and processes whatever is due, in four steps:
 
 0. **Transitions** — `schedule.services.process_transitions(at)` records any
    season boundary crossed at or before `now()` that hasn't been recorded
@@ -81,11 +86,27 @@ reads `now()` once, then finds and processes whatever is due, in three steps:
    most once ever, so a tick that runs twice, or catches up several weeks
    late, cannot top up the trainer pool twice for the same boundary. See
    `staff/README.md`.
-1. **Claim** — inside one transaction, holding a row lock on the due race
+1. **Ageing and growth** — for every `CLOSED` transition `process_transitions`
+   returned, every rider's age advances by one
+   (`riders.services.advance_ages()`). Then
+   `schedule.services.process_week_transitions(at)` records any week
+   boundary opened at or before `now()` that hasn't been recorded yet (see
+   `schedule/README.md`, *Week transitions*); if any were recorded,
+   `riders.services.apply_weekly_growth(weeks=len(weeks))` moves every
+   rider's attributes along their age curve
+   ([#58](https://github.com/mario595/cycling-manager/issues/58); see
+   `riders/README.md`, *The age curve*) — one call for however many weeks
+   were missed, not one call per week. Ageing runs before growth, so a
+   rider who turned 33 at this same boundary is evaluated against the new
+   age immediately. Neither step touches a race row, so both run outside
+   the claim transaction below, the same as race simulation does and for
+   the same reason: a full-table update must not extend the lock window
+   race claiming holds.
+2. **Claim** — inside one transaction, holding a row lock on the due race
    rows themselves (not a clock row — there is no longer one to lock in
    production): every `scheduled` race whose `starts_at` is at or before
    `now()` is flipped to `running`, up to `catch_up_max_races` at a time.
-2. **Execute** — outside any transaction: simulate each claimed race,
+3. **Execute** — outside any transaction: simulate each claimed race,
    record its result, then score it (`competitions.services.score_race`).
 
 **Scoring happens here, not inside `racing.services.simulate_race`.**

@@ -2,11 +2,12 @@
 
 ## What this app owns
 
-`Season`, `Week`, and `SeasonTransition` — the numbered periods racing
-happens inside, and the exactly-once record of when one opens or closes —
-plus the race calendar: which races a season's declaration file places into
-which week and day. Not the race itself as a model (that is `racing.Race`,
-which a week's `races` points at), and not the clock (`world/`).
+`Season`, `Week`, `SeasonTransition` and `WeekTransition` — the numbered
+periods racing happens inside, and the exactly-once record of when a
+season opens or closes and when a week opens — plus the race calendar:
+which races a season's declaration file places into which week and day.
+Not the race itself as a model (that is `racing.Race`, which a week's
+`races` points at), and not the clock (`world/`).
 
 ## Derived, not stored
 
@@ -50,13 +51,34 @@ runs three weeks late still records the moment the season actually opened
 or closed, not how late the tick was. (`recorded_at`, separately, is
 `auto_now_add` real time — the gap between the two is exactly how late.)
 
-## The transition hook ships empty
+## Season close now advances every rider's age
 
-Nothing happens at a season boundary today beyond the `SeasonTransition`
-row being written. That row is the hook later features (promotion/
-relegation, contract renewal, salary reviews — all out of scope here, see
-`specs/season.md`) will attach to. Shipping it empty is deliberate, not an
-oversight.
+A season boundary is no longer inert: `world.services.tick()` reads the
+`CLOSED` transitions `process_transitions()` returns and, for each one,
+calls `riders.services.advance_ages()` — every rider in the game, rostered
+or free agent, one year older. Promotion/relegation, contract renewal and
+salary reviews (out of scope here, see `specs/season.md`) remain
+unattached; season close is not fully empty any more, but it is still far
+from full.
+
+## Week transitions
+
+`WeekTransition` is the weekly counterpart of `SeasonTransition`: an
+exactly-once record that a `Week` has opened, written by
+`process_week_transitions()` and read by `world.services.tick()` to drive
+weekly rider growth and decline
+([#58](https://github.com/mario595/cycling-manager/issues/58)). A week has
+only one kind of boundary — it opens; nothing closes it — so the unique
+constraint is on `week` alone, not `(week, kind)` the way
+`SeasonTransition` needs for two kinds.
+
+Same shape as *Exactly-once*, above: the `UniqueConstraint` is the
+guarantee, not the `exclude()` in `process_week_transitions()`, which only
+keeps the common case cheap. `occurred_at` is the week's own `starts_at` —
+the boundary that was crossed — never the `at` the tick passed in, for the
+same reason `SeasonTransition.occurred_at` isn't either: a tick running
+three weeks late must still record each week at the moment it actually
+started.
 
 ## Declaring a season
 

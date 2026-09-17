@@ -8,13 +8,26 @@ import world.services as world_services
 from competitions.models import RacePoints
 from racing.models import Race, RaceResult
 from riders.models import Rider
-from schedule.models import Season, SeasonTransition
+from schedule.models import SEASON_WEEKS, Season, SeasonTransition, Week
 from staff.generation import TRAINERS_PER_SEASON_BOUNDARY
 from staff.models import Trainer
 from teams.models import Team
 from world.clocks import MockClock
 from world.models import GameClock
 from world.services import get_clock, now, tick
+
+
+def make_season_with_weeks(number: int, starts_at) -> Season:
+    season = Season.objects.create(number=number, starts_at=starts_at)
+    for week_number in range(1, SEASON_WEEKS + 1):
+        week_start = season.starts_at + timedelta(weeks=week_number - 1)
+        Week.objects.create(
+            season=season,
+            number=week_number,
+            starts_at=week_start,
+            ends_at=week_start + timedelta(weeks=1),
+        )
+    return season
 
 
 @pytest.fixture
@@ -216,6 +229,136 @@ def test_tick_does_not_record_a_transition_twice(db):
     assert SeasonTransition.objects.filter(
         season=season, kind=SeasonTransition.Kind.OPENED,
     ).count() == 1
+
+
+@pytest.fixture
+def young_rider(db, team) -> Rider:
+    return Rider.objects.create(
+        name="Young Rider",
+        team=team,
+        speciality=Rider.Speciality.CLIMBER,
+        age=20,
+        peak_age=27,
+        potential=90,
+        decline_rate=50,
+        climb=40,
+        sprint=40,
+        flat=40,
+        resistance=40,
+        positioning=40,
+    )
+
+
+def test_a_tick_applies_one_week_of_growth(db, young_rider):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_one = season.weeks.get(number=1)
+    clock.set(week_one.starts_at + timedelta(hours=1))
+
+    run = tick()
+    young_rider.refresh_from_db()
+
+    assert run.weeks_processed == 1
+    # A young rider well below potential moves every week, even if the
+    # movement is too small to cross a whole stored point yet.
+    assert young_rider.climb > 40 or young_rider.growth_debt.get("climb", 0) > 0
+
+
+def test_a_tick_three_weeks_late_applies_three_weeks_of_growth(db, young_rider):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_four = season.weeks.get(number=4)
+    clock.set(week_four.starts_at + timedelta(hours=1))
+
+    run = tick()
+
+    assert run.weeks_processed == 4
+
+
+def test_two_ticks_in_the_same_week_apply_growth_once(db, young_rider):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_one = season.weeks.get(number=1)
+    clock.set(week_one.starts_at + timedelta(hours=1))
+
+    tick()
+    young_rider.refresh_from_db()
+    after_first = (young_rider.climb, dict(young_rider.growth_debt))
+
+    tick()
+    young_rider.refresh_from_db()
+    after_second = (young_rider.climb, dict(young_rider.growth_debt))
+
+    assert after_first == after_second
+
+
+def test_riders_age_when_a_season_closes(db, young_rider):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    clock.set(season.ends_at + timedelta(hours=1))
+
+    run = tick()
+    young_rider.refresh_from_db()
+
+    assert run.riders_aged == 1
+    assert young_rider.age == 21
+
+
+def test_riders_do_not_age_mid_season(db, young_rider):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_one = season.weeks.get(number=1)
+    clock.set(week_one.starts_at + timedelta(hours=1))
+
+    run = tick()
+    young_rider.refresh_from_db()
+
+    assert run.riders_aged == 0
+    assert young_rider.age == 20
+
+
+def test_growth_is_applied_before_races_are_simulated(db, young_rider, team, monkeypatch):
+    # A rider racing in the same tick their week's growth lands should
+    # race with that week's attributes already applied. weeks_processed
+    # and races_finished both being non-zero proves nothing about *order*
+    # (either call order would produce the same counts), so this records
+    # the actual call order and asserts growth happened first.
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_one = season.weeks.get(number=1)
+    for i in range(3):
+        Rider.objects.create(
+            name=f"Teammate {i}", team=team,
+            climb=60, sprint=60, flat=60, resistance=60, positioning=60,
+        )
+    Race.objects.create(
+        name="Week One Race",
+        course=[{"length": 500.0, "gradient": 0.0}],
+        starts_at=week_one.starts_at + timedelta(hours=1),
+        status=Race.Status.SCHEDULED,
+    )
+    clock.set(week_one.starts_at + timedelta(hours=1))
+
+    call_order: list[str] = []
+    original_apply_weekly_growth = world_services.apply_weekly_growth
+    original_simulate_race = world_services.simulate_race
+
+    def _record_growth(*args, **kwargs):
+        call_order.append("growth")
+        return original_apply_weekly_growth(*args, **kwargs)
+
+    def _record_race(*args, **kwargs):
+        call_order.append("race")
+        return original_simulate_race(*args, **kwargs)
+
+    monkeypatch.setattr("world.services.apply_weekly_growth", _record_growth)
+    monkeypatch.setattr("world.services.simulate_race", _record_race)
+
+    run = tick()
+
+    assert run.weeks_processed == 1
+    assert run.races_finished == 1
+    assert call_order == ["growth", "race"]
 
 
 def test_tick_tops_up_the_pool_when_a_season_opens(db):

@@ -43,11 +43,11 @@ class Rider(TimeStampedModel):
     being folded into the attributes handed to the engine at race time.
 
     The hidden traits (`potential`, `peak_age`, `decline_rate`,
-    `injury_proneness`, `training_affinity`) are stored but inert as of
-    #57 — nothing reads them yet. They exist so a rider generated today does
-    not need regenerating when #58 (growth/decline), #41 (injuries) and #36
-    (training) each start reading one. **Never add them to a serializer** —
-    see riders/README.md.
+    `injury_proneness`, `training_affinity`, `growth_debt`) are never
+    serialized — see riders/README.md. `potential`, `peak_age` and
+    `decline_rate` drive weekly growth and decline (#58);
+    `injury_proneness` and `training_affinity` remain inert until #41
+    (injuries) and #36 (training) each start reading one.
     """
 
     class Speciality(models.TextChoices):
@@ -106,24 +106,24 @@ class Rider(TimeStampedModel):
     age = models.PositiveSmallIntegerField(
         default=25,
         validators=[MinValueValidator(18), MaxValueValidator(40)],
-        help_text="Static as of #57. Advanced once per season by #58.",
+        help_text="Advanced by one for every rider when a season closes (#58).",
     )
 
     # --- Hidden, between-race traits (never serialized — see class docstring) ---
     potential = models.PositiveSmallIntegerField(
         default=70,
         validators=[MinValueValidator(1), MaxValueValidator(100)],
-        help_text="Hidden. The ceiling attributes grow toward once #58 lands.",
+        help_text="Hidden. Scaled per attribute by speciality shape to set the ceiling growth (#58) approaches.",
     )
     peak_age = models.PositiveSmallIntegerField(
         default=27,
         validators=[MinValueValidator(22), MaxValueValidator(34)],
-        help_text="Hidden. When growth turns to decline, once #58 lands.",
+        help_text="Hidden. Below this age attributes grow toward potential; at or above it they decline (#58).",
     )
     decline_rate = models.PositiveSmallIntegerField(
         default=50,
         validators=[MinValueValidator(1), MaxValueValidator(100)],
-        help_text="Hidden. Higher falls away faster past peak_age, once #58 lands.",
+        help_text="Hidden. Higher falls away faster past peak_age (#58).",
     )
     injury_proneness = models.PositiveSmallIntegerField(
         default=50,
@@ -135,6 +135,16 @@ class Rider(TimeStampedModel):
         help_text=(
             "Hidden. {attribute_name: weight} over ENGINE_ATTRIBUTES, read by "
             "weekly training once #36 lands."
+        ),
+    )
+    growth_debt = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Hidden. {attribute_name: float} over ENGINE_ATTRIBUTES — fractional "
+            "weekly growth/decline (#58) not yet large enough to move the stored "
+            "integer attribute. A missing key reads as 0.0. Empty until the first "
+            "week of growth runs, so blank is this field's normal starting state."
         ),
     )
 
