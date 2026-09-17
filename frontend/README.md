@@ -186,11 +186,17 @@ the squad-selection widget the mockup shows, and only what `specs/squad-
 selection.md` (now folded into `racing/README.md`) actually specifies.
 Deliberately dropped, because the spec doesn't cover it: the mockup's
 eight-rider squads (the spec fixes four), per-rider suitability scores
-(course-aware assessment is #45), `INJURED`/`FATIGUED` states (#41), the
-course profile SVG, terrain/temperature/wind/tier/points facts, and the
+(course-aware assessment is #45), the course profile SVG,
+terrain/temperature/wind/tier/points facts, and the
 final classification table for a past race. `Race.tsx` shows only name,
 date, distance and status, and reuses the mockup's checkbox-row and
-★-to-set-leader interaction for the part that is in scope.
+★-to-set-leader interaction for the part that is in scope. Each candidate row
+additionally shows a `FIT` meter alongside the five attribute bars — the
+rider's freshness on the same 0-10 display scale, clipped apart from the
+engine attributes so it reads as a status marker rather than a sixth skill
+([#59](https://github.com/mario595/cycling-manager/issues/59); see
+`api/README.md`). The mockup's discrete `INJURED`/`FATIGUED` rider states
+(#41) are still not shown — freshness is a continuous meter, not a flag.
 
 The mockup's **Calendar** screen additionally shows things this feature does
 not have — multiple season cards with a switcher, win/podium/points stats, a

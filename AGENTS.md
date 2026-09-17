@@ -129,7 +129,7 @@ up front — an empty app is just noise. The table below marks which exist.
 | `racing/` | Racing | **built**, `README.md` | The seam between Django and the engine: race records, results, log storage, ORM↔dataclass adapter. |
 | `core/` | Core | **built** | Shared abstract models. Deliberately tiny. |
 | `accounts/` | Accounts | **built**, `README.md` | Custom `User`, login by email. Register, log in, log out. |
-| `riders/` | Riders | **built**, `README.md` | Persisted riders: engine attributes plus speciality, build, age, generation, the weekly age curve (growth/decline) and trainer-driven weekly training. Freshness (#59) still to come. |
+| `riders/` | Riders | **built**, `README.md` | Persisted riders: engine attributes plus speciality, build, age, generation, the weekly age curve (growth/decline), trainer-driven weekly training and rider freshness (fatigue and weekly recovery). |
 | `teams/` | Teams | **built**, `README.md` | Teams, codes, colours, manager link, and claiming an unmanaged team. Staff/tactics still to come. |
 | `transfers/` | Transfers | *not yet* | Market for buying/selling riders, auctions, contracts, free agents, market value. (The youth academy is a **development squad** and lives in `riders/`.) |
 | `competitions/` | Competitions | **built**, `README.md` | Race points and season standings, one Group. Divisions, multiple Groups, promotion/relegation, classifications and season history still to come. A **Division** is a tier; a **Group** is a parallel section within one. |

@@ -41,7 +41,10 @@ DRF routers and serializers that aggregate other apps' data for the SPA.
   `candidates` is the team's whole roster, each flagged `selected`/
   `is_leader`, so one response gives the squad screen everything it draws.
   Its five engine attributes are the 0-10 display scale, same as the riders
-  endpoint below — see `racing/README.md`, *Squads*.
+  endpoint below — see `racing/README.md`, *Squads*. Each candidate also
+  carries `freshness` on that same 0-10 display scale; the hidden
+  `recovery_rate` behind it never appears in this or any other payload — see
+  `riders/README.md`, *Freshness*.
 - `GET /api/riders/` — the **caller's own** team's roster (`RiderSerializer`,
   `RiderListView`). Same `team_for()` pattern as the squad endpoint: no team
   id in the URL, a caller with no team gets a 403. Attributes are shipped

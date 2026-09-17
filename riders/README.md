@@ -14,12 +14,12 @@ simulation itself (`race_engine/`).
 Every rider carries two kinds of attribute:
 
 - **Visible**: `speciality`, `nationality`, `height_cm`, `weight_kg`, `age`,
-  and the five engine attributes (`climb`, `sprint`, `flat`, `resistance`,
-  `positioning`). These are what `api.RiderSerializer` and
+  `freshness`, and the five engine attributes (`climb`, `sprint`, `flat`,
+  `resistance`, `positioning`). These are what `api.RiderSerializer` and
   `api.SquadRiderSerializer` ship to the player.
 - **Hidden**: `potential`, `peak_age`, `decline_rate`, `injury_proneness`,
-  `training_affinity`, `growth_debt`. **Never add one of these to a
-  serializer.** The whole premise of the hidden-trait design is that the
+  `training_affinity`, `recovery_rate`, `growth_debt`. **Never add one of
+  these to a serializer.** The whole premise of the hidden-trait design is that the
   player cannot see them — a hidden trait leaking onto a screen is a
   defect, not a convenience for debugging. Look at them in Django admin
   instead.
@@ -44,7 +44,10 @@ no observable consequence is an unfair dice roll, not depth — applies from
 the point each trait goes live, not before. Growth/decline (#58) and weekly
 training (#36) each clear it: `training_affinity`'s only observable
 consequence is how quickly a focused trainer's work accumulates, which the
-Training screen surfaces. #41 must clear the same bar when it lands.
+Training screen surfaces. `recovery_rate` is the newest entry: its only
+observable consequence is how fast `freshness` — a visible number that moves
+every week — climbs back up, so it clears the same bar. #41 must clear it too
+when it lands.
 
 ## Display scale: stored 1-100, shown 0-10
 
@@ -162,6 +165,53 @@ the fact — the "what moved" summary this readme's *Future work* once asked
 for. Because both mechanisms settle together, a listed change is the visible
 number moving, not an attribution of how much came from which; that split
 would be fake precision on a 0-10 scale and is deliberately not offered.
+
+## Freshness
+
+`freshness` is a rider's race readiness — a visible field, stored 1-100
+(default, and ceiling, 100 — the same range as the engine attributes) and
+mapped onto the 0-10 display scale for the player. `recovery_rate` (default
+50, hidden) is how much of that ground a rested week wins back. The two
+fields follow the same stored-1-100 / shown-0-10 convention as the engine
+attributes; the recovery rate is a *rate of change*, so it has no display
+scale and is never serialized ([#59](https://github.com/mario595/cycling-manager/issues/59)).
+
+**Cost and recovery are fixed constants in `services.py`, not field-tuned.**
+`RACE_FRESHNESS_COST` (25 stored points) is deducted from every finisher when
+their race is simulated (`racing.services.simulate_race`); a week's recovery
+is the rider's `recovery_rate` mapped linearly onto
+`[RECOVERY_MIN, RECOVERY_MAX]` = [8, 20], applied once per week by the tick
+to every rider who did **not** race that week. Because the recovery rate is
+hidden, a rider's max race-and-recover cadence varies from rider to rider:
+the fastest-recovering roster at 20/week can race ~1.3 times per week without
+net loss, the slowest at 8/week only once — a race almost always costs more
+than a single resting week returns, which is the point: consistent racing
+wears a rider down and a manager must rotate their four-rider squad between
+races within a twelve-week season.
+
+**Three hard limits.** `FRESHNESS_MAX` caps recovery; `FRESHNESS_FLOOR` (20)
+is where cost stops: a rider never drops below it, because below the floor
+they would be racing at a fixed minimum rather than a further-restricted
+one — races below it still cost the rider nothing extra (cost stops, rather
+than bouncing at the floor). `PENALTY_AT_FLOOR` (0.80) is the ceiling on how
+much fatigue can hold a rider back. `freshness_multiplier` maps stored
+freshness linearly onto `[PENALTY_AT_FLOOR, 1.0]` and breaks the
+inferability rule's *rate* half: the player watches freshness move on the
+squad screen and takes the consequences (weaker racing) without ever seeing
+the multiplier.
+
+**`riders/` never applies the penalty or the cost.** `services.py` owns the
+arithmetic and the weekly recovery pass; the *penalty* is applied in exactly
+one place — `racing.adapters.to_engine_rider` scales a rider's five engine
+attributes by their freshness as they cross into the engine — and the *cost*
+in exactly one place — `racing.services.simulate_race`, which deducts it from
+the finishers' stored freshness inside the same transaction that records
+results. The weekly pass lives where the week lives: `world/services.py`
+calls `apply_weekly_recovery` alongside `apply_weekly_growth`, excluding
+riders who finished a race in the week being settled. This keeps the
+dependency direction in `AGENTS.md` intact — `riders/` may not import
+`racing/` or `world/`, so the consumption and the recovery both live where
+the caller lives.
 
 ## Generation
 
