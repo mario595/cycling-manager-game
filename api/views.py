@@ -66,11 +66,8 @@ def team_for(user):
 
 
 class ClockView(APIView):
-    """The game's current time. Public by design: world data is meant to be
-    visible before signup, the game's shop window. Overrides the
-    project-wide IsAuthenticated default."""
-
-    permission_classes = [AllowAny]
+    """The game's current time. Requires a session: the game exposes nothing
+    to a visitor who is not logged in — see api/README.md, *Authentication*."""
 
     def get(self, request):
         return Response(ClockSerializer({"current": now()}).data)
@@ -78,10 +75,9 @@ class ClockView(APIView):
 
 class PositionView(APIView):
     """Where the world is in its season: in_season, off_season, or
-    no_season — see schedule/README.md. Public, for the same reason as
-    ClockView."""
-
-    permission_classes = [AllowAny]
+    no_season — see schedule/README.md. Requires a session: the game
+    exposes nothing to a visitor who is not logged in — see api/README.md,
+    *Authentication*."""
 
     def get(self, request):
         position = current_position(now())
@@ -117,10 +113,9 @@ def _week_payload(week) -> dict:
 
 class CalendarView(APIView):
     """The current season's whole calendar: all twelve weeks, each with the
-    race(s) on it — see schedule/README.md, *The race calendar*. Public,
-    for the same reason as ClockView."""
-
-    permission_classes = [AllowAny]
+    race(s) on it — see schedule/README.md, *The race calendar*. Requires a
+    session: the game exposes nothing to a visitor who is not logged in —
+    see api/README.md, *Authentication*."""
 
     def get(self, request):
         position = current_position(now())

@@ -27,6 +27,11 @@ export default defineConfig(({ command }) => ({
     outDir: 'dist',
     emptyOutDir: true,
   },
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: './src/setupTests.ts',
+  },
   server: {
     // race_player already owns 5173, so default elsewhere. PORT wins when set,
     // which is how the tooling assigns a free port.

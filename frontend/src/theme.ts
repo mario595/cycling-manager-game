@@ -70,15 +70,6 @@ export const riderStatus = {
 
 export type RiderStatus = keyof typeof riderStatus
 
-/** Inbox tag colours, keyed by tag. */
-export const inboxTag = {
-  TRANSFER: { bg: '#EDEAF6', fg: '#5C5386' },
-  MEDICAL: { bg: '#FAECE6', fg: '#A0553F' },
-  SPONSOR: { bg: '#E6F0EC', fg: '#2E6B58' },
-} as const
-
-export type InboxTag = keyof typeof inboxTag
-
 /**
  * The warmer, more saturated accent wash used for "this is happening right
  * now" emphasis on the calendar screen — the current week's rail and row,
@@ -109,11 +100,4 @@ export function barColor(value: number): string {
   if (value >= 80) return color.positive
   if (value >= 60) return color.accent
   return color.neutralBar
-}
-
-/** Same idea for form, which reads as bad rather than neutral when low. */
-export function formColor(value: number): string {
-  if (value > 70) return color.positive
-  if (value > 50) return color.accent
-  return color.negative
 }
