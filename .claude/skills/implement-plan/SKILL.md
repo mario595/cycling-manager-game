@@ -333,7 +333,7 @@ for the canonical list. The usual order:
 
 ```bash
 manage.py seed_user             # demo account: test@mail.com / 123456789
-manage.py seed_teams            # unmanaged teams with rosters, ready to claim
+manage.py seed_teams --claim-for test@mail.com   # one team for the demo account, the rest claimable
 manage.py seed_trainers         # hireable trainers in the pool
 manage.py load_season seasons/season-1.example.json   # season 1 and its races
 ```

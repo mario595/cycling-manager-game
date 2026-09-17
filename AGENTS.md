@@ -98,13 +98,15 @@ root, in dependency order:
 
 ```bash
 .venv/bin/python manage.py seed_user      # accounts: test@mail.com / 123456789
-.venv/bin/python manage.py seed_teams     # teams: unmanaged rosters ready to claim
+.venv/bin/python manage.py seed_teams --claim-for test@mail.com  # teams: one claimed for the demo account, the rest claimable
 .venv/bin/python manage.py seed_trainers  # staff: hireable trainers in the pool
 .venv/bin/python manage.py load_season seasons/season-1.example.json  # schedule: season 1's twelve weeks and races
 ```
 
 `seed_user` is idempotent; the others only add (`load_season` errors if the
 season is already declared — pass `--replace` while it has not started).
+`seed_teams --claim-for` gives the demo account a team and leaves the rest
+unmanaged, so a freshly registered player still has teams to claim.
 `mock_clock set <season start>` and `tick` then settle the world, but only under
 `GAME_CLOCK_CLASS=world.clocks.MockClock`.
 
