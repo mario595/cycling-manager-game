@@ -1,6 +1,6 @@
 # Strip the mock UI and require login — Implementation Plan
 
-**Spec:** `specs/strip-mock-ui-require-login.md` · **Issue:** #73 · **Status:** proposed
+**Spec:** `specs/strip-mock-ui-require-login.md` · **Issue:** #73 · **Status:** in progress
 **Apps touched:** `frontend/`, `api/`
 
 ## Context you need
@@ -344,7 +344,7 @@ empty.
 
 ## Work items
 
-### W1 — `frontend/`: add the test runner
+### W1 — `frontend/`: add the test runner — **done**
 
 Add `vitest`, `@testing-library/react`, `@testing-library/jest-dom` and `jsdom`
 to `devDependencies`; add `"test": "vitest run"` to scripts; add a `test` block
@@ -354,7 +354,7 @@ importing `@testing-library/jest-dom`).
 **Test:** `frontend/src/nextRace.test.ts` — a trivial case proving the runner
 executes. Lands first so every later item has somewhere to put its tests.
 
-### W2 — `frontend/src/nextRace.ts`: derive the next race
+### W2 — `frontend/src/nextRace.ts`: derive the next race — **done**
 
 New pure module per D5.
 
@@ -363,7 +363,7 @@ New pure module per D5.
 `returns null when every race has finished`, `returns null for a null calendar`,
 `orders races within a week by starts_at`.
 
-### W3 — `api/views.py`: close the three public endpoints
+### W3 — `api/views.py`: close the three public endpoints — **done**
 
 Remove `permission_classes = [AllowAny]` from `ClockView`, `PositionView` and
 `CalendarView`; rewrite their docstrings per D6.
@@ -377,7 +377,7 @@ in this file" breaks the app's ability to boot for a visitor.
 a logged-in client. Keep `test_me_reports_anonymous_for_a_visitor` passing
 unchanged — it is the regression test for D6's exception.
 
-### W4 — `frontend/src/components/Layout.tsx`: the session guard
+### W4 — `frontend/src/components/Layout.tsx`: the session guard — **done**
 
 Add `ANON_ALLOWED_PATHS` and the D2 guard block. Remove the `TEAM` import.
 
@@ -390,7 +390,7 @@ an anonymous visitor already on /login`, `allows /register anonymously`,
 mid-load` (the race condition: render with `loading: true, me: null` and assert
 no navigation occurred), `passes the attempted path in location state`.
 
-### W5 — `frontend/src/screens/Login.tsx`: return to the attempted page
+### W5 — `frontend/src/screens/Login.tsx`: return to the attempted page — **done**
 
 Read `location.state.from` per D3.
 
@@ -398,7 +398,7 @@ Read `location.state.from` per D3.
 manager to the page they attempted`, `sends them to / when there is no attempted
 page`, `sends a team-less manager to /claim even with an attempted page`.
 
-### W6 — `frontend/src/navigation.ts` + `Sidebar.tsx`: six items, no badges
+### W6 — `frontend/src/navigation.ts` + `Sidebar.tsx`: six items, no badges — **done**
 
 Reduce `NAV_SECTIONS` per the table; drop `badge` from `NavItem`; delete the
 badge rendering; remove `TEAM.tier` and the `TEAM.season` fallback per D8/D9.
@@ -407,7 +407,7 @@ badge rendering; remove `TEAM.tier` and the `TEAM.season` fallback per D8/D9.
 (asserting each `NAV_ITEMS` path is a key of a fixture list of built routes),
 `no section is empty`, `no item declares a badge`.
 
-### W7 — `frontend/src/App.tsx`: delete Placeholder, redirect unknown paths
+### W7 — `frontend/src/App.tsx`: delete Placeholder, redirect unknown paths — **done**
 
 Remove the import and both uses; add the catch-all `<Navigate to="/" replace />`
 **inside** the Layout route. Delete `screens/Placeholder.tsx`.
@@ -416,7 +416,7 @@ Remove the import and both uses; add the catch-all `<Navigate to="/" replace />`
 manager to the dashboard`, `an unknown path sends an anonymous visitor to
 /login` (proving the catch-all is inside the guard, per the App.tsx section).
 
-### W8 — `frontend/src/useNextRaceSquad.ts`: squad status for the next race
+### W8 — `frontend/src/useNextRaceSquad.ts`: squad status for the next race — **done**
 
 New hook per D4.
 
@@ -424,7 +424,7 @@ New hook per D4.
 is null`, `reports saved`, `reports not saved`, `reports null on a failed
 request`.
 
-### W9 — `frontend/src/screens/Dashboard.tsx`: rebuild from real data
+### W9 — `frontend/src/screens/Dashboard.tsx`: rebuild from real data — **done**
 
 Rewrite per the Dashboard section. Delete `placeholderData.ts`,
 `courseProfile.ts`, and `theme.ts`'s `inboxTag`/`formColor`.
@@ -440,7 +440,7 @@ the rest of the page while one block is still loading`.
 **Load-bearing:** the last case. It is what proves the per-block loading
 discipline from the Dashboard section rather than a single combined gate.
 
-### W10 — documentation
+### W10 — documentation — **done**
 
 Per the next section. Lands last so it describes what was actually built.
 

@@ -138,7 +138,7 @@ up front — an empty app is just noise. The table below marks which exist.
 | `staff/` | Staff | **built**, `README.md` | Trainers hireable from a shared pool into one fixed slot per team. Physios and scouts still to come. |
 | `world/` | World Simulation | **built**, `README.md` | The game clock and the tick. AI team decisions still to come. |
 | `api/` | API | **built**, `README.md` | DRF routers aggregating each app's serializers and views. |
-| `frontend/` | Frontend/UI | **scaffold**, `README.md` | The React SPA. Built to `frontend/dist/`, served by Django. Dashboard and Roster render from the mockup; everything else is a placeholder route. No DB yet. |
+| `frontend/` | Frontend/UI | **built**, `README.md` | The React SPA. Built to `frontend/dist/`, served by Django. Six real screens (dashboard, roster, staff, calendar, results, league table) plus squad selection, all from the API, no fixture data. Unknown paths redirect to `/`; every route requires a session. |
 
 ### Dependency direction
 
