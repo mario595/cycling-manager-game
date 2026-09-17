@@ -22,7 +22,12 @@ from competitions.services import score_race
 from racing.models import Race
 from racing.services import riders_who_raced, simulate_race
 from riders.models import Rider
-from riders.services import advance_ages, apply_weekly_growth, training_deltas
+from riders.services import (
+    advance_ages,
+    apply_weekly_growth,
+    apply_weekly_recovery,
+    training_deltas,
+)
 from schedule.models import SeasonTransition, Week
 from schedule.services import process_transitions, process_week_transitions
 from staff.models import Trainer, TrainingWeekReport
@@ -117,15 +122,18 @@ def _completed_week(week) -> Week | None:
 
 
 def _apply_training_week(week) -> int:
-    """One week's growth and training, settled together.
+    """One week's growth, training and freshness recovery, settled together.
 
     Iterated per week rather than collapsed into a count because each
-    week has its own focus and its own races — see the plan's Design
-    decision 3. Growth and the resulting report are keyed to `week` (the
-    rollover just crossed, preserving #58's one-growth-week-per-season-week
-    cadence); the *race* half reads the week that just completed, since
-    this week's races have not run yet. Returns how many riders had a
-    *displayed* value change, for TickRun.riders_trained.
+    week has its own focus, its own races and its own racers — see the
+    plan's Design decision 3. Growth and the resulting report are keyed
+    to `week` (the rollover just crossed, preserving
+    #58's one-growth-week-per-season-week cadence); the *race* half reads
+    the week that just completed, since this week's races have not run
+    yet. Freshness recovery follows the same shape: it runs once per
+    week, excluding riders who raced in the week being settled — see the
+    plan's Design decision 6. Returns how many riders had a *displayed*
+    value change, for TickRun.riders_trained.
     """
     raced_week = _completed_week(week)
     raced = riders_who_raced(raced_week) if raced_week is not None else {}
@@ -154,6 +162,9 @@ def _apply_training_week(week) -> int:
 
     changes = apply_weekly_growth(weeks=1, extra_deltas=extra)
     _write_training_reports(week, changes, focus_by_team)
+    # `raced` is the {rider_id: [...]} of riders who finished a race in the
+    # week being settled; those riders skip recovery (Design decision 6).
+    apply_weekly_recovery(exclude_ids=set(raced))
     return len(changes)
 
 
