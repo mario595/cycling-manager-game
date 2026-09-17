@@ -259,9 +259,29 @@ are the ones that get broken:
    also the signal to shut the environment down — see **Tearing it down** below.
    Do that only after the PR and the status move have both succeeded.
 
-   The PR body ends with `Closes #<N>`. That is deliberate — the ticket stays at
+   **The PR must be linked to the issue, and must close it on merge.** This is
+   not optional and not a formatting preference — it is how the ticket stops
+   being open once the work lands. Two lines in the body do it, and the template
+   in `.claude/ticket-workflow.md` has both:
+
+   - `Implements #<N>.` at the top — the link a person reads.
+   - `Closes #<N>` at the end — the keyword GitHub acts on.
+
+   `Closes` is deliberate rather than a plain reference: the ticket sits at
    **Implemented** through review and testing, and merging to master is the last
-   step.
+   step, which closes it.
+
+   **Then check that GitHub actually registered it**, because a typo in the
+   number fails silently and you will not find out until a merged PR leaves the
+   ticket open:
+
+   ```bash
+   gh pr view <n> --repo mario595/cycling-manager --json closingIssuesReferences
+   ```
+
+   That must list issue `<N>`. If it comes back empty, the keyword did not take
+   — fix the body with `gh pr edit <n> --body-file ...` and check again. Do not
+   move the ticket or tear anything down until it lists the issue.
 6. Report, briefly:
    - the pull request URL, and that the server and database are now shut down;
    - the scenarios, so they stay in the conversation as well as the PR;

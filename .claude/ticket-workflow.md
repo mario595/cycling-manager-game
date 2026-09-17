@@ -140,8 +140,22 @@ Implements #<N>.
 Closes #<N>
 ```
 
-`Closes #<N>` is deliberate: the ticket sits at **Implemented** through review and
-testing, and merging to master is the last step, which closes it.
+Both issue lines are required. `Implements #<N>.` is the link a person reads;
+`Closes #<N>` is the keyword GitHub acts on, and without it a merged PR leaves
+the ticket open. `Closes` rather than a plain reference is deliberate: the ticket
+sits at **Implemented** through review and testing, and merging to master is the
+last step, which closes it.
+
+**Verify the link after creating the PR.** A wrong issue number fails silently:
+
+```bash
+gh pr view <n> --repo mario595/cycling-manager --json closingIssuesReferences
+```
+
+It must list issue `<N>`. Empty means the keyword did not take — repair the body
+with `gh pr edit <n> --body-file <file>` and check again before moving the ticket.
+(The keyword only works on a PR targeting the default branch, which is why the
+base is `master`.)
 
 If `gh pr create` reports a PR already exists for the branch, do not open a second
 one — update the existing PR's body instead (`gh pr edit <n> --body-file …`) and
