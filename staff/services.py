@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from django.db import transaction
 
+from riders.models import ENGINE_ATTRIBUTES
+
 from .generation import TRAINERS_PER_SEASON_BOUNDARY, generate_trainer_pool
-from .models import Trainer
+from .models import DEFAULT_FOCUS, Trainer, TrainingFocus, TrainingWeekReport
 
 
 class StaffError(Exception):
@@ -68,6 +70,49 @@ def fire_trainer(team) -> Trainer:
 def trainer_for(team) -> Trainer | None:
     """`team`'s trainer, or None."""
     return Trainer.objects.filter(team=team).first()
+
+
+def focus_for(team) -> str | None:
+    """The team's current training focus, or None if they have no trainer.
+
+    A team with a trainer but no TrainingFocus row is treated as the
+    default (DEFAULT_FOCUS) without a write — the row is only created
+    when the manager actually chooses. No row and no trainer is just no
+    focus at all.
+    """
+    if trainer_for(team) is None:
+        return None
+    focus = TrainingFocus.objects.filter(team=team).first()
+    return DEFAULT_FOCUS if focus is None else focus.attribute
+
+
+def set_focus(team, attribute: str) -> TrainingFocus:
+    """Set this week's focus. Raises NoTrainerHired if the team has no
+    trainer — the spec is explicit that a team without one has no focus
+    decision to make at all, so this is a 409 at the API, not a silent
+    no-op. Raises ValueError for an attribute outside ENGINE_ATTRIBUTES
+    (the API's ChoiceField should catch that first)."""
+    if attribute not in ENGINE_ATTRIBUTES:
+        raise ValueError(f"Unknown training attribute: {attribute!r}")
+    if trainer_for(team) is None:
+        raise NoTrainerHired("Your team has no trainer.")
+
+    focus, _ = TrainingFocus.objects.get_or_create(
+        team=team, defaults={"attribute": attribute},
+    )
+    if focus.attribute != attribute:
+        focus.attribute = attribute
+        focus.save(update_fields=["attribute", "updated_at"])
+    return focus
+
+
+def latest_report(team) -> TrainingWeekReport | None:
+    """The most recent week's report, for the Training screen."""
+    return (
+        TrainingWeekReport.objects.filter(team=team)
+        .order_by("-week__starts_at")
+        .first()
+    )
 
 
 def available_trainers():

@@ -510,6 +510,8 @@ this plan exists to avoid.
 *Test:* `staff/tests/test_services.py::test_set_focus_requires_a_trainer`,
 `::test_focus_defaults_without_writing_a_row`.
 
+**Done.**
+
 ### W5 — `world/services.py`: the weekly pass
 `_apply_training_week`, `_write_training_reports`, the per-week loop, and
 `TickRun.riders_trained` with its migration.
