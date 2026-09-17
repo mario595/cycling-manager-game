@@ -209,3 +209,46 @@ class StaffSerializer(serializers.Serializer):
 
 class HireTrainerSerializer(serializers.Serializer):
     trainer_id = serializers.IntegerField()
+
+
+class TrainingChangeSerializer(serializers.Serializer):
+    """One rider's visible movement at a rollover. Display scale only, and
+    deliberately no hidden traits — the report carries exactly what the
+    player can already see (riders/README.md)."""
+
+    rider_id = serializers.IntegerField()
+    rider_name = serializers.CharField()
+    attribute = serializers.CharField()
+    from_value = serializers.IntegerField(source="from")
+    to_value = serializers.IntegerField(source="to")
+
+
+class TrainingSerializer(serializers.Serializer):
+    """The Training screen's whole state in one payload, the same shape
+    rule StaffSerializer follows: every key always present, so the SPA
+    branches on one response rather than calling three endpoints.
+
+    `last_week` is null when no rollover report exists yet; otherwise it
+    carries the focus that was applied and the display-scale changes (an
+    empty `changes` list is normal)."""
+
+    has_trainer = serializers.BooleanField()
+    focus = serializers.CharField(allow_null=True)
+    options = serializers.ListField(child=serializers.CharField())
+    last_week = serializers.SerializerMethodField()
+
+    def get_last_week(self, obj):
+        report = obj["last_week"]
+        if report is None:
+            return None
+        return {
+            "attribute": report.attribute,
+            "changes": TrainingChangeSerializer(report.changes, many=True).data,
+        }
+
+
+class TrainingFocusSerializer(serializers.Serializer):
+    """The PUT body: one of the five attribute names. The ChoiceField makes
+    an unknown value a 400 before the view is reached."""
+
+    attribute = serializers.ChoiceField(choices=ENGINE_ATTRIBUTES)

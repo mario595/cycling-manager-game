@@ -15,6 +15,7 @@ from .views import (
     SquadView,
     StaffView,
     StandingsView,
+    TrainingView,
 )
 
 app_name = "api"
@@ -33,4 +34,5 @@ urlpatterns = [
     path("staff/", StaffView.as_view(), name="staff"),
     path("staff/trainer/hire/", HireTrainerView.as_view(), name="hire-trainer"),
     path("staff/trainer/fire/", FireTrainerView.as_view(), name="fire-trainer"),
+    path("staff/training/", TrainingView.as_view(), name="training"),
 ]

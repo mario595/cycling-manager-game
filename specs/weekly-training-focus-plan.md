@@ -536,6 +536,13 @@ Serializers, `TrainingView`, URL.
 `::test_training_put_sets_focus`, `::test_training_put_without_trainer_is_409`,
 `::test_training_never_exposes_training_affinity`.
 
+**Done.** `TrainingChangeSerializer` (display-scale before/after mapped from
+`from`/`to`), `TrainingSerializer` (`has_trainer`, `focus`, `options`,
+`last_week` via `SerializerMethodField`), `TrainingFocusSerializer` (ChoiceField
+filters unknown attributes as 400), `TrainingView` (GET whole payload, PUT
+409/204) at `api/urls.py` `staff/training/`. All four named tests plus the
+existing api suite pass (53).
+
 ### W7 — docs
 `staff/README.md`, `riders/README.md`, `world/README.md`, `racing/README.md`,
 `AGENTS.md`. See below.
