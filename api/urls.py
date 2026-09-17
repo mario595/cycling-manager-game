@@ -6,11 +6,14 @@ from .views import (
     CalendarView,
     ClaimTeamView,
     ClockView,
+    FireTrainerView,
+    HireTrainerView,
     MeView,
     PositionView,
     RaceResultsView,
     RiderListView,
     SquadView,
+    StaffView,
     StandingsView,
 )
 
@@ -27,4 +30,7 @@ urlpatterns = [
     path("competitions/standings/", StandingsView.as_view(), name="standings"),
     path("riders/", RiderListView.as_view(), name="riders"),
     path("teams/claim/", ClaimTeamView.as_view(), name="claim-team"),
+    path("staff/", StaffView.as_view(), name="staff"),
+    path("staff/trainer/hire/", HireTrainerView.as_view(), name="hire-trainer"),
+    path("staff/trainer/fire/", FireTrainerView.as_view(), name="fire-trainer"),
 ]

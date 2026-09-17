@@ -74,6 +74,13 @@ reads `now()` once, then finds and processes whatever is due, in three steps:
    yet (see `schedule/README.md`, *Exactly-once*). This runs **before**
    claiming races: a race in week 1 of a season that has just opened should
    be processed in a world that has already recorded the opening.
+   Immediately after, `tick()` calls `staff.services.top_up_pool()` once
+   per transition `process_transitions` actually wrote — the season-boundary
+   hook's first consumer. Idempotency comes from that return value, not
+   from anything tracked in `staff/`: a `SeasonTransition` row is written at
+   most once ever, so a tick that runs twice, or catches up several weeks
+   late, cannot top up the trainer pool twice for the same boundary. See
+   `staff/README.md`.
 1. **Claim** — inside one transaction, holding a row lock on the due race
    rows themselves (not a clock row — there is no longer one to lock in
    production): every `scheduled` race whose `starts_at` is at or before

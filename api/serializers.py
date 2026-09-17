@@ -180,3 +180,32 @@ class StandingsSerializer(serializers.Serializer):
     state = serializers.CharField()
     season = serializers.IntegerField(allow_null=True)
     standings = StandingsEntrySerializer(many=True)
+
+
+class TrainerSerializer(serializers.Serializer):
+    """One trainer as the Staff screen needs them: identity and the five
+    skills on the 0-10 display scale, never the stored 1-100 — the same
+    rule every rider serializer follows (riders/display.py)."""
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    nationality = serializers.CharField()
+    speciality = serializers.CharField()
+    skills = serializers.SerializerMethodField()
+
+    def get_skills(self, obj) -> dict[str, int]:
+        return _display_scale_attributes(obj)
+
+
+class StaffSerializer(serializers.Serializer):
+    """The Staff screen's whole state: either a hired trainer or the pool.
+    Both keys are always present — `trainer` null when the slot is empty,
+    `pool` empty when it is filled — so the SPA branches on one payload
+    rather than calling two endpoints."""
+
+    trainer = TrainerSerializer(allow_null=True)
+    pool = TrainerSerializer(many=True)
+
+
+class HireTrainerSerializer(serializers.Serializer):
+    trainer_id = serializers.IntegerField()

@@ -23,6 +23,7 @@ from racing.models import Race
 from racing.services import simulate_race
 from schedule.models import SeasonTransition
 from schedule.services import process_transitions
+from staff.services import top_up_pool
 
 from .clocks import Clock
 from .models import GameClock, TickRun
@@ -106,6 +107,13 @@ def tick() -> TickRun:
     # has just opened should be processed in a world that has already
     # recorded the opening.
     transitions = process_transitions(at)
+
+    # One top-up per crossed boundary. Idempotent for free: a
+    # SeasonTransition row is written at most once ever (unique on
+    # (season, kind)), so a tick that runs twice, or catches up three weeks
+    # late, cannot double-fill the pool.
+    for _ in transitions:
+        top_up_pool()
 
     reclaimed = _reclaim_unfinished()
     claimed = _claim(limit=max(0, max_races - len(reclaimed)), at=at)

@@ -9,8 +9,9 @@ from rest_framework.test import APIClient
 import world.services as world_services
 from competitions.services import score_race
 from racing.models import Race, RaceResult, RaceSquad
-from riders.models import Rider
+from riders.models import DISPLAY_MAX, Rider
 from schedule.models import SEASON_WEEKS, Season, Week
+from staff.models import Trainer
 from teams.models import Team
 from world.services import now
 
@@ -613,3 +614,136 @@ def test_squad_candidates_have_no_role(squad_race, squad_riders, squad_client):
     response = squad_client.get(f"/api/racing/races/{squad_race.pk}/squad/")
 
     assert "role" not in response.data["candidates"][0]
+
+
+@pytest.fixture
+def staff_manager(db) -> User:
+    return User.objects.create_user(email="staff-manager@example.com", password="s0meth1ng-good")
+
+
+@pytest.fixture
+def staff_team(db, staff_manager) -> Team:
+    return Team.objects.create(name="Staff Team", code="STF", manager=staff_manager)
+
+
+@pytest.fixture
+def staff_client(staff_manager) -> APIClient:
+    client = APIClient()
+    client.force_authenticate(user=staff_manager)
+    return client
+
+
+@pytest.fixture
+def pool_trainer(db) -> Trainer:
+    return Trainer.objects.create(
+        name="Coach One", climb=90, sprint=40, flat=45, resistance=50, positioning=35,
+    )
+
+
+def test_staff_requires_authentication(db):
+    client = APIClient()
+
+    assert client.get("/api/staff/").status_code == 403
+
+
+def test_staff_without_a_team_is_403(db):
+    manager_without_a_team = User.objects.create_user(
+        email="no-team-staff@example.com", password="s0meth1ng-good",
+    )
+    client = APIClient()
+    client.force_authenticate(user=manager_without_a_team)
+
+    assert client.get("/api/staff/").status_code == 403
+
+
+def test_staff_shows_the_pool_when_the_slot_is_empty(staff_client, staff_team, pool_trainer):
+    response = staff_client.get("/api/staff/")
+
+    assert response.status_code == 200
+    assert response.data["trainer"] is None
+    assert len(response.data["pool"]) == 1
+    assert response.data["pool"][0]["id"] == pool_trainer.pk
+
+
+def test_staff_shows_the_trainer_when_hired(staff_client, staff_team, pool_trainer):
+    pool_trainer.team = staff_team
+    pool_trainer.save()
+
+    response = staff_client.get("/api/staff/")
+
+    assert response.data["trainer"]["id"] == pool_trainer.pk
+    assert response.data["pool"] == []
+
+
+def test_staff_skills_are_on_the_display_scale(staff_client, staff_team, pool_trainer):
+    response = staff_client.get("/api/staff/")
+
+    skills = response.data["pool"][0]["skills"]
+    for value in skills.values():
+        assert 0 <= value <= DISPLAY_MAX
+    assert skills["climb"] == 9  # display scale, not the stored 90
+
+
+def test_hire_fills_the_slot(staff_client, staff_team, pool_trainer):
+    response = staff_client.post("/api/staff/trainer/hire/", {"trainer_id": pool_trainer.pk})
+
+    assert response.status_code == 204
+    follow_up = staff_client.get("/api/staff/")
+    assert follow_up.data["trainer"]["id"] == pool_trainer.pk
+
+
+def test_hire_an_already_hired_trainer_returns_409(staff_client, staff_team, pool_trainer):
+    other_manager = User.objects.create_user(email="other-staff@example.com", password="s0meth1ng-good")
+    other_team = Team.objects.create(name="Other Staff Team", code="OST", manager=other_manager)
+    pool_trainer.team = other_team
+    pool_trainer.save()
+
+    response = staff_client.post("/api/staff/trainer/hire/", {"trainer_id": pool_trainer.pk})
+
+    assert response.status_code == 409
+
+
+def test_hire_when_slot_occupied_returns_409(staff_client, staff_team, pool_trainer):
+    hired = Trainer.objects.create(
+        name="Coach Two", team=staff_team,
+        climb=30, sprint=90, flat=45, resistance=50, positioning=35,
+    )
+
+    response = staff_client.post("/api/staff/trainer/hire/", {"trainer_id": pool_trainer.pk})
+
+    assert response.status_code == 409
+    hired.refresh_from_db()
+    assert hired.team_id == staff_team.pk
+
+
+def test_fire_empties_the_slot(staff_client, staff_team, pool_trainer):
+    pool_trainer.team = staff_team
+    pool_trainer.save()
+
+    response = staff_client.post("/api/staff/trainer/fire/")
+
+    assert response.status_code == 204
+    follow_up = staff_client.get("/api/staff/")
+    assert follow_up.data["trainer"] is None
+    assert any(t["id"] == pool_trainer.pk for t in follow_up.data["pool"])
+
+
+def test_fire_with_no_trainer_returns_409(staff_client, staff_team):
+    response = staff_client.post("/api/staff/trainer/fire/")
+
+    assert response.status_code == 409
+
+
+def test_hire_cannot_target_another_teams_trainer(staff_client, staff_team):
+    other_manager = User.objects.create_user(email="employed-staff@example.com", password="s0meth1ng-good")
+    other_team = Team.objects.create(name="Employed Team", code="EMP", manager=other_manager)
+    employed = Trainer.objects.create(
+        name="Coach Three", team=other_team,
+        climb=90, sprint=40, flat=45, resistance=50, positioning=35,
+    )
+
+    response = staff_client.post("/api/staff/trainer/hire/", {"trainer_id": employed.pk})
+
+    assert response.status_code == 409
+    employed.refresh_from_db()
+    assert employed.team_id == other_team.pk

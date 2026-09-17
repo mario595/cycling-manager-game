@@ -15,6 +15,15 @@ from racing.models import SQUAD_SIZE, Race
 from racing.services import SquadError, set_squad, suggested_squad
 from riders.models import ENGINE_ATTRIBUTES, Rider
 from schedule.services import current_position
+from staff.services import (
+    NoTrainerHired,
+    SlotOccupied,
+    TrainerNotAvailable,
+    available_trainers,
+    fire_trainer,
+    hire_trainer,
+    trainer_for,
+)
 from teams.models import Team
 from teams.services import NoTeamAvailable, claim_team
 from world.services import now
@@ -23,6 +32,7 @@ from .serializers import (
     CalendarSerializer,
     ClaimTeamSerializer,
     ClockSerializer,
+    HireTrainerSerializer,
     MeSerializer,
     MeTeamSerializer,
     PositionSerializer,
@@ -30,6 +40,7 @@ from .serializers import (
     RiderSerializer,
     SquadSerializer,
     SquadWriteSerializer,
+    StaffSerializer,
     StandingsSerializer,
 )
 
@@ -358,3 +369,67 @@ class StandingsView(APIView):
             ],
         }
         return Response(StandingsSerializer(payload).data)
+
+
+class StaffView(APIView):
+    """The caller's own team's staff: the hired trainer, or the pool to
+    hire from.
+
+    No team id in the URL — the team is always the caller's own via
+    team_for(), the same pattern as SquadView and RiderListView. Falls
+    back to the project default, IsAuthenticated — do not re-add AllowAny.
+
+    The pool is only populated in the response when the slot is empty: a
+    team with a trainer has nothing to hire, and shipping the pool anyway
+    would invite the SPA to offer a hire the API would reject.
+    """
+
+    def get(self, request):
+        team = team_for(request.user)
+        if team is None:
+            return Response({"detail": "You do not manage a team."}, status=403)
+
+        trainer = trainer_for(team)
+        pool = [] if trainer is not None else list(available_trainers())
+        return Response(StaffSerializer({"trainer": trainer, "pool": pool}).data)
+
+
+class HireTrainerView(APIView):
+    """Hire one pool trainer into the caller's empty slot.
+
+    409, not 400, for "already hired" and "slot occupied": the request is
+    well-formed but the world's state refuses it — the same split
+    ClaimTeamView documents.
+    """
+
+    def post(self, request):
+        team = team_for(request.user)
+        if team is None:
+            return Response({"detail": "You do not manage a team."}, status=403)
+
+        serializer = HireTrainerSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            hire_trainer(team, serializer.validated_data["trainer_id"])
+        except (TrainerNotAvailable, SlotOccupied) as exc:
+            return Response({"detail": str(exc)}, status=409)
+
+        return Response(status=204)
+
+
+class FireTrainerView(APIView):
+    """Return the caller's trainer to the shared pool. POST, not DELETE —
+    nothing is destroyed; the trainer survives in the pool."""
+
+    def post(self, request):
+        team = team_for(request.user)
+        if team is None:
+            return Response({"detail": "You do not manage a team."}, status=403)
+
+        try:
+            fire_trainer(team)
+        except NoTrainerHired as exc:
+            return Response({"detail": str(exc)}, status=409)
+
+        return Response(status=204)

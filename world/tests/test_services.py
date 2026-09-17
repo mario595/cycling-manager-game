@@ -9,6 +9,8 @@ from competitions.models import RacePoints
 from racing.models import Race, RaceResult
 from riders.models import Rider
 from schedule.models import Season, SeasonTransition
+from staff.generation import TRAINERS_PER_SEASON_BOUNDARY
+from staff.models import Trainer
 from teams.models import Team
 from world.clocks import MockClock
 from world.models import GameClock
@@ -214,3 +216,34 @@ def test_tick_does_not_record_a_transition_twice(db):
     assert SeasonTransition.objects.filter(
         season=season, kind=SeasonTransition.Kind.OPENED,
     ).count() == 1
+
+
+def test_tick_tops_up_the_pool_when_a_season_opens(db):
+    clock: MockClock = get_clock()
+    season = Season.objects.create(number=1, starts_at=now())
+    clock.set(season.starts_at + timedelta(hours=1))
+    before_count = Trainer.objects.count()
+
+    tick()
+
+    assert Trainer.objects.count() == before_count + TRAINERS_PER_SEASON_BOUNDARY
+
+
+def test_a_second_tick_does_not_top_up_again(db):
+    clock: MockClock = get_clock()
+    season = Season.objects.create(number=1, starts_at=now())
+    clock.set(season.starts_at + timedelta(hours=1))
+    before_count = Trainer.objects.count()
+
+    tick()
+    tick()
+
+    assert Trainer.objects.count() == before_count + TRAINERS_PER_SEASON_BOUNDARY
+
+
+def test_tick_with_no_boundary_crossed_does_not_top_up(db, four_riders):
+    before_count = Trainer.objects.count()
+
+    tick()
+
+    assert Trainer.objects.count() == before_count
