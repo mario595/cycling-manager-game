@@ -187,7 +187,10 @@ Stop when:
 - doing what the plan says would **break a rule in `AGENTS.md`**;
 - you need a **package that is not in `requirements.txt`**;
 - you want to change **anything the plan does not mention**;
-- the work item turns out to be **much bigger** than the plan suggests.
+- the work item turns out to be **much bigger** than the plan suggests;
+- a merge conflict with master is **semantic** — both sides changed the same
+  behaviour in ways that cannot both be true. That is a design decision, not a
+  merge.
 
 Asking costs one message. A wrong guess costs the whole work item, and sometimes
 the ones after it.
@@ -203,7 +206,7 @@ you can see, and which you would pick.
 - Never leave commented-out code, or dead code you added.
 - Never add a dependency without asking.
 - Never edit `specs/<slug>.md`, or change a decision in the plan.
-- Never merge the pull request or the branch yourself.
+- Never merge the pull request, and never merge your branch into master. (Merging master *into* your branch is required — see **Bringing master in**.)
 - Never end a work item with the suite red.
 
 ---
@@ -247,12 +250,14 @@ are the ones that get broken:
 1. Run the full suite one last time. It must be green.
 2. Do the plan's **Documentation update** section. It is not optional.
 3. Commit that documentation change.
-4. **Leave it running for review** — see below.
-5. **Open the PR, move the ticket, then tear the environment down.** Follow
+4. **Bring master in and resolve any conflicts** — see below. Do this *before*
+   the user tries it, so what they verify is what will actually merge.
+5. **Leave it running for review** — see below.
+6. **Open the PR, move the ticket, then tear the environment down.** Follow
    `.claude/ticket-workflow.md`: confirm in one line and wait for a yes, then
    push the branch and open the pull request, then set the board's Status field
    to **Implemented**. That file has the PR body template and the exact `gh`
-   commands. Put the scenarios from step 4 into the PR body under **How to try
+   commands. Put the scenarios from step 5 into the PR body under **How to try
    it**.
 
    **The user's yes is the signal that they have finished trying it**, so it is
@@ -282,7 +287,7 @@ are the ones that get broken:
    That must list issue `<N>`. If it comes back empty, the keyword did not take
    — fix the body with `gh pr edit <n> --body-file ...` and check again. Do not
    move the ticket or tear anything down until it lists the issue.
-6. Report, briefly:
+7. Report, briefly:
    - the pull request URL, and that the server and database are now shut down;
    - the scenarios, so they stay in the conversation as well as the PR;
    - the branch name;
@@ -299,6 +304,88 @@ suite not green — do not start the server, do not open the PR and do not move 
 ticket. Commit what is finished, say exactly where you got to, and stop.
 
 ---
+
+## Bringing master in
+
+Your branch was cut from master days or hours ago and other work has landed
+since. Merge it now, while you can still fix what breaks — not after the user
+has signed off on something that no longer applies.
+
+```bash
+git fetch origin
+git merge origin/master
+```
+
+### If it merges cleanly
+
+Do not relax. **A clean git merge does not mean a clean codebase.** Run both
+checks:
+
+```bash
+PYTEST
+/home/mario/dev/cycling-manager/.venv/bin/python manage.py makemigrations --check --dry-run
+```
+
+The migration check is the one that catches what git cannot see. If master added
+a migration and so did you, git merges the two files without complaint because
+they are different files — but Django now has **two leaf nodes in the migration
+graph**, and `migrate` refuses to run. Git was never going to notice: nothing
+conflicted textually.
+
+The fix is a merge migration, never hand-editing either file:
+
+```bash
+/home/mario/dev/cycling-manager/.venv/bin/python manage.py makemigrations --merge
+```
+
+Commit that with the merge.
+
+### If there are conflicts
+
+Resolve them, with these rules:
+
+- **Read both sides and understand what each was doing** before you choose. A
+  conflict means two people changed the same thing for two different reasons;
+  the resolution usually keeps both intentions, not one of them.
+- **`--ours` and `--theirs` are almost always wrong** for a source file. They
+  discard one side's work silently. Use them only for a generated file that is
+  about to be regenerated anyway.
+- **Never resolve a conflict by deleting a test.** If master added a test your
+  branch breaks, your branch is what is wrong.
+- **If the conflict is semantic** — both sides changed the same behaviour in
+  ways that cannot both be true — **stop and ask**. That is a design question,
+  not a merge.
+
+Then the same two checks as above, plus a read of the merge diff:
+
+```bash
+git diff origin/master...HEAD
+```
+
+The suite must be green before you go any further. A failure now is the merge's
+doing, and it is yours to fix.
+
+### Then
+
+Commit the merge, and re-apply migrations to this worktree's database before the
+user looks at it, since master may have brought new ones:
+
+```bash
+/home/mario/dev/cycling-manager/.venv/bin/python manage.py migrate
+```
+
+### Just before you push
+
+Master can move again while the user is clicking through. When you have the
+go-ahead, check once more and merge again if it has:
+
+```bash
+git fetch origin && git log --oneline HEAD..origin/master
+```
+
+Empty means nothing moved. If it is not empty, merge, re-run the suite and the
+migration check, and say so — briefly — rather than pushing something you have
+not tested.
 
 ## Leaving it running for review
 
