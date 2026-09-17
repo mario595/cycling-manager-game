@@ -522,6 +522,14 @@ this plan exists to avoid.
 *Load-bearing:* the three-missed-weeks test is what proves Design decision 3 —
 it must fail if someone "simplifies" the loop back to `weeks=len(weeks)`.
 
+**Done.** Deviation from the sketch above: `process_week_transitions()` returns
+`WeekTransition` rows (not `Week`s), and races are simulated *after* the weekly
+pass, so a week's own races are not yet known when its transition is processed.
+`_apply_training_week(week)` therefore sources the race half from
+`_completed_week(week)` (the week just ended), while growth and the report stay
+keyed to the rollover week so #58's one-growth-week-per-season-week cadence is
+preserved. Confirmed with the user; recorded in `world/README.md` (W7).
+
 ### W6 — `api/`: the Training endpoint
 Serializers, `TrainingView`, URL.
 *Test:* `api/tests.py::test_training_get_without_trainer_has_no_focus`,

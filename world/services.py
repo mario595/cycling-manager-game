@@ -14,17 +14,19 @@ import traceback
 from datetime import datetime
 
 from django.conf import settings
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from django.utils.module_loading import import_string
 
 from competitions.services import score_race
 from racing.models import Race
-from racing.services import simulate_race
-from riders.services import advance_ages, apply_weekly_growth
-from schedule.models import SeasonTransition
+from racing.services import riders_who_raced, simulate_race
+from riders.models import Rider
+from riders.services import advance_ages, apply_weekly_growth, training_deltas
+from schedule.models import SeasonTransition, Week
 from schedule.services import process_transitions, process_week_transitions
-from staff.services import top_up_pool
+from staff.models import Trainer, TrainingWeekReport
+from staff.services import focus_for, top_up_pool
 
 from .clocks import Clock
 from .models import GameClock, TickRun
@@ -97,6 +99,92 @@ def _execute(race_ids: list[int], tick: TickRun, at: datetime) -> None:
             tick.error += f"race {race_id}:\n{traceback.format_exc()}\n"
 
 
+def _completed_week(week) -> Week | None:
+    """The week just before `week` in the same season, or None.
+
+    A `WeekTransition` is written when a week *opens* (`schedule/README.md`,
+    *Week transitions*), and `tick()` applies training before claiming the
+    races due now. So the races of the week being entered are not yet known
+    at the moment its growth/training runs. The races a boundary can
+    account for are the ones from the week that just completed — entering
+    week N therefore rewards week N-1's racing. Week 1 has no preceding
+    week, and cross-season carry-over is out of scope (see
+    world/README.md, *How a tick works*).
+    """
+    if week.number <= 1:
+        return None
+    return Week.objects.filter(season=week.season, number=week.number - 1).first()
+
+
+def _apply_training_week(week) -> int:
+    """One week's growth and training, settled together.
+
+    Iterated per week rather than collapsed into a count because each
+    week has its own focus and its own races — see the plan's Design
+    decision 3. Growth and the resulting report are keyed to `week` (the
+    rollover just crossed, preserving #58's one-growth-week-per-season-week
+    cadence); the *race* half reads the week that just completed, since
+    this week's races have not run yet. Returns how many riders had a
+    *displayed* value change, for TickRun.riders_trained.
+    """
+    raced_week = _completed_week(week)
+    raced = riders_who_raced(raced_week) if raced_week is not None else {}
+    extra: dict[int, dict[str, float]] = {}
+    focus_by_team: dict[int, str] = {}
+
+    for trainer in Trainer.objects.filter(team__isnull=False).select_related("team"):
+        focus = focus_for(trainer.team)
+        if focus is None:
+            continue
+        focus_by_team[trainer.team_id] = focus
+        skill = getattr(trainer, focus)
+        for rider in trainer.team.riders.all():
+            extra[rider.pk] = training_deltas(
+                rider, focus=focus, trainer_skill=skill,
+                raced_attributes=raced.get(rider.pk, []),
+            )
+
+    # Riders whose team has no trainer still get the race effect.
+    for rider in Rider.objects.exclude(pk__in=extra):
+        attrs = raced.get(rider.pk, [])
+        if attrs:
+            extra[rider.pk] = training_deltas(
+                rider, focus=None, trainer_skill=None, raced_attributes=attrs,
+            )
+
+    changes = apply_weekly_growth(weeks=1, extra_deltas=extra)
+    _write_training_reports(week, changes, focus_by_team)
+    return len(changes)
+
+
+def _write_training_reports(week, changes, focus_by_team) -> int:
+    """One TrainingWeekReport per team that has a trainer, holding that
+    week's visible changes (an empty list is normal).
+
+    Each insert runs inside its own `transaction.atomic()` with an
+    IntegrityError caught, the same per-row shape `process_transitions`
+    uses and for the same reason: an IntegrityError poisons an enclosing
+    transaction. The WeekTransition row is the real exactly-once
+    guarantee; the (team, week) constraint is a second line of defence.
+    """
+    by_team: dict[int, list[dict]] = {}
+    for change in changes:
+        by_team.setdefault(change["team_id"], []).append(change)
+
+    written = 0
+    for team_id, focus in focus_by_team.items():
+        with transaction.atomic():
+            try:
+                TrainingWeekReport.objects.create(
+                    team_id=team_id, week=week, attribute=focus,
+                    changes=by_team.get(team_id, []),
+                )
+                written += 1
+            except IntegrityError:
+                pass
+    return written
+
+
 def tick() -> TickRun:
     """Find and process whatever is due, exactly once. The only entry point
     cron — or a developer, after moving the mock clock with `mock_clock` —
@@ -124,8 +212,9 @@ def tick() -> TickRun:
         riders_aged = advance_ages()
 
     weeks = process_week_transitions(at)
-    if weeks:
-        apply_weekly_growth(weeks=len(weeks))
+    riders_trained = 0
+    for transition in weeks:            # per week, NOT weeks=len(weeks)
+        riders_trained += _apply_training_week(transition.week)
 
     reclaimed = _reclaim_unfinished()
     claimed = _claim(limit=max(0, max_races - len(reclaimed)), at=at)
@@ -137,6 +226,7 @@ def tick() -> TickRun:
         seasons_closed=sum(1 for t in transitions if t.kind == SeasonTransition.Kind.CLOSED),
         weeks_processed=len(weeks),
         riders_aged=riders_aged,
+        riders_trained=riders_trained,
     )
     _execute(reclaimed + claimed, run, at=at)
     run.capped = capped
