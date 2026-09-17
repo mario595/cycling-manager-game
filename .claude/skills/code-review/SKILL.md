@@ -356,6 +356,23 @@ gh pr review <n> --repo mario595/cycling-manager --request-changes --body-file <
 If `gh pr review` hits the Projects-classic error, use the REST fallback in
 `.claude/ticket-workflow.md`.
 
+**If it instead fails with "Can not approve your own pull request"**, the PR was
+opened under the same GitHub account this skill runs as — expected on this repo,
+where there is one account for both author and reviewer. GitHub refuses a formal
+review state (`--approve` or `--request-changes`) from an account reviewing its
+own PR; there is no flag or fallback that gets around this, because it is not a
+`gh` bug, it is the platform rule. Post the same body as a plain comment instead:
+
+```bash
+gh pr comment <n> --repo mario595/cycling-manager --body-file <file>
+```
+
+The verdict in the comment body (`Approved` / `Changes requested`) is still
+authoritative — proceed to Step 5 exactly as if the formal review had gone
+through. Do not try to work around the restriction (a second account, `gh api`
+with different auth, etc.) — it is a deliberate GitHub rule, not an obstacle to
+route past.
+
 ## Step 5 — Move the ticket, or don't
 
 **Approved** — move the ticket to **Code reviewed**, following
