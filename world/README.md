@@ -23,10 +23,11 @@ The tick also records season and week boundaries as they're crossed, via
 `schedule.services.process_transitions()` and
 `process_week_transitions()` — see `schedule/README.md` for what a
 transition is and why it's a row rather than an action — and, off the back
-of those, advances every rider's age at a season close and every rider's
-attributes each week
-([#58](https://github.com/mario595/cycling-manager/issues/58); see
-`riders/README.md`, *The age curve*).
+of those, advances every rider's age at a season close and applies each
+week's growth plus the team's weekly training
+([#58](https://github.com/mario595/cycling-manager/issues/58),
+[#36](https://github.com/mario595/cycling-manager/issues/36); see
+`riders/README.md`, *The age curve* and *Weekly training*).
 
 ## The clock discipline rule
 
@@ -86,28 +87,48 @@ reads `now()` once, then finds and processes whatever is due, in four steps:
    most once ever, so a tick that runs twice, or catches up several weeks
    late, cannot top up the trainer pool twice for the same boundary. See
    `staff/README.md`.
-1. **Ageing and growth** — for every `CLOSED` transition `process_transitions`
-   returned, every rider's age advances by one
+1. **Ageing, growth and weekly training** — for every `CLOSED` transition
+   `process_transitions` returned, every rider's age advances by one
    (`riders.services.advance_ages()`). Then
    `schedule.services.process_week_transitions(at)` records any week
    boundary opened at or before `now()` that hasn't been recorded yet (see
-   `schedule/README.md`, *Week transitions*); if any were recorded,
-   `riders.services.apply_weekly_growth(weeks=len(weeks))` moves every
-   rider's attributes along their age curve
-   ([#58](https://github.com/mario595/cycling-manager/issues/58); see
-   `riders/README.md`, *The age curve*) — one call for however many weeks
-   were missed, not one call per week. Ageing runs before growth, so a
-   rider who turned 33 at this same boundary is evaluated against the new
-   age immediately. Neither step touches a race row, so both run outside
-   the claim transaction below, the same as race simulation does and for
-   the same reason: a full-table update must not extend the lock window
-   race claiming holds.
+   `schedule/README.md`, *Week transitions*), and each recorded transition
+   is applied **one week at a time**:
+   `world.services._apply_training_week(week)` moves every rider along
+   their age curve via `riders.services.apply_weekly_growth(weeks=1,
+   extra_deltas=...)`, adding that week's training deltas — the trainer's
+   focused skill and last week's racing — through the one `growth_debt`
+   ledger, and writes a per-team `staff.TrainingWeekReport` of the
+   display-scale changes it made.
+   [#58](https://github.com/mario595/cycling-manager/issues/58)'s single
+   `apply_weekly_growth(weeks=len(weeks))` call is gone, deliberately:
+   training cannot collapse to a count, because each week has its own focus
+   and its own races — a tick that runs three weeks late must apply three
+   *different* training weeks ([#36](https://github.com/mario595/cycling-manager/issues/36),
+   the plan's Design decision 3; see `staff/README.md`, *Weekly training*).
+   Ageing runs before growth, so a rider who turned 33 at this same
+   boundary is evaluated against the new age immediately. None of this
+   touches a race row, so it runs outside the claim transaction below, the
+   same as race simulation does and for the same reason: a full-table
+   update must not extend the lock window race claiming holds.
 2. **Claim** — inside one transaction, holding a row lock on the due race
    rows themselves (not a clock row — there is no longer one to lock in
    production): every `scheduled` race whose `starts_at` is at or before
    `now()` is flipped to `running`, up to `catch_up_max_races` at a time.
 3. **Execute** — outside any transaction: simulate each claimed race,
    record its result, then score it (`competitions.services.score_race`).
+
+**Training's race half reads the week that just completed, not the one being
+entered.** A `WeekTransition` is written when a week *opens*, and the steps
+above apply growth and training before claiming the races due now — so a
+week's own races have not run yet at the moment its training is settled.
+`_apply_training_week` therefore asks `_completed_week(week)` (the same
+season's week `number - 1`) for `racing.services.riders_who_raced`, meaning
+entering week N rewards week N-1's racing. Week 1 has no preceding week and
+trains nothing from racing; a rider on a team with no trainer still gains
+the race effect, just no report. This offsets the tick's internal ordering,
+not the season's — a manager planning against the calendar sees a raced
+week credited at the boundary into the next week.
 
 **Scoring happens here, not inside `racing.services.simulate_race`.**
 `racing/` may not import `competitions/` — that would invert the

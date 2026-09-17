@@ -65,6 +65,11 @@ class TickRun(models.Model):
         default=0,
         help_text="How many riders had their age advanced this tick (#58).",
     )
+    riders_trained = models.PositiveIntegerField(
+        default=0,
+        help_text="How many riders had a *displayed* attribute change from training "
+        "and/or racing this tick (#36).",
+    )
     error = models.TextField(
         blank=True, default="",
         help_text="Traceback if the run failed. Empty on success.",

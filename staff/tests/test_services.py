@@ -1,16 +1,22 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone as dt_timezone
+
 import pytest
 
+from schedule.models import Season, Week
 from staff.generation import TRAINERS_PER_SEASON_BOUNDARY
-from staff.models import Trainer
+from staff.models import DEFAULT_FOCUS, Trainer, TrainingFocus, TrainingWeekReport
 from staff.services import (
     NoTrainerHired,
     SlotOccupied,
     TrainerNotAvailable,
     available_trainers,
     fire_trainer,
+    focus_for,
     hire_trainer,
+    latest_report,
+    set_focus,
     top_up_pool,
 )
 
@@ -87,3 +93,65 @@ def test_top_up_only_adds(trainer, team):
     assert Trainer.objects.count() == before_count + TRAINERS_PER_SEASON_BOUNDARY
     trainer.refresh_from_db()
     assert trainer.team_id == team.pk
+
+
+def test_set_focus_requires_a_trainer(team):
+    with pytest.raises(NoTrainerHired):
+        set_focus(team, "climb")
+
+
+def test_focus_defaults_without_writing_a_row(trainer, team):
+    hire_trainer(team, trainer.pk)
+
+    assert focus_for(team) == DEFAULT_FOCUS
+    assert not TrainingFocus.objects.filter(team=team).exists()
+
+
+def test_set_focus_creates_the_row(trainer, team):
+    hire_trainer(team, trainer.pk)
+
+    focus = set_focus(team, "sprint")
+
+    assert focus.attribute == "sprint"
+    assert focus_for(team) == "sprint"
+    assert TrainingFocus.objects.filter(team=team).count() == 1
+
+
+def test_set_focus_updates_an_existing_row(trainer, team):
+    hire_trainer(team, trainer.pk)
+    first = set_focus(team, "sprint")
+
+    second = set_focus(team, "flat")
+
+    assert second.pk == first.pk
+    assert focus_for(team) == "flat"
+
+
+def test_set_focus_rejects_an_unknown_attribute(trainer, team):
+    hire_trainer(team, trainer.pk)
+
+    with pytest.raises(ValueError):
+        set_focus(team, "luck")
+
+
+def _make_week(season, number, monday):
+    return Week.objects.create(
+        season=season, number=number, starts_at=monday, ends_at=monday + timedelta(weeks=1),
+    )
+
+
+def test_latest_report_returns_the_most_recent_week(db, trainer, team):
+    hire_trainer(team, trainer.pk)
+    monday = datetime(2027, 3, 1, 0, 0, tzinfo=dt_timezone.utc)
+    season = Season.objects.create(number=1, starts_at=monday)
+    week_one = _make_week(season, 1, monday)
+    week_two = _make_week(season, 2, monday + timedelta(weeks=1))
+    old = TrainingWeekReport.objects.create(team=team, week=week_one, attribute="flat")
+    recent = TrainingWeekReport.objects.create(team=team, week=week_two, attribute="climb")
+
+    assert latest_report(team).pk == recent.pk
+    assert latest_report(team).pk != old.pk
+
+
+def test_latest_report_is_none_without_one(db, team):
+    assert latest_report(team) is None

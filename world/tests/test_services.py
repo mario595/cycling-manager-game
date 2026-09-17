@@ -10,7 +10,8 @@ from racing.models import Race, RaceResult
 from riders.models import Rider
 from schedule.models import SEASON_WEEKS, Season, SeasonTransition, Week
 from staff.generation import TRAINERS_PER_SEASON_BOUNDARY
-from staff.models import Trainer
+from staff.models import Trainer, TrainingWeekReport
+from staff.services import set_focus
 from teams.models import Team
 from world.clocks import MockClock
 from world.models import GameClock
@@ -290,6 +291,129 @@ def test_two_ticks_in_the_same_week_apply_growth_once(db, young_rider):
     after_second = (young_rider.climb, dict(young_rider.growth_debt))
 
     assert after_first == after_second
+
+
+def test_training_applies_once_per_week(db, team):
+    # One week boundary crossed -> exactly one training pass -> one report
+    # for the trainer's team, focused on what the manager chose.
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_one = season.weeks.get(number=1)
+    Trainer.objects.create(
+        name="Coach", team=team,
+        climb=100, sprint=30, flat=30, resistance=30, positioning=30,
+    )
+    Rider.objects.create(
+        name="Trainee", team=team, age=25, peak_age=27, potential=70,
+        climb=89, sprint=40, flat=40, resistance=40, positioning=40,
+    )
+    set_focus(team, "climb")
+    clock.set(week_one.starts_at + timedelta(hours=1))
+
+    run = tick()
+
+    report = TrainingWeekReport.objects.get(team=team)
+    assert report.week == week_one
+    assert report.attribute == "climb"
+    # climb 89 (display 8) plus a focused week's points crosses display 9,
+    # so the report records a visible change.
+    assert report.changes
+    assert run.riders_trained >= 1
+
+
+def test_three_missed_weeks_apply_three_training_weeks(db, team):
+    # The load-bearing test for Design decision 3: catching up three weeks
+    # late must run one training pass PER week (each with its own focus and
+    # races), not one collapsed pass for the whole gap. Collapsing back to
+    # `apply_weekly_growth(weeks=len(weeks))` leaves exactly one report and
+    # this test fails.
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_three = season.weeks.get(number=3)
+    Trainer.objects.create(
+        name="Coach", team=team,
+        climb=100, sprint=30, flat=30, resistance=30, positioning=30,
+    )
+    Rider.objects.create(
+        name="Trainee", team=team, age=25, peak_age=27, potential=70,
+        climb=89, sprint=40, flat=40, resistance=40, positioning=40,
+    )
+    set_focus(team, "climb")
+    clock.set(week_three.starts_at + timedelta(hours=1))
+
+    run = tick()
+
+    assert run.weeks_processed == 3
+    reports = TrainingWeekReport.objects.filter(team=team).order_by("week__number")
+    assert reports.count() == 3
+    assert {report.attribute for report in reports} == {"climb"}
+    assert run.riders_trained >= 1
+
+
+def test_rider_on_teamless_squad_still_gains_from_racing(db, team):
+    # No trainer anywhere: the trainer half of training is off, but the
+    # race-based half still applies. The race runs during week 1; entering
+    # week 2 is the rollover that rewards week 1's racing. `flat` sits at or
+    # above its ceiling for this climber, so its only possible movement is
+    # the RACE_TRAINING_UNIT stored points from a 150 km flat race.
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_one = season.weeks.get(number=1)
+    week_two = season.weeks.get(number=2)
+    rider = Rider.objects.create(
+        name="Racer", team=team,
+        speciality=Rider.Speciality.CLIMBER,
+        age=25, peak_age=27, potential=70,
+        climb=60, sprint=60, flat=60, resistance=60, positioning=60,
+    )
+    for i in range(3):
+        Rider.objects.create(
+            name=f"Teammate {i}", team=team,
+            speciality=Rider.Speciality.CLIMBER,
+            age=25, peak_age=27, potential=70,
+            climb=60, sprint=60, flat=60, resistance=60, positioning=60,
+        )
+    Race.objects.create(
+        name="Week One Race",
+        course=[{"length": 150_000.0, "gradient": 0.0}],
+        starts_at=week_one.starts_at + timedelta(hours=1),
+        week=week_one,
+        status=Race.Status.SCHEDULED,
+    )
+
+    clock.set(week_one.starts_at + timedelta(hours=1))
+    first = tick()                       # week 1 opens; its race runs
+    clock.set(week_two.starts_at + timedelta(hours=1))
+    tick()                               # week 2 opens: week 1's racing is rewarded
+    rider.refresh_from_db()
+
+    assert first.races_finished == 1
+    assert rider.growth_debt.get("flat", 0) == pytest.approx(0.25)
+    # No team has a trainer, so no TrainingWeekReport is written at all.
+    assert not TrainingWeekReport.objects.exists()
+
+
+def test_concurrent_ticks_train_once(db, team):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_one = season.weeks.get(number=1)
+    Trainer.objects.create(
+        name="Coach", team=team,
+        climb=100, sprint=30, flat=30, resistance=30, positioning=30,
+    )
+    Rider.objects.create(
+        name="Trainee", team=team, age=25, peak_age=27, potential=70,
+        climb=89, sprint=40, flat=40, resistance=40, positioning=40,
+    )
+    set_focus(team, "climb")
+    clock.set(week_one.starts_at + timedelta(hours=1))
+
+    first = tick()
+    second = tick()
+
+    assert first.riders_trained >= 1
+    assert second.riders_trained == 0
+    assert TrainingWeekReport.objects.filter(team=team).count() == 1
 
 
 def test_riders_age_when_a_season_closes(db, young_rider):

@@ -5,9 +5,11 @@
 `Trainer` — the shared hiring pool and the one trainer slot a team may fill
 from it. Hiring and firing (`services.hire_trainer`, `services.fire_trainer`),
 generation (`generation.py`), and the season-boundary top-up
-(`services.top_up_pool`). Not what a trainer *does* once hired — that is
-[#36](https://github.com/mario595/cycling-manager/issues/36), weekly
-training focus. Not a fee or a salary for the slot — that is
+(`services.top_up_pool`). Plus the trainer's day job once hired: the team's
+weekly training focus and its rollover record — `TrainingFocus` and
+`TrainingWeekReport`, the heart of
+[#36](https://github.com/mario595/cycling-manager/issues/36); see *Weekly
+training*, below. Not a fee or a salary for the slot — that is
 [#69](https://github.com/mario595/cycling-manager/issues/69), deferred until
 the ledger (`economy/`) exists. Not the physio or scout roles the original
 brief also names — both wait on their own dependencies
@@ -89,11 +91,55 @@ app's: #36 requires off-speciality training to always be worth something,
 never zero, so no trainer skill is ever generated near the bottom of the
 1-100 range.
 
+## Weekly training
+
+Once hired, a trainer earns their keep ([#36](https://github.com/mario595/cycling-manager/issues/36)):
+the tick applies the team's training focus every time a `WeekTransition`
+crosses, and writes what visibly changed to a `TrainingWeekReport` (one per
+team per week). The physics live in `riders/` — `riders.services.training_deltas`,
+and the `growth_debt` ledger it shares with the age curve — see
+`riders/README.md`, *Weekly training*. This app owns the two models around
+it:
+
+- **`TrainingFocus`** — one row per team (`OneToOneField` to team), holding
+  which of the five attributes the team is working on. **The focus is a
+  property of the team's training programme, not of the person hired** (the
+  plan's Design decision 5): firing a trainer and hiring another must not
+  silently reset what the team was working on, and `Trainer` rows return to
+  the shared pool where a stale focus would be meaningless. `DEFAULT_FOCUS`
+  (`climb`) covers the no-row case; the row is created on demand by
+  `focus_for` / `set_focus`. A team with no trainer has no focus at all.
+- **`TrainingWeekReport`** — the stored "what changed" list for one team's
+  week: the focus applied (blank when the team had no trainer) and the
+  display-scale movements as JSON (`{"rider_id", "rider_name", "attribute",
+  "from", "to"}`, an empty list normal). Written at rollover so the Training
+  screen reports what last week did without diffing attributes after the
+  fact (Design decision 7). `(team, week)` is unique — a second line of
+  defence behind `WeekTransition`'s exactly-once guarantee.
+
+Both are keyed to the **team**, not to `Trainer` — for exactly the reason
+`Trainer.team` is a `OneToOneField` rather than an FK on `Team`: this app
+owns the concept, and putting it on `teams.Team` would invert the
+dependency graph (`teams` must not know about `staff`).
+
+**A late tick applies the latest focus to every missed week, and that is
+accepted** (Design decision 3). The focus is a single mutable field; a tick
+that catches up three weeks late has no record of what was intended in each
+— nobody asked for a per-week history of intent, and a late tick is a
+server-health problem, not a game mechanic. What the tick *does* iterate is
+the weeks themselves (`world.services._apply_training_week`), because each
+week's races differ — see `world/README.md`, *How a tick works*.
+
 ## What `staff/` may import
 
-`core`, `teams`, `riders` — matching `AGENTS.md`'s dependency graph. Never
-`world/`, `api/`, `schedule/` or `racing/`. The season-boundary top-up is
-wired the other way: `world.services.tick()` imports `staff.services.
+`core`, `teams`, `riders` — matching `AGENTS.md`'s dependency graph, plus a
+**string-only** reference to `schedule.Week`: `TrainingWeekReport.week` is a
+`ForeignKey("schedule.Week", ...)` declared as a string, the same
+import-free pattern `racing/models.py`'s `Race.week` uses, so
+`staff/models.py` imports nothing from `schedule/`. The dependency is real
+and `AGENTS.md`'s graph says so; only the module stays import-free. Never
+`world/`, `api/`, or `racing/`. The season-boundary top-up is wired the
+other way: `world.services.tick()` imports `staff.services.
 top_up_pool` and calls it once per crossed `SeasonTransition`, using that
 row's exactly-once guarantee for idempotency rather than anything tracked
 in this app. See `world/README.md`, *How a tick works*.

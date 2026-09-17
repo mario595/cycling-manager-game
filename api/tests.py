@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import timedelta
+import json
+from datetime import datetime, timedelta, timezone as dt_timezone
 
 import pytest
 from django.test import override_settings
@@ -11,7 +12,7 @@ from competitions.services import score_race
 from racing.models import Race, RaceResult, RaceSquad
 from riders.models import DISPLAY_MAX, Rider
 from schedule.models import SEASON_WEEKS, Season, Week
-from staff.models import Trainer
+from staff.models import Trainer, TrainingWeekReport
 from teams.models import Team
 from world.services import now
 
@@ -791,3 +792,63 @@ def test_hire_cannot_target_another_teams_trainer(staff_client, staff_team):
     assert response.status_code == 409
     employed.refresh_from_db()
     assert employed.team_id == other_team.pk
+
+
+def test_training_get_without_trainer_has_no_focus(staff_client, staff_team):
+    response = staff_client.get("/api/staff/training/")
+
+    assert response.status_code == 200
+    assert response.data["has_trainer"] is False
+    assert response.data["focus"] is None
+    assert response.data["last_week"] is None
+    assert set(response.data["options"]) == set(["climb", "sprint", "flat", "resistance", "positioning"])
+
+
+def test_training_put_sets_focus(staff_client, staff_team):
+    # Hire a trainer first so the team has a focus decision to make.
+    trainer = Trainer.objects.create(
+        name="Coach", team=staff_team,
+        climb=90, sprint=40, flat=45, resistance=50, positioning=35,
+    )
+
+    response = staff_client.put("/api/staff/training/", {"attribute": "sprint"}, format="json")
+    follow_up = staff_client.get("/api/staff/training/")
+
+    assert response.status_code == 204
+    assert follow_up.data["has_trainer"] is True
+    assert follow_up.data["focus"] == "sprint"
+
+
+def test_training_put_without_trainer_is_409(staff_client, staff_team):
+    response = staff_client.put("/api/staff/training/", {"attribute": "climb"}, format="json")
+
+    assert response.status_code == 409
+
+
+def test_training_never_exposes_training_affinity(staff_client, staff_team):
+    monday = datetime(2027, 3, 1, 0, 0, tzinfo=dt_timezone.utc)
+    season = Season.objects.create(number=1, starts_at=monday)
+    week = Week.objects.create(
+        season=season, number=1, starts_at=monday, ends_at=monday + timedelta(weeks=1),
+    )
+    rider = Rider.objects.create(
+        name="Trainee", team=staff_team,
+        climb=89, sprint=40, flat=40, resistance=40, positioning=40,
+        training_affinity={"climb": 1.5, "sprint": 0.5, "flat": 1.0, "resistance": 1.0, "positioning": 1.0},
+    )
+    TrainingWeekReport.objects.create(
+        team=staff_team, week=week, attribute="climb",
+        changes=[{
+            "rider_id": rider.pk, "rider_name": rider.name, "team_id": staff_team.pk,
+            "attribute": "climb", "from": 8, "to": 9,
+        }],
+    )
+
+    response = staff_client.get("/api/staff/training/")
+
+    assert response.status_code == 200
+    body = json.dumps(response.data)
+    assert "training_affinity" not in body
+    change = response.data["last_week"]["changes"][0]
+    assert change["from_value"] == 8
+    assert change["to_value"] == 9

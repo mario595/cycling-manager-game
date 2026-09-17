@@ -21,7 +21,10 @@ from staff.services import (
     TrainerNotAvailable,
     available_trainers,
     fire_trainer,
+    focus_for,
     hire_trainer,
+    latest_report,
+    set_focus,
     trainer_for,
 )
 from teams.models import Team
@@ -42,6 +45,8 @@ from .serializers import (
     SquadWriteSerializer,
     StaffSerializer,
     StandingsSerializer,
+    TrainingFocusSerializer,
+    TrainingSerializer,
 )
 
 
@@ -424,6 +429,45 @@ class FireTrainerView(APIView):
 
         try:
             fire_trainer(team)
+        except NoTrainerHired as exc:
+            return Response({"detail": str(exc)}, status=409)
+
+        return Response(status=204)
+
+
+class TrainingView(APIView):
+    """The caller's team's weekly training: the current focus and the last
+    rollover's visible changes.
+
+    No team id in the URL — the team is always the caller's own via
+    team_for(), the same pattern as StaffView. GET always returns the whole
+    payload; PUT sets the focus. A team without a trainer gets a 409 on PUT
+    (well-formed request, world state refuses it) and a null `focus` with
+    `has_trainer = false` on GET.
+    """
+
+    def get(self, request):
+        team = team_for(request.user)
+        if team is None:
+            return Response({"detail": "You do not manage a team."}, status=403)
+
+        return Response(TrainingSerializer({
+            "has_trainer": trainer_for(team) is not None,
+            "focus": focus_for(team),
+            "options": list(ENGINE_ATTRIBUTES),
+            "last_week": latest_report(team),
+        }).data)
+
+    def put(self, request):
+        team = team_for(request.user)
+        if team is None:
+            return Response({"detail": "You do not manage a team."}, status=403)
+
+        serializer = TrainingFocusSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            set_focus(team, serializer.validated_data["attribute"])
         except NoTrainerHired as exc:
             return Response({"detail": str(exc)}, status=409)
 

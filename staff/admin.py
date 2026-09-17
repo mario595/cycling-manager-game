@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Trainer
+from .models import Trainer, TrainingFocus, TrainingWeekReport
 
 
 @admin.register(Trainer)
@@ -21,3 +21,13 @@ class TrainerAdmin(admin.ModelAdmin):
             ),
         }),
     )
+
+
+@admin.register(TrainingFocus)
+class TrainingFocusAdmin(admin.ModelAdmin):
+    list_display = ("team", "attribute")
+
+
+@admin.register(TrainingWeekReport)
+class TrainingWeekReportAdmin(admin.ModelAdmin):
+    list_display = ("team", "week", "attribute")

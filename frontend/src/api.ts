@@ -334,3 +334,40 @@ export async function hireTrainer(trainerId: number): Promise<void> {
 export async function fireTrainer(): Promise<void> {
   return writeJson('/api/staff/trainer/fire/', 'POST')
 }
+
+/** One rider's visible movement at a rollover — display scale only, matching
+ * riders/display.py. Hidden traits (training affinity, etc.) never reach this
+ * client at all. */
+export interface TrainingChange {
+  rider_id: number
+  rider_name: string
+  attribute: string
+  from_value: number
+  to_value: number
+}
+
+/** The Training screen's whole state in one payload. `last_week` is null
+ * until the first rollover, then the focus that was applied plus its visible
+ * changes. */
+export interface TrainingState {
+  has_trainer: boolean
+  focus: string | null
+  options: string[]
+  last_week: {
+    attribute: string
+    changes: TrainingChange[]
+  } | null
+}
+
+export async function getTraining(): Promise<TrainingState> {
+  const response = await fetch('/api/staff/training/')
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new Error(body?.detail ?? `training request failed: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function setTrainingFocus(attribute: string): Promise<void> {
+  return writeJson('/api/staff/training/', 'PUT', { attribute })
+}

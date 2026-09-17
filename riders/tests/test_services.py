@@ -11,6 +11,7 @@ from riders.services import (
     advance_ages,
     apply_weekly_growth,
     attribute_ceilings,
+    training_deltas,
     weekly_deltas,
 )
 
@@ -218,6 +219,72 @@ def test_attributes_never_leave_the_1_100_range(db):
 
     for name in ENGINE_ATTRIBUTES:
         assert MIN_ATTRIBUTE <= getattr(rider, name) <= MAX_ATTRIBUTE
+
+
+def test_training_delta_scales_with_trainer_skill():
+    rider = make_rider(speciality=Rider.Speciality.CLIMBER)
+    weak = training_deltas(rider, focus="climb", trainer_skill=30, raced_attributes=[])
+    strong = training_deltas(rider, focus="climb", trainer_skill=90, raced_attributes=[])
+
+    assert 0 < weak["climb"] < strong["climb"]
+
+
+def test_off_speciality_training_is_never_zero():
+    rider = make_rider(speciality=Rider.Speciality.CLIMBER)
+    rider.training_affinity = {"climb": 1.45, "sprint": 0.55}
+
+    deltas = training_deltas(rider, focus="sprint", trainer_skill=30, raced_attributes=[])
+
+    # A trainer working outside their speciality still improves the rider —
+    # "not a substitute", never silence — just clearly less than in it.
+    assert deltas["sprint"] > 0
+
+
+def test_injured_rider_gets_nothing(monkeypatch):
+    monkeypatch.setattr("riders.services.is_injured", lambda rider: True)
+    rider = make_rider()
+
+    deltas = training_deltas(
+        rider, focus="climb", trainer_skill=90, raced_attributes=["climb", "sprint"],
+    )
+
+    assert all(value == 0.0 for value in deltas.values())
+
+
+def test_training_and_growth_settle_through_one_debt(db):
+    # The load-bearing test this plan exists for: a training delta and a
+    # growth delta in the same week must settle through ONE debt ledger —
+    # each at ~0.6, individually truncated to a zero carry, together worth
+    # one stored point. A second pass after apply_weekly_growth would give
+    # an answer of zero and this test fails.
+    rider = Rider.objects.create(
+        name="Trainee",
+        speciality=Rider.Speciality.CLIMBER,
+        age=20,
+        peak_age=27,
+        potential=80,
+        decline_rate=50,
+        climb=99,
+        sprint=40,
+        flat=40,
+        resistance=40,
+        positioning=40,
+    )
+    growth = weekly_deltas(rider, weeks=1)["climb"]
+    assert 0 < growth < 1
+
+    records = apply_weekly_growth(weeks=1, extra_deltas={rider.pk: {"climb": 0.6}})
+    rider.refresh_from_db()
+
+    assert rider.climb == 100
+    assert records == [{
+        "rider_id": rider.pk,
+        "rider_name": "Trainee",
+        "team_id": None,
+        "attribute": "climb",
+        "from": 9,
+        "to": 10,
+    }]
 
 
 def test_debt_does_not_accumulate_once_an_attribute_is_clamped():
