@@ -10,6 +10,7 @@ The React SPA. Currently a **scaffold**: it reproduces the mockup in
 | `/` | Dashboard | Built — full layout from the design, fixture data |
 | `/roster` | Roster | Built — filter, sort and rider detail panel, from the API, no fixture data |
 | `/staff` | Staff | Built — hire/fire a trainer, from the API, no fixture data |
+| `/training` | Training | Built — set the weekly focus, see last week's moves, from the API, no fixture data |
 | `/calendar` | Calendar | Built — twelve weeks from the API, no fixture data |
 | `/race/:raceId` | Race | Built — squad selection, no fixture data |
 | `/league` | League | Built — season standings table from the API, no fixture data |
@@ -184,3 +185,10 @@ card-and-bar composition (the same `Card`, `Bar`, `barColor` primitives, the
 same rider-card layout) rather than inventing a new visual language, so the
 screen looks consistent with the rest of the app even without a reference
 export.
+
+`Training.tsx` is in the same position — `design/` predates weekly training
+as a feature — and follows the same rule, composing `PageHeading`, `Card`,
+`CardHeader` and `Button` the way `Staff.tsx` does. Its shapes mirror the
+API's `TrainingState` payload exactly: the last-rollover changes panel and
+the focus picker are the two things `specs/weekly-training-focus.md` asks
+for, with nothing invented around them.

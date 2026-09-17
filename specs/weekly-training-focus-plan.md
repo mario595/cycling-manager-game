@@ -564,6 +564,14 @@ dependencies (with a string-only-reference note) and updates the `staff/` and
 `api.ts`, `useTraining.ts`, `screens/Training.tsx`, `App.tsx`.
 *Test:* manual, per Verification. The SPA has no test suite today.
 
+**Done.** `api.ts` gained `TrainingChange`, `TrainingState`, `getTraining()`
+and `setTrainingFocus()`; `useTraining.ts` mirrors `useStaff` (60s poll +
+refresh); `screens/Training.tsx` renders the last-rollover changes panel on
+top (hidden entirely when there is no report, "No visible changes last week."
+when empty) and the focus picker only when `has_trainer`, otherwise a line to
+Staff; `App.tsx` maps `/training` to it (the nav item already existed).
+`tsc -b && vite build` passes. Manual checks are the Verification section.
+
 ## Execution order
 
 W1 first: it is the only item with no dependency on #71, it is pure and
