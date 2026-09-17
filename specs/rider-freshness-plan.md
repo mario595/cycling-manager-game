@@ -367,7 +367,7 @@ screen already uses for a rating; do not introduce a new widget style. Read
 
 ## Work items
 
-### W1 — `riders/`: the fields, the constants and the arithmetic
+### W1 — `riders/`: the fields, the constants and the arithmetic ✅ done
 Add `freshness` and `recovery_rate` to `Rider` with the migration; add the six
 constants, `freshness_multiplier`, `recovery_amount`, `apply_race_cost` and
 `apply_weekly_recovery` to `riders/services.py`; roll `recovery_rate` in
