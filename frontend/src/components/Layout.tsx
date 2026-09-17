@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 
 import { titleForPath } from '../navigation'
-import { TEAM } from '../placeholderData'
 import { seasonLabel } from '../seasonLabel'
 import { MOBILE_BREAKPOINT, color, font } from '../theme'
 import { useAuth } from '../useAuth'
@@ -14,6 +13,10 @@ import { Sidebar } from './Sidebar'
  * Without this list a team-less user landing on /claim would be bounced
  * straight back to itself. */
 const TEAM_LESS_ALLOWED_PATHS = new Set(['/login', '/register', '/claim'])
+
+/** The only routes a visitor with no session may reach. Registration must be
+ * here or a new player could never get an account. */
+const ANON_ALLOWED_PATHS = new Set(['/login', '/register'])
 
 /** True while the viewport is narrow enough to want the drawer layout. */
 function useIsMobile(): boolean {
@@ -38,7 +41,7 @@ export function Layout() {
   const { pathname } = useLocation()
   const { position } = useSeason()
   const label = seasonLabel(position)
-  const { me } = useAuth()
+  const { me, loading } = useAuth()
   const teamName = me?.team?.name ?? 'No team'
 
   // Growing the window past the breakpoint while the drawer is open would
@@ -47,6 +50,15 @@ export function Layout() {
     if (!mobile) setDrawer(false)
   }, [mobile])
 
+  // `loading` gates both guards and is checked first: useAuth starts with
+  // me === null, loading === true, so without it every visitor — including a
+  // logged-in manager refreshing the page — would bounce to /login before
+  // getMe() answers. A failed getMe() leaves me === null and loading ===
+  // false, so it falls through to the login redirect rather than hanging.
+  if (loading) return null
+  if (!me?.authenticated && !ANON_ALLOWED_PATHS.has(pathname)) {
+    return <Navigate to="/login" replace state={{ from: pathname }} />
+  }
   // A logged-in user with no team cannot use /roster or a squad screen —
   // both 403 and render an error. Redirect to /claim instead of letting
   // each screen handle the 403 individually.
@@ -124,19 +136,6 @@ export function Layout() {
               {teamName.toUpperCase()}
               {label ? ` · ${label}` : ''}
             </div>
-          </div>
-          <div
-            style={{
-              marginLeft: 'auto',
-              background: color.surface,
-              border: `1px solid ${color.border}`,
-              borderRadius: 9,
-              padding: '7px 11px',
-              fontSize: 12,
-              fontFamily: font.mono,
-            }}
-          >
-            {TEAM.budget}
           </div>
         </header>
 
