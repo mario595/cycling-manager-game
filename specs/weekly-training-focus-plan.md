@@ -488,6 +488,8 @@ one week. (`racing/` uses a flat `tests.py`, not a `tests/` package — unlike
 *Test:* `staff/tests/test_models.py::test_one_focus_per_team` and
 `::test_one_report_per_team_per_week` both assert `IntegrityError`.
 
+**Done.**
+
 ### W3 — `riders/services.py`: training deltas, and one shared settle
 `is_injured()`, `training_deltas()`, and the `extra_deltas` parameter plus new
 return type on `apply_weekly_growth()`. **Update #71's existing caller and
