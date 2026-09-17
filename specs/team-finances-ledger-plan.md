@@ -383,6 +383,7 @@ accumulating, then reverse.
 ## Work items
 
 ### W1 — `economy/`: create the app
+**[x] done**
 `startapp economy`, add to `LOCAL_APPS` in `config/settings/base.py`,
 write `economy/README.md`, add `economy/models.py` with `LedgerEntry`,
 `Kind`, `STARTING_BALANCE`, `WEEKLY_WAGE_PER_RIDER`, and generate
