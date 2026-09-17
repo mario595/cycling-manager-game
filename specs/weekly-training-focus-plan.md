@@ -503,6 +503,8 @@ point, not zero.
 *Load-bearing:* that last test is the one that catches the double-truncation
 this plan exists to avoid.
 
+**Done.**
+
 ### W4 — `staff/services.py`: focus read/write
 `focus_for`, `set_focus`, `latest_report`.
 *Test:* `staff/tests/test_services.py::test_set_focus_requires_a_trainer`,

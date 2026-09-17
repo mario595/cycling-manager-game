@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from django.db.models import F
 
+from .display import to_display_scale
 from .generation import SPECIALITY_PROFILES
 from .models import ENGINE_ATTRIBUTES, Rider
 
@@ -35,6 +36,20 @@ WEEKLY_DECLINE_UNIT = 0.006
 #: model's age cap of 40 against the youngest possible peak_age of 22)
 #: losing an implausible amount in one season.
 DECLINE_YEARS_CAP = 3
+
+#: Trainer effect per week per trainer skill point: `WEEKLY_TRAINING_UNIT *
+#: trainer_skill * affinity`. Tuned so a trainer at 85 in their speciality
+#: with a rider on affinity 1.2 gives `0.010 * 85 * 1.2 ≈ 1.02` stored
+#: points a week — about twelve across a season, just over one display
+#: level — while the same trainer on a 30-score off-speciality skill gives
+#: ~0.36/week, clearly worse but never zero (the spec's "not a substitute"
+#: framing from specs/weekly-training-focus-plan.md, Design decision 8).
+WEEKLY_TRAINING_UNIT = 0.010
+
+#: Stored points a finished race earns toward each attribute it trained.
+#: "Much less" than trainer training: a rider racing most weeks gains ~2-3
+#: points a season from racing alone, so trainers stay the main lever.
+RACE_TRAINING_UNIT = 0.25
 
 MIN_ATTRIBUTE = 1
 MAX_ATTRIBUTE = 100
@@ -110,33 +125,83 @@ def _settle(current: int, debt: float, delta: float) -> tuple[int, float]:
     return new_value, remainder
 
 
-def apply_weekly_growth(weeks: int = 1) -> int:
-    """Move every rider along their age curve by `weeks` weeks.
+def is_injured(rider: Rider) -> bool:
+    """Whether a rider sits out training this week.
 
-    Fractional movement accumulates in each rider's growth_debt rather
-    than being rounded away each call — see Design decision 5. Returns
-    how many riders had a stored attribute actually change.
+    Always False until #41 (injuries) lands and gives this a real answer.
+    A deliberate placeholder, not an oversight: the spec requires injured
+    riders to be skipped, and #41 owns the data model that decides what
+    "injured" means.
     """
-    changed = 0
+    return False
+
+
+def training_deltas(
+    rider: Rider,
+    *,
+    focus: str | None,
+    trainer_skill: int | None,
+    raced_attributes: list[str],
+) -> dict[str, float]:
+    """This week's training movement for one rider, before settling.
+
+    Trainer effect and race effect are additive (spec: "not a substitute
+    for it"). Returns 0.0 for every attribute when the rider is injured.
+    Never returns a negative value — training only ever raises.
+    """
+    if is_injured(rider):
+        return {name: 0.0 for name in ENGINE_ATTRIBUTES}
+
+    deltas = {name: 0.0 for name in ENGINE_ATTRIBUTES}
+    if focus is not None and trainer_skill is not None:
+        affinity = rider.training_affinity.get(focus, 1.0)
+        deltas[focus] += WEEKLY_TRAINING_UNIT * trainer_skill * affinity
+    for name in raced_attributes:
+        deltas[name] += RACE_TRAINING_UNIT
+    return deltas
+
+
+def apply_weekly_growth(
+    weeks: int = 1,
+    extra_deltas: dict[int, dict[str, float]] | None = None,
+) -> list[dict]:
+    """Move every rider along their age curve, plus any extra per-rider
+    deltas, settling both through one growth_debt ledger.
+
+    `extra_deltas` is {rider_id: {attribute: delta}}. Returns one record
+    per rider whose *displayed* value changed, so the caller can build a
+    training report without re-reading the table.
+    """
+    records: list[dict] = []
     riders_to_update: list[Rider] = []
     for rider in Rider.objects.all():
         deltas = weekly_deltas(rider, weeks=weeks)
+        extra = extra_deltas.get(rider.pk, {}) if extra_deltas else {}
         debt = dict(rider.growth_debt)
-        rider_changed = False
         for name in ENGINE_ATTRIBUTES:
             current = getattr(rider, name)
-            new_value, remainder = _settle(current, debt.get(name, 0.0), deltas[name])
+            new_value, remainder = _settle(
+                current, debt.get(name, 0.0), deltas[name] + extra.get(name, 0.0),
+            )
             debt[name] = remainder
             if new_value != current:
                 setattr(rider, name, new_value)
-                rider_changed = True
+                before = to_display_scale(current)
+                after = to_display_scale(new_value)
+                if after != before:
+                    records.append({
+                        "rider_id": rider.pk,
+                        "rider_name": rider.name,
+                        "team_id": rider.team_id,
+                        "attribute": name,
+                        "from": before,
+                        "to": after,
+                    })
         rider.growth_debt = debt
         riders_to_update.append(rider)
-        if rider_changed:
-            changed += 1
 
     Rider.objects.bulk_update(riders_to_update, [*ENGINE_ATTRIBUTES, "growth_debt"])
-    return changed
+    return records
 
 
 def advance_ages() -> int:
