@@ -1,14 +1,20 @@
 from __future__ import annotations
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from riders.generation import generate_roster
 from riders.models import Rider
 from teams.models import Team
+from teams.services import claim_team
 
 DEFAULT_TEAM_COUNT = 16
 DEFAULT_RIDERS_PER_TEAM = 12
+
+#: The team a claimed --claim-for team is given. Arbitrary — a player who
+#: claims a team themselves always chooses its name and code.
+DEMO_TEAM_NAME = "Test Team"
+DEMO_TEAM_CODE = "TST"
 
 #: Plausible team names paired with a derived three-letter code. Seed data,
 #: not game logic — kept here rather than in teams/models.py or a fixture.
@@ -73,9 +79,12 @@ class Command(BaseCommand):
     help = (
         "Create unmanaged teams, each with a freshly generated roster, so "
         "there is something for a registered player to claim — see "
-        "teams/README.md and specs/claiming-a-team.md. Adds teams by "
-        "default; --reset deletes every unmanaged team (and their riders) "
-        "first. Never touches a managed team."
+        "teams/README.md and specs/claiming-a-team.md. Ensures --count "
+        "unmanaged teams exist, creating nothing when they already do, so "
+        "re-running is safe; --reset deletes every unmanaged team (and "
+        "their riders) first. Never touches a managed team. --claim-for "
+        "takes one team out of the pool for an existing user (the demo "
+        "account, say)."
     )
 
     def add_arguments(self, parser):
@@ -91,6 +100,14 @@ class Command(BaseCommand):
             "--reset", action="store_true",
             help="Delete every unmanaged team and its riders first. A managed "
             "team, and its riders, are never touched, reset or not.",
+        )
+        parser.add_argument(
+            "--claim-for",
+            default=None,
+            help="Email of an existing user to claim a team for — e.g. the "
+            "demo account test@mail.com. Aborts if the user is not found; "
+            "claims nothing if they already manage a team. One team is taken "
+            "out of the pool.",
         )
 
     def handle(self, *args, **options):
@@ -120,11 +137,23 @@ class Command(BaseCommand):
                     f"rider(s), {result_count} result(s), {squad_count} squad(s)"
                 )
 
+            unmanaged_count = Team.objects.filter(manager__isnull=True).count()
+            needed = max(0, count - unmanaged_count)
             created_teams = 0
             created_riders = 0
-            for index in range(count):
+            index = 0
+            while created_teams < needed:
                 name, code = _name_and_code(index)
-                primary, secondary = COLOUR_PALETTE[index % len(COLOUR_PALETTE)]
+                index += 1
+                # Team.name is unique, so a name once created (even for a
+                # team that was claimed and renamed since) must never be
+                # created again — skip it and let _name_and_code generate
+                # the next one.
+                if Team.objects.filter(name=name).exists():
+                    continue
+                primary, secondary = COLOUR_PALETTE[
+                    created_teams % len(COLOUR_PALETTE)
+                ]
                 team = Team.objects.create(
                     name=name, code=code,
                     primary_colour=primary, secondary_colour=secondary,
@@ -134,7 +163,28 @@ class Command(BaseCommand):
                 created_teams += 1
                 created_riders += len(roster)
 
-        self.stdout.write(
+            claimed = None
+            claim_for = options["claim_for"]
+            if claim_for:
+                from accounts.models import User
+
+                user = User.objects.filter(email=claim_for).first()
+                if user is None:
+                    raise CommandError(
+                        f"no user with email {claim_for!r} — run seed_user "
+                        "first (or register a player)"
+                    )
+                if Team.objects.filter(manager=user).exists():
+                    self.stdout.write(
+                        f"{claim_for} already manages a team — nothing claimed"
+                    )
+                else:
+                    claimed = claim_team(user, name=DEMO_TEAM_NAME, code=DEMO_TEAM_CODE)
+
+        message = (
             f"created {created_teams} unmanaged team(s), "
             f"{created_riders} rider(s)"
         )
+        if claimed is not None:
+            message += f"\nclaimed {claimed.name} ({claimed.code}) for {claim_for}"
+        self.stdout.write(message)
