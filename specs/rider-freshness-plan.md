@@ -408,7 +408,7 @@ Call `apply_weekly_recovery(exclude_ids=set(raced))` in `_apply_training_week`.
 `test_three_missed_weeks_recover_three_times` (proves the per-week loop is
 honoured rather than collapsed).
 
-### W5 — `api/`: freshness on the squad screen
+### W5 — `api/`: freshness on the squad screen ✅ done
 Add it to the view's dict and `SquadRiderSerializer`.
 **Tests** (`api/tests.py`): `test_squad_riders_include_freshness_on_display_scale`,
 `test_squad_riders_never_expose_recovery_rate`.
