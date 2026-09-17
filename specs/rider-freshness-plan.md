@@ -391,7 +391,7 @@ with the floor multiplier must still produce 1, not 0).
 **Load-bearing:** this is the only place the penalty exists. Verify
 `race_engine/` is untouched by this commit.
 
-### W3 — `racing/services.py`: consume freshness and weight auto-pick
+### W3 — `racing/services.py`: consume freshness and weight auto-pick ✅ done
 Pass `freshness_scale` in `simulate_race`; deduct from finishers inside the
 existing transaction; weight `auto_pick_squad`'s sort.
 **Tests** (`racing/tests.py`): `test_simulate_race_deducts_freshness_from_finishers`,
