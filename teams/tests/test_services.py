@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone as dt_timezone
+
 import pytest
 from django.core.exceptions import ValidationError
 
 from accounts.models import User
+from economy.models import STARTING_BALANCE, LedgerEntry
+from economy.services import balance_for, entries_for
 from racing.models import Race, RaceResult
 from riders.models import Rider
 from teams.models import Team
@@ -79,3 +83,37 @@ def test_claim_preserves_race_results(db, user, team, rider, race):
 
     result.refresh_from_db()
     assert result.rider_id == rider.pk
+
+
+def test_claim_resets_balance_to_starting_amount(db, user, team):
+    at = datetime(2027, 3, 1, 0, 0, tzinfo=dt_timezone.utc)
+    LedgerEntry.objects.create(
+        team=team, kind=LedgerEntry.Kind.STARTING_BALANCE, amount=STARTING_BALANCE,
+        occurred_at=at, description="Starting balance",
+    )
+    LedgerEntry.objects.create(
+        team=team, kind=LedgerEntry.Kind.WAGES, amount=-14_400,
+        occurred_at=at, description="Weekly wages",
+    )
+
+    claim_team(user, name="Mountain Goats", code="MGO")
+
+    assert balance_for(team) == STARTING_BALANCE
+
+
+def test_claim_preserves_prior_ledger_entries(db, user, team):
+    at = datetime(2027, 3, 1, 0, 0, tzinfo=dt_timezone.utc)
+    original = LedgerEntry.objects.create(
+        team=team, kind=LedgerEntry.Kind.STARTING_BALANCE, amount=STARTING_BALANCE,
+        occurred_at=at, description="Starting balance",
+    )
+    LedgerEntry.objects.create(
+        team=team, kind=LedgerEntry.Kind.WAGES, amount=-14_400,
+        occurred_at=at, description="Weekly wages",
+    )
+
+    claim_team(user, name="Mountain Goats", code="MGO")
+
+    entries = list(entries_for(team))
+    assert any(e.pk == original.pk for e in entries)
+    assert any(e.kind == LedgerEntry.Kind.TAKEOVER for e in entries)

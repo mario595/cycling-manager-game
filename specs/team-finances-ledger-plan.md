@@ -431,6 +431,7 @@ forward three weeks, one tick, assert **three** entries with three distinct
 reason for D3.
 
 ### W5 — `teams/`: reset balance on claim
+**[x] done**
 The function-scope import and call in `claim_team`.
 **Test:** `teams/tests/test_services.py` —
 `test_claim_resets_balance_to_starting_amount`,
