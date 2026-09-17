@@ -214,6 +214,7 @@ def generate_rider(
         peak_age=peak_age,
         decline_rate=rng.randint(_MIN_ATTRIBUTE, _MAX_ATTRIBUTE),
         injury_proneness=rng.randint(_MIN_ATTRIBUTE, _MAX_ATTRIBUTE),
+        recovery_rate=rng.randint(_MIN_ATTRIBUTE, _MAX_ATTRIBUTE),
         training_affinity=_roll_training_affinity(speciality, rng),
         **attributes,
     )

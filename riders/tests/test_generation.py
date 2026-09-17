@@ -4,6 +4,7 @@ import random
 
 from riders.generation import BUILD_PROFILES, _roll_potential, generate_rider, generate_roster
 from riders.models import ENGINE_ATTRIBUTES, Rider
+from riders.services import FRESHNESS_MAX
 
 
 def test_generated_rider_is_valid(db):
@@ -70,3 +71,9 @@ def test_roster_size_and_team(db, team):
 
     assert len(roster) == 12
     assert all(rider.team_id == team.pk for rider in roster)
+
+
+def test_generated_rider_starts_at_full_freshness(db):
+    rider = generate_rider(rng=random.Random(7))
+
+    assert rider.freshness == FRESHNESS_MAX

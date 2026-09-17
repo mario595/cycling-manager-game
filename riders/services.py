@@ -8,7 +8,8 @@ run and how many weeks to apply.
 
 from __future__ import annotations
 
-from django.db.models import F
+from django.db.models import F, Value
+from django.db.models.functions import Greatest
 
 from .display import to_display_scale
 from .generation import SPECIALITY_PROFILES
@@ -53,6 +54,32 @@ RACE_TRAINING_UNIT = 0.25
 
 MIN_ATTRIBUTE = 1
 MAX_ATTRIBUTE = 100
+
+#: Freshness is stored 1-100 and shown 0-10 through the shared
+#: to_display_scale — the same convention as every attribute and every
+#: trainer skill. MAX is what a rider starts at and what rest returns
+#: toward; FLOOR is the "low floor" the spec decided: a rider parked there
+#: is a visible handicap, not a rounding error.
+FRESHNESS_MAX = 100
+FRESHNESS_FLOOR = 20
+
+#: Freshness deducted when a rider finishes one race. The spec requires a
+#: race to cost more than a week of rest returns (RECOVERY_MAX is 20), so
+#: that racing every week nets negative and only a rotation across the
+#: squad keeps a rider consistently near full.
+RACE_FRESHNESS_COST = 25
+
+#: Weekly recovery range a hidden recovery_rate of 1-100 maps onto
+#: linearly. At the average rate (~14/week), a rider racing every week
+#: nets -11/week and reaches the floor from full in about seven weeks —
+#: within a twelve-week season.
+RECOVERY_MIN = 8
+RECOVERY_MAX = 20
+
+#: Attribute multiplier at FRESHNESS_FLOOR: a 20% cut, clearly visible in
+#: results without making the rider a non-participant. Multiplier is
+#: linear in freshness between FRESHNESS_FLOOR and FRESHNESS_MAX.
+PENALTY_AT_FLOOR = 0.80
 
 
 def attribute_ceilings(rider: Rider) -> dict[str, float]:
@@ -211,3 +238,54 @@ def advance_ages() -> int:
     UPDATE statement via F(), not a per-row loop.
     """
     return Rider.objects.filter(age__lt=40).update(age=F("age") + 1)
+
+
+def freshness_multiplier(freshness: int) -> float:
+    """Attribute scaling for a rider at this freshness.
+
+    1.0 at FRESHNESS_MAX, PENALTY_AT_FLOOR at FRESHNESS_FLOOR, linear
+    between. Input is clamped, so a value outside the range (only
+    reachable via admin) can never scale attributes *up*.
+    """
+    clamped = max(FRESHNESS_FLOOR, min(FRESHNESS_MAX, freshness))
+    return PENALTY_AT_FLOOR + (
+        (1 - PENALTY_AT_FLOOR)
+        * (clamped - FRESHNESS_FLOOR)
+        / (FRESHNESS_MAX - FRESHNESS_FLOOR)
+    )
+
+
+def recovery_amount(rider: Rider) -> int:
+    """Freshness this rider regains in a week of rest.
+
+    Maps recovery_rate 1-100 onto RECOVERY_MIN..RECOVERY_MAX linearly.
+    """
+    fraction = (rider.recovery_rate - MIN_ATTRIBUTE) / (MAX_ATTRIBUTE - MIN_ATTRIBUTE)
+    return round(RECOVERY_MIN + fraction * (RECOVERY_MAX - RECOVERY_MIN))
+
+
+def apply_race_cost(rider_ids: list[int]) -> int:
+    """Deduct RACE_FRESHNESS_COST from each rider, floored at
+    FRESHNESS_FLOOR. One UPDATE via Greatest/F, not a per-row loop.
+    Returns the number of rows updated.
+    """
+    return Rider.objects.filter(pk__in=rider_ids).update(
+        freshness=Greatest(
+            Value(FRESHNESS_FLOOR),
+            F("freshness") - RACE_FRESHNESS_COST,
+        )
+    )
+
+
+def apply_weekly_recovery(*, exclude_ids: set[int]) -> int:
+    """Restore one week of freshness to every rider not in exclude_ids,
+    capped at FRESHNESS_MAX. Returns rows updated.
+    """
+    to_update: list[Rider] = []
+    for rider in Rider.objects.exclude(pk__in=exclude_ids):
+        restored = min(FRESHNESS_MAX, rider.freshness + recovery_amount(rider))
+        if restored != rider.freshness:
+            rider.freshness = restored
+            to_update.append(rider)
+    Rider.objects.bulk_update(to_update, ["freshness"])
+    return len(to_update)
