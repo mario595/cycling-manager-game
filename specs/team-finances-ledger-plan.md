@@ -396,6 +396,7 @@ on a duplicate, and `test_non_wage_entries_are_not_constrained` writing two
 non-wage rows.
 
 ### W2 — `economy/services.py`: balance, opening balance, reset
+**[x] done**
 `balance_for`, `entries_for`, `ensure_opening_balance`,
 `reset_to_starting_balance`.
 **Test:** `economy/tests/test_services.py` — `test_balance_is_zero_with_no_entries`,
