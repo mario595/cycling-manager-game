@@ -440,7 +440,7 @@ the rest of the page while one block is still loading`.
 **Load-bearing:** the last case. It is what proves the per-block loading
 discipline from the Dashboard section rather than a single combined gate.
 
-### W10 — documentation
+### W10 — documentation — **done**
 
 Per the next section. Lands last so it describes what was actually built.
 
