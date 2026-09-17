@@ -382,7 +382,7 @@ constants, `freshness_multiplier`, `recovery_amount`, `apply_race_cost` and
 **Load-bearing:** the multiplier must clamp its input; an unclamped value
 scales attributes *above* their stored values.
 
-### W2 — `racing/adapters.py`: scale attributes into the engine
+### W2 — `racing/adapters.py`: scale attributes into the engine ✅ done
 Add `freshness_scale` to `to_engine_rider` with `_scaled` clamping into 1–100.
 **Tests** (`racing/tests.py`): `test_to_engine_rider_scales_attributes_by_freshness`,
 `test_to_engine_rider_defaults_to_no_scaling`,
