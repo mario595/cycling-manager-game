@@ -50,10 +50,11 @@ def _display_scale_attributes(obj) -> dict[str, int]:
 
 
 class SquadRiderSerializer(serializers.Serializer):
-    """One rider as the squad screen needs them: identity, speciality and
+    """One rider as the squad screen needs them: identity, speciality,
     age, the five engine attributes on the 0-10 display scale (never the
-    stored 1-100 — see riders/display.py) for the manager to compare on, and
-    whether they are in the squad and leading it."""
+    stored 1-100 — see riders/display.py) and freshness mapped through the
+    same scale, for the manager to compare on, plus whether they are in the
+    squad and leading it. The recovery rate is deliberately not included."""
 
     id = serializers.IntegerField()
     name = serializers.CharField()
@@ -61,11 +62,15 @@ class SquadRiderSerializer(serializers.Serializer):
     age = serializers.IntegerField()
     selected = serializers.BooleanField()
     is_leader = serializers.BooleanField()
+    freshness = serializers.SerializerMethodField()
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
         data.update(_display_scale_attributes(instance))
         return data
+
+    def get_freshness(self, instance) -> int:
+        return to_display_scale(instance["freshness"])
 
 
 class RiderSerializer(serializers.Serializer):
