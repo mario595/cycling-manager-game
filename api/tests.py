@@ -25,7 +25,10 @@ def test_clock_endpoint_returns_current_game_time(db):
     # (the view's and this assertion's) would almost never match exactly.
     world_services._clock = None
     try:
-        response = APIClient().get("/api/world/clock/")
+        client = APIClient()
+        user = User.objects.create_user(email="clock@example.com", password="s0meth1ng-good")
+        client.force_authenticate(user=user)
+        response = client.get("/api/world/clock/")
 
         assert response.status_code == 200
         assert response.data["current"] == now().isoformat().replace("+00:00", "Z")
@@ -43,7 +46,10 @@ def test_position_endpoint_reports_the_current_week(db):
             starts_at=season.starts_at, ends_at=season.starts_at + timedelta(weeks=1),
         )
 
-        response = APIClient().get("/api/schedule/position/")
+        client = APIClient()
+        user = User.objects.create_user(email="position@example.com", password="s0meth1ng-good")
+        client.force_authenticate(user=user)
+        response = client.get("/api/schedule/position/")
 
         assert response.status_code == 200
         assert response.data["state"] == "in_season"
@@ -57,7 +63,10 @@ def test_position_endpoint_reports_the_current_week(db):
 def test_position_endpoint_reports_no_season_when_none_declared(db):
     world_services._clock = None
     try:
-        response = APIClient().get("/api/schedule/position/")
+        client = APIClient()
+        user = User.objects.create_user(email="position@example.com", password="s0meth1ng-good")
+        client.force_authenticate(user=user)
+        response = client.get("/api/schedule/position/")
 
         assert response.status_code == 200
         assert response.data["state"] == "no_season"
@@ -91,7 +100,10 @@ def test_calendar_returns_twelve_weeks(db):
             week=week_one,
         )
 
-        response = APIClient().get("/api/schedule/calendar/")
+        client = APIClient()
+        user = User.objects.create_user(email="calendar@example.com", password="s0meth1ng-good")
+        client.force_authenticate(user=user)
+        response = client.get("/api/schedule/calendar/")
 
         assert response.status_code == 200
         assert len(response.data["weeks"]) == 12
@@ -108,7 +120,10 @@ def test_calendar_reports_off_season_with_no_weeks(db):
     try:
         _create_season_with_weeks(now() - timedelta(weeks=13))
 
-        response = APIClient().get("/api/schedule/calendar/")
+        client = APIClient()
+        user = User.objects.create_user(email="calendar@example.com", password="s0meth1ng-good")
+        client.force_authenticate(user=user)
+        response = client.get("/api/schedule/calendar/")
 
         assert response.status_code == 200
         assert response.data["state"] == "off_season"
@@ -121,7 +136,10 @@ def test_calendar_reports_off_season_with_no_weeks(db):
 def test_calendar_reports_no_season_before_any_is_declared(db):
     world_services._clock = None
     try:
-        response = APIClient().get("/api/schedule/calendar/")
+        client = APIClient()
+        user = User.objects.create_user(email="calendar@example.com", password="s0meth1ng-good")
+        client.force_authenticate(user=user)
+        response = client.get("/api/schedule/calendar/")
 
         assert response.status_code == 200
         assert response.data["state"] == "no_season"
@@ -143,7 +161,10 @@ def test_calendar_race_carries_status_and_distance(db):
             week=week_one,
         )
 
-        response = APIClient().get("/api/schedule/calendar/")
+        client = APIClient()
+        user = User.objects.create_user(email="calendar@example.com", password="s0meth1ng-good")
+        client.force_authenticate(user=user)
+        response = client.get("/api/schedule/calendar/")
 
         race_data = next(w for w in response.data["weeks"] if w["races"])["races"][0]
         assert race_data["status"] == "scheduled"
@@ -152,14 +173,37 @@ def test_calendar_race_carries_status_and_distance(db):
         world_services._clock = None
 
 
-@override_settings(GAME_CLOCK_CLASS="world.clocks.MockClock")
-def test_calendar_is_public(db):
-    world_services._clock = None
-    try:
-        client = APIClient()
-        assert client.get("/api/schedule/calendar/").status_code == 200
-    finally:
-        world_services._clock = None
+def test_clock_requires_login(db):
+    client = APIClient()
+
+    assert client.get("/api/world/clock/").status_code == 403
+
+    user = User.objects.create_user(email="clocker@example.com", password="s0meth1ng-good")
+    client.force_authenticate(user=user)
+
+    assert client.get("/api/world/clock/").status_code == 200
+
+
+def test_position_requires_login(db):
+    client = APIClient()
+
+    assert client.get("/api/schedule/position/").status_code == 403
+
+    user = User.objects.create_user(email="positioner@example.com", password="s0meth1ng-good")
+    client.force_authenticate(user=user)
+
+    assert client.get("/api/schedule/position/").status_code == 200
+
+
+def test_calendar_requires_login(db):
+    client = APIClient()
+
+    assert client.get("/api/schedule/calendar/").status_code == 403
+
+    user = User.objects.create_user(email="calendars@example.com", password="s0meth1ng-good")
+    client.force_authenticate(user=user)
+
+    assert client.get("/api/schedule/calendar/").status_code == 200
 
 
 def test_me_reports_anonymous_for_a_visitor(db):
