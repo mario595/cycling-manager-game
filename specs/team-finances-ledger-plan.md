@@ -407,6 +407,7 @@ it exactly to `STARTING_BALANCE`, and **the prior entries still exist**),
 `test_reset_at_starting_balance_writes_nothing`.
 
 ### W3 — `economy/services.py`: `charge_weekly_wages`
+**[x] done**
 **Test:** `economy/tests/test_wages.py` —
 `test_charges_every_team_once`, `test_amount_is_roster_times_wage`,
 `test_unmanaged_teams_are_charged`,

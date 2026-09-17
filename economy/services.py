@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from django.db.models import Sum, QuerySet
+from django.db import IntegrityError, transaction
+from django.db.models import Count, Sum, QuerySet
 from django.utils import timezone
+from teams.models import Team
 
-from .models import STARTING_BALANCE, LedgerEntry
+from .models import STARTING_BALANCE, WEEKLY_WAGE_PER_RIDER, LedgerEntry
 
 
 def balance_for(team) -> int:
@@ -55,3 +57,39 @@ def reset_to_starting_balance(team) -> LedgerEntry | None:
         occurred_at=timezone.now(),
         description="Team taken over",
     )
+
+
+def charge_weekly_wages(week) -> int:
+    """Debit every team one combined wage entry for `week`. Returns how
+    many entries were written.
+
+    Called once per crossed week boundary from world.services.tick(),
+    inside the loop over WeekTransition rows. Exactly-once comes from that
+    WeekTransition row (unique on `week`, written before this runs); the
+    (team, week) constraint below is a second line of defence.
+
+    One atomic() per create, never one around the loop: an IntegrityError
+    poisons the enclosing transaction in Django. Same shape as
+    schedule.services.process_transitions and staff's
+    _write_training_reports, for the same reason.
+    """
+    counts = dict(
+        Team.objects.annotate(n=Count("riders")).values_list("pk", "n")
+    )
+    written = 0
+    for team_id, rider_count in counts.items():
+        with transaction.atomic():
+            try:
+                LedgerEntry.objects.create(
+                    team_id=team_id,
+                    kind=LedgerEntry.Kind.WAGES,
+                    amount=-(rider_count * WEEKLY_WAGE_PER_RIDER),
+                    occurred_at=week.starts_at,
+                    week=week,
+                    rider_count=rider_count,
+                    description="Weekly wages",
+                )
+                written += 1
+            except IntegrityError:
+                continue          # already charged; correct outcome, not an error
+    return written
