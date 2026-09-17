@@ -9,6 +9,7 @@ The React SPA. Currently a **scaffold**: it reproduces the mockup in
 |-------|--------|-------|
 | `/` | Dashboard | Built — full layout from the design, fixture data |
 | `/roster` | Roster | Built — filter, sort and rider detail panel, from the API, no fixture data |
+| `/staff` | Staff | Built — hire/fire a trainer, from the API, no fixture data |
 | `/calendar` | Calendar | Built — twelve weeks from the API, no fixture data |
 | `/race/:raceId` | Race | Built — squad selection, no fixture data |
 | `/league` | League | Built — season standings table from the API, no fixture data |
@@ -176,3 +177,10 @@ that link through to a race-detail screen (#47, not built). `Calendar.tsx`
 matches the mockup's per-season card and week-row structure, but shows one
 season only (there is no multi-season history yet) and drops anything that
 needs standings or a detail screen that does not exist.
+
+`Staff.tsx` has **no mockup to build from at all** — `design/` was exported
+before staff existed as a domain. It follows `Roster.tsx`'s existing
+card-and-bar composition (the same `Card`, `Bar`, `barColor` primitives, the
+same rider-card layout) rather than inventing a new visual language, so the
+screen looks consistent with the rest of the app even without a reference
+export.

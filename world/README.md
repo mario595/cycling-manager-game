@@ -78,12 +78,20 @@ reads `now()` once, then finds and processes whatever is due, in four steps:
    season boundary crossed at or before `now()` that hasn't been recorded
    yet (see `schedule/README.md`, *Exactly-once*). This runs **before**
    claiming races: a race in week 1 of a season that has just opened should
-   be processed in a world that has already recorded the opening. For every
-   `CLOSED` transition this returns, every rider's age advances by one
-   (`riders.services.advance_ages()`).
-1. **Growth** — `schedule.services.process_week_transitions(at)` records any
-   week boundary opened at or before `now()` that hasn't been recorded yet
-   (see `schedule/README.md`, *Week transitions*). If any were recorded,
+   be processed in a world that has already recorded the opening.
+   Immediately after, `tick()` calls `staff.services.top_up_pool()` once
+   per transition `process_transitions` actually wrote — the season-boundary
+   hook's first consumer. Idempotency comes from that return value, not
+   from anything tracked in `staff/`: a `SeasonTransition` row is written at
+   most once ever, so a tick that runs twice, or catches up several weeks
+   late, cannot top up the trainer pool twice for the same boundary. See
+   `staff/README.md`.
+1. **Ageing and growth** — for every `CLOSED` transition `process_transitions`
+   returned, every rider's age advances by one
+   (`riders.services.advance_ages()`). Then
+   `schedule.services.process_week_transitions(at)` records any week
+   boundary opened at or before `now()` that hasn't been recorded yet (see
+   `schedule/README.md`, *Week transitions*); if any were recorded,
    `riders.services.apply_weekly_growth(weeks=len(weeks))` moves every
    rider's attributes along their age curve
    ([#58](https://github.com/mario595/cycling-manager/issues/58); see

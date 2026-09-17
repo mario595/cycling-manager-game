@@ -295,3 +295,42 @@ export async function getStandings(): Promise<Standings> {
   }
   return response.json()
 }
+
+/** Skills are the 0-10 display scale, same convention as Rider — see
+ * riders/display.py. `speciality` is the skill this trainer is best at,
+ * derived server-side, not a separate rating. */
+export interface Trainer {
+  id: number
+  name: string
+  nationality: string
+  speciality: string
+  skills: {
+    climb: number
+    sprint: number
+    flat: number
+    resistance: number
+    positioning: number
+  }
+}
+
+export interface Staff {
+  trainer: Trainer | null
+  pool: Trainer[]
+}
+
+export async function getStaff(): Promise<Staff> {
+  const response = await fetch('/api/staff/')
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new Error(body?.detail ?? `staff request failed: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function hireTrainer(trainerId: number): Promise<void> {
+  return writeJson('/api/staff/trainer/hire/', 'POST', { trainer_id: trainerId })
+}
+
+export async function fireTrainer(): Promise<void> {
+  return writeJson('/api/staff/trainer/fire/', 'POST')
+}

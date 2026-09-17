@@ -24,6 +24,7 @@ from racing.services import simulate_race
 from riders.services import advance_ages, apply_weekly_growth
 from schedule.models import SeasonTransition
 from schedule.services import process_transitions, process_week_transitions
+from staff.services import top_up_pool
 
 from .clocks import Clock
 from .models import GameClock, TickRun
@@ -107,6 +108,13 @@ def tick() -> TickRun:
     # has just opened should be processed in a world that has already
     # recorded the opening.
     transitions = process_transitions(at)
+
+    # One top-up per crossed boundary. Idempotent for free: a
+    # SeasonTransition row is written at most once ever (unique on
+    # (season, kind)), so a tick that runs twice, or catches up three weeks
+    # late, cannot double-fill the pool.
+    for _ in transitions:
+        top_up_pool()
 
     # Ageing before growth, so a rider who turned 33 at this boundary is
     # evaluated against their new age this same tick.

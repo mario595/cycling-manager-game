@@ -108,7 +108,7 @@ up front — an empty app is just noise. The table below marks which exist.
 | `competitions/` | Competitions | **built**, `README.md` | Race points and season standings, one Group. Divisions, multiple Groups, promotion/relegation, classifications and season history still to come. A **Division** is a tier; a **Group** is a parallel section within one. |
 | `schedule/` | Schedule | **built**, `README.md` | Seasons, their twelve weeks, and the race calendar declared within them. **Not** `calendar/` — that shadows the stdlib module. |
 | `economy/` | Economy | *not yet* | Budgets, sponsorships, prize money, fanbase/merchandise. Use an append-only ledger, not a mutable balance field. |
-| `staff/` | Staff | *not yet* | Hired trainers, physios and scouts. Fixed slots, one per role per team. |
+| `staff/` | Staff | **built**, `README.md` | Trainers hireable from a shared pool into one fixed slot per team. Physios and scouts still to come. |
 | `world/` | World Simulation | **built**, `README.md` | The game clock and the tick. AI team decisions still to come. |
 | `api/` | API | **built**, `README.md` | DRF routers aggregating each app's serializers and views. |
 | `frontend/` | Frontend/UI | **scaffold**, `README.md` | The React SPA. Built to `frontend/dist/`, served by Django. Dashboard and Roster render from the mockup; everything else is a placeholder route. No DB yet. |
@@ -176,8 +176,10 @@ cycling-manager/
 │   └── README.md          # email login, session auth, what this app may import
 ├── riders/
 │   └── README.md          # attributes, display scale, generation
-└── teams/
-    └── README.md          # codes, colours, claiming an unmanaged team
+├── teams/
+│   └── README.md          # codes, colours, claiming an unmanaged team
+└── staff/
+    └── README.md          # the trainer pool, the one-slot rule, hiring
 ```
 
 ## Development Principles
