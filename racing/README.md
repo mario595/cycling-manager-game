@@ -147,6 +147,34 @@ finish" position, only a lower one. Anything that scores or ranks off
 for the rule this protects (a team whose whole squad abandoned must not be
 credited for wherever those riders were numbered).
 
+## The weekly-training readers
+
+Weekly training ([#36](https://github.com/mario595/cycling-manager/issues/36))
+needs one thing only this app can answer: what a race *rewarded*. That answer
+lives in `services.py`, computed entirely from the stored `Race.course` JSON,
+in two functions:
+
+- **`course_training_attribute(course)`** — which single attribute a course
+  trains. Pure and engine-free: a distance-weighted average gradient at or
+  above `CLIMB_GRADIENT_THRESHOLD` (2.0%) trains `climb`; a course of
+  `SPRINT_MAX_DISTANCE` (120 km) or less with no such climb trains `sprint`;
+  `RESISTANCE_MIN_DISTANCE` (200 km) or more trains `resistance`; anything
+  else merely flat trains `flat`. `positioning` is never awarded — no course
+  shape distinctly rewards draft skill (the plan's Design decision 4).
+- **`riders_who_raced(week)`** — `{rider_id: [attribute, ...]}` over every
+  `RaceResult` with a `finish_time` in `week`'s races, one query rather than
+  one per race. A rider who finished several of the week's races appears once
+  per race and is trained for each.
+
+**Terrain is classified here, not read from the engine's `Terrain`**, for the
+same reason everything else in this app is the seam: only `racing/adapters.py`
+may import `race_engine`, and the stored course JSON is already the segment
+list — reaching into the engine would drag a whole other import path in for a
+computation the app's own `Race.course` row already carries. `riders/` must
+not import `racing/`, so the two halves meet in `world/`, which imports both:
+see `world/README.md`, *How a tick works*, for where these results are
+consumed each week.
+
 ### A race belongs to a week
 
 `Race.week` is a `ForeignKey("schedule.Week", ...)`, declared as a string so

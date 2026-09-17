@@ -27,17 +27,24 @@ Every rider carries two kinds of attribute:
 `potential`, `peak_age` and `decline_rate` are live: `services.py` reads
 them every week to grow or decline a rider's attributes, and `age`
 advances once per season — see *The age curve*, below.
-`injury_proneness` and `training_affinity` are still inert, waiting on
-injuries ([#41](https://github.com/mario595/cycling-manager/issues/41))
-and weekly training
-([#36](https://github.com/mario595/cycling-manager/issues/36))
-respectively. `growth_debt` is an implementation detail of the age curve,
+`training_affinity` is live too: `services.training_deltas` reads it each
+week to scale the trainer's focused training
+([#36](https://github.com/mario595/cycling-manager/issues/36); see *Weekly
+training*, below) — and it is **still never serialized**: the Training
+screen ships only the display-scale before/after, never the trait behind
+them. `injury_proneness` remains inert, waiting on injuries
+([#41](https://github.com/mario595/cycling-manager/issues/41)): the
+training pass skips injured riders through `services.is_injured()`, a
+placeholder that returns `False` for everyone until #41 gives it a real
+answer. `growth_debt` is an implementation detail of the age curve,
 not a game concept — see below.
 
 The rule that *every hidden trait must be inferable* — a hidden value with
 no observable consequence is an unfair dice roll, not depth — applies from
-the point each trait goes live, not before. It is a bar #41 and #36 must
-each clear when they land; growth/decline (#58) clears it now.
+the point each trait goes live, not before. Growth/decline (#58) and weekly
+training (#36) each clear it: `training_affinity`'s only observable
+consequence is how quickly a focused trainer's work accumulates, which the
+Training screen surfaces. #41 must clear the same bar when it lands.
 
 ## Display scale: stored 1-100, shown 0-10
 
@@ -108,15 +115,53 @@ keeps the remainder — so twelve weeks of 0.6 becomes 7 stored points
 instead of being rounded to 0 every week or inflated to 12. It is hidden
 and never serialized, like every other trait in this section.
 
-`riders/` knows nothing about weeks, seasons or the clock — `apply_weekly_growth(weeks)`
-and `advance_ages()` are pure with respect to time; `world.services.tick()`
-is what decides when to call them and how many weeks have passed. This
-keeps the dependency direction in `AGENTS.md` intact: `riders/` may not
+`riders/` knows nothing about weeks, seasons or the clock —
+`apply_weekly_growth(weeks, extra_deltas=None)` and `advance_ages()` are
+pure with respect to time; `world.services.tick()` is what decides when to
+call them and how many weeks have passed. The signature gained
+`extra_deltas` and a return value for #36 — see *Weekly training*, below.
+This keeps the dependency direction in `AGENTS.md` intact: `riders/` may not
 import `schedule/` or `world/`.
 
 **Decline has no floor, and there is no retirement.** A rider can decline
 indefinitely toward the bottom of the range and sit on a roster, unusable,
 forever — deliberately out of scope here. See *Future work*, below.
+
+## Weekly training
+
+`services.training_deltas(rider, *, focus, trainer_skill, raced_attributes)`
+computes one rider's weekly training movement: the trainer's skill in the
+focused attribute × `WEEKLY_TRAINING_UNIT` (0.010) × the rider's hidden
+`training_affinity` for that attribute, plus a flat `RACE_TRAINING_UNIT`
+(0.25) stored points per race finished last week, toward each attribute that
+week's terrain rewarded (the list coming from
+`racing.services.riders_who_raced`). Values are stored points in the same
+1-100 world the age curve operates in; a focused season lands at roughly one
+display point and racing "much less" (tuning reasoning: the plan's Design
+decision 8). Both units are named module constants, not literals.
+
+The effect never goes negative and off-speciality training is never zero —
+`WEEKLY_TRAINING_UNIT` scales a weak trainer's 30-score off-speciality skill
+to ~0.3 stored points a week, and `staff/generation.py`'s 25 floor exists so
+no generated trainer ever sits below that. `services.is_injured(rider)`
+returns `False` for everyone: it is #41's seam — named and called now so the
+pass skips injured riders the moment injuries exist, with no data model for
+#41 to inherit (the plan's Design decision 6). Do **not** add an
+`is_injured` field to `Rider`; that is #41's decision to make.
+
+`training_deltas` never touches the database. The caller
+(`world.services._apply_training_week`) collects one deltas map per affected
+rider and hands it to
+`apply_weekly_growth(weeks, extra_deltas=None)`, which adds the week's
+training movement to its age-curve movement and settles both through the one
+`growth_debt` — one pass, one rounding point (Design decisions 1 and 2; see
+*The age curve*, above). The return is one record per rider whose
+*displayed* value moved, which the world writes to `staff.TrainingWeekReport`
+so the Training screen can report the week without diffing attributes after
+the fact — the "what moved" summary this readme's *Future work* once asked
+for. Because both mechanisms settle together, a listed change is the visible
+number moving, not an attribution of how much came from which; that split
+would be fake precision on a 0-10 scale and is deliberately not offered.
 
 ## Generation
 
@@ -194,8 +239,9 @@ command is an entry point, the same latitude
   fall indefinitely and stay on the roster, unusable, forever. Belongs to
   a dedicated retirement feature ([#42](https://github.com/mario595/cycling-manager/issues/42)),
   not to the age curve itself.
-- **A visible "what moved" summary.** Growth and decline currently surface
-  only as changed numbers a player has to notice for themselves. Fold this
-  into weekly training's ([#36](https://github.com/mario595/cycling-manager/issues/36))
-  Training-page summary once it exists, so both weekly mechanisms report
-  through one list rather than two.
+- **Attributing movement to growth vs training.** The "what moved" list is
+  built — `staff.TrainingWeekReport` at each rollover, shown on the Training
+  screen — but a change is the visible number moving, with no split of how
+  much came from the age curve vs training. That split is deliberately not
+  offered: growth and training settle through one ledger, and attributing
+  them on a 0-10 scale would be false precision.

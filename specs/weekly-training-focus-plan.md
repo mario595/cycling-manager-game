@@ -547,6 +547,19 @@ existing api suite pass (53).
 `staff/README.md`, `riders/README.md`, `world/README.md`, `racing/README.md`,
 `AGENTS.md`. See below.
 
+**Done.** All five updated: `staff/README.md` gained a *Weekly training*
+section (team-keyed focus per Design decision 5, accepted late-tick behaviour
+per Design decision 3) and records the string-only reference to
+`schedule.Week`; `riders/README.md` moves `training_affinity` from inert to
+live, documents `is_injured()` as #41's placeholder, adds *Weekly training*
+and the new `apply_weekly_growth(weeks, extra_deltas=None)` signature;
+`world/README.md`'s *How a tick works* step 1 now covers the per-week
+training step, why it cannot collapse to a count, and the raced-week
+ordering deviation (`_completed_week`); `racing/README.md` gained *The
+weekly-training readers*; `AGENTS.md` adds `schedule` to `staff`'s
+dependencies (with a string-only-reference note) and updates the `staff/` and
+`riders/` table rows.
+
 ### W8 — `frontend/`: the Training screen
 `api.ts`, `useTraining.ts`, `screens/Training.tsx`, `App.tsx`.
 *Test:* manual, per Verification. The SPA has no test suite today.
