@@ -401,7 +401,7 @@ existing transaction; weight `auto_pick_squad`'s sort.
 **Load-bearing:** the deduction goes *inside* `transaction.atomic()`, and only
 finishers pay.
 
-### W4 — `world/services.py`: weekly recovery on the tick
+### W4 — `world/services.py`: weekly recovery on the tick ✅ done
 Call `apply_weekly_recovery(exclude_ids=set(raced))` in `_apply_training_week`.
 **Tests** (`world/tests/`): `test_tick_recovers_freshness_for_resting_riders`,
 `test_tick_does_not_recover_a_rider_who_raced_that_week`,
