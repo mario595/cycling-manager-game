@@ -19,6 +19,7 @@ from django.utils import timezone
 from django.utils.module_loading import import_string
 
 from competitions.services import score_race
+from economy.services import charge_weekly_wages
 from racing.models import Race
 from racing.services import riders_who_raced, simulate_race
 from riders.models import Rider
@@ -213,8 +214,10 @@ def tick() -> TickRun:
 
     weeks = process_week_transitions(at)
     riders_trained = 0
+    wage_entries = 0
     for transition in weeks:            # per week, NOT weeks=len(weeks)
         riders_trained += _apply_training_week(transition.week)
+        wage_entries += charge_weekly_wages(transition.week)
 
     reclaimed = _reclaim_unfinished()
     claimed = _claim(limit=max(0, max_races - len(reclaimed)), at=at)
@@ -227,6 +230,7 @@ def tick() -> TickRun:
         weeks_processed=len(weeks),
         riders_aged=riders_aged,
         riders_trained=riders_trained,
+        wage_entries=wage_entries,
     )
     _execute(reclaimed + claimed, run, at=at)
     run.capped = capped

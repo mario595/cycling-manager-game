@@ -418,6 +418,7 @@ constraint), `test_occurred_at_is_the_weeks_start`.
 unchanged by it.
 
 ### W4 — `world/`: wire wages into the tick
+**[x] done**
 Import and call inside the existing week loop; add `TickRun.wage_entries`
 and its migration.
 **Test:** `world/tests/test_tick.py` —
