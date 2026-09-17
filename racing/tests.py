@@ -586,3 +586,43 @@ def test_riders_who_raced_groups_by_rider(db, week, team):
 
     assert set(raced[racer.pk]) == {"sprint", "climb"}
     assert abandoned.pk not in raced
+
+
+def test_to_engine_rider_scales_attributes_by_freshness(rider):
+    fresh = to_engine_rider(rider, role="leader", freshness_scale=1.0)
+    tired = to_engine_rider(rider, role="leader", freshness_scale=0.80)
+
+    assert tired.attributes.climb < fresh.attributes.climb
+    assert tired.attributes.sprint < fresh.attributes.sprint
+    assert tired.attributes.positioning < fresh.attributes.positioning
+    assert tired.attributes.resistance < fresh.attributes.resistance
+    assert tired.attributes.flat < fresh.attributes.flat
+
+
+def test_to_engine_rider_defaults_to_no_scaling(rider):
+    """Existing callers that do not pass freshness_scale must see
+    the stored attribute values unchanged."""
+    unscaled = to_engine_rider(rider, role="support")
+
+    assert unscaled.attributes.climb == 94
+    assert unscaled.attributes.positioning == 52
+
+
+def test_to_engine_rider_never_scales_below_engine_minimum(db, team):
+    """A rider at attribute 1 with the floor multiplier (0.80) must
+    still produce 1, not 0 — the engine validates its range and a 0
+    would raise mid-race."""
+    minimal = Rider.objects.create(
+        name="Minimal", team=team,
+        climb=1, sprint=1, flat=1, resistance=1, positioning=1,
+    )
+
+    # floor multiplier is 0.80; round(1 * 0.80) = 1, already >= 1.
+    # test with an even smaller scale to prove the clamp works.
+    scaled = to_engine_rider(minimal, role="support", freshness_scale=0.10)
+
+    assert scaled.attributes.climb == 1
+    assert scaled.attributes.sprint == 1
+    assert scaled.attributes.flat == 1
+    assert scaled.attributes.resistance == 1
+    assert scaled.attributes.positioning == 1

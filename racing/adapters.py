@@ -27,7 +27,16 @@ if TYPE_CHECKING:
     from .models import Race
 
 
-def to_engine_rider(rider: DBRider, *, role: str) -> EngineRider:
+def _scaled(value: int, scale: float) -> int:
+    """Apply a freshness scale, rounding and clamping into [1, 100].
+
+    The engine validates its own attribute range, so an unclamped value
+    would raise mid-race.
+    """
+    return max(1, min(100, round(value * scale)))
+
+
+def to_engine_rider(rider: DBRider, *, role: str, freshness_scale: float = 1.0) -> EngineRider:
     """Convert a persisted rider into the dataclass the engine simulates.
 
     The engine identifies riders by string id; we use the primary key so that
@@ -38,10 +47,16 @@ def to_engine_rider(rider: DBRider, *, role: str) -> EngineRider:
     therefore required, not defaulted: the caller must derive it from the
     squad for this race, and a caller that forgets fails loudly here rather
     than sending an unintended role into the engine.
+
+    `freshness_scale` defaults to 1.0 so existing callers and tests that do
+    not care about fatigue keep working unchanged. `simulate_race` passes a
+    real value computed from `rider.freshness` via
+    `riders.services.freshness_multiplier`.
     """
-    attributes = RiderAttributes(
-        **{name: getattr(rider, name) for name in ENGINE_ATTRIBUTES}
-    )
+    attributes = RiderAttributes(**{
+        name: _scaled(getattr(rider, name), freshness_scale)
+        for name in ENGINE_ATTRIBUTES
+    })
     return EngineRider(
         id=str(rider.pk),
         name=rider.name,
