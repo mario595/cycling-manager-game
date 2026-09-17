@@ -21,6 +21,7 @@ from racing.services import (
     suggested_squad,
 )
 from riders.models import Rider
+from riders.services import FRESHNESS_FLOOR
 from schedule.models import Season, Week
 from teams.models import Team
 
@@ -626,3 +627,126 @@ def test_to_engine_rider_never_scales_below_engine_minimum(db, team):
     assert scaled.attributes.flat == 1
     assert scaled.attributes.resistance == 1
     assert scaled.attributes.positioning == 1
+
+
+def test_simulate_race_deducts_freshness_from_finishers(running_race, four_riders):
+    simulate_race(running_race, game_time=timezone.now())
+
+    for rider in four_riders:
+        rider.refresh_from_db()
+        assert rider.freshness == 100 - 25
+
+
+def test_simulate_race_does_not_deduct_from_non_finishers(running_race, four_riders, monkeypatch):
+    # The engine always runs until every rider finishes, so a non-finisher
+    # cannot arise from a real run today. Inject one through the adapter
+    # seam: simulate_race must still refuse to charge a rider whose
+    # finish_time is None — the same rule riders_who_raced applies.
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    states = [
+        SimpleNamespace(finish_time=100.0, rider=SimpleNamespace(id=str(r.pk)))
+        for r in four_riders
+    ]
+    states[-1].finish_time = None
+
+    def fake_run_race(riders, course, log_path, *args, **kwargs):
+        Path(log_path).touch()
+        return states
+
+    monkeypatch.setattr("racing.services.run_race_via_adapter", fake_run_race)
+
+    simulate_race(running_race, game_time=timezone.now())
+
+    for i, rider in enumerate(four_riders):
+        rider.refresh_from_db()
+        if i == len(four_riders) - 1:
+            assert rider.freshness == 100
+        else:
+            assert rider.freshness == 100 - 25
+
+
+def test_auto_pick_prefers_fresher_rider_of_equal_strength(db, team):
+    fresh = Rider.objects.create(
+        name="Fresh Strong", team=team,
+        climb=90, sprint=90, flat=90, resistance=90, positioning=90,
+    )
+    tired = Rider.objects.create(
+        name="Tired Strong", team=team,
+        climb=90, sprint=90, flat=90, resistance=90, positioning=90,
+    )
+    tired.freshness = FRESHNESS_FLOOR
+    tired.save(update_fields=["freshness"])
+    for i in range(2):
+        Rider.objects.create(
+            name=f"Filler {i}", team=team,
+            climb=20, sprint=20, flat=20, resistance=20, positioning=20,
+        )
+
+    rider_ids, leader_id = auto_pick_squad(team)
+
+    assert leader_id == fresh.pk
+    assert rider_ids[:2] == [fresh.pk, tired.pk]
+
+
+def test_auto_pick_still_prefers_much_stronger_tired_rider(db, team):
+    strong = Rider.objects.create(
+        name="Strong Tired", team=team,
+        climb=90, sprint=90, flat=90, resistance=90, positioning=90,
+    )
+    strong.freshness = FRESHNESS_FLOOR
+    strong.save(update_fields=["freshness"])
+    medium = Rider.objects.create(
+        name="Medium Fresh", team=team,
+        climb=50, sprint=50, flat=50, resistance=50, positioning=50,
+    )
+    for i in range(2):
+        Rider.objects.create(
+            name=f"Weak {i}", team=team,
+            climb=20, sprint=20, flat=20, resistance=20, positioning=20,
+        )
+
+    rider_ids, leader_id = auto_pick_squad(team)
+
+    assert leader_id == strong.pk
+    assert rider_ids[0] == strong.pk
+    assert rider_ids[1] == medium.pk
+
+
+def test_tired_riders_finish_worse_than_fresh_ones_on_the_same_seed(db):
+    """The likeliest failure mode for this feature is the penalty silently
+    not applying — the numbers all move on screen but the scaled attributes
+    never reach the engine. Simulating the same course twice with the same
+    seed, once with one team at the floor, is what catches it: engine
+    randomness is identical between the runs, so any ordering change is
+    caused by the penalty."""
+    tired_team = Team.objects.create(name="Tired Team", code="TIR")
+    fresh_team = Team.objects.create(name="Fresh Team", code="FRE")
+    for name, team in [("Tired", tired_team), ("Fresh", fresh_team)]:
+        for i in range(4):
+            Rider.objects.create(
+                name=f"{name} {i}", team=team,
+                climb=90, sprint=90, flat=90, resistance=90, positioning=90,
+            )
+    course = [{"length": 500.0, "gradient": 0.0}]
+    both_fresh = Race.objects.create(name="Both Fresh", course=course, seed=12345)
+    race_tired = Race.objects.create(name="Tired Team", course=course, seed=12345)
+
+    simulate_race(both_fresh, game_time=timezone.now())
+
+    Rider.objects.filter(team=tired_team).update(freshness=FRESHNESS_FLOOR)
+    simulate_race(race_tired, game_time=timezone.now())
+
+    def best_position(race, team) -> int:
+        return min(
+            RaceResult.objects.filter(race=race, rider__team=team)
+            .values_list("position", flat=True)
+        )
+
+    fresh_min = best_position(both_fresh, tired_team)
+    tired_min = best_position(race_tired, tired_team)
+    fresh_team_min = best_position(race_tired, fresh_team)
+
+    assert fresh_min < tired_min
+    assert fresh_team_min < tired_min
