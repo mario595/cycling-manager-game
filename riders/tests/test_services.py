@@ -60,6 +60,33 @@ def test_a_young_rider_below_potential_grows():
     assert deltas["climb"] > 0
 
 
+def test_a_season_of_growth_for_a_young_rider_is_10_to_20_stored_points():
+    # Spec (In scope #7): "a full season of growth ... is worth roughly
+    # one to two points on the 0-10 display scale" — 10 to 20 stored
+    # points. A young, promising-but-unfinished rider — climb 45, comparable
+    # to what generation.py actually produces, with room left below a
+    # realistic potential of 65 — is the representative case this promise
+    # is about, not an extreme gap.
+    rider = make_rider(age=20, peak_age=27, climb=45, potential=65)
+
+    season_delta = weekly_deltas(rider, weeks=12)["climb"]
+
+    assert 10 <= season_delta <= 20
+
+
+def test_a_season_of_decline_for_a_veteran_is_10_to_20_stored_points():
+    # Spec (In scope #7): "a rider deep in decline loses about the same
+    # over a season." An average decline_rate, comfortably past peak (at
+    # or beyond DECLINE_YEARS_CAP, where decline has finished
+    # accelerating) is the representative deep-decline case, not an edge
+    # case — most riders past their peak eventually reach it.
+    rider = make_rider(age=34, peak_age=27, decline_rate=50)
+
+    season_delta = weekly_deltas(rider, weeks=12)["climb"]
+
+    assert -20 <= season_delta <= -10
+
+
 def test_a_rider_past_peak_age_declines():
     rider = make_rider(age=30, peak_age=27, decline_rate=50)
 
@@ -77,6 +104,21 @@ def test_decline_accelerates_with_years_past_peak():
     delta_three = weekly_deltas(three_years_past, weeks=1)["climb"]
 
     assert abs(delta_three) > abs(delta_one)
+
+
+def test_decline_stops_accelerating_past_the_years_cap():
+    # A veteran many years past peak must not keep losing more every
+    # season forever — DECLINE_YEARS_CAP is what stops per-week decline
+    # from scaling without bound the longer a rider has been past their
+    # peak (a slice of the population this game generates: age caps at
+    # 40, peak_age can be as young as 22).
+    three_years_past = make_rider(age=30, peak_age=27, decline_rate=50)
+    ten_years_past = make_rider(age=37, peak_age=27, decline_rate=50)
+
+    delta_three = weekly_deltas(three_years_past, weeks=1)["climb"]
+    delta_ten = weekly_deltas(ten_years_past, weeks=1)["climb"]
+
+    assert delta_three == delta_ten
 
 
 def test_a_higher_decline_rate_falls_faster():

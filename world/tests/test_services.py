@@ -315,9 +315,12 @@ def test_riders_do_not_age_mid_season(db, young_rider):
     assert young_rider.age == 20
 
 
-def test_growth_is_applied_before_races_are_simulated(db, young_rider, team):
+def test_growth_is_applied_before_races_are_simulated(db, young_rider, team, monkeypatch):
     # A rider racing in the same tick their week's growth lands should
-    # race with that week's attributes already applied.
+    # race with that week's attributes already applied. weeks_processed
+    # and races_finished both being non-zero proves nothing about *order*
+    # (either call order would produce the same counts), so this records
+    # the actual call order and asserts growth happened first.
     clock: MockClock = get_clock()
     season = make_season_with_weeks(1, now())
     week_one = season.weeks.get(number=1)
@@ -334,7 +337,23 @@ def test_growth_is_applied_before_races_are_simulated(db, young_rider, team):
     )
     clock.set(week_one.starts_at + timedelta(hours=1))
 
+    call_order: list[str] = []
+    original_apply_weekly_growth = world_services.apply_weekly_growth
+    original_simulate_race = world_services.simulate_race
+
+    def _record_growth(*args, **kwargs):
+        call_order.append("growth")
+        return original_apply_weekly_growth(*args, **kwargs)
+
+    def _record_race(*args, **kwargs):
+        call_order.append("race")
+        return original_simulate_race(*args, **kwargs)
+
+    monkeypatch.setattr("world.services.apply_weekly_growth", _record_growth)
+    monkeypatch.setattr("world.services.simulate_race", _record_race)
+
     run = tick()
 
     assert run.weeks_processed == 1
     assert run.races_finished == 1
+    assert call_order == ["growth", "race"]

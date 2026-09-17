@@ -52,9 +52,9 @@ reimplement it.
 This is deliberate lossiness, not a rounding bug: two riders at 71 and 74
 both show 7, and a rider is not shown to have reached a level until their
 stored value actually gets there (58 shows 5, not 6). The roster cannot
-offer a meaningful sort on a raw attribute number, and growth (see
-`specs/rider-growth-and-decline.md`, #58) arrives as an occasional visible
-jump rather than a number that visibly creeps every week.
+offer a meaningful sort on a raw attribute number, and growth (see *The
+age curve*, below) arrives as an occasional visible jump rather than a
+number that visibly creeps every week.
 
 **Do not rescale the stored values to make display simpler.** A stored
 range change invalidates the verified realism balance across all six
@@ -74,10 +74,19 @@ changed numbers, never a report of what moved.
 **Two halves, joined at `peak_age`, not one polynomial.** Below `peak_age`,
 `weekly_deltas` closes a fraction of the remaining gap to a per-attribute
 ceiling; at or above it, attributes fall at a rate scaled by
-`decline_rate` and by years past peak. Growth speed and decline speed are
-governed by different hidden traits and must be tunable apart — a rider's
-`potential` says nothing about how fast they fall once they're past their
-best.
+`decline_rate` and by years past peak, capped at `DECLINE_YEARS_CAP` (3)
+so decline keeps accelerating for a rider newly past their peak — where it
+matters for a manager's decision — without compounding without bound the
+longer a rider has been retired-in-all-but-name. Growth speed and decline
+speed are governed by different hidden traits and must be tunable apart —
+a rider's `potential` says nothing about how fast they fall once they're
+past their best. Both constants are tuned so a season of growth or
+decline for the *representative* case — a young rider well below
+potential, or an average-`decline_rate` veteran comfortably past peak —
+lands at roughly one to two points on the display scale (10-20 stored
+points), the band `specs/rider-growth-and-decline.md` promised before it
+was deleted post-implementation (see `AGENTS.md`, *Closing a ticket*); a
+rider with a near-maximum `decline_rate` can still lose somewhat more.
 
 **The ceiling is per-attribute, not `potential` itself.** `potential` is
 one number; a rider has five attributes. `attribute_ceilings()` scales it

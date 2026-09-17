@@ -20,9 +20,21 @@ from .models import ENGINE_ATTRIBUTES, Rider
 WEEKLY_GROWTH_FRACTION = 0.035
 
 #: Stored points a rider at decline_rate 100 loses per week, per year past
-#: peak_age. Tuned so a rider two years past peak with an average decline
-#: rate loses roughly a display point across a season.
-WEEKLY_DECLINE_UNIT = 0.010
+#: peak_age (capped at DECLINE_YEARS_CAP). Tuned so a rider several years
+#: past peak with an *average* decline rate (50) loses roughly one to two
+#: display points across a season — the spec's promised band
+#: (specs/rider-growth-and-decline.md, In scope #7) for the representative
+#: case, not just the ceiling — rather than compounding without bound the
+#: longer a rider has been retired-in-all-but-name.
+WEEKLY_DECLINE_UNIT = 0.006
+
+#: Years past peak_age after which decline stops accelerating and holds
+#: steady. Decline still "accelerates rather than being linear" for a
+#: rider newly past their peak — the part of the curve where it matters
+#: for a manager's decision — without an 18-years-past-peak veteran (the
+#: model's age cap of 40 against the youngest possible peak_age of 22)
+#: losing an implausible amount in one season.
+DECLINE_YEARS_CAP = 3
 
 MIN_ATTRIBUTE = 1
 MAX_ATTRIBUTE = 100
@@ -71,7 +83,7 @@ def weekly_deltas(rider: Rider, weeks: int = 1) -> dict[str, float]:
             # attribute (Design decision 10).
             deltas[name] = max(0.0, gap) * closed
     else:
-        years_past = rider.age - rider.peak_age
+        years_past = min(rider.age - rider.peak_age, DECLINE_YEARS_CAP)
         per_week = WEEKLY_DECLINE_UNIT * rider.decline_rate * years_past
         for name in ENGINE_ATTRIBUTES:
             deltas[name] = -per_week * weeks
