@@ -259,6 +259,16 @@ function RiderRow({
             </div>
           )
         })}
+
+        {/* freshness: the same 0-10 display scale as the attributes, but a
+            status marker rather than an engine attribute — clipped apart so
+            it reads as a separate meter. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 90, marginLeft: 4, paddingLeft: 9, borderLeft: `1px solid ${color.border}` }}>
+          <span style={{ fontSize: 9.5, color: color.mutedStrong, fontFamily: font.mono, width: 18 }}>
+            FIT
+          </span>
+          <Bar value={rider.freshness * 10} fill={barColor(rider.freshness * 10)} />
+        </div>
       </div>
 
       {editable && isSelected ? (

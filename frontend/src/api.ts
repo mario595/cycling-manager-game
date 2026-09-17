@@ -183,6 +183,7 @@ export interface SquadRider {
   flat: number
   resistance: number
   positioning: number
+  freshness: number
   selected: boolean
   is_leader: boolean
 }
