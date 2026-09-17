@@ -413,7 +413,7 @@ Add it to the view's dict and `SquadRiderSerializer`.
 **Tests** (`api/tests.py`): `test_squad_riders_include_freshness_on_display_scale`,
 `test_squad_riders_never_expose_recovery_rate`.
 
-### W6 — `frontend/`: show it on the squad selection screen
+### W6 — `frontend/`: show it on the squad selection screen ✅ done
 **Verification:** the browser check in *Verification*, below — this item has no
 unit test of its own beyond whatever the screen's existing tests cover.
 
