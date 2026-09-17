@@ -30,6 +30,60 @@ class SquadError(ValueError):
     API."""
 
 
+#: Distance-weighted mean gradient (%) at or above which a course trains climb.
+CLIMB_GRADIENT_THRESHOLD = 2.0
+#: Courses at or under this length (m) with no real climbing train sprint.
+SPRINT_MAX_DISTANCE = 120_000
+#: Courses at or over this length (m) train resistance.
+RESISTANCE_MIN_DISTANCE = 200_000
+
+
+def course_training_attribute(course: list[dict]) -> str:
+    """Which rider attribute racing this course rewards.
+
+    Pure function over the stored Race.course JSON — deliberately not a
+    read of race_engine.models.Terrain, which only racing/adapters.py may
+    import (AGENTS.md). Never returns "positioning": no course shape
+    distinctly rewards draft skill. See specs/weekly-training-focus-plan.md,
+    Design decision 4.
+    """
+    total_length = sum(s["length"] for s in course)
+    weighted_gradient = (
+        sum(s["length"] * s["gradient"] for s in course) / total_length
+    ) if total_length else 0.0
+
+    if total_length == 0:
+        return "flat"
+    if weighted_gradient >= CLIMB_GRADIENT_THRESHOLD:
+        return "climb"
+    if total_length >= RESISTANCE_MIN_DISTANCE:
+        return "resistance"
+    if total_length <= SPRINT_MAX_DISTANCE:
+        return "sprint"
+    return "flat"
+
+
+def riders_who_raced(week) -> dict[int, list[str]]:
+    """{rider_id: [training attribute per race they finished]} for one week.
+
+    One query over RaceResult joined to Race, not one query per race. A
+    rider who raced twice in a week appears with two entries and is
+    trained for both. Non-finishers are excluded — `RaceResult.position`
+    is assigned to everyone, so only `finish_time` says a rider actually
+    raced; see racing/README.md.
+    """
+    results = (
+        RaceResult.objects.filter(race__week=week, finish_time__isnull=False)
+        .select_related("race")
+    )
+    raced: dict[int, list[str]] = {}
+    for result in results:
+        raced.setdefault(result.rider_id, []).append(
+            course_training_attribute(result.race.course)
+        )
+    return raced
+
+
 def auto_pick_squad(team: Team) -> tuple[list[int], int]:
     """Four rider ids and the leader's id, chosen naively.
 

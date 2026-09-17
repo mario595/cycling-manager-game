@@ -480,6 +480,8 @@ mountain course, a long flat course, a short flat course and an empty course;
 one week. (`racing/` uses a flat `tests.py`, not a `tests/` package — unlike
 `staff/` and `riders/`.)
 
+**Done.**
+
 ### W2 — `staff/`: the two models
 `TrainingFocus` and `TrainingWeekReport`, migration `0002`, admin registration.
 `schedule.Week` referenced as a string.

@@ -13,7 +13,9 @@ from racing.models import Race, RaceLog, RaceResult, RaceSquad, RaceSquadRider
 from racing.services import (
     SquadError,
     auto_pick_squad,
+    course_training_attribute,
     previous_squad,
+    riders_who_raced,
     set_squad,
     simulate_race,
     suggested_squad,
@@ -543,3 +545,44 @@ def test_a_team_of_three_is_skipped_rather_than_crashing_the_race(running_race, 
 
     assert not RaceSquad.objects.filter(race=running_race, team=understaffed_team).exists()
     assert len(results) == 4
+
+
+def test_course_training_attribute_buckets():
+    mountain = [{"length": 50000.0, "gradient": 3.0}]
+    long_flat = [{"length": 250000.0, "gradient": 0.0}]
+    short_flat = [{"length": 50000.0, "gradient": 0.0}]
+    mid_flat = [{"length": 150000.0, "gradient": 0.0}]
+
+    assert course_training_attribute(mountain) == "climb"
+    assert course_training_attribute(long_flat) == "resistance"
+    assert course_training_attribute(short_flat) == "sprint"
+    assert course_training_attribute(mid_flat) == "flat"
+    # No segments, or no total length, must not divide by zero.
+    assert course_training_attribute([]) == "flat"
+
+
+def test_riders_who_raced_groups_by_rider(db, week, team):
+    racer = Rider.objects.create(
+        name="Twice Racer", team=team,
+        climb=60, sprint=60, flat=60, resistance=60, positioning=60,
+    )
+    abandoned = Rider.objects.create(
+        name="Abandoned", team=team,
+        climb=60, sprint=60, flat=60, resistance=60, positioning=60,
+    )
+    race_one = Race.objects.create(
+        name="Short Flat", course=[{"length": 50000.0, "gradient": 0.0}],
+        starts_at=week.starts_at + timedelta(days=1), week=week,
+    )
+    race_two = Race.objects.create(
+        name="Short Climber", course=[{"length": 50000.0, "gradient": 3.0}],
+        starts_at=week.starts_at + timedelta(days=2), week=week,
+    )
+    RaceResult.objects.create(race=race_one, rider=racer, position=1, finish_time=1000.0)
+    RaceResult.objects.create(race=race_two, rider=racer, position=1, finish_time=2000.0)
+    RaceResult.objects.create(race=race_one, rider=abandoned, position=2, finish_time=None)
+
+    raced = riders_who_raced(week)
+
+    assert set(raced[racer.pk]) == {"sprint", "climb"}
+    assert abandoned.pk not in raced
