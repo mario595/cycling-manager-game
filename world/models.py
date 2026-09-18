@@ -70,6 +70,10 @@ class TickRun(models.Model):
         help_text="How many riders had a *displayed* attribute change from training "
         "and/or racing this tick (#36).",
     )
+    wage_entries = models.PositiveIntegerField(
+        default=0,
+        help_text="Ledger wage entries written this tick.",
+    )
     error = models.TextField(
         blank=True, default="",
         help_text="Traceback if the run failed. Empty on success.",

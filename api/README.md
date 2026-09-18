@@ -84,6 +84,14 @@ DRF routers and serializers that aggregate other apps' data for the SPA.
   caller with no team gets a 403. A trainer's five skills are shipped
   through `to_display_scale`, same as a rider's attributes. See
   `staff/README.md`.
+- `GET /api/economy/finances/` (`FinancesSerializer`, `FinancesView`) — the
+  **caller's own** team's finances: `balance` (the sum of the ledger, never
+  a stored column) and `entries`, newest first, each with `kind`,
+  `description`, `amount`, `occurred_at`, `rider_count` and a `balance_after`
+  running total computed in Python as the list is walked. Same `team_for()`
+  pattern as the staff endpoint: no team id in the URL. Unlike `staff/`, a
+  caller with no team gets `{"balance": 0, "entries": []}` — the screen has
+  an empty state, not an error. See `economy/README.md`.
 - `POST /api/staff/trainer/hire/` (`HireTrainerSerializer`,
   `HireTrainerView`) — hire the pool trainer named by `trainer_id` into the
   caller's empty slot. `204` on success. `409` (not `400`) when that

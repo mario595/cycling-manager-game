@@ -271,3 +271,30 @@ class TrainingFocusSerializer(serializers.Serializer):
     an unknown value a 400 before the view is reached."""
 
     attribute = serializers.ChoiceField(choices=ENGINE_ATTRIBUTES)
+
+
+class LedgerEntrySerializer(serializers.Serializer):
+    """One ledger entry as the Finances screen needs it: what happened,
+    when, how much, and the balance after it — spec rule 11. `kind` is the
+    machine name (starting_balance/wages/takeover); the SPA renders the
+    label. `rider_count` is set on wage entries only — null elsewhere.
+    `id` exists so the SPA can key React's list on a stable unique value
+    rather than on a (kind, occurred_at, amount) triplet."""
+
+    id = serializers.IntegerField()
+    kind = serializers.CharField()
+    description = serializers.CharField()
+    amount = serializers.IntegerField()
+    occurred_at = serializers.DateTimeField(allow_null=True)
+    rider_count = serializers.IntegerField(allow_null=True)
+    balance_after = serializers.IntegerField()
+
+
+class FinancesSerializer(serializers.Serializer):
+    """The Finances screen's whole state: the running balance and the full
+    history, newest first, each entry carrying the balance after it was
+    written (the view computes `balance_after` per D7 — see
+    specs/team-finances-ledger-plan.md)."""
+
+    balance = serializers.IntegerField()
+    entries = LedgerEntrySerializer(many=True)

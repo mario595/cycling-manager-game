@@ -163,6 +163,25 @@ class Command(BaseCommand):
                 created_teams += 1
                 created_riders += len(roster)
 
+            # Imported here, not at module scope: teams/ must not import
+            # economy/ at import time (AGENTS.md's dependency direction).
+            # Same rule and reason as the racing.models import in the reset
+            # branch above. Runs *before* the claim block so the team a
+            # --claim-for takes out of the pool already sits at
+            # STARTING_BALANCE — claim_team's takeover then computes a zero
+            # delta, and the claimed team ends at the standard amount with
+            # no double credit. ensure_opening_balance is a get_or_create,
+            # so re-running seed_teams cannot double-credit any team.
+            # `at` is the game time the entries are stamped with — a seed
+            # command is an entry point, so it reads the clock itself, the
+            # same way schedule's load_season does (AGENTS.md).
+            from economy.services import ensure_opening_balance
+            from world.services import now
+
+            at = now()
+            for team in Team.objects.all():
+                ensure_opening_balance(team, at=at)
+
             claimed = None
             claim_for = options["claim_for"]
             if claim_for:
@@ -179,7 +198,7 @@ class Command(BaseCommand):
                         f"{claim_for} already manages a team — nothing claimed"
                     )
                 else:
-                    claimed = claim_team(user, name=DEMO_TEAM_NAME, code=DEMO_TEAM_CODE)
+                    claimed = claim_team(user, name=DEMO_TEAM_NAME, code=DEMO_TEAM_CODE, at=at)
 
         message = (
             f"created {created_teams} unmanaged team(s), "

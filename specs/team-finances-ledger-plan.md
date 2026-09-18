@@ -383,6 +383,7 @@ accumulating, then reverse.
 ## Work items
 
 ### W1 — `economy/`: create the app
+**[x] done**
 `startapp economy`, add to `LOCAL_APPS` in `config/settings/base.py`,
 write `economy/README.md`, add `economy/models.py` with `LedgerEntry`,
 `Kind`, `STARTING_BALANCE`, `WEEKLY_WAGE_PER_RIDER`, and generate
@@ -395,6 +396,7 @@ on a duplicate, and `test_non_wage_entries_are_not_constrained` writing two
 non-wage rows.
 
 ### W2 — `economy/services.py`: balance, opening balance, reset
+**[x] done**
 `balance_for`, `entries_for`, `ensure_opening_balance`,
 `reset_to_starting_balance`.
 **Test:** `economy/tests/test_services.py` — `test_balance_is_zero_with_no_entries`,
@@ -405,6 +407,7 @@ it exactly to `STARTING_BALANCE`, and **the prior entries still exist**),
 `test_reset_at_starting_balance_writes_nothing`.
 
 ### W3 — `economy/services.py`: `charge_weekly_wages`
+**[x] done**
 **Test:** `economy/tests/test_wages.py` —
 `test_charges_every_team_once`, `test_amount_is_roster_times_wage`,
 `test_unmanaged_teams_are_charged`,
@@ -415,6 +418,7 @@ constraint), `test_occurred_at_is_the_weeks_start`.
 unchanged by it.
 
 ### W4 — `world/`: wire wages into the tick
+**[x] done**
 Import and call inside the existing week loop; add `TickRun.wage_entries`
 and its migration.
 **Test:** `world/tests/test_tick.py` —
@@ -427,6 +431,7 @@ forward three weeks, one tick, assert **three** entries with three distinct
 reason for D3.
 
 ### W5 — `teams/`: reset balance on claim
+**[x] done**
 The function-scope import and call in `claim_team`.
 **Test:** `teams/tests/test_services.py` —
 `test_claim_resets_balance_to_starting_amount`,
@@ -435,6 +440,7 @@ are still queryable afterwards — this is the append-only guarantee, and the
 test that catches someone "simplifying" it to a delete).
 
 ### W6 — `api/`: the finances endpoint
+**[x] done**
 Serializers, view, url.
 **Test:** `api/tests.py` — `test_finances_requires_a_session`,
 `test_finances_returns_balance_and_entries`,
@@ -444,6 +450,7 @@ the newest equals `balance`), `test_finances_for_a_user_with_no_team`.
 *Load-bearing:* the running-balance test — D7's off-by-one lives here.
 
 ### W7 — `frontend/`: the Finances screen
+**[x] done**
 `api.ts` additions, `useFinances.ts`, `screens/Finances.tsx`, the nav item,
 the `SCREENS` registration.
 **Test:** `frontend/src/screens/Finances.test.tsx` — renders nothing while
@@ -451,6 +458,7 @@ loading, renders balance and entries, and shows the warning when the
 balance is negative.
 
 ### W8 — `teams/`: seed an opening balance
+**[x] done**
 Call `ensure_opening_balance` for each team in `seed_teams` (function-scope
 import, same as W5).
 **Test:** `teams/tests/test_seed_teams.py::test_seeded_teams_have_an_opening_balance`

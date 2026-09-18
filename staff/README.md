@@ -158,9 +158,11 @@ mainly useful for demos and manual testing.
 
 ## Future work / possible improvements
 
-- **Fee and recurring salary** — [#69](https://github.com/mario595/cycling-manager/issues/69),
-  once the ledger (`economy/`, [#20](https://github.com/mario595/cycling-manager/issues/20))
-  exists. Hiring today is free.
+- **Fee and recurring salary** — [#69](https://github.com/mario595/cycling-manager/issues/69).
+  Unblocked: the ledger it debits from (`economy/`, [#20](https://github.com/mario595/cycling-manager/issues/20))
+  exists and the tick already writes per-week `wages` entries to every team
+  (`world/README.md`, *How a tick works*); a trainer salary is just another
+  ledger row. Hiring today is free.
 - **Physio slot** — once [#41](https://github.com/mario595/cycling-manager/issues/41)
   (injuries) gives it something to affect.
 - **Scout slot** — once transfers/youth intake give it something to narrow.
