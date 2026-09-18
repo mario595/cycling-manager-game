@@ -181,7 +181,7 @@ class RaceResultEntrySerializer(serializers.Serializer):
 
 class RaceResultPointsEntrySerializer(serializers.Serializer):
     team = RaceResultTeamSerializer()
-    position = serializers.IntegerField()
+    position = serializers.IntegerField(allow_null=True)
     points = serializers.IntegerField()
 
 

@@ -340,6 +340,8 @@ gets `403`.
 
 ### W2 — `api/`: zero-fill the points table
 
+✅ Done — `RaceResultsView` appends non-scoring starters from `RaceSquad`; `RaceResultPointsEntrySerializer.position` is `allow_null=True`; `test_points_include_teams_that_scored_nothing` green.
+
 `RaceResultsView`'s `points` payload gains non-scoring starters;
 `RaceResultPointsEntrySerializer.position` becomes nullable.
 

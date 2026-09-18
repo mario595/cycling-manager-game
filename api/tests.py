@@ -532,6 +532,26 @@ def test_race_results_returns_order_and_points(finished_race_with_points):
     assert response.data["points"][0]["points"] == 20
 
 
+def test_points_include_teams_that_scored_nothing(finished_race_with_points):
+    """Load-bearing: starters come from RaceSquad, not from the distinct
+    teams in results — a team entered in the race but with no result row
+    still gets a zero row. See specs/race-detail-view-plan.md, D3."""
+    non_scoring = Team.objects.create(name="Zero Team", code="ZRO")
+    RaceSquad.objects.create(race=finished_race_with_points, team=non_scoring)
+
+    client = APIClient()
+    user = User.objects.create_user(email="viewer5@example.com", password="s0meth1ng-good")
+    client.force_authenticate(user=user)
+
+    response = client.get(f"/api/racing/races/{finished_race_with_points.pk}/results/")
+
+    assert response.status_code == 200
+    zero_row = next(p for p in response.data["points"] if p["team"]["id"] == non_scoring.pk)
+    assert zero_row["points"] == 0
+    assert zero_row["position"] is None
+    assert response.data["points"][0]["team"]["id"] != non_scoring.pk
+
+
 def test_unfinished_race_results_404(db):
     race = Race.objects.create(
         name="Not Yet Run", course=[{"length": 40000.0, "gradient": 0.0}],

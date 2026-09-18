@@ -333,6 +333,29 @@ class RaceResultsView(APIView):
 
         results = race.results.select_related("rider__team").order_by("position")
         points = race.points.select_related("team").order_by("position")
+        scored = {p.team_id: p for p in points}
+        starters = (
+            Team.objects
+            .filter(race_squads__race=race)
+            .distinct()
+            .order_by("name")
+        )
+        points_payload = [
+            {
+                "team": {"id": p.team.pk, "name": p.team.name, "code": p.team.code},
+                "position": p.position,
+                "points": p.points,
+            }
+            for p in points
+        ] + [
+            {
+                "team": {"id": t.pk, "name": t.name, "code": t.code},
+                "position": None,
+                "points": 0,
+            }
+            for t in starters
+            if t.pk not in scored
+        ]
 
         payload = {
             "race": {"id": race.pk, "name": race.name, "status": race.status},
@@ -348,14 +371,7 @@ class RaceResultsView(APIView):
                 }
                 for r in results
             ],
-            "points": [
-                {
-                    "team": {"id": p.team.pk, "name": p.team.name, "code": p.team.code},
-                    "position": p.position,
-                    "points": p.points,
-                }
-                for p in points
-            ],
+            "points": points_payload,
         }
         return Response(RaceResultsSerializer(payload).data)
 
