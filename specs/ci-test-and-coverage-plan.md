@@ -356,7 +356,7 @@ This is the load-bearing item: **the threshold in W3 is only meaningful if this
 number is right**, and it is the one an implementer is most likely to get subtly
 wrong by omitting one of the two test layouts.
 
-### W3 — `.github/workflows/ci.yml`: the workflow
+### W3 — `.github/workflows/ci.yml`: the workflow — **done**
 
 Add the workflow file as above. Nothing else changes.
 
