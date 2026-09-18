@@ -49,11 +49,21 @@ def _display_scale_attributes(obj) -> dict[str, int]:
     return {name: to_display_scale(get(name)) for name in ENGINE_ATTRIBUTES}
 
 
+def _display_freshness(obj) -> int:
+    """Freshness on the same 0-10 scale as the attributes, for the same two
+    object shapes as _display_scale_attributes — dicts from the squad
+    endpoint, Rider instances from the roster endpoint."""
+    if isinstance(obj, dict):
+        return to_display_scale(obj["freshness"])
+    return to_display_scale(obj.freshness)
+
+
 class SquadRiderSerializer(serializers.Serializer):
-    """One rider as the squad screen needs them: identity, speciality and
+    """One rider as the squad screen needs them: identity, speciality,
     age, the five engine attributes on the 0-10 display scale (never the
-    stored 1-100 — see riders/display.py) for the manager to compare on, and
-    whether they are in the squad and leading it."""
+    stored 1-100 — see riders/display.py) and freshness mapped through the
+    same scale, for the manager to compare on, plus whether they are in the
+    squad and leading it. The recovery rate is deliberately not included."""
 
     id = serializers.IntegerField()
     name = serializers.CharField()
@@ -61,18 +71,23 @@ class SquadRiderSerializer(serializers.Serializer):
     age = serializers.IntegerField()
     selected = serializers.BooleanField()
     is_leader = serializers.BooleanField()
+    freshness = serializers.SerializerMethodField()
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
         data.update(_display_scale_attributes(instance))
         return data
 
+    def get_freshness(self, instance) -> int:
+        return _display_freshness(instance)
+
 
 class RiderSerializer(serializers.Serializer):
-    """One rider as the roster screen needs them. Attributes are the 0-10
-    display scale, never the stored 1-100 — see riders/display.py. Hidden
-    traits (potential, peak age, decline rate, injury proneness, training
-    affinity) are deliberately absent: the player must not see them."""
+    """One rider as the roster screen needs them. Attributes and freshness
+    are the 0-10 display scale, never the stored 1-100 — see
+    riders/display.py. Hidden traits (potential, peak age, decline rate,
+    injury proneness, training affinity) and the recovery rate are
+    deliberately absent: the player must not see them."""
 
     id = serializers.IntegerField()
     name = serializers.CharField()
@@ -81,11 +96,15 @@ class RiderSerializer(serializers.Serializer):
     age = serializers.IntegerField()
     height_cm = serializers.IntegerField()
     weight_kg = serializers.IntegerField()
+    freshness = serializers.SerializerMethodField()
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
         data.update(_display_scale_attributes(instance))
         return data
+
+    def get_freshness(self, instance) -> int:
+        return _display_freshness(instance)
 
 
 class SquadSerializer(serializers.Serializer):

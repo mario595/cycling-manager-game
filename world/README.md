@@ -98,8 +98,14 @@ reads `now()` once, then finds and processes whatever is due, in four steps:
    their age curve via `riders.services.apply_weekly_growth(weeks=1,
    extra_deltas=...)`, adding that week's training deltas — the trainer's
    focused skill and last week's racing — through the one `growth_debt`
-   ledger, and writes a per-team `staff.TrainingWeekReport` of the
-   display-scale changes it made.
+   ledger, writes a per-team `staff.TrainingWeekReport` of the
+   display-scale changes it made, and then settles freshness:
+   `riders.services.apply_weekly_recovery(exclude_ids=set(raced))` restores
+   one week's recovery to every rider who did **not** finish a race in the
+   week being settled ([#59](https://github.com/mario595/cycling-manager/issues/59);
+   see `riders/README.md`, *Freshness*). Recovery follows the same per-week
+   shape as training — one pass per `CLOSED` transition, never collapsed for
+   a late tick — because whether a rider raced differs week to week.
    [#58](https://github.com/mario595/cycling-manager/issues/58)'s single
    `apply_weekly_growth(weeks=len(weeks))` call is gone, deliberately:
    training cannot collapse to a count, because each week has its own focus

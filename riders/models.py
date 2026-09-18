@@ -43,11 +43,14 @@ class Rider(TimeStampedModel):
     being folded into the attributes handed to the engine at race time.
 
     The hidden traits (`potential`, `peak_age`, `decline_rate`,
-    `injury_proneness`, `training_affinity`, `growth_debt`) are never
-    serialized — see riders/README.md. `potential`, `peak_age` and
-    `decline_rate` drive weekly growth and decline (#58);
-    `injury_proneness` and `training_affinity` remain inert until #41
-    (injuries) and #36 (training) each start reading one.
+    `injury_proneness`, `training_affinity`, `growth_debt`,
+    `recovery_rate`) are never serialized — see riders/README.md.
+    `potential`, `peak_age` and `decline_rate` drive weekly growth and
+    decline (#58); `injury_proneness` and `training_affinity` remain
+    inert until #41 (injuries) and #36 (training) each start reading
+    one. `freshness` is visible (0-10 via to_display_scale, like any
+    attribute) but its recovery rate is not — the value is what the
+    player acts on; how fast it climbs back is learned by watching it.
     """
 
     class Speciality(models.TextChoices):
@@ -108,6 +111,15 @@ class Rider(TimeStampedModel):
         validators=[MinValueValidator(18), MaxValueValidator(40)],
         help_text="Advanced by one for every rider when a season closes (#58).",
     )
+    freshness = models.PositiveSmallIntegerField(
+        default=100,
+        validators=[MinValueValidator(1), MaxValueValidator(100)],
+        help_text=(
+            "Visible (0-10 via to_display_scale). Falls RACE_FRESHNESS_COST "
+            "when a rider finishes a race, recovers weekly for rested riders. "
+            "See riders/services.py."
+        ),
+    )
 
     # --- Hidden, between-race traits (never serialized — see class docstring) ---
     potential = models.PositiveSmallIntegerField(
@@ -135,6 +147,16 @@ class Rider(TimeStampedModel):
         help_text=(
             "Hidden. {attribute_name: weight} over ENGINE_ATTRIBUTES, read by "
             "weekly training once #36 lands."
+        ),
+    )
+    recovery_rate = models.PositiveSmallIntegerField(
+        default=50,
+        validators=[MinValueValidator(1), MaxValueValidator(100)],
+        help_text=(
+            "Hidden. Maps onto how much freshness a rested rider regains each "
+            "week (RECOVERY_MIN..RECOVERY_MAX in riders/services.py). Never "
+            "serialized — the player infers it from the visible freshness "
+            "moving. See riders/README.md, Visible vs hidden."
         ),
     )
     growth_debt = models.JSONField(

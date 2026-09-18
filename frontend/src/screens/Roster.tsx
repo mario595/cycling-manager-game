@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 
 import type { Rider } from '../api'
-import { Bar, Card, PageBody, PageHeading, StatTile } from '../components/primitives'
+import { Bar, Card, LabelBar, PageBody, PageHeading, StatTile } from '../components/primitives'
 import { barColor, color, font } from '../theme'
 import { useAuth } from '../useAuth'
 import { useRoster } from '../useRoster'
@@ -263,38 +263,16 @@ function RiderCard({
         </div>
       </div>
 
-      {/* rider[key] is the 0-10 display scale (riders/display.py); Bar/
-          barColor expect 0-100, so scale for the bar only — see
-          specs/rider-attributes-plan.md, Design decisions, item 12. */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0,1fr))', gap: 7 }}>
-        {ATTR_KEYS.map(({ key, label }) => {
-          const value = rider[key]
-          return (
-            <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'baseline',
-                  gap: 2,
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: 9.5,
-                    letterSpacing: '0.6px',
-                    color: color.mutedStrong,
-                    fontFamily: font.mono,
-                  }}
-                >
-                  {label}
-                </span>
-                <span style={{ fontSize: 11, fontWeight: 600, fontFamily: font.mono }}>{value}</span>
-              </div>
-              <Bar value={value * 10} fill={barColor(value * 10)} />
-            </div>
-          )
-        })}
+      {/* rider[key] and rider.freshness are the 0-10 display scale (see
+          riders/display.py); LabelBar prints the value and scales it to
+          0-100 for the bar. */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+        {ATTR_KEYS.map(({ key, label }) => (
+          <LabelBar key={key} label={label} value={rider[key]} />
+        ))}
+        <div style={{ marginTop: 3, paddingTop: 7, borderTop: `1px solid ${color.divider}` }}>
+          <LabelBar label="FIT" value={rider.freshness} />
+        </div>
       </div>
 
       <div
@@ -387,6 +365,32 @@ function RiderPanel({ rider, onClose }: { rider: Rider; onClose: () => void }) {
             </div>
           )
         })}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            marginTop: 1,
+            paddingTop: 11,
+            borderTop: `1px solid ${color.divider}`,
+          }}
+        >
+          <span style={{ width: 88, flex: '0 0 88px', fontSize: 12.5, color: '#565A61' }}>
+            Freshness
+          </span>
+          <Bar value={rider.freshness * 10} fill={barColor(rider.freshness * 10)} height={7} />
+          <span
+            style={{
+              width: 26,
+              textAlign: 'right',
+              fontSize: 12,
+              fontWeight: 600,
+              fontFamily: font.mono,
+            }}
+          >
+            {rider.freshness}
+          </span>
+        </div>
       </div>
 
       <div

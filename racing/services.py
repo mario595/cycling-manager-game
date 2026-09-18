@@ -16,6 +16,7 @@ from django.core.files.base import ContentFile
 from django.db import transaction
 
 from riders.models import ENGINE_ATTRIBUTES, Rider
+from riders.services import apply_race_cost, freshness_multiplier
 from teams.models import Team
 
 from .adapters import run_race_via_adapter, to_engine_course, to_engine_rider, to_team_codes
@@ -87,10 +88,16 @@ def riders_who_raced(week) -> dict[int, list[str]]:
 def auto_pick_squad(team: Team) -> tuple[list[int], int]:
     """Four rider ids and the leader's id, chosen naively.
 
-    By total engine attributes descending, then by pk ascending — the pk
-    tiebreak is what makes this deterministic and so testable. The strongest
-    rider leads. Deliberately course-blind: see specs/squad-selection.md,
-    Out of scope, and #45.
+    By total engine attributes weighted by freshness
+    (riders.services.freshness_multiplier), descending, then by pk
+    ascending — the pk tiebreak is what makes this deterministic and so
+    testable. The strongest rider leads. Deliberately course-blind: see
+    specs/squad-selection.md, Out of scope, and #45.
+
+    The weighting is a light preference, not an optimiser — the same
+    multiplier the engine penalty uses, so an unmanaged team does not
+    mechanically run its best four into the ground. A much stronger tired
+    rider still outranks a weak fresh one.
 
     Raises SquadError if the team has fewer than four riders.
     """
@@ -103,7 +110,8 @@ def auto_pick_squad(team: Team) -> tuple[list[int], int]:
     ordered = sorted(
         riders,
         key=lambda r: (
-            -sum(getattr(r, name) for name in ENGINE_ATTRIBUTES),
+            -sum(getattr(r, name) for name in ENGINE_ATTRIBUTES)
+            * freshness_multiplier(r.freshness),
             r.pk,
         ),
     )
@@ -256,7 +264,11 @@ def simulate_race(race: Race, *, game_time: datetime) -> list[RaceResult]:
 
     db_riders = [m.rider for m in members]
     engine_riders = [
-        to_engine_rider(m.rider, role="leader" if m.is_leader else "support")
+        to_engine_rider(
+            m.rider,
+            role="leader" if m.is_leader else "support",
+            freshness_scale=freshness_multiplier(m.rider.freshness),
+        )
         for m in members
     ]
     teams = list({m.squad.team.pk: m.squad.team for m in members}.values())
@@ -296,6 +308,15 @@ def simulate_race(race: Race, *, game_time: datetime) -> list[RaceResult]:
             )
             for i, s in enumerate(finishers, start=1)
         ])
+        # Only finishers pay: a rider whose finish_time is None did not
+        # complete the race, the same rule riders_who_raced and
+        # competitions/ already apply. Written here, in the results
+        # transaction, so "raced" and "paid for it" are atomic — see the
+        # plan's Design decision 7.
+        finisher_ids = [
+            by_pk[s.rider.id].pk for s in finishers if s.finish_time is not None
+        ]
+        apply_race_cost(finisher_ids)
         race.status = Race.Status.FINISHED
         race.finished_at = game_time
         race.save(update_fields=["status", "finished_at"])

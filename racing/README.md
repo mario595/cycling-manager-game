@@ -47,6 +47,19 @@ age, form, morale); the engine rider carries only what the simulation reads.
 The shared attribute names are listed once, in `riders.models.ENGINE_ATTRIBUTES`,
 so the adapter iterates that tuple rather than hard-coding the list twice.
 
+**`to_engine_rider` scales attributes by freshness — the only place the
+feasibility penalty is applied.** Each of the five engine attributes is
+multiplied by `riders.services.freshness_multiplier(rider.freshness)`, linear
+between `PENALTY_AT_FLOOR` (0.80) at `FRESHNESS_FLOOR` (20) and 1.0 at full,
+then clamped into the engine's valid range. The downgrade therefore travels
+into the simulation itself — a tired rider is genuinely weaker in the race —
+rather than being shaved off results afterwards. This is deliberate and
+single-location: `race_engine/` never hears the word "freshness" (see the
+core rule above), `riders/` owns the arithmetic, and `racing/` applies it at
+the only crossing point (the plan for #59 made this the load-bearing decision,
+because every other placement either leaks the penalty into `race_engine/` or
+requests an ad-hoc `to_engine_rider` override that bypasses it).
+
 ## Race logs
 
 ### What they are
@@ -240,6 +253,13 @@ calls `ensure_squads(race)` first, then builds the engine's rider list from
 selected by any team's squad simply does not appear in the log, the replay,
 or the results.
 
+**Finishers pay the freshness cost.** Inside the same transaction that records
+`RaceResult` rows, every rider who finished has `RACE_FRESHNESS_COST` (25,
+`riders/`) deducted from their stored `freshness`, floored at
+`FRESHNESS_FLOOR` — the counterpart to the penalty above (see `riders/README.
+md`, *Freshness*). Auto-picked and saved squads cost the same; resting is
+what recovers the ground, once per week in `world/`.
+
 ## Squads
 
 Before a race, a manager picks which four of their team's riders start and
@@ -277,7 +297,9 @@ top of `simulate_race`, writes an auto-picked squad (`is_auto_picked=True`)
 for every team that does not already have one for this race — a manager who
 never opened the screen still fields a squad, per the spec's item 8. The pick
 itself, `auto_pick_squad`, is deliberately naive — by total engine attributes
-descending, then by pk as a tiebreak, with the strongest rider leading — and is meant
+descending, each rider's raw total weighted by their `freshness_multiplier`
+(tired riders rank behind equally strong rested ones; [#59]), then by pk as a
+tiebreak, with the strongest rider leading — and is meant
 to lose to a manager who chooses deliberately (#45 covers a smarter fallback
 later; #39 and #44 will share this same mechanism rather than duplicate it).
 A team with fewer than four riders is skipped with a warning, not an

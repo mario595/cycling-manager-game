@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react'
 
-import { color, font } from '../theme'
+import { barColor, color, font } from '../theme'
 
 /** The white rounded panel every block on both screens sits in. */
 export function Card({
@@ -121,6 +121,34 @@ export function Bar({
       }}
     >
       <div style={{ width: `${value}%`, height: '100%', background: fill, borderRadius: 3 }} />
+    </div>
+  )
+}
+
+/**
+ * One rider attribute on the 0-10 display scale as a labelled coloured bar
+ * with its value printed beside it — the shared readout on the roster cards
+ * and the squad-selection rows, so a rider reads the same everywhere.
+ */
+export function LabelBar({ label, value }: { label: string; value: number }) {
+  const scaled = value * 10
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 90 }}>
+      <span style={{ fontSize: 9.5, color: color.muted, fontFamily: font.mono, width: 26 }}>
+        {label}
+      </span>
+      <Bar value={scaled} fill={barColor(scaled)} />
+      <span
+        style={{
+          fontSize: 11,
+          fontWeight: 600,
+          fontFamily: font.mono,
+          width: 14,
+          textAlign: 'right',
+        }}
+      >
+        {value}
+      </span>
     </div>
   )
 }
