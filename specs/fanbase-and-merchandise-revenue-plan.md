@@ -584,6 +584,8 @@ on **both** the stored `delta` and `fanbase_for`.
 
 ### W5 — `economy/services.py`: `pay_merchandise`
 
+**Done.**
+
 **Test:** `economy/tests/test_merchandise.py` (new) —
 `test_merchandise_is_fanbase_over_divisor` (10,000 fanbase → 400 credits),
 `test_merchandise_is_a_positive_ledger_entry` (`amount > 0`, and

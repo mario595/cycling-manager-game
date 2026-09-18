@@ -6,6 +6,7 @@ from teams.models import Team
 
 from .models import (
     FANBASE_PER_POINT,
+    MERCHANDISE_FANBASE_PER_CREDIT,
     MINIMUM_FANBASE,
     STARTING_BALANCE,
     STARTING_FANBASE,
@@ -202,4 +203,38 @@ def apply_weekly_fanbase(week, *, points_by_team: dict[int, int]) -> int:
                 written += 1
             except IntegrityError:
                 continue          # already applied; correct outcome, not an error
+    return written
+
+
+def pay_merchandise(week) -> int:
+    """Credit every team its merchandise income for `week`, computed off its
+    current fanbase. Returns entries written.
+
+    Called from world.services.tick() right after apply_weekly_fanbase —
+    merchandise is paid on the *now-updated* fanbase (D7). It recomputes each
+    team's fanbase from the rows rather than accepting a number, so the two
+    functions stay independently testable and a re-run cannot pay on a stale
+    figure. Once per week, same exactly-once shape as charge_weekly_wages.
+    """
+    current = dict(
+        FanbaseEntry.objects.values("team_id").annotate(total=Sum("delta"))
+        .values_list("team_id", "total")
+    )
+    written = 0
+    for team_id in Team.objects.values_list("pk", flat=True):
+        fanbase = max(current.get(team_id) or 0, 0)
+        amount = fanbase // MERCHANDISE_FANBASE_PER_CREDIT
+        with transaction.atomic():
+            try:
+                LedgerEntry.objects.create(
+                    team_id=team_id,
+                    kind=LedgerEntry.Kind.MERCHANDISE,
+                    amount=amount,
+                    occurred_at=week.starts_at,
+                    week=week,
+                    description="Merchandise revenue",
+                )
+                written += 1
+            except IntegrityError:
+                continue          # already paid; correct outcome, not an error
     return written
