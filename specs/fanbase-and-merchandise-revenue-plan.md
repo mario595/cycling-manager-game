@@ -535,7 +535,7 @@ No new screen, no chart — both are out of scope.
 
 ### W1 — `economy/models.py`, `economy/migrations/0002_*`: the fanbase model and the merchandise kind
 
-Add the five constants, `FanbaseEntry`, the `MERCHANDISE` choice and the
+**Done.** Add the five constants, `FanbaseEntry`, the `MERCHANDISE` choice and the
 merchandise unique constraint. Generate the migration.
 
 **Test:** `economy/tests/test_models.py` — `test_fanbase_entry_week_unique_per_team`
