@@ -3,7 +3,8 @@ django>=5.0
 djangorestframework>=3.15
 whitenoise>=6.6
 
-# Production database driver (dev uses SQLite, no driver needed)
+# PostgreSQL driver. Needed everywhere: dev runs Postgres too, via
+# docker-compose.yml.
 psycopg2-binary>=2.9
 
 # Dev / test
