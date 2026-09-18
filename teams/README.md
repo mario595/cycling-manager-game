@@ -27,12 +27,15 @@ A registered user with no team calls `claim_team(user, name=..., code=..., at=..
 4. Generates a fresh roster via `riders.generation.generate_roster()` and
    assigns it to the team.
 5. Writes a ledger `takeover` entry that brings the team's balance back to
-   `STARTING_BALANCE` — `economy.services.reset_to_starting_balance(team, at=...)`,
-   imported **inside `claim_team`** (see *What `teams/` may import*). The
-   team's financial history is never deleted; the takeover is a *new* row on
-   top of it — `economy/README.md`, *The ledger is append-only*. The `at`
-   (game time) is passed in by the caller — `api/`'s view and `seed_teams`
-   supply `world.services.now()` — because `teams/` must not import `world/`.
+   `STARTING_BALANCE`, and a fanbase `takeover` row that brings its fanbase
+   back to `STARTING_FANBASE` (#21) — `reset_to_starting_balance(team, at=...)`
+   and `reset_fanbase(team, at=...)`, both imported **inside `claim_team`**
+   (see *What `teams/` may import*). The team's financial and fanbase history
+   is never deleted; each takeover is a *new* row on top of it —
+   `economy/README.md`, *The ledger is append-only* and *Fanbase is derived
+   too*. The `at` (game time) is passed in by the caller — `api/`'s view and
+   `seed_teams` supply `world.services.now()` — because `teams/` must not
+   import `world/`.
 
 If no unmanaged team exists, `claim_team` raises `NoTeamAvailable`. A second
 claim by an already-managing user is not checked here — `Team.manager` is a
@@ -89,9 +92,10 @@ ever changes, the suite catches it immediately: a real cycle surfaces as an
 
 ### A special case: `economy/`
 
-`teams/` may import exactly one `economy/` function, **inside a function
-body, never at module scope**: `reset_to_starting_balance` in `claim_team`,
-and `ensure_opening_balance` in `seed_teams`' `handle()`. This is the same
+`teams/` may import exactly the `economy/` functions it writes inside
+**function bodies, never at module scope**: `reset_to_starting_balance` and
+`reset_fanbase` in `claim_team`, plus `ensure_opening_balance` and
+`ensure_starting_fanbase` in `seed_teams`' `handle()`. This is the same
 entry-point pattern as `seed_teams` importing `racing.models` inside
 `handle()` — `AGENTS.md`'s dependency graph says `economy -> teams`, and a
 module-scope `from economy.services import ...` would import `economy/` (and
@@ -121,17 +125,18 @@ suffix (`"Ardennes Racing 2"`, code `"ARX"` — a letter, not a digit, since
 `team_code_validator` requires three uppercase letters).
 
 Every team `seed_teams` creates or leaves in place gets a ledger opening
-balance via `economy.services.ensure_opening_balance(team, at=...)`
-(imported inside `handle()`, same entry-point rule as `racing.models` — see
-*What `teams/` may import*). The `at` is the current game time — the command
-reads `world.services.now()` itself, like `schedule/`'s `load_season` does.
-The claim block runs **after** that loop, so the team a
-`--claim-for` takes out of the pool already sits at `STARTING_BALANCE`;
-`claim_team`'s takeover then computes a zero delta and writes nothing,
-leaving the claimed team at the standard amount with exactly one
-`starting_balance` entry — no double credit. A team claimed later, once
-wages have drained it, gets the takeover row instead
-(`economy/README.md`).
+balance via `economy.services.ensure_opening_balance(team, at=...)` and a
+starting fanbase via `ensure_starting_fanbase(team, at=...)` (#21; both
+imported inside `handle()`, same entry-point rule as `racing.models` —
+see *What `teams/` may import*). The `at` is the current game time — the
+command reads `world.services.now()` itself, like `schedule/`'s `load_season`
+does. The claim block runs **after** that loop, so the team a
+`--claim-for` takes out of the pool already sits at `STARTING_BALANCE` and
+`STARTING_FANBASE`; `claim_team`'s takeovers then compute zero deltas and
+write nothing, leaving the claimed team at the standard figures with exactly
+one `starting_balance` entry and one starting fanbase row — no double credit.
+A team claimed later, once wages have drained it and its fanbase has moved,
+gets the takeover row instead (`economy/README.md`).
 
 Imports `racing.models` inside `handle()`, not at module scope — same rule
 and reason as `riders/management/commands/reset_riders.py`: a management

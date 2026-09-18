@@ -633,7 +633,7 @@ history); `teams/tests/test_seed_teams.py` —
 `renders a negative weekly change in the negative colour`,
 `renders a merchandise entry with its label and a positive amount`.
 
-### W10 — documentation
+### W10 — documentation **Done.**
 
 See below. One commit, last, once the behaviour is settled.
 

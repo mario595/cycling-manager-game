@@ -228,6 +228,9 @@ for, with nothing invented around them.
 as a domain. It follows the same staff-composition rule, and its copy comes
 from the ledger's own kinds (`economy/README.md`): a balance headline that
 flags a negative balance, and the history list rendered newest-first with
-the per-entry kind label, date and amount. The design's "CLUB" grouping is
+the per-entry kind label, date and amount. A second tile shows the team's
+fanbase with this week's change (green or red, per
+`specs/fanbase-and-merchandise-revenue.md`); merchandise payments appear as
+their own positive ledger lines. The design's "CLUB" grouping is
 aspirational — the SPA has no such section — so `/finances` is a nav item in
 the TEAM section, next to the staff and training screens it visually matches.

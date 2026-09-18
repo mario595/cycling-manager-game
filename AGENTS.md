@@ -130,13 +130,13 @@ up front — an empty app is just noise. The table below marks which exist.
 | `core/` | Core | **built** | Shared abstract models. Deliberately tiny. |
 | `accounts/` | Accounts | **built**, `README.md` | Custom `User`, login by email. Register, log in, log out. |
 | `riders/` | Riders | **built**, `README.md` | Persisted riders: engine attributes plus speciality, build, age, generation, the weekly age curve (growth/decline), trainer-driven weekly training and rider freshness (fatigue and weekly recovery). |
-| `teams/` | Teams | **built**, `README.md` | Teams, codes, colours, manager link, and claiming an unmanaged team (which resets its ledger balance via a takeover entry). Staff/tactics still to come. |
+| `teams/` | Teams | **built**, `README.md` | Teams, codes, colours, manager link, and claiming an unmanaged team (which resets its ledger balance and fanbase via takeover entries). Staff/tactics still to come. |
 | `transfers/` | Transfers | *not yet* | Market for buying/selling riders, auctions, contracts, free agents, market value. (The youth academy is a **development squad** and lives in `riders/`.) |
 | `competitions/` | Competitions | **built**, `README.md` | Race points and season standings, one Group. Divisions, multiple Groups, promotion/relegation, classifications and season history still to come. A **Division** is a tier; a **Group** is a parallel section within one. |
 | `schedule/` | Schedule | **built**, `README.md` | Seasons, their twelve weeks, and the race calendar declared within them. **Not** `calendar/` — that shadows the stdlib module. |
-| `economy/` | Economy | **built**, `README.md` | The append-only ledger: every team's balance is the sum of its `LedgerEntry` rows — starting balance, weekly wages, claim takeover. Prize money, sponsorships, budgets and salaries still to come. |
+| `economy/` | Economy | **built**, `README.md` | The append-only ledger: every team's balance is the sum of its `LedgerEntry` rows — starting balance, weekly wages, merchandise income, claim takeover — and its fanbase, the sum of its `FanbaseEntry` rows. Prize money, sponsorship, budgets and salaries still to come. |
 | `staff/` | Staff | **built**, `README.md` | Trainers hireable from a shared pool into one fixed slot per team, plus the team's weekly training focus and its rollover report. Physios and scouts still to come. |
-| `world/` | World Simulation | **built**, `README.md` | The game clock and the tick (which charges each team its weekly wages). AI team decisions still to come. |
+| `world/` | World Simulation | **built**, `README.md` | The game clock and the tick (which charges each team its weekly wages, adjusts fanbase and pays merchandise income). AI team decisions still to come. |
 | `api/` | API | **built**, `README.md` | DRF routers aggregating each app's serializers and views. |
 | `frontend/` | Frontend/UI | **built**, `README.md` | The React SPA. Built to `frontend/dist/`, served by Django. Seven real screens (dashboard, roster, staff, calendar, results, league table, finances) plus squad selection, all from the API, no fixture data. Unknown paths redirect to `/`; every route requires a session. |
 
@@ -161,9 +161,10 @@ world, api    -> everything (orchestration / presentation)
 nothing is allowed to import *them*.
 
 **`teams -> economy` is an exception that proves the rule.** `teams/` may
-import exactly two `economy/` functions — `reset_to_starting_balance` in
-`claim_team` and `ensure_opening_balance` in `seed_teams`' `handle()` — both
-**inside function bodies, never at module scope**. A module-scope import would
+import exactly the `economy/` functions it needs — `reset_to_starting_balance`
+and `reset_fanbase` in `claim_team`, `ensure_opening_balance` and
+`ensure_starting_fanbase` in `seed_teams`' `handle()` — all **inside function
+bodies, never at module scope**. A module-scope import would
 load `economy/` (and through it `teams/`) the moment `teams/models.py`
 loads, creating an import cycle; the lazy import keeps the edge real but
 breaks the cycle. It is the same entry-point pattern as `schedule/`'s

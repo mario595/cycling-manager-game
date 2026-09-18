@@ -6,6 +6,13 @@ Turning a finished race's results into points, and those points into a
 season standings table. `RacePoints` is the one model here: one row per
 team per race, recording the position that scored and what it was worth.
 
+`competitions.services.points_by_team(week)` — one dict of a week's combined
+points, `{team_id: total}`, absent keys meaning zero — exists to feed
+`economy/`'s weekly fanbase adjustment (`specs/fanbase-and-merchandise-revenue-plan.md`,
+D1). `world/` calls it off the week that just completed and hands the result
+to `economy.services.apply_weekly_fanbase`, because `economy` may not import
+this app — the same inversion this file documents for `racing/` below.
+
 There is no `Group` or `Division` model yet — one implicit Group, one
 table, per `specs/race-points-and-standings.md`. See *Future work* below.
 
