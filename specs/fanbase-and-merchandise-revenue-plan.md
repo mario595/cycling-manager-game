@@ -559,6 +559,8 @@ still present).
 
 ### W3 — `competitions/services.py`: `points_by_team`
 
+**Done.**
+
 **Test:** `competitions/tests/` — `test_points_by_team_sums_a_weeks_races`
 (two races in one week, one team scoring in both), and
 `test_points_by_team_omits_teams_that_scored_nothing`.
