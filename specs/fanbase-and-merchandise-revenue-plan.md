@@ -567,6 +567,8 @@ still present).
 
 ### W4 — `economy/services.py`: `apply_weekly_fanbase` **Load-bearing (D4)**
 
+**Done.**
+
 **Test:** `economy/tests/test_fanbase.py` —
 `test_points_raise_fanbase_net_of_decay` (10 points → `10*40 - 150 = +250`),
 `test_scoreless_team_only_decays` (`−150`),

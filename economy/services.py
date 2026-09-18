@@ -5,8 +5,11 @@ from django.db.models import Count, QuerySet, Sum
 from teams.models import Team
 
 from .models import (
+    FANBASE_PER_POINT,
+    MINIMUM_FANBASE,
     STARTING_BALANCE,
     STARTING_FANBASE,
+    WEEKLY_FANBASE_DECAY,
     WEEKLY_WAGE_PER_RIDER,
     FanbaseEntry,
     LedgerEntry,
@@ -155,4 +158,48 @@ def charge_weekly_wages(week) -> int:
                 written += 1
             except IntegrityError:
                 continue          # already charged; correct outcome, not an error
+    return written
+
+
+def apply_weekly_fanbase(week, *, points_by_team: dict[int, int]) -> int:
+    """Adjust every team's fanbase for `week`. Returns rows written.
+
+    The week each team is scored against is the caller's job: this function
+    takes the points as a plain dict — economy/ may not import competitions/
+    (AGENTS.md). `world/services.py` passes the week that just completed,
+    never the one opening (D2) — see economy/README.md, *Fanbase reads the
+    completed week*.
+
+    The delta is clamped so the resulting fanbase never falls below
+    MINIMUM_FANBASE, and the *clamped* delta is what is stored (D4): the
+    sum of rows is the fanbase, so clamping on read would make history and
+    displayed value disagree. Called once per crossed week boundary from
+    world.services.tick(); exactly-once comes from that WeekTransition row,
+    the (team, week) constraint below being a second line of defence.
+    """
+    current = dict(
+        FanbaseEntry.objects.values("team_id").annotate(total=Sum("delta"))
+        .values_list("team_id", "total")
+    )
+    written = 0
+    for team_id in Team.objects.values_list("pk", flat=True):
+        points = points_by_team.get(team_id, 0)
+        now_at = current.get(team_id) or 0
+        raw = points * FANBASE_PER_POINT - WEEKLY_FANBASE_DECAY
+        # Clamp the RESULT, store the delta that gets there (D4).
+        delta = max(now_at + raw, MINIMUM_FANBASE) - now_at
+        with transaction.atomic():
+            try:
+                FanbaseEntry.objects.create(
+                    team_id=team_id,
+                    kind=FanbaseEntry.Kind.WEEKLY,
+                    delta=delta,
+                    occurred_at=week.starts_at,
+                    week=week,
+                    points=points,
+                    description="Weekly fanbase change",
+                )
+                written += 1
+            except IntegrityError:
+                continue          # already applied; correct outcome, not an error
     return written
