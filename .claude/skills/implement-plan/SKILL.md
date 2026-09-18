@@ -252,6 +252,8 @@ are the ones that get broken:
 3. Commit that documentation change.
 4. **Bring master in and resolve any conflicts** — see below. Do this *before*
    the user tries it, so what they verify is what will actually merge.
+   **This is a gate you may not skip before opening the PR: the branch must be
+   conflict-free against latest master.**
 5. **Leave it running for review** — see below.
 6. **Open the PR, move the ticket, then tear the environment down.** Follow
    `.claude/ticket-workflow.md`: confirm in one line and wait for a yes, then
@@ -287,6 +289,19 @@ are the ones that get broken:
    That must list issue `<N>`. If it comes back empty, the keyword did not take
    — fix the body with `gh pr edit <n> --body-file ...` and check again. Do not
    move the ticket or tear anything down until it lists the issue.
+
+   **Confirm the PR is conflict-free as GitHub sees it.** The merge in step 4
+   proves the branch holds master's content, but GitHub recomputes conflicts
+   against whatever master is now, and master may have moved since. `mergeable`
+   must report `MERGEABLE` (not `CONFLICTING`), and `mergeStateStatus` `CLEAN`:
+
+   ```bash
+   gh pr view <n> --repo mario595/cycling-manager --json mergeable,mergeStateStatus
+   ```
+
+   If it comes back `CONFLICTING`, merge the new master in, re-run the suite and
+   the migration check, push, and re-check. Never open a PR, report a PR, or move
+   a ticket for a PR that GitHub reports as conflicting.
 7. Report, briefly:
    - the pull request URL, and that the server and database are now shut down;
    - the scenarios, so they stay in the conversation as well as the PR;
@@ -385,7 +400,9 @@ git fetch origin && git log --oneline HEAD..origin/master
 
 Empty means nothing moved. If it is not empty, merge, re-run the suite and the
 migration check, and say so — briefly — rather than pushing something you have
-not tested.
+not tested. After the push, confirm GitHub agrees the PR is conflict-free
+(`gh pr view <n> --json mergeable` → `MERGEABLE`); a branch that merged cleanly
+locally can still be reported `CONFLICTING` once master has moved.
 
 ## Leaving it running for review
 
