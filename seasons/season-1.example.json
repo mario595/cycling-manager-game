@@ -1,4 +1,18 @@
 {
   "number": 1,
-  "starts_at": "2027-03-01T00:00:00Z"
+  "starts_at": "2027-03-01T00:00:00Z",
+  "races": [
+    { "week": 1, "day": "sunday", "time": "14:00", "name": "Opening Sprint", "course": [{ "length": 110000, "gradient": 0.0 }] },
+    { "week": 2, "day": "sunday", "time": "14:00", "name": "Mountain Road", "course": [{ "length": 40000, "gradient": 4.0 }, { "length": 60000, "gradient": 2.0 }] },
+    { "week": 3, "day": "sunday", "time": "14:00", "name": "Long Haul", "course": [{ "length": 210000, "gradient": 0.0 }] },
+    { "week": 4, "day": "sunday", "time": "14:00", "name": "Country Lanes", "course": [{ "length": 105000, "gradient": 0.0 }] },
+    { "week": 5, "day": "sunday", "time": "14:00", "name": "Alpine Stage", "course": [{ "length": 50000, "gradient": 5.0 }, { "length": 50000, "gradient": 3.0 }] },
+    { "week": 6, "day": "sunday", "time": "14:00", "name": "Endurance Test", "course": [{ "length": 220000, "gradient": 0.0 }] },
+    { "week": 7, "day": "sunday", "time": "14:00", "name": "City Circuit", "course": [{ "length": 95000, "gradient": 0.0 }] },
+    { "week": 8, "day": "sunday", "time": "14:00", "name": "Ridge Roller", "course": [{ "length": 30000, "gradient": 4.0 }, { "length": 70000, "gradient": 1.5 }] },
+    { "week": 9, "day": "sunday", "time": "14:00", "name": "Marlon Grind", "course": [{ "length": 215000, "gradient": 0.0 }] },
+    { "week": 10, "day": "sunday", "time": "14:00", "name": "Coastal Dash", "course": [{ "length": 90000, "gradient": 0.0 }] },
+    { "week": 11, "day": "sunday", "time": "14:00", "name": "Summit Finish", "course": [{ "length": 65000, "gradient": 4.5 }, { "length": 35000, "gradient": 2.0 }] },
+    { "week": 12, "day": "sunday", "time": "14:00", "name": "Championship Finale", "course": [{ "length": 230000, "gradient": 0.0 }] }
+  ]
 }
