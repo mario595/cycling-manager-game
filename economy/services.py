@@ -4,7 +4,13 @@ from django.db import IntegrityError, transaction
 from django.db.models import Count, QuerySet, Sum
 from teams.models import Team
 
-from .models import STARTING_BALANCE, WEEKLY_WAGE_PER_RIDER, LedgerEntry
+from .models import (
+    STARTING_BALANCE,
+    STARTING_FANBASE,
+    WEEKLY_WAGE_PER_RIDER,
+    FanbaseEntry,
+    LedgerEntry,
+)
 
 
 def balance_for(team) -> int:
@@ -19,6 +25,57 @@ def balance_for(team) -> int:
 def entries_for(team) -> QuerySet[LedgerEntry]:
     """A team's ledger entries, newest first (the model default)."""
     return LedgerEntry.objects.filter(team=team)
+
+
+def fanbase_for(team) -> int:
+    """A team's fanbase: the sum of its FanbaseEntry deltas. Derived,
+    never stored — same discipline as balance_for."""
+    return (
+        FanbaseEntry.objects.filter(team=team).aggregate(total=Sum("delta"))["total"] or 0
+    )
+
+
+def fanbase_entries_for(team) -> QuerySet[FanbaseEntry]:
+    """A team's fanbase history, newest first (the model default)."""
+    return FanbaseEntry.objects.filter(team=team)
+
+
+def ensure_starting_fanbase(team, *, at) -> FanbaseEntry:
+    """Give `team` its starting fanbase, once.
+
+    Idempotent (`get_or_create` on `kind=STARTING`), so a second call —
+    re-running `seed_teams`, a reclaimed team — never double-credits a team.
+    Mirror of `ensure_opening_balance`; `at` is game time, passed by the
+    caller (economy/ may not import world/, AGENTS.md).
+    """
+    entry, _ = FanbaseEntry.objects.get_or_create(
+        team=team,
+        kind=FanbaseEntry.Kind.STARTING,
+        defaults={
+            "delta": STARTING_FANBASE,
+            "occurred_at": at,
+            "description": "Starting fanbase",
+        },
+    )
+    return entry
+
+
+def reset_fanbase(team, *, at) -> FanbaseEntry | None:
+    """Bring `team`'s fanbase back to STARTING_FANBASE with a `takeover`
+    row. Returns None when it already is STARTING_FANBASE.
+
+    `at` is game time, the moment the takeover completes — the caller
+    passes `world.services.now()` itself. See `reset_to_starting_balance`."""
+    delta = STARTING_FANBASE - fanbase_for(team)
+    if delta == 0:
+        return None
+    return FanbaseEntry.objects.create(
+        team=team,
+        kind=FanbaseEntry.Kind.TAKEOVER,
+        delta=delta,
+        occurred_at=at,
+        description="Team taken over",
+    )
 
 
 def ensure_opening_balance(team, *, at) -> LedgerEntry:

@@ -547,7 +547,7 @@ that catches D8 being implemented by widening the existing constraint.
 
 ### W2 — `economy/services.py`: `fanbase_for`, `fanbase_entries_for`, `ensure_starting_fanbase`, `reset_fanbase`
 
-The four non-weekly functions. No caller yet.
+**Done.** The four non-weekly functions. No caller yet.
 
 **Test:** `economy/tests/test_fanbase.py` (new) —
 `test_fanbase_is_sum_of_deltas`, `test_ensure_starting_fanbase_is_idempotent`
