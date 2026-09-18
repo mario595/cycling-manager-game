@@ -71,3 +71,15 @@ def test_reseeding_does_not_double_credit(db):
         )
         assert opening_entries.count() == 1
         assert balance_for(team) == STARTING_BALANCE
+
+
+def test_claim_for_does_not_double_credit(db):
+    user = User.objects.create_user(email="a@b.com", password="x", display_name="A")
+    call_command("seed_teams", "--count=4", "--per-team=12", f"--claim-for={user.email}")
+
+    claimed = Team.objects.get(manager=user)
+    assert balance_for(claimed) == STARTING_BALANCE
+    takeovers = LedgerEntry.objects.filter(
+        team=claimed, kind=LedgerEntry.Kind.TAKEOVER,
+    )
+    assert takeovers.count() == 0  # claimed at exactly the starting balance
