@@ -440,6 +440,7 @@ are still queryable afterwards — this is the append-only guarantee, and the
 test that catches someone "simplifying" it to a delete).
 
 ### W6 — `api/`: the finances endpoint
+**[x] done**
 Serializers, view, url.
 **Test:** `api/tests.py` — `test_finances_requires_a_session`,
 `test_finances_returns_balance_and_entries`,

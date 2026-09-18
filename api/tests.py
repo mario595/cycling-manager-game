@@ -852,3 +852,90 @@ def test_training_never_exposes_training_affinity(staff_client, staff_team):
     change = response.data["last_week"]["changes"][0]
     assert change["from_value"] == 8
     assert change["to_value"] == 9
+
+
+@pytest.fixture
+def finances_manager(db) -> User:
+    return User.objects.create_user(email="finances-manager@example.com", password="s0meth1ng-good")
+
+
+@pytest.fixture
+def finances_team(db, finances_manager) -> Team:
+    return Team.objects.create(name="Finances Team", code="FIN", manager=finances_manager)
+
+
+@pytest.fixture
+def finances_client(finances_manager) -> APIClient:
+    client = APIClient()
+    client.force_authenticate(user=finances_manager)
+    return client
+
+
+def make_ledger_entry(team, kind, amount, occurred_at, description):
+    from economy.models import LedgerEntry
+    return LedgerEntry.objects.create(
+        team=team, kind=kind, amount=amount,
+        occurred_at=occurred_at, description=description,
+    )
+
+
+def test_finances_requires_a_session(finances_team):
+    client = APIClient()
+
+    response = client.get("/api/economy/finances/")
+
+    assert response.status_code == 403
+
+
+def test_finances_returns_balance_and_entries(finances_client, finances_team):
+    at = datetime(2027, 3, 1, 0, 0, tzinfo=dt_timezone.utc)
+    make_ledger_entry(
+        finances_team, "starting_balance", 500_000, at, "Starting balance",
+    )
+    make_ledger_entry(
+        finances_team, "wages", -14_400, at + timedelta(weeks=1), "Weekly wages",
+    )
+
+    response = finances_client.get("/api/economy/finances/")
+
+    assert response.status_code == 200
+    assert response.data["balance"] == 485_600
+    assert len(response.data["entries"]) == 2
+
+
+def test_entries_are_newest_first_with_running_balance(finances_client, finances_team):
+    """Load-bearing: D7's off-by-one lives here. The oldest entry's
+    `balance_after` must equal the starting balance, and the newest must
+    equal the current `balance`."""
+    at = datetime(2027, 3, 1, 0, 0, tzinfo=dt_timezone.utc)
+    make_ledger_entry(
+        finances_team, "starting_balance", 500_000, at, "Starting balance",
+    )
+    make_ledger_entry(
+        finances_team, "wages", -14_400, at + timedelta(weeks=1), "Weekly wages",
+    )
+    make_ledger_entry(
+        finances_team, "wages", -14_400, at + timedelta(weeks=2), "Weekly wages",
+    )
+
+    response = finances_client.get("/api/economy/finances/")
+
+    entries = response.data["entries"]
+    assert [e["kind"] for e in entries] == ["wages", "wages", "starting_balance"]
+    assert entries[-1]["balance_after"] == 500_000
+    assert entries[0]["balance_after"] == 471_200
+    assert entries[0]["balance_after"] == response.data["balance"]
+
+
+def test_finances_for_a_user_with_no_team(db):
+    manager_without_a_team = User.objects.create_user(
+        email="no-team-finances@example.com", password="s0meth1ng-good",
+    )
+    client = APIClient()
+    client.force_authenticate(user=manager_without_a_team)
+
+    response = client.get("/api/economy/finances/")
+
+    assert response.status_code == 200
+    assert response.data["balance"] == 0
+    assert response.data["entries"] == []

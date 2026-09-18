@@ -11,6 +11,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from competitions.services import standings
+from economy.services import balance_for, entries_for
 from racing.models import SQUAD_SIZE, Race
 from racing.services import SquadError, set_squad, suggested_squad
 from riders.models import ENGINE_ATTRIBUTES, Rider
@@ -35,6 +36,7 @@ from .serializers import (
     CalendarSerializer,
     ClaimTeamSerializer,
     ClockSerializer,
+    FinancesSerializer,
     HireTrainerSerializer,
     MeSerializer,
     MeTeamSerializer,
@@ -472,3 +474,38 @@ class TrainingView(APIView):
             return Response({"detail": str(exc)}, status=409)
 
         return Response(status=204)
+
+
+class FinancesView(APIView):
+    """The caller's own team's ledger: the running balance and its full
+    history, newest first, each entry carrying the balance after it was
+    written.
+
+    No team id in the URL — the team is always the caller's own via
+    team_for(), the same pattern as StaffView. A user with no team gets an
+    empty ledger rather than a 403, so the Finances screen renders its calm
+    empty state instead of an error — see
+    specs/team-finances-ledger-plan.md, W6.
+
+    `balance_after` is computed here per D7: walk the entries in
+    chronological order accumulating a running total, then reverse into the
+    newest-first order the SPA displays. Doing it newest-first by
+    subtracting is the natural first attempt and it is off-by-one — the
+    oldest entry's `balance_after` must equal the starting balance.
+    """
+
+    def get(self, request):
+        team = team_for(request.user)
+        if team is None:
+            return Response(FinancesSerializer({"balance": 0, "entries": []}).data)
+
+        entries = list(entries_for(team))
+        running = 0
+        for entry in reversed(entries):            # chronological, oldest first
+            running += entry.amount
+            entry.balance_after = running
+
+        return Response(FinancesSerializer({
+            "balance": balance_for(team),
+            "entries": entries,
+        }).data)
