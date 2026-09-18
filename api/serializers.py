@@ -307,8 +307,7 @@ class LedgerEntrySerializer(serializers.Serializer):
 class FinancesSerializer(serializers.Serializer):
     """The Finances screen's whole state: the running balance and the full
     history, newest first, each entry carrying the balance after it was
-    written (the view computes `balance_after` per D7 — see
-    specs/team-finances-ledger-plan.md)."""
+    written — the view computes `balance_after`; see economy/README.md."""
 
     balance = serializers.IntegerField()
     entries = LedgerEntrySerializer(many=True)

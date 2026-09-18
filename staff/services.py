@@ -30,8 +30,7 @@ def hire_trainer(team, trainer_id: int) -> Trainer:
     Locks the requested row for the duration, WITHOUT skip_locked: the
     caller asked for this specific trainer, so a contended row must make us
     wait and then report the truth, not silently behave as though the
-    trainer never existed. See specs/trainers-as-hireable-staff-plan.md,
-    Design decisions 3.
+    trainer never existed. See staff/README.md.
     """
     with transaction.atomic():
         try:
