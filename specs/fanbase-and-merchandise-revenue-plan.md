@@ -619,7 +619,7 @@ history); `teams/tests/test_seed_teams.py` —
 `test_seed_teams_gives_every_team_a_starting_fanbase` and
 `test_reseeding_does_not_double_credit_fanbase`.
 
-### W8 — `api/serializers.py`, `api/views.py`: expose fanbase
+### W8 — `api/serializers.py`, `api/views.py`: expose fanbase **Done.**
 
 **Test:** `api/tests.py` — `test_finances_includes_fanbase_and_weekly_change`,
 `test_finances_fanbase_change_is_zero_before_any_weekly_entry`,

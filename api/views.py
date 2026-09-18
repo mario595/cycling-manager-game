@@ -11,7 +11,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from competitions.services import standings
-from economy.services import balance_for, entries_for
+from economy.models import FanbaseEntry
+from economy.services import (
+    balance_for,
+    entries_for,
+    fanbase_entries_for,
+    fanbase_for,
+)
 from racing.models import SQUAD_SIZE, Race
 from racing.services import SquadError, set_squad, suggested_squad
 from riders.models import ENGINE_ATTRIBUTES, Rider
@@ -499,7 +505,9 @@ class FinancesView(APIView):
     def get(self, request):
         team = team_for(request.user)
         if team is None:
-            return Response(FinancesSerializer({"balance": 0, "entries": []}).data)
+            return Response(FinancesSerializer({
+                "balance": 0, "fanbase": 0, "fanbase_change": 0, "entries": [],
+            }).data)
 
         entries = list(entries_for(team))
         running = 0
@@ -507,7 +515,13 @@ class FinancesView(APIView):
             running += entry.amount
             entry.balance_after = running
 
+        latest = fanbase_entries_for(team).filter(
+            kind=FanbaseEntry.Kind.WEEKLY,
+        ).first()            # model ordering is -occurred_at, -pk
+    
         return Response(FinancesSerializer({
             "balance": balance_for(team),
+            "fanbase": fanbase_for(team),
+            "fanbase_change": latest.delta if latest else 0,
             "entries": entries,
         }).data)
