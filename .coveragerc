@@ -1,0 +1,18 @@
+[run]
+source = .
+omit =
+    */migrations/*
+    */tests/*
+    */test_*.py
+    */tests.py
+    manage.py
+    config/settings/*
+    config/worktree.py
+    race_player/*
+    scripts/*
+    .venv/*
+    */apps.py
+
+[report]
+precision = 0
+show_missing = true

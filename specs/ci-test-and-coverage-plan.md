@@ -337,7 +337,7 @@ depended on the specific hasher (unlikely, but check before proceeding).
 This item is independent of coverage and the workflow — it speeds up every
 local `pytest` run too, immediately, whether or not W2 ever lands.
 
-### W2 — `.coveragerc` + `requirements.txt`: make coverage measurable and reproducible
+### W2 — `.coveragerc` + `requirements.txt`: make coverage measurable and reproducible — **done**
 
 Add `.coveragerc` exactly as above and `pytest-cov>=5` to `requirements.txt`.
 
