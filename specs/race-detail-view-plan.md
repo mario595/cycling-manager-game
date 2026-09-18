@@ -419,6 +419,11 @@ the way `Dashboard.test.tsx` mocks its own):
 
 ### W7 — `frontend/`: delete `/results`
 
+✅ Done — `Results.tsx`, its `SCREENS` entry and the RACING nav item removed;
+`getRaceResults` stays for `useRaceResults`. The two tests naming the page
+were updated as planned; no new test added for `/results` falling through to
+`/`, which `App.test.tsx` already covers by unknown-path redirection.
+
 Remove `frontend/src/screens/Results.tsx`, its entry in `App.tsx`'s
 `SCREENS`, and the `{ path: '/results', name: 'Results' }` item from
 `navigation.ts`'s `RACING` section. `getRaceResults` stays — `useRaceResults`
