@@ -47,11 +47,11 @@ DRF routers and serializers that aggregate other apps' data for the SPA.
   `riders/README.md`, *Freshness*.
 - `GET /api/riders/` — the **caller's own** team's roster (`RiderSerializer`,
   `RiderListView`). Same `team_for()` pattern as the squad endpoint: no team
-  id in the URL, a caller with no team gets a 403. Attributes are shipped
-  through `riders.display.to_display_scale` (0-10, never the stored 1-100);
-  the hidden traits (`potential`, `peak_age`, `decline_rate`,
-  `injury_proneness`, `training_affinity`) never appear in this or any
-  other payload — see `riders/README.md`.
+  id in the URL, a caller with no team gets a 403. Attributes and freshness
+  are shipped through `riders.display.to_display_scale` (0-10, never the
+  stored 1-100); the hidden traits (`potential`, `peak_age`, `decline_rate`,
+  `injury_proneness`, `training_affinity`) and the hidden `recovery_rate`
+  never appear in this or any other payload — see `riders/README.md`.
 - `GET /api/racing/races/<race_id>/results/` — a finished race's finishing
   order plus each team's points from it (`RaceResultsSerializer`,
   `RaceResultsView`). A race that has not reached `FINISHED` is a `404`, not
