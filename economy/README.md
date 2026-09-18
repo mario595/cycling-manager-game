@@ -91,5 +91,9 @@ inside `claim_team` without creating a cycle.
   this ledger.
 - **Insolvency** — #27, what happens when a balance goes and stays deeply
   negative. This ticket only flags a negative balance, never acts on it.
+- **A full-table read every tick** — `charge_weekly_wages` counts every
+  team's riders on each wage run. Fine at dozens of teams; worth a
+  `WHERE team.manager IS NOT NULL` or another efficiency when the pool
+  grows. Not before — the sum is not yet a bottleneck.
 - **Runway projection** — "N weeks of money left": not useful until there is
   income to make it interesting.

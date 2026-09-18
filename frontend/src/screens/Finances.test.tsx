@@ -23,6 +23,7 @@ const finances: FinancesPayload = {
   balance: 485_600,
   entries: [
     {
+      id: 2,
       kind: 'wages',
       description: 'Weekly wages',
       amount: -14_400,
@@ -31,6 +32,7 @@ const finances: FinancesPayload = {
       balance_after: 485_600,
     },
     {
+      id: 1,
       kind: 'starting_balance',
       description: 'Starting balance',
       amount: 500_000,

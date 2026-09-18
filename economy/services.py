@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Sum, QuerySet
-from django.utils import timezone
+from django.db.models import Count, QuerySet, Sum
 from teams.models import Team
 
 from .models import STARTING_BALANCE, WEEKLY_WAGE_PER_RIDER, LedgerEntry
@@ -22,31 +21,38 @@ def entries_for(team) -> QuerySet[LedgerEntry]:
     return LedgerEntry.objects.filter(team=team)
 
 
-def ensure_opening_balance(team) -> LedgerEntry:
+def ensure_opening_balance(team, *, at) -> LedgerEntry:
     """Give `team` its starting balance, once.
 
     Idempotent (`get_or_create` on `kind=STARTING_BALANCE`), so a second
     call — re-running `seed_teams`, a reclaimed team — never double-credits
     a team.
+
+    `at` is game time, the moment the balance is granted — the caller
+    (world/, api/, or `teams/`'s seed command) passes `world.services.now()`
+    itself. economy/ may not import world/ (AGENTS.md).
     """
     entry, _ = LedgerEntry.objects.get_or_create(
         team=team,
         kind=LedgerEntry.Kind.STARTING_BALANCE,
         defaults={
             "amount": STARTING_BALANCE,
-            "occurred_at": timezone.now(),
+            "occurred_at": at,
             "description": "Starting balance",
         },
     )
     return entry
 
 
-def reset_to_starting_balance(team) -> LedgerEntry | None:
+def reset_to_starting_balance(team, *, at) -> LedgerEntry | None:
     """Bring `team`'s balance back to STARTING_BALANCE with a `takeover`
     entry — the append-only ledger's own idiom for a correction (economy/
     README.md, *The ledger is append-only*). Returns None when the balance
     already is STARTING_BALANCE, so a team claimed at exactly the starting
-    amount does not get a meaningless zero-credit row."""
+    amount does not get a meaningless zero-credit row.
+
+    `at` is game time, the moment the takeover completes — the caller
+    passes `world.services.now()` itself. See `ensure_opening_balance`."""
     delta = STARTING_BALANCE - balance_for(team)
     if delta == 0:
         return None
@@ -54,7 +60,7 @@ def reset_to_starting_balance(team) -> LedgerEntry | None:
         team=team,
         kind=LedgerEntry.Kind.TAKEOVER,
         amount=delta,
-        occurred_at=timezone.now(),
+        occurred_at=at,
         description="Team taken over",
     )
 

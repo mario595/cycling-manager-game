@@ -25,12 +25,21 @@ def test_balance_sums_signed_amounts(db, team):
 
 
 def test_ensure_opening_balance_is_idempotent(db, team):
-    first = ensure_opening_balance(team)
-    second = ensure_opening_balance(team)
+    at = datetime(2027, 3, 1, 0, 0, tzinfo=dt_timezone.utc)
+    first = ensure_opening_balance(team, at=at)
+    second = ensure_opening_balance(team, at=at)
 
     assert first.pk == second.pk
     assert balance_for(team) == STARTING_BALANCE
     assert LedgerEntry.objects.filter(team=team).count() == 1
+
+
+def test_ensure_opening_balance_stamps_game_time(db, team):
+    at = datetime(2027, 3, 1, 0, 0, tzinfo=dt_timezone.utc)
+
+    entry = ensure_opening_balance(team, at=at)
+
+    assert entry.occurred_at == at
 
 
 def test_reset_writes_the_difference(db, team):
@@ -44,7 +53,7 @@ def test_reset_writes_the_difference(db, team):
         occurred_at=at, description="Weekly wages",
     )
 
-    reset_to_starting_balance(team)
+    reset_to_starting_balance(team, at=at)
 
     # The prior entries must still exist — this is the append-only guarantee.
     assert entries_for(team).count() == 3
@@ -58,5 +67,5 @@ def test_reset_at_starting_balance_writes_nothing(db, team):
         occurred_at=at, description="Starting balance",
     )
 
-    assert reset_to_starting_balance(team) is None
+    assert reset_to_starting_balance(team, at=at) is None
     assert LedgerEntry.objects.filter(team=team).count() == 1

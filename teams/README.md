@@ -10,7 +10,7 @@ the ledger).
 
 ## Claiming a team
 
-A registered user with no team calls `claim_team(user, name=..., code=...)`
+A registered user with no team calls `claim_team(user, name=..., code=..., at=...)`
 (exposed as `POST /api/teams/claim/`, `api/README.md`). One transaction:
 
 1. Locks the lowest-`pk` unmanaged team with `select_for_update(skip_locked=True)`
@@ -27,10 +27,12 @@ A registered user with no team calls `claim_team(user, name=..., code=...)`
 4. Generates a fresh roster via `riders.generation.generate_roster()` and
    assigns it to the team.
 5. Writes a ledger `takeover` entry that brings the team's balance back to
-   `STARTING_BALANCE` — `economy.services.reset_to_starting_balance()`,
+   `STARTING_BALANCE` — `economy.services.reset_to_starting_balance(team, at=...)`,
    imported **inside `claim_team`** (see *What `teams/` may import*). The
    team's financial history is never deleted; the takeover is a *new* row on
-   top of it — `economy/README.md`, *The ledger is append-only*.
+   top of it — `economy/README.md`, *The ledger is append-only*. The `at`
+   (game time) is passed in by the caller — `api/`'s view and `seed_teams`
+   supply `world.services.now()` — because `teams/` must not import `world/`.
 
 If no unmanaged team exists, `claim_team` raises `NoTeamAvailable`. A second
 claim by an already-managing user is not checked here — `Team.manager` is a
@@ -119,9 +121,11 @@ suffix (`"Ardennes Racing 2"`, code `"ARX"` — a letter, not a digit, since
 `team_code_validator` requires three uppercase letters).
 
 Every team `seed_teams` creates or leaves in place gets a ledger opening
-balance via `economy.services.ensure_opening_balance` (imported inside
-`handle()`, same entry-point rule as `racing.models` — see *What `teams/`
-may import*). The claim block runs **after** that loop, so the team a
+balance via `economy.services.ensure_opening_balance(team, at=...)`
+(imported inside `handle()`, same entry-point rule as `racing.models` — see
+*What `teams/` may import*). The `at` is the current game time — the command
+reads `world.services.now()` itself, like `schedule/`'s `load_season` does.
+The claim block runs **after** that loop, so the team a
 `--claim-for` takes out of the pool already sits at `STARTING_BALANCE`;
 `claim_team`'s takeover then computes a zero delta and writes nothing,
 leaving the claimed team at the standard amount with exactly one

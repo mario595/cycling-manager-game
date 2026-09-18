@@ -10,7 +10,7 @@ function formatCredits(amount: number): string {
   return amount.toLocaleString('en-US')
 }
 
-/** `balance_after` is a whole number too — same formatting as amounts. */
+/** `occurred_at` is an ISO game-time string; render it as a calendar date. */
 function formatDate(occurredAt: string | null): string {
   return occurredAt ? new Date(occurredAt).toLocaleDateString() : '—'
 }
@@ -88,7 +88,7 @@ export function Finances() {
         ) : (
           finances.entries.map((entry) => (
             <div
-              key={`${entry.kind}-${entry.occurred_at}-${entry.amount}`}
+              key={entry.id}
               style={{
                 display: 'flex',
                 alignItems: 'center',

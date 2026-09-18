@@ -258,8 +258,11 @@ class LedgerEntrySerializer(serializers.Serializer):
     """One ledger entry as the Finances screen needs it: what happened,
     when, how much, and the balance after it — spec rule 11. `kind` is the
     machine name (starting_balance/wages/takeover); the SPA renders the
-    label. `rider_count` is set on wage entries only — null elsewhere."""
+    label. `rider_count` is set on wage entries only — null elsewhere.
+    `id` exists so the SPA can key React's list on a stable unique value
+    rather than on a (kind, occurred_at, amount) triplet."""
 
+    id = serializers.IntegerField()
     kind = serializers.CharField()
     description = serializers.CharField()
     amount = serializers.IntegerField()

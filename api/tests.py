@@ -939,3 +939,69 @@ def test_finances_for_a_user_with_no_team(db):
     assert response.status_code == 200
     assert response.data["balance"] == 0
     assert response.data["entries"] == []
+
+
+@override_settings(GAME_CLOCK_CLASS="world.clocks.MockClock")
+def test_finances_history_built_through_services_orders_by_game_time(db):
+    """The regression test for review finding 1: every ledger entry must be
+    stamped with *game* time, never the wall clock. A season dated 2027
+    against a wall clock that reads one year earlier is exactly the trap —
+    had opening balance / takeover used timezone.now(), they'd sort as the
+    oldest rows and the newest-first order and running balance would invert.
+    Serve the history from games, not read it off the page: opening balance,
+    a week of wages, then a claim, each through the real services callers
+    use, passing world.services.now() as `at`.
+    """
+    world_services._clock = None
+    try:
+        from economy.services import charge_weekly_wages, ensure_opening_balance
+        from teams.services import claim_team
+        from world.services import get_clock, now
+
+        clock: MockClock = get_clock()
+        season_start = datetime(2027, 3, 1, 0, 0, tzinfo=dt_timezone.utc)
+        # The world's clock lives a year in the future of the wall clock this
+        # test runs under. That divergence is the bug's fuel. load() first:
+        # MockClock.set() reads the GameClock row, which load() creates.
+        import world.models as world_models
+        world_models.GameClock.load()
+        clock.set(season_start - timedelta(days=1))
+
+        unmanaged = Team.objects.create(name="Pool Team", code="POL")
+        Rider.objects.create(
+            name="Pool Rider", team=unmanaged,
+            climb=60, sprint=60, flat=60, resistance=60, positioning=60,
+        )
+        user = User.objects.create_user(
+            email="claim-finances@example.com", password="s0meth1ng-good",
+        )
+
+        ensure_opening_balance(unmanaged, at=now())   # stamped 2027-02-28
+
+        season = Season.objects.create(number=1, starts_at=season_start)
+        week = Week.objects.create(
+            season=season, number=1,
+            starts_at=season_start, ends_at=season_start + timedelta(weeks=1),
+        )
+        charge_weekly_wages(week)                      # stamped week.starts_at (2027-03-01)
+
+        clock.set(season_start + timedelta(days=7))
+        claim_team(user, name="Claimed Team", code="CLM", roster_size=0, at=now())
+
+        client = APIClient()
+        client.force_authenticate(user=user)
+        response = client.get("/api/economy/finances/")
+        assert response.status_code == 200
+
+        entries = response.data["entries"]
+        assert [e["kind"] for e in entries] == ["takeover", "wages", "starting_balance"]
+        # Newest first, each balance_after chaining onto the previous one.
+        assert entries[0]["occurred_at"] == "2027-03-08T00:00:00Z"
+        assert entries[1]["occurred_at"] == "2027-03-01T00:00:00Z"
+        assert entries[2]["occurred_at"] == "2027-02-28T00:00:00Z"
+        assert entries[2]["balance_after"] == 500_000
+        assert entries[1]["balance_after"] == 500_000 - 1_200
+        assert entries[0]["balance_after"] == 500_000
+        assert entries[0]["balance_after"] == response.data["balance"]
+    finally:
+        world_services._clock = None

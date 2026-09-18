@@ -377,6 +377,7 @@ export async function setTrainingFocus(attribute: string): Promise<void> {
  * `rider_count` is set on wage entries only — null elsewhere. `balance_after`
  * is computed server-side: the running balance just after this entry. */
 export interface LedgerEntry {
+  id: number
   kind: 'starting_balance' | 'wages' | 'takeover'
   description: string
   amount: number

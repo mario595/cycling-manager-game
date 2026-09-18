@@ -265,6 +265,7 @@ class ClaimTeamView(APIView):
                 request.user,
                 name=serializer.validated_data["name"],
                 code=serializer.validated_data["code"],
+                at=now(),
             )
         except NoTeamAvailable as exc:
             return Response({"detail": str(exc)}, status=409)
