@@ -370,6 +370,10 @@ the hook reports neither loading nor error.
 
 ### W4 — `frontend/src/raceTime.ts`: time and gap formatting
 
+✅ Done — `formatRaceTime` and `formatGap` added, both flooring fractional
+seconds, with tests for the under/over-hour winner's time, the `+0:00` zero
+gap and the minute/hour boundaries.
+
 **Test** (`frontend/src/raceTime.test.ts`, new): a winner's time under an
 hour and over an hour; a gap of exactly zero renders `+0:00` (**not** an
 empty string — spec, *Rules and edge cases*); a gap crossing a minute and an
