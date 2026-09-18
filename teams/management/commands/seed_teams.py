@@ -168,19 +168,21 @@ class Command(BaseCommand):
             # Same rule and reason as the racing.models import in the reset
             # branch above. Runs *before* the claim block so the team a
             # --claim-for takes out of the pool already sits at
-            # STARTING_BALANCE — claim_team's takeover then computes a zero
-            # delta, and the claimed team ends at the standard amount with
-            # no double credit. ensure_opening_balance is a get_or_create,
-            # so re-running seed_teams cannot double-credit any team.
+            # STARTING_BALANCE (and STARTING_FANBASE) — claim_team's takeover
+            # then computes a zero delta for each, and the claimed team ends
+            # at the standard figures with no double credit. Both ensures
+            # are get_or_create-backed, so re-running seed_teams cannot
+            # double-credit any team.
             # `at` is the game time the entries are stamped with — a seed
             # command is an entry point, so it reads the clock itself, the
             # same way schedule's load_season does (AGENTS.md).
-            from economy.services import ensure_opening_balance
+            from economy.services import ensure_opening_balance, ensure_starting_fanbase
             from world.services import now
 
             at = now()
             for team in Team.objects.all():
                 ensure_opening_balance(team, at=at)
+                ensure_starting_fanbase(team, at=at)
 
             claimed = None
             claim_for = options["claim_for"]

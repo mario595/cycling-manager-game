@@ -610,7 +610,7 @@ the opening week gets `points == 0` and a pure-decay delta;
 each dated to its own week's `starts_at`;
 `test_tick_run_counts_fanbase_and_merchandise_entries`.
 
-### W7 — `teams/services.py`, `teams/management/commands/seed_teams.py`: reset on claim, seed on create
+### W7 — `teams/services.py`, `teams/management/commands/seed_teams.py`: reset on claim, seed on create **Done.**
 
 **Test:** `teams/tests/test_services.py` —
 `test_claiming_a_team_resets_its_fanbase` (an unmanaged team grown to 30,000
