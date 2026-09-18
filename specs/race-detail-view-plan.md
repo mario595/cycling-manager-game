@@ -356,6 +356,10 @@ unchanged — the scoring team stays first.
 
 ### W3 — `frontend/`: the API client and the two hooks
 
+✅ Done — `getRaceDetail`, `RaceDetail`/`CourseSegment` types and widened
+`RaceResultPointsEntry.position` in `api.ts`; `useRaceDetail.ts` and
+`useRaceResults.ts` added; `does not fetch when disabled` green.
+
 `getRaceDetail` and the `RaceDetail`/`CourseSegment` types in `api.ts`;
 `RaceResultPointsEntry.position` widened to `number | null`; new
 `useRaceDetail.ts` and `useRaceResults.ts`.
