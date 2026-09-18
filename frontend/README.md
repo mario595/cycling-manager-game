@@ -12,7 +12,7 @@ all reading the real API. No screen renders invented data.
 | `/staff` | Staff | Built — hire/fire a trainer, from the API, no fixture data |
 | `/training` | Training | Built — set the weekly focus, see last week's moves, from the API, no fixture data |
 | `/calendar` | Calendar | Built — twelve weeks from the API, no fixture data |
-| `/race/:raceId` | Race | Built — the full race screen: course profile and squad before it runs, results after, from the API, no fixture data |
+| `/race/:raceId` | Race | Built — the full race screen: course profile and squad before it runs, course profile and results after, from the API, no fixture data |
 | `/league` | League | Built — season standings table from the API, no fixture data |
 | `/login`, `/register` | Login, Register | Built — real accounts, no fixture data |
 | `/claim` | ClaimTeam | Built — real claim, no fixture data |
@@ -179,13 +179,22 @@ template DSL, not runnable source, and it is not a build input. When it is
 re-exported, reconcile `src/theme.ts` against it first.
 
 The mockup's **Race day** screen is now **built** as `Race.tsx`, apart from
-the deliberate exclusions. It shows the course elevation profile and the
-race's name, date, distance and status before the race, the squad-selection
-widget for the manager's own team, and — for a finished race — the rider
-results and team points tables. Race playback (`race_player/`, the separate
-tick-by-tick visualizer) is answered for now: deliberately not folded in —
-*Out of scope* of this feature, and the log-slimming work `racing/README.md`
-calls for comes first. What remains dropped from the mockup: the eight-rider
+the deliberate exclusions. It shows the race's name, date, distance and
+status, the course elevation profile on every reachable state (before the
+race and after it has finished), the squad-selection widget for the
+manager's own team before the race, and — for a finished race — the rider
+results and team points tables. The course profile is **`race_player`'s
+elevation chart, reused**: `CourseProfile.tsx` imports `CourseChart`,
+`computeProfile` and the `Segment` type directly from `race_player/src/`,
+so the SPA's calendar and the visualizer derive and draw a course
+identically. That cross-package import resolves `react` from
+`race_player/node_modules` unless held to the frontend copy, so
+`vite.config.ts` dedupes `react`/`react-dom`; `race_player` remains the
+source of the chart and the frontend only bundles it. Race playback (the
+tick-by-tick visualizer itself) is answered for now: deliberately not
+folded in — *Out of scope* of this feature, and the log-slimming work
+`racing/README.md` calls for comes first. What remains dropped from the
+mockup: the eight-rider
 squads (the spec fixes four), per-rider course suitability (course-aware
 assessment is #45), other teams' entrants on an upcoming race,
 wind/temperature/tier/points display facts, and the discrete
@@ -204,7 +213,7 @@ and freshness through the single `LabelBar` primitive, each with its printed
 The mockup's **Calendar** screen additionally shows things this feature does
 not have — multiple season cards with a switcher, win/podium/points stats, a
 "Next up" highlight state, race terrain/class metadata, and result positions
-that link through to a race-detail screen (#47, not built). `Calendar.tsx`
+that link through to a race-detail screen. `Calendar.tsx`
 matches the mockup's per-season card and week-row structure, but shows one
 season only (there is no multi-season history yet) and drops anything that
 needs standings or a detail screen that does not exist.

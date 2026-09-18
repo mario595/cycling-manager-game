@@ -112,10 +112,10 @@ describe('Race', () => {
     const { container } = renderRace()
 
     expect(screen.getByText('Circuit of Example')).toBeInTheDocument()
-    expect(container.querySelector('polyline')).not.toBeNull()
+    expect(container.querySelector('svg[aria-label="Elevation profile"]')).not.toBeNull()
   })
 
-  it('renders both tables for a finished race', () => {
+  it('renders the course profile and both tables for a finished race', () => {
     mockUseRaceDetail.mockReturnValue({
       race: { ...upcomingRace, status: 'finished' },
       loading: false,
@@ -127,6 +127,7 @@ describe('Race', () => {
 
     expect(screen.getByText('Winner Rider')).toBeInTheDocument()
     expect(screen.getByText('Zero Team')).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Elevation profile' })).toBeInTheDocument()
   })
 
   it('renders without a squad panel when the manager has no team', () => {

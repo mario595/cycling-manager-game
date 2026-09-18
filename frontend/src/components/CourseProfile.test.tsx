@@ -1,30 +1,46 @@
-import { render } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import { CourseProfile } from './CourseProfile'
 
-function yValues(path: string): number[] {
-  return path.split(' ').map((pair) => Number(pair.split(',')[1]))
+/** The drawn course, as one pair of y coordinates per segment stroke
+ * (y of the segment's start and end). y grows downward in SVG, so a
+ * climb makes the second y smaller. */
+function segmentYs(container: HTMLElement): number[][] {
+  const strokes = container.querySelectorAll('path[fill="none"]')
+  return Array.from(strokes).map((stroke) => {
+    const nums = stroke
+      .getAttribute('d')!
+      .match(/-?\d+(?:\.\d+)?/g)!
+      .map(Number)
+    return [nums[1], nums[3]]
+  })
 }
 
 describe('CourseProfile', () => {
-  it('renders a polyline with varying y for a climbing course', () => {
-    const course = [{ length: 10000, gradient: 0.05 }]
-    const { container } = render(<CourseProfile course={course} />)
-
-    const polyline = container.querySelector('polyline')
-    expect(polyline).not.toBeNull()
-    const ys = yValues(polyline!.getAttribute('points')!)
-    expect(new Set(ys).size).toBeGreaterThan(1)
-  })
-
-  it('renders without throwing for a flat course', () => {
+  it('renders the shared elevation chart for a climbing course', () => {
     const course = [
-      { length: 10000, gradient: 0 },
-      { length: 20000, gradient: 0 },
+      { length: 40000, gradient: 4 },
+      { length: 60000, gradient: 2 },
     ]
     const { container } = render(<CourseProfile course={course} />)
 
-    expect(container.querySelector('polyline')).not.toBeNull()
+    expect(container.querySelector('svg[aria-label="Elevation profile"]')).not.toBeNull()
+    // rising elevation: the first segment's endpoints sit at different heights
+    const [first] = segmentYs(container)
+    expect(first[0]).not.toBe(first[1])
+    expect(screen.getByText('4%')).toBeInTheDocument()
+    expect(screen.getByText('elevation (m)')).toBeInTheDocument()
+    expect(screen.getByText('distance (km)')).toBeInTheDocument()
+  })
+
+  it('renders a flat course as a level line', () => {
+    const course = [{ length: 110000, gradient: 0 }]
+    const { container } = render(<CourseProfile course={course} />)
+
+    expect(container.querySelector('svg[aria-label="Elevation profile"]')).not.toBeNull()
+    const [first] = segmentYs(container)
+    expect(first[0]).toBe(first[1])
+    expect(screen.getByText('0%')).toBeInTheDocument()
   })
 })

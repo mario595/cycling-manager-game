@@ -1,21 +1,5 @@
-import type { ParsedRace, ProfilePoint, RaceSnapshot, Segment } from '../types/race'
-
-function computeProfile(segments: Segment[]): ProfilePoint[] {
-  const points: ProfilePoint[] = []
-  let elevation = 0
-  let distance = 0
-
-  points.push({ distance: 0, elevation: 0, gradient: segments[0]?.gradient ?? 0 })
-
-  for (const seg of segments) {
-    const change = seg.length * (seg.gradient / 100)
-    elevation += change
-    distance += seg.length
-    points.push({ distance, elevation, gradient: seg.gradient })
-  }
-
-  return points
-}
+import type { ParsedRace, RaceSnapshot } from '../types/race'
+import { computeProfile } from './profile'
 
 export function parseRaceLog(text: string): ParsedRace {
   const snapshots: RaceSnapshot[] = text

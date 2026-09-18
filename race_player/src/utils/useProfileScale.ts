@@ -9,10 +9,10 @@ export interface ProfileScale {
 }
 
 /**
- * Create linear scales mapping distance/elevation to SVG pixel coordinates.
+ * Linear scales mapping distance/elevation to SVG pixel coordinates.
  * Uses fixed margins so the chart area is predictable for overlays.
  */
-export function useProfileScale(
+export function profileScale(
   width: number,
   height: number,
   maxDistance: number,
@@ -20,17 +20,26 @@ export function useProfileScale(
   maxElevation: number,
 ): ProfileScale {
   const margin = { top: 20, right: 20, bottom: 40, left: 85 }
+  const plotWidth = width - margin.left - margin.right
+  const plotHeight = height - margin.top - margin.bottom
+  const elevRange = maxElevation - minElevation || 1
 
-  return useMemo(() => {
-    const plotWidth = width - margin.left - margin.right
-    const plotHeight = height - margin.top - margin.bottom
-    const elevRange = maxElevation - minElevation || 1
+  const x = (distance: number) => margin.left + (distance / maxDistance) * plotWidth
+  const y = (elevation: number) =>
+    margin.top + (1 - (elevation - minElevation) / elevRange) * plotHeight
 
-    const x = (distance: number) =>
-      margin.left + (distance / maxDistance) * plotWidth
-    const y = (elevation: number) =>
-      margin.top + (1 - (elevation - minElevation) / elevRange) * plotHeight
+  return { width, height, margin, x, y }
+}
 
-    return { width, height, margin, x, y }
-  }, [width, height, maxDistance, minElevation, maxElevation, margin.top, margin.right, margin.bottom, margin.left])
+export function useProfileScale(
+  width: number,
+  height: number,
+  maxDistance: number,
+  minElevation: number,
+  maxElevation: number,
+): ProfileScale {
+  return useMemo(
+    () => profileScale(width, height, maxDistance, minElevation, maxElevation),
+    [width, height, maxDistance, minElevation, maxElevation],
+  )
 }

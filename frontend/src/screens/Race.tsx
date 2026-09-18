@@ -94,6 +94,7 @@ function raceBody(
     if (!state.results) return null
     return (
       <>
+        <CourseProfile course={race.course} />
         <RiderResultsTable results={state.results} />
         <TeamPointsTable results={state.results} />
       </>
