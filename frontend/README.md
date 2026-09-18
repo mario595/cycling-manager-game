@@ -12,9 +12,8 @@ all reading the real API. No screen renders invented data.
 | `/staff` | Staff | Built — hire/fire a trainer, from the API, no fixture data |
 | `/training` | Training | Built — set the weekly focus, see last week's moves, from the API, no fixture data |
 | `/calendar` | Calendar | Built — twelve weeks from the API, no fixture data |
-| `/race/:raceId` | Race | Built — squad selection, no fixture data |
+| `/race/:raceId` | Race | Built — the full race screen: course profile and squad before it runs, results after, from the API, no fixture data |
 | `/league` | League | Built — season standings table from the API, no fixture data |
-| `/results` | Results | Built — the most recently finished race's order and points, from the API, no fixture data |
 | `/login`, `/register` | Login, Register | Built — real accounts, no fixture data |
 | `/claim` | ClaimTeam | Built — real claim, no fixture data |
 | anything else | — | Redirects to `/` |
@@ -179,27 +178,28 @@ from — the reference for spacing, colour and copy. It is a mockup in a custom
 template DSL, not runnable source, and it is not a build input. When it is
 re-exported, reconcile `src/theme.ts` against it first.
 
-The mockup's **Race day** screen is now **partly** built, as `Race.tsx` —
-folding it together with `race_player/` (the separate tick-by-tick
-visualizer) is still its own undecided question (#47). What is built is only
-the squad-selection widget the mockup shows, and only what `specs/squad-
-selection.md` (now folded into `racing/README.md`) actually specifies.
-Deliberately dropped, because the spec doesn't cover it: the mockup's
-eight-rider squads (the spec fixes four), per-rider suitability scores
-(course-aware assessment is #45), the course profile SVG,
-terrain/temperature/wind/tier/points facts, and the
-final classification table for a past race. `Race.tsx` shows only name,
-date, distance and status, and reuses the mockup's checkbox-row and
-★-to-set-leader interaction for the part that is in scope. Each candidate row
-additionally shows a `FIT` meter alongside the five attribute bars — the
-rider's freshness on the same 0-10 display scale, clipped apart from the
-engine attributes so it reads as a status marker rather than a sixth skill
+The mockup's **Race day** screen is now **built** as `Race.tsx`, apart from
+the deliberate exclusions. It shows the course elevation profile and the
+race's name, date, distance and status before the race, the squad-selection
+widget for the manager's own team, and — for a finished race — the rider
+results and team points tables. Race playback (`race_player/`, the separate
+tick-by-tick visualizer) is answered for now: deliberately not folded in —
+*Out of scope* of this feature, and the log-slimming work `racing/README.md`
+calls for comes first. What remains dropped from the mockup: the eight-rider
+squads (the spec fixes four), per-rider course suitability (course-aware
+assessment is #45), other teams' entrants on an upcoming race,
+wind/temperature/tier/points display facts, and the discrete
+`INJURED`/`FATIGUED` rider states
+(#41) — freshness is a continuous meter, not a flag. The screen reuses the
+mockup's checkbox-row and ★-to-set-leader interaction for the squad part.
+Each candidate row additionally shows a `FIT` meter alongside the five
+attribute bars — the rider's freshness on the same 0-10 display scale,
+clipped apart from the engine attributes so it reads as a status marker
+rather than a sixth skill
 ([#59](https://github.com/mario595/cycling-manager/issues/59); see
 `api/README.md`). `Roster.tsx`'s cards draw the same readout — attributes
-and freshness through the single `LabelBar` primitive, each with its
-printed 0-10 value — so a rider reads identically on both screens. The
-mockup's discrete `INJURED`/`FATIGUED` rider states
-(#41) are still not shown — freshness is a continuous meter, not a flag.
+and freshness through the single `LabelBar` primitive, each with its printed
+0-10 value — so a rider reads identically on both screens.
 
 The mockup's **Calendar** screen additionally shows things this feature does
 not have — multiple season cards with a switcher, win/podium/points stats, a

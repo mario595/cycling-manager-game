@@ -271,6 +271,11 @@ player-facing feature. Two models record the choice:
 - **`RaceSquadRider(squad, rider, is_leader)`** — one row per selected rider,
   four per squad.
 
+`RaceSquad` is also the record of which teams started a race: the results
+API (`api/`) reads it to list non-scoring teams, so a finished race's points
+table is exhaustive rather than derived from which teams recorded a result
+(see `api/README.md`).
+
 **Membership is rows, not a JSON list on `RaceSquad`.** `simulate_race` joins
 against every selected rider's attributes in one query to build the engine's
 field, and a JSON array of ids would mean either N+1 lookups or a manual

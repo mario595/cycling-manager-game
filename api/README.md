@@ -52,11 +52,23 @@ DRF routers and serializers that aggregate other apps' data for the SPA.
   stored 1-100); the hidden traits (`potential`, `peak_age`, `decline_rate`,
   `injury_proneness`, `training_affinity`) and the hidden `recovery_rate`
   never appear in this or any other payload — see `riders/README.md`.
+- `GET /api/racing/races/<race_id>/` — one race's own facts
+  (`RaceDetailSerializer`, `RaceDetailView`): id, name, status, starts_at,
+  distance and the raw `{length, gradient}` course segments. Readable by any
+  authenticated manager regardless of team — the contrast with `SquadView`
+  below, which 403s a caller with no team. No status filter: a `scheduled`,
+  `running`, `finished` or `failed` race all return `200`; the status is in
+  the payload and the SPA decides what to draw.
 - `GET /api/racing/races/<race_id>/results/` — a finished race's finishing
   order plus each team's points from it (`RaceResultsSerializer`,
   `RaceResultsView`). A race that has not reached `FINISHED` is a `404`, not
   a `200` with an empty list — "no results yet" and "no such race" would
-  otherwise look the same to the SPA. `IsAuthenticated`, the project default.
+  otherwise look the same to the SPA. `points` carries one row per team that
+  started, scoring teams first ordered by position and then the rest by
+  name, with `position: null` and `points: 0` for a team that scored
+  nothing — the starter set comes from `RaceSquad`, not from which teams
+  recorded a result (see `racing/README.md`, *Squads*). `IsAuthenticated`,
+  the project default.
 - `GET /api/competitions/standings/` — the current season's points table
   (`StandingsSerializer`, `StandingsView`, serializing
   `competitions.services.standings`). Same `state` vocabulary as
