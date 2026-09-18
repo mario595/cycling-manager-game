@@ -450,6 +450,7 @@ the newest equals `balance`), `test_finances_for_a_user_with_no_team`.
 *Load-bearing:* the running-balance test — D7's off-by-one lives here.
 
 ### W7 — `frontend/`: the Finances screen
+**[x] done**
 `api.ts` additions, `useFinances.ts`, `screens/Finances.tsx`, the nav item,
 the `SCREENS` registration.
 **Test:** `frontend/src/screens/Finances.test.tsx` — renders nothing while

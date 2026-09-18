@@ -371,3 +371,32 @@ export async function getTraining(): Promise<TrainingState> {
 export async function setTrainingFocus(attribute: string): Promise<void> {
   return writeJson('/api/staff/training/', 'PUT', { attribute })
 }
+
+/** One ledger entry as the Finances screen needs it. `kind` is the machine
+ * name (starting_balance/wages/takeover); the screen renders the label.
+ * `rider_count` is set on wage entries only — null elsewhere. `balance_after`
+ * is computed server-side: the running balance just after this entry. */
+export interface LedgerEntry {
+  kind: 'starting_balance' | 'wages' | 'takeover'
+  description: string
+  amount: number
+  occurred_at: string | null
+  rider_count: number | null
+  balance_after: number
+}
+
+/** A team's whole financial state in one payload: the running balance and
+ * its full history, newest first. */
+export interface Finances {
+  balance: number
+  entries: LedgerEntry[]
+}
+
+export async function getFinances(): Promise<Finances> {
+  const response = await fetch('/api/economy/finances/')
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new Error(body?.detail ?? `finances request failed: ${response.status}`)
+  }
+  return response.json()
+}
