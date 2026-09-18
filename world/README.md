@@ -87,7 +87,7 @@ reads `now()` once, then finds and processes whatever is due, in four steps:
    most once ever, so a tick that runs twice, or catches up several weeks
    late, cannot top up the trainer pool twice for the same boundary. See
    `staff/README.md`.
-1. **Ageing, growth and weekly training** — for every `CLOSED` transition
+1. **Ageing, growth, training and wages** — for every `CLOSED` transition
    `process_transitions` returned, every rider's age advances by one
    (`riders.services.advance_ages()`). Then
    `schedule.services.process_week_transitions(at)` records any week
@@ -106,6 +106,14 @@ reads `now()` once, then finds and processes whatever is due, in four steps:
    and its own races — a tick that runs three weeks late must apply three
    *different* training weeks ([#36](https://github.com/mario595/cycling-manager/issues/36),
    the plan's Design decision 3; see `staff/README.md`, *Weekly training*).
+   The same per-transition loop charges every team its wages for the week
+   just closed — `economy.services.charge_weekly_wages(week)`, one combined
+   `wages` entry per team per week, dated to `week.starts_at`
+   (`economy/README.md`). The entry count is summed onto the tick's
+   `TickRun.wage_entries` counter (the column added by
+   `world/migrations/0006`), so each `TickRun` row records how many wage
+   entries its parse wrote; idempotency is the `(team, week)` constraint,
+   the same defence `charge_weekly_wages` and `WeekTransition` lean on.
    Ageing runs before growth, so a rider who turned 33 at this same
    boundary is evaluated against the new age immediately. None of this
    touches a race row, so it runs outside the claim transaction below, the
