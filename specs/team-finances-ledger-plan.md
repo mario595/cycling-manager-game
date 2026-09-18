@@ -458,6 +458,7 @@ loading, renders balance and entries, and shows the warning when the
 balance is negative.
 
 ### W8 — `teams/`: seed an opening balance
+**[x] done**
 Call `ensure_opening_balance` for each team in `seed_teams` (function-scope
 import, same as W5).
 **Test:** `teams/tests/test_seed_teams.py::test_seeded_teams_have_an_opening_balance`

@@ -181,6 +181,16 @@ class Command(BaseCommand):
                 else:
                     claimed = claim_team(user, name=DEMO_TEAM_NAME, code=DEMO_TEAM_CODE)
 
+            # Imported here, not at module scope: teams/ must not import
+            # economy/ at import time (AGENTS.md's dependency direction).
+            # Same rule and reason as the racing.models import in the reset
+            # branch above. ensure_opening_balance is a get_or_create, so
+            # re-running seed_teams cannot double-credit any team.
+            from economy.services import ensure_opening_balance
+
+            for team in Team.objects.all():
+                ensure_opening_balance(team)
+
         message = (
             f"created {created_teams} unmanaged team(s), "
             f"{created_riders} rider(s)"
