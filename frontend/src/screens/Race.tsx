@@ -1,11 +1,14 @@
 import { useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 
-import type { Squad, SquadRider } from '../api'
-import { Button, Card, LabelBar, PageBody, PageHeading, StatTile } from '../components/primitives'
+import type { CalendarRace, RaceDetail, RaceResultEntry, RaceResults, Squad, SquadRider } from '../api'
+import { CourseProfile } from '../components/CourseProfile'
+import { Button, Card, CardHeader, LabelBar, PageBody, PageHeading, StatTile } from '../components/primitives'
 import { raceStatusLabel } from '../raceStatus'
+import { formatGap, formatRaceTime } from '../raceTime'
 import { color, font } from '../theme'
-import { useAuth } from '../useAuth'
+import { useRaceDetail } from '../useRaceDetail'
+import { useRaceResults } from '../useRaceResults'
 import { useSquad } from '../useSquad'
 
 const SQUAD_SIZE = 4
@@ -20,26 +23,18 @@ const ATTRS: { key: keyof SquadRider & string; label: string }[] = [
 
 export function Race() {
   const { raceId } = useParams<{ raceId: string }>()
-  const { me, loading: authLoading } = useAuth()
-  const hasTeam = me?.team != null
+  const id = Number(raceId)
 
-  const { squad, loading, error, save, saving, saveError } = useSquad(Number(raceId))
+  const { race, loading, error } = useRaceDetail(id)
+  const { results, loading: resultsLoading, error: resultsError } = useRaceResults(
+    id,
+    race?.status === 'finished',
+  )
+  const { squad, save, saving, saveError } = useSquad(id)
 
-  if (authLoading || loading) return null
+  if (loading) return null
 
-  if (!hasTeam) {
-    return (
-      <PageBody gap={18} paddingTop={26}>
-        <Card style={{ padding: '18px 20px' }}>
-          <div style={{ fontSize: 13.5, color: color.muted }}>
-            You do not manage a team, so there is no squad for you to pick here.
-          </div>
-        </Card>
-      </PageBody>
-    )
-  }
-
-  if (error || !squad) {
+  if (error || !race) {
     return (
       <PageBody gap={18} paddingTop={26}>
         <Card style={{ padding: '18px 20px' }}>
@@ -49,33 +44,163 @@ export function Race() {
     )
   }
 
+  const body = raceBody(race, { results, resultsLoading, resultsError, squad, save, saving, saveError })
+
   return (
     <PageBody gap={18} paddingTop={26}>
       <PageHeading
-        eyebrow={raceStatusLabel(squad.race_status).toUpperCase()}
-        title={squad.race_name}
+        eyebrow={raceStatusLabel(race.status as CalendarRace['status']).toUpperCase()}
+        title={race.name}
         titleSize={29}
-        subtitle={metaLine(squad)}
+        subtitle={metaLine(race)}
       />
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <StatTile label="DISTANCE" value={`${squad.distance_km.toFixed(1)} km`} minWidth={104} />
+        <StatTile label="DISTANCE" value={`${race.distance_km.toFixed(1)} km`} minWidth={104} />
         <StatTile
           label="DATE"
-          value={squad.starts_at ? new Date(squad.starts_at).toLocaleDateString() : '—'}
+          value={race.starts_at ? new Date(race.starts_at).toLocaleDateString() : '—'}
           minWidth={104}
         />
-        <StatTile label="STATUS" value={raceStatusLabel(squad.race_status)} minWidth={104} />
+        <StatTile label="STATUS" value={raceStatusLabel(race.status as CalendarRace['status'])} minWidth={104} />
       </div>
 
-      <SquadPanel squad={squad} onSave={save} saving={saving} saveError={saveError} />
+      {body}
     </PageBody>
   )
 }
 
-function metaLine(squad: Squad): string {
-  const date = squad.starts_at ? new Date(squad.starts_at).toLocaleDateString() : 'unscheduled'
-  return `${date} · ${squad.distance_km.toFixed(1)} km · ${squad.team_name}`
+function metaLine(race: RaceDetail): string {
+  const date = race.starts_at ? new Date(race.starts_at).toLocaleDateString() : 'unscheduled'
+  return `${date} · ${race.distance_km.toFixed(1)} km`
+}
+
+function raceBody(
+  race: RaceDetail,
+  state: {
+    results: RaceResults | null
+    resultsLoading: boolean
+    resultsError: boolean
+    squad: Squad | null
+    save: (riderIds: number[], leaderId: number) => Promise<void>
+    saving: boolean
+    saveError: string | null
+  },
+) {
+  if (race.status === 'finished') {
+    if (state.resultsError) {
+      return <MessageCard text="Couldn't load this race's results." />
+    }
+    if (!state.results) return null
+    return (
+      <>
+        <CourseProfile course={race.course} />
+        <RiderResultsTable results={state.results} />
+        <TeamPointsTable results={state.results} />
+      </>
+    )
+  }
+  if (race.status === 'failed') {
+    return <MessageCard text="This race did not run." />
+  }
+  if (race.status === 'running') {
+    return <MessageCard text="This race is being simulated." />
+  }
+  return (
+    <>
+      <CourseProfile course={race.course} />
+      {state.squad ? (
+        <SquadPanel
+          squad={state.squad}
+          onSave={state.save}
+          saving={state.saving}
+          saveError={state.saveError}
+        />
+      ) : null}
+    </>
+  )
+}
+
+function MessageCard({ text }: { text: string }) {
+  return (
+    <Card style={{ padding: '18px 20px' }}>
+      <div style={{ fontSize: 13.5, color: color.muted }}>{text}</div>
+    </Card>
+  )
+}
+
+function RiderResultsTable({ results }: { results: RaceResults }) {
+  const winner = results.results.find((r) => r.finished)
+  const winnerTime = winner?.finish_time ?? null
+
+  const timeCell = (entry: RaceResultEntry): string => {
+    if (!entry.finished || entry.finish_time === null || winnerTime === null) return 'DNF'
+    if (entry.position === winner?.position) return formatRaceTime(winnerTime)
+    return formatGap(entry.finish_time - winnerTime)
+  }
+
+  return (
+    <Card>
+      <CardHeader title="Rider results" />
+      <div>
+        {results.results.map((entry) => (
+          <div
+            key={entry.rider.id}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              padding: '12px 20px',
+              borderBottom: `1px solid ${color.divider}`,
+            }}
+          >
+            <div style={{ width: 32, fontFamily: font.mono, fontSize: 13, color: color.mutedStrong }}>
+              {entry.finished ? entry.position : '—'}
+            </div>
+            <div style={{ flex: 1, fontSize: 14 }}>
+              {entry.rider.name}
+              {entry.team ? (
+                <span style={{ marginLeft: 8, fontFamily: font.mono, fontSize: 11.5, color: color.muted }}>
+                  {entry.team.code}
+                </span>
+              ) : null}
+            </div>
+            <div style={{ fontFamily: font.mono, fontSize: 14, fontWeight: 600 }}>{timeCell(entry)}</div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
+function TeamPointsTable({ results }: { results: RaceResults }) {
+  return (
+    <Card>
+      <CardHeader title="Team points" />
+      <div>
+        {results.points.map((entry) => (
+          <div
+            key={entry.team.id}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              padding: '12px 20px',
+              borderBottom: `1px solid ${color.divider}`,
+            }}
+          >
+            <div style={{ flex: 1, fontSize: 14 }}>
+              {entry.team.name}
+              <span style={{ marginLeft: 8, fontFamily: font.mono, fontSize: 11.5, color: color.muted }}>
+                {entry.team.code}
+              </span>
+            </div>
+            <div style={{ fontFamily: font.mono, fontSize: 14, fontWeight: 600 }}>{entry.points}</div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
 }
 
 function SquadPanel({

@@ -34,10 +34,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     label: 'RACING',
-    items: [
-      { path: '/calendar', name: 'Calendar' },
-      { path: '/results', name: 'Results' },
-    ],
+    items: [{ path: '/calendar', name: 'Calendar' }],
   },
   {
     label: 'COMPETITION',

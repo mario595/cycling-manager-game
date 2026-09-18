@@ -17,7 +17,6 @@ vi.mock('./screens/Dashboard', () => ({ Dashboard: () => <div data-testid="dashb
 vi.mock('./screens/Roster', () => ({ Roster: () => <div data-testid="roster" /> }))
 vi.mock('./screens/Staff', () => ({ Staff: () => <div data-testid="staff" /> }))
 vi.mock('./screens/Calendar', () => ({ Calendar: () => <div data-testid="calendar" /> }))
-vi.mock('./screens/Results', () => ({ Results: () => <div data-testid="results" /> }))
 vi.mock('./screens/League', () => ({ League: () => <div data-testid="league" /> }))
 vi.mock('./screens/Race', () => ({ Race: () => <div data-testid="race" /> }))
 vi.mock('./screens/Login', () => ({ Login: () => <div data-testid="login" /> }))
