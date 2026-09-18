@@ -1,7 +1,7 @@
 # CI: run tests and enforce a coverage threshold — Implementation Plan
 
 **Spec:** `specs/ci-test-and-coverage.md` · **Issue:** #80 · **Status:** proposed
-**Apps touched:** none. New files: `.github/workflows/ci.yml` (new), `.coveragerc` (new), `requirements.txt`, `README.md`, `AGENTS.md`
+**Apps touched:** none. New files: `.github/workflows/ci.yml` (new), `.coveragerc` (new), `requirements.txt`, `README.md`, `AGENTS.md`, `config/settings/dev.py`
 
 ## Context you need
 
@@ -16,6 +16,18 @@ docker compose up -d                        # Postgres 16 on host port 5433
 .venv/bin/python -m pytest                  # 398 tests, ~2.5-4 min
 cd frontend && npm run lint && npm run test && npm run build
 ```
+
+**Also verified during planning: the backend suite's 2.5–4 minute runtime is
+almost entirely password hashing, not database or fixture cost.** Every test
+that creates a `User` — directly, or via a fixture that does — pays Django's
+default PBKDF2 hasher cost, measured at **~1.8 seconds for one
+`create_user()` call**. `teams/tests/test_services.py`'s `user` fixture and
+`accounts/tests.py`'s login tests are the biggest payers. Switching the test
+settings to `MD5PasswordHasher` (Django's own documented recommendation for
+test suites — insecure by design, fine for throwaway test data, never used in
+production) measured at **163s → 15s, all 398 tests still passing**. This is
+now W1 below, ahead of the CI workflow itself, so the workflow is fast from
+its first run rather than needing a follow-up.
 
 Four facts about this repo that the workflow must respect, all verified:
 
@@ -49,13 +61,16 @@ When this is done:
 
 1. Opening a pull request, or pushing to `master`, runs the tests automatically.
 2. Two jobs run in parallel: a fast one with no database (`race_engine` +
-   frontend lint/test/build), and a slow one with Postgres 16 (the Django suite).
-3. The slow job measures backend coverage with migrations, tests, settings,
+   frontend lint/test/build), and a backend one with Postgres 16 (the Django
+   suite) — which now finishes in ~15s instead of ~3 minutes.
+3. The backend job measures coverage with migrations, tests, settings,
    `manage.py` and `race_player/` excluded, and **fails below 85%**.
 4. The result is visible as a check on the pull request. It does not block merge
    — branch protection is unavailable on this plan.
 5. `pytest-cov` is a declared dependency, and the coverage exclusions live in a
    committed config file that a local run uses too.
+6. The Django test suite uses a fast password hasher, so both CI and local
+   `pytest` runs benefit — not just CI.
 
 ## Design decisions (settled — implement these, do not substitute)
 
@@ -125,6 +140,31 @@ When this is done:
 12. **`race_player/` is excluded from coverage but its tests, if any, are not
     run separately.** It is not in `pyproject.toml`'s `testpaths`, so pytest
     never collects it today. Leave that as-is.
+
+13. **The fast password hasher is set in `config/settings/dev.py`, guarded so
+    it can never reach production**, using the same pattern `dev.py` already
+    uses for `AUTH_PASSWORD_VALIDATORS` a few lines above it (that override
+    "has no way to leak into production" because `prod.py` imports only
+    `base.py`, never `dev.py`). Do **not** create a separate `test.py`
+    settings module for this — `pyproject.toml`'s `DJANGO_SETTINGS_MODULE` is
+    already `config.settings.dev`, `manage.py` defaults to it too, and adding
+    a third settings file for one line is more moving parts than the change
+    needs. Do **not** gate it behind an environment variable — dev and test
+    should always get the fast hasher; there is no scenario where a developer
+    wants slow local test runs.
+
+    ```python
+    # config/settings/dev.py, placed near AUTH_PASSWORD_VALIDATORS
+    #
+    # Django's default hasher (PBKDF2) is deliberately slow — ~1.8s per
+    # create_user() call — which is correct for production and pointless
+    # for throwaway test/dev accounts. MD5PasswordHasher is Django's own
+    # documented recommendation for speeding up tests. Like
+    # AUTH_PASSWORD_VALIDATORS above, this only applies when
+    # DJANGO_SETTINGS_MODULE points at this file — prod.py never imports
+    # dev.py, so this has no way to reach a real deployment.
+    PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
+    ```
 
 ## Data model
 
@@ -274,7 +314,30 @@ spec requires, and avoids a second coverage-combining step.
 
 ## Work items
 
-### W1 — `.coveragerc` + `requirements.txt`: make coverage measurable and reproducible
+### W1 — `config/settings/dev.py`: fast password hasher for dev and test
+
+Add `PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]` as
+shown in decision 13, near the existing `AUTH_PASSWORD_VALIDATORS` override.
+
+**Proves it:** time the suite before and after — the whole point of this item
+is a measured number, not a plausible-sounding setting:
+
+```bash
+git stash          # temporarily remove the change
+time .venv/bin/python -m pytest --reuse-db -q
+git stash pop       # restore it
+time .venv/bin/python -m pytest --reuse-db -q
+```
+
+Expect roughly **163s → 15s**. All 398 tests must still pass — this changes
+password *hashing speed*, not authentication behaviour, so no test should
+newly fail or newly pass. If any test's outcome changes, stop: something
+depended on the specific hasher (unlikely, but check before proceeding).
+
+This item is independent of coverage and the workflow — it speeds up every
+local `pytest` run too, immediately, whether or not W2 ever lands.
+
+### W2 — `.coveragerc` + `requirements.txt`: make coverage measurable and reproducible
 
 Add `.coveragerc` exactly as above and `pytest-cov>=5` to `requirements.txt`.
 
@@ -289,11 +352,11 @@ The TOTAL line must read **89%** (or higher if the suite has grown). If it reads
 93%, the test-file omits are not matching — check that both `*/tests.py` and
 `*/tests/*` are present. If it reads far lower, an omit is too aggressive.
 
-This is the load-bearing item: **the threshold in W2 is only meaningful if this
+This is the load-bearing item: **the threshold in W3 is only meaningful if this
 number is right**, and it is the one an implementer is most likely to get subtly
 wrong by omitting one of the two test layouts.
 
-### W2 — `.github/workflows/ci.yml`: the workflow
+### W3 — `.github/workflows/ci.yml`: the workflow
 
 Add the workflow file as above. Nothing else changes.
 
@@ -308,7 +371,7 @@ green (see Verification). Optionally validate the YAML parses first:
 (PyYAML is present transitively; if it is not, skip this — GitHub will report a
 syntax error on push.)
 
-### W3 — `README.md` and `AGENTS.md`: document it
+### W4 — `README.md` and `AGENTS.md`: document it
 
 See *Documentation update* below.
 
@@ -316,17 +379,23 @@ See *Documentation update* below.
 
 ## Execution order
 
-**W1 → W2 → W3**, one commit each.
+**W1 → W2 → W3 → W4**, one commit each.
 
-W1 first because the threshold number is an input to W2: if actual coverage
+W1 first, and on its own: it is independent of everything else, has an
+immediate local payoff, and — importantly — changes the coverage baseline's
+*runtime* (not its percentage), so measuring coverage in W2 against a suite
+that already runs in 15s rather than 3 minutes is the honest starting point
+for everything after it.
+
+W2 second because the threshold number is an input to W3: if actual coverage
 turned out to be 80% rather than 89%, the 85% floor in the workflow would be
-wrong and W2 would need different content. Measuring before writing the gate is
+wrong and W3 would need different content. Measuring before writing the gate is
 the point.
 
-W2 second, alone, so that the PR which introduces CI is itself the first thing
-CI runs on — the cleanest possible proof.
+W3 third, alone, so that the PR which introduces CI is itself the first thing
+CI runs on — the cleanest possible proof, and now a fast one.
 
-W3 last, once the workflow's real behaviour is known, so the documentation
+W4 last, once the workflow's real behaviour is known, so the documentation
 describes what happened rather than what was intended.
 
 Stop and commit after each.
@@ -355,9 +424,13 @@ Unit tests cannot verify a CI workflow; it is verified by running.
 1. **Open the pull request for this branch.** Both checks — *Engine and frontend*
    and *Django suite and coverage* — must appear and go green.
 
-2. **Confirm the fast job is actually fast.** It should finish in well under two
-   minutes, and crucially it must not be waiting on a database. If it takes as
-   long as the backend job, the split has not achieved anything.
+2. **Confirm the fast job is actually fast, and that the backend job is too.**
+   The fast job should finish in well under two minutes and must not be
+   waiting on a database. The backend job, with W1's hasher change in place,
+   should finish in well under a minute of actual test time (plus checkout
+   and dependency install) — not the 2.5–4 minutes the suite took before.
+   If the backend job is still slow, W1 did not land or did not take effect
+   in this environment; check it before investigating anything else.
 
 3. **Confirm the coverage gate can actually fail** — this is the check that
    matters most, because *a threshold that cannot fail proves nothing*. A
@@ -389,7 +462,9 @@ wrong answer.
 | Risk | Mitigation |
 |---|---|
 | **`POSTGRES_PORT` inherited as 5433, service container on 5432 → every Django test errors.** The single most likely mistake. | Job-level `env: POSTGRES_PORT: 5432`, called out in decision 2 and checked by Verification step 4. |
-| **Coverage omits miss one of the two test layouts** (`tests.py` vs `tests/`), inflating the number to ~93% so the 85% floor is trivially met. | W1 states the expected number (89%) and says explicitly what 93% means. Both patterns are in `.coveragerc`. |
+| **The hasher change is placed behind an environment-variable guard, or in a settings module `pyproject.toml` doesn't actually select**, so it silently never applies and the suite stays slow. | W1's own verification step times the suite before and after and expects a specific, large delta (163s → 15s) — a no-op change is caught immediately, not assumed. |
+| **A test asserts something about password-hash *format*** (e.g. checking a stored hash starts with `pbkdf2_sha256$`), which MD5PasswordHasher would break. Not found in this codebase, but worth naming. | W1's verification requires all 398 tests to still pass with no change in which tests pass or fail — any such test would fail immediately and visibly. |
+| **Coverage omits miss one of the two test layouts** (`tests.py` vs `tests/`), inflating the number to ~93% so the 85% floor is trivially met. | W2 states the expected number (89%) and says explicitly what 93% means. Both patterns are in `.coveragerc`. |
 | **`--cov-fail-under` not actually wired up**, so the gate silently never fails. | Verification step 3 deliberately raises the bar to 99% and requires a red check before reverting. |
 | **Job starts before Postgres is accepting connections → flaky red builds.** | `--health-cmd pg_isready` with interval/timeout/retries, mirroring `docker-compose.yml`. |
 | Implementer "simplifies" the two jobs into one, losing the fast feedback. | Decision 1 states the split is the point and names the rejected alternative. |

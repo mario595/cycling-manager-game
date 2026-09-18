@@ -40,6 +40,10 @@ lint, build, and coverage floor all passed.
 7. A failing check is visible on the pull request. It does not and cannot
    block merging — this repository has no branch protection available (see
    Rules and edge cases) — so failure is informative, not preventative.
+8. The backend test suite uses a fast password hasher in the test settings,
+   so creating a `User` in a test costs milliseconds instead of the ~1.8
+   seconds Django's production-strength hasher takes by design. This is a
+   test-environment setting, never used to hash a real password.
 
 ## Out of scope
 
@@ -57,9 +61,10 @@ lint, build, and coverage floor all passed.
   branch protection.** Both would enable blocking merges, but neither is
   justified by this ticket alone. Revisit if the project gains contributors
   or goes public for other reasons.
-- **Speeding up the backend test suite.** It currently takes 2.5–4 minutes.
-  Worth watching, not worth fixing pre-emptively. Deferred to its own ticket
-  if it becomes a problem — see Deferred.
+- **Speeding up the backend test suite beyond the password-hasher fix.**
+  The hasher change (in scope — item 8) measured at **163s → 15s, an 11x
+  improvement**, which removes the original motivation for chasing further
+  runtime work. Anything beyond that is deferred — see Deferred.
 - **The stale `requirements.txt` comment the original ticket flagged.**
   Already corrected; nothing left to do.
 
@@ -116,9 +121,15 @@ lint, build, and coverage floor all passed.
 - **CD is a separate, later ticket.** No hosting target exists yet.
 - **The `requirements.txt` stale-comment note from the original issue is
   already resolved** — no action needed here.
-- **Backend suite runtime (2.5–4 minutes currently) is not addressed by
-  this ticket.** Tracked instead as a possible future ticket — see
-  Deferred.
+- **Backend suite runtime, measured and fixed within this ticket.** Profiling
+  found the entire 2.5–4 minute runtime traced almost entirely to Django's
+  default PBKDF2 password hasher — every test that creates a `User` (directly
+  or via a fixture) pays ~1.8s for a single `create_user()` call, since
+  PBKDF2 is deliberately slow for production security. A test-only hasher
+  override (`PASSWORD_HASHERS = ["...MD5PasswordHasher"]`) measured at
+  **163s → 15s** with all 398 tests still passing. This is now in scope
+  (item 8), not deferred — the fix is a one-line settings change, not a
+  suite redesign, so there was no reason to wait for a second ticket.
 
 ## Open questions
 
@@ -127,11 +138,9 @@ None outstanding — the original issue's open questions (database need for
 
 ## Deferred
 
-- **Backend test suite runtime.** The suite takes 2.5–4 minutes with no
-  single slow test to blame — it's spread thin across ~400 tests, heaviest
-  in `accounts` and `api` fixture setup. Not a problem yet; worth its own
-  ticket to investigate and speed up if CI turns-per-day makes the wait
-  costly.
+- **Any further backend runtime work beyond the password-hasher fix.** At
+  ~15s the suite is no longer a runtime concern; revisit only if it grows
+  slow again for an unrelated reason.
 - **Per-diff or per-app coverage.** More useful than whole-repo coverage,
   more work to set up. Wait until there's more than one contributor for the
   distinction to start mattering.
