@@ -314,7 +314,7 @@ spec requires, and avoids a second coverage-combining step.
 
 ## Work items
 
-### W1 — `config/settings/dev.py`: fast password hasher for dev and test
+### W1 — `config/settings/dev.py`: fast password hasher for dev and test — **done**
 
 Add `PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]` as
 shown in decision 13, near the existing `AUTH_PASSWORD_VALIDATORS` override.
@@ -337,7 +337,7 @@ depended on the specific hasher (unlikely, but check before proceeding).
 This item is independent of coverage and the workflow — it speeds up every
 local `pytest` run too, immediately, whether or not W2 ever lands.
 
-### W2 — `.coveragerc` + `requirements.txt`: make coverage measurable and reproducible
+### W2 — `.coveragerc` + `requirements.txt`: make coverage measurable and reproducible — **done**
 
 Add `.coveragerc` exactly as above and `pytest-cov>=5` to `requirements.txt`.
 
@@ -356,7 +356,7 @@ This is the load-bearing item: **the threshold in W3 is only meaningful if this
 number is right**, and it is the one an implementer is most likely to get subtly
 wrong by omitting one of the two test layouts.
 
-### W3 — `.github/workflows/ci.yml`: the workflow
+### W3 — `.github/workflows/ci.yml`: the workflow — **done**
 
 Add the workflow file as above. Nothing else changes.
 
@@ -371,7 +371,7 @@ green (see Verification). Optionally validate the YAML parses first:
 (PyYAML is present transitively; if it is not, skip this — GitHub will report a
 syntax error on push.)
 
-### W4 — `README.md` and `AGENTS.md`: document it
+### W4 — `README.md` and `AGENTS.md`: document it — **done**
 
 See *Documentation update* below.
 
