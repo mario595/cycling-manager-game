@@ -626,7 +626,7 @@ history); `teams/tests/test_seed_teams.py` —
 `test_finances_without_a_team_returns_zero_fanbase`,
 `test_merchandise_entry_serializes_with_its_kind`.
 
-### W9 — `frontend/src/api.ts`, `frontend/src/screens/Finances.tsx`: show it
+### W9 — `frontend/src/api.ts`, `frontend/src/screens/Finances.tsx`: show it **Done.**
 
 **Test:** `frontend/src/screens/Finances.test.tsx` —
 `renders the fanbase tile with its weekly change`,

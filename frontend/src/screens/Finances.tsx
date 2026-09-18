@@ -19,6 +19,17 @@ const KIND_LABELS: Record<LedgerEntry['kind'], string> = {
   starting_balance: 'Starting balance',
   wages: 'Weekly wages',
   takeover: 'Team takeover',
+  merchandise: 'Merchandise revenue',
+}
+
+/** The fanbase tile's suffix: how the team's support moved this week, in the
+ * positive or negative colour so a drop is read at a glance. `fanbase_change`
+ * is 0 before the first weekly row, which renders as "+0 this week" rather
+ * than a bare tile. */
+function fanbaseChangeSuffix(change: number): { text: string; color: string } {
+  const sign = change < 0 ? '−' : '+'
+  const text = `${sign}${formatCredits(Math.abs(change))} this week`
+  return { text, color: change < 0 ? color.negative : color.positive }
 }
 
 export function Finances() {
@@ -61,13 +72,23 @@ export function Finances() {
         titleSize={29}
         subtitle="Everything that has touched your team's account, newest first."
         aside={
-          <StatTile
-            label="BALANCE"
-            value={formatCredits(finances.balance)}
-            suffix=" credits"
-            minWidth={160}
-            dark={false}
-          />
+          <>
+            <StatTile
+              label="BALANCE"
+              value={formatCredits(finances.balance)}
+              suffix=" credits"
+              minWidth={160}
+              dark={false}
+            />
+            <StatTile
+              label="FANBASE"
+              value={formatCredits(finances.fanbase)}
+              suffix={fanbaseChangeSuffix(finances.fanbase_change).text}
+              suffixColor={fanbaseChangeSuffix(finances.fanbase_change).color}
+              minWidth={160}
+              dark={false}
+            />
+          </>
         }
       />
 
