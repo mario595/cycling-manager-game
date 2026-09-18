@@ -314,7 +314,7 @@ spec requires, and avoids a second coverage-combining step.
 
 ## Work items
 
-### W1 — `config/settings/dev.py`: fast password hasher for dev and test
+### W1 — `config/settings/dev.py`: fast password hasher for dev and test — **done**
 
 Add `PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]` as
 shown in decision 13, near the existing `AUTH_PASSWORD_VALIDATORS` override.

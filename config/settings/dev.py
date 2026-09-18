@@ -65,3 +65,11 @@ GAME_CLOCK_CLASS = os.environ.get("GAME_CLOCK_CLASS", "world.clocks.RealClock")
 # leak into production; it only ever applies when DJANGO_SETTINGS_MODULE
 # points at this file.
 AUTH_PASSWORD_VALIDATORS: list[dict] = []
+
+# Django's default hasher (PBKDF2) is deliberately slow — ~1.8s per
+# create_user() call — which is correct for production and pointless for
+# throwaway test/dev accounts. MD5PasswordHasher is Django's own documented
+# recommendation for speeding up tests. Like AUTH_PASSWORD_VALIDATORS above,
+# this only applies when DJANGO_SETTINGS_MODULE points at this file — prod.py
+# never imports dev.py, so this has no way to reach a real deployment.
+PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
