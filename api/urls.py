@@ -6,6 +6,7 @@ from .views import (
     CalendarView,
     ClaimTeamView,
     ClockView,
+    FinancesView,
     FireTrainerView,
     HireTrainerView,
     MeView,
@@ -37,4 +38,5 @@ urlpatterns = [
     path("staff/trainer/hire/", HireTrainerView.as_view(), name="hire-trainer"),
     path("staff/trainer/fire/", FireTrainerView.as_view(), name="fire-trainer"),
     path("staff/training/", TrainingView.as_view(), name="training"),
+    path("economy/finances/", FinancesView.as_view(), name="finances"),
 ]

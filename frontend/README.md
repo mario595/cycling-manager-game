@@ -1,6 +1,6 @@
 # Frontend
 
-The React SPA, served by Django from `frontend/dist/`: seven built screens,
+The React SPA, served by Django from `frontend/dist/`: eight built screens,
 all reading the real API. No screen renders invented data.
 
 ## What exists
@@ -10,6 +10,7 @@ all reading the real API. No screen renders invented data.
 | `/` | Dashboard | Built — season, standings, next race and squad status from the API, no fixture data |
 | `/roster` | Roster | Built — filter, sort, rider detail panel and the same freshness bar as squad selection, from the API, no fixture data |
 | `/staff` | Staff | Built — hire/fire a trainer, from the API, no fixture data |
+| `/finances` | Finances | Built — balance and ledger history from the API, no fixture data |
 | `/training` | Training | Built — set the weekly focus, see last week's moves, from the API, no fixture data |
 | `/calendar` | Calendar | Built — twelve weeks from the API, no fixture data |
 | `/race/:raceId` | Race | Built — the full race screen: course profile and squad before it runs, course profile and results after, from the API, no fixture data |
@@ -231,3 +232,11 @@ as a feature — and follows the same rule, composing `PageHeading`, `Card`,
 API's `TrainingState` payload exactly: the last-rollover changes panel and
 the focus picker are the two things `specs/weekly-training-focus.md` asks
 for, with nothing invented around them.
+
+`Finances.tsx` likewise has **no mockup** — `design/` predates the economy
+as a domain. It follows the same staff-composition rule, and its copy comes
+from the ledger's own kinds (`economy/README.md`): a balance headline that
+flags a negative balance, and the history list rendered newest-first with
+the per-entry kind label, date and amount. The design's "CLUB" grouping is
+aspirational — the SPA has no such section — so `/finances` is a nav item in
+the TEAM section, next to the staff and training screens it visually matches.

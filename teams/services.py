@@ -26,7 +26,7 @@ class AlreadyManaging(ClaimError):
     """Raised by callers, not by claim_team itself — see its docstring."""
 
 
-def claim_team(user, *, name: str, code: str, roster_size: int = ROSTER_SIZE) -> Team:
+def claim_team(user, *, name: str, code: str, roster_size: int = ROSTER_SIZE, at) -> Team:
     """Assign an unmanaged team to `user`, rename it, release its riders and
     give it a freshly generated roster. One transaction: a half-claimed team
     (renamed but with no roster) must never be observable.
@@ -35,6 +35,12 @@ def claim_team(user, *, name: str, code: str, roster_size: int = ROSTER_SIZE) ->
     OneToOneField, so a second claim raises IntegrityError, and the caller
     (api.views.ClaimTeamView) checks first via team_for() so the happy path
     never relies on that exception.
+
+    `at` is the game time the takeover is recorded at, handed on to
+    economy.services.reset_to_starting_balance — the caller (api/, `teams/`'s
+    seed command) passes `world.services.now()` itself. teams/'s library code
+    must not import world/ (AGENTS.md), so the caller supplies it, the same
+    way schedule/services.py's callers do.
     """
     with transaction.atomic():
         team = (
@@ -54,4 +60,11 @@ def claim_team(user, *, name: str, code: str, roster_size: int = ROSTER_SIZE) ->
 
         team.riders.update(team=None)
         Rider.objects.bulk_create(generate_roster(roster_size, team=team))
+
+        # Imported here, not at module scope: teams/ must not import
+        # economy/ at import time (AGENTS.md's dependency direction). Same
+        # rule and reason as seed_teams.py importing racing.models inside
+        # handle().
+        from economy.services import reset_to_starting_balance
+        reset_to_starting_balance(team, at=at)
     return team

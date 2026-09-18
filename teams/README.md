@@ -5,12 +5,12 @@
 `Team` — name, code, colours, and the `manager` link to `accounts.User`.
 `services.claim_team()`, the only writer of that link. The `seed_teams`
 management command, which populates a claimable world. Not rosters (`riders/`
-owns `Rider`), not standings (the unbuilt `competitions/`), not money (the
-unbuilt `economy/`).
+owns `Rider`), not standings (`competitions/`), not money (`economy/` owns
+the ledger).
 
 ## Claiming a team
 
-A registered user with no team calls `claim_team(user, name=..., code=...)`
+A registered user with no team calls `claim_team(user, name=..., code=..., at=...)`
 (exposed as `POST /api/teams/claim/`, `api/README.md`). One transaction:
 
 1. Locks the lowest-`pk` unmanaged team with `select_for_update(skip_locked=True)`
@@ -26,6 +26,13 @@ A registered user with no team calls `claim_team(user, name=..., code=...)`
    erasing the team's race history.
 4. Generates a fresh roster via `riders.generation.generate_roster()` and
    assigns it to the team.
+5. Writes a ledger `takeover` entry that brings the team's balance back to
+   `STARTING_BALANCE` — `economy.services.reset_to_starting_balance(team, at=...)`,
+   imported **inside `claim_team`** (see *What `teams/` may import*). The
+   team's financial history is never deleted; the takeover is a *new* row on
+   top of it — `economy/README.md`, *The ledger is append-only*. The `at`
+   (game time) is passed in by the caller — `api/`'s view and `seed_teams`
+   supply `world.services.now()` — because `teams/` must not import `world/`.
 
 If no unmanaged team exists, `claim_team` raises `NoTeamAvailable`. A second
 claim by an already-managing user is not checked here — `Team.manager` is a
@@ -80,6 +87,18 @@ imports `riders.models` — no module that imports `teams/` at runtime. If this
 ever changes, the suite catches it immediately: a real cycle surfaces as an
 `ImportError` at Django startup, not a subtle bug.
 
+### A special case: `economy/`
+
+`teams/` may import exactly one `economy/` function, **inside a function
+body, never at module scope**: `reset_to_starting_balance` in `claim_team`,
+and `ensure_opening_balance` in `seed_teams`' `handle()`. This is the same
+entry-point pattern as `seed_teams` importing `racing.models` inside
+`handle()` — `AGENTS.md`'s dependency graph says `economy -> teams`, and a
+module-scope `from economy.services import ...` would import `economy/` (and
+through it `teams/`) the moment `teams/models.py` loads, creating a cycle.
+Importing inside the function keeps the edge real but lazy. See
+`economy/README.md`.
+
 ## `seed_teams` — populating a claimable world
 
 ```bash
@@ -101,6 +120,19 @@ logic); once `--count` exceeds the list, names and codes get a generation
 suffix (`"Ardennes Racing 2"`, code `"ARX"` — a letter, not a digit, since
 `team_code_validator` requires three uppercase letters).
 
+Every team `seed_teams` creates or leaves in place gets a ledger opening
+balance via `economy.services.ensure_opening_balance(team, at=...)`
+(imported inside `handle()`, same entry-point rule as `racing.models` — see
+*What `teams/` may import*). The `at` is the current game time — the command
+reads `world.services.now()` itself, like `schedule/`'s `load_season` does.
+The claim block runs **after** that loop, so the team a
+`--claim-for` takes out of the pool already sits at `STARTING_BALANCE`;
+`claim_team`'s takeover then computes a zero delta and writes nothing,
+leaving the claimed team at the standard amount with exactly one
+`starting_balance` entry — no double credit. A team claimed later, once
+wages have drained it, gets the takeover row instead
+(`economy/README.md`).
+
 Imports `racing.models` inside `handle()`, not at module scope — same rule
 and reason as `riders/management/commands/reset_riders.py`: a management
 command is an entry point, and `teams/`'s library code (`models.py`,
@@ -110,9 +142,10 @@ command is an entry point, and `teams/`'s library code (`models.py`,
 
 - **Team-code disambiguation.** [#56](https://github.com/mario595/cycling-manager/issues/56),
   see *Codes are not unique* above.
-- **Resetting a claimed team's money to a fixed starting amount.** Decided
-  (`specs/claiming-a-team.md`'s reasoning, now in git history) but not built —
-  the game has no money at all yet; `economy/` doesn't exist.
+- **Resetting a claimed team's money to a fixed starting amount.** **Done** —
+  claiming writes a `takeover` ledger entry that brings the balance back to
+  `STARTING_BALANCE` without deleting history. See *Claiming a team* above
+  and `economy/README.md`.
 - **Inheriting a claimed team's classification position and Season points.**
   Same story: decided, but there is no standings table for it to apply to
   until `competitions/` exists.

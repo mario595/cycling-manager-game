@@ -3,6 +3,8 @@ from __future__ import annotations
 from django.core.management import call_command
 
 from accounts.models import User
+from economy.models import STARTING_BALANCE, LedgerEntry
+from economy.services import balance_for
 from riders.models import Rider
 from teams.models import Team
 
@@ -48,3 +50,36 @@ def test_codes_are_three_uppercase_letters(db):
 
     for team in Team.objects.all():
         team.full_clean(exclude=["manager"])
+
+
+def test_seeded_teams_have_an_opening_balance(db):
+    call_command("seed_teams", "--count=4", "--per-team=12")
+
+    for team in Team.objects.all():
+        entry = LedgerEntry.objects.get(team=team, kind=LedgerEntry.Kind.STARTING_BALANCE)
+        assert entry.amount == STARTING_BALANCE
+        assert balance_for(team) == STARTING_BALANCE
+
+
+def test_reseeding_does_not_double_credit(db):
+    call_command("seed_teams", "--count=4", "--per-team=12")
+    call_command("seed_teams", "--count=4", "--per-team=12")
+
+    for team in Team.objects.all():
+        opening_entries = LedgerEntry.objects.filter(
+            team=team, kind=LedgerEntry.Kind.STARTING_BALANCE,
+        )
+        assert opening_entries.count() == 1
+        assert balance_for(team) == STARTING_BALANCE
+
+
+def test_claim_for_does_not_double_credit(db):
+    user = User.objects.create_user(email="a@b.com", password="x", display_name="A")
+    call_command("seed_teams", "--count=4", "--per-team=12", f"--claim-for={user.email}")
+
+    claimed = Team.objects.get(manager=user)
+    assert balance_for(claimed) == STARTING_BALANCE
+    takeovers = LedgerEntry.objects.filter(
+        team=claimed, kind=LedgerEntry.Kind.TAKEOVER,
+    )
+    assert takeovers.count() == 0  # claimed at exactly the starting balance
