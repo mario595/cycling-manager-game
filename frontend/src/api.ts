@@ -261,7 +261,7 @@ export interface RaceResultEntry {
 
 export interface RaceResultPointsEntry {
   team: RaceResultTeam
-  position: number
+  position: number | null
   points: number
 }
 
@@ -275,6 +275,28 @@ export async function getRaceResults(raceId: number): Promise<RaceResults> {
   const response = await fetch(`/api/racing/races/${raceId}/results/`)
   if (!response.ok) {
     throw new Error(`race results request failed: ${response.status}`)
+  }
+  return response.json()
+}
+
+export interface CourseSegment {
+  length: number
+  gradient: number
+}
+
+export interface RaceDetail {
+  id: number
+  name: string
+  status: string
+  starts_at: string | null
+  distance_km: number
+  course: CourseSegment[]
+}
+
+export async function getRaceDetail(raceId: number): Promise<RaceDetail> {
+  const response = await fetch(`/api/racing/races/${raceId}/`)
+  if (!response.ok) {
+    throw new Error(`race detail request failed: ${response.status}`)
   }
   return response.json()
 }

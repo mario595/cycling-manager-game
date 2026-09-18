@@ -23,6 +23,12 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 export default defineConfig(({ command }) => ({
   base: command === 'build' ? '/static/' : '/',
   plugins: [react()],
+  // The course profile is imported from race_player/src across packages; that
+  // code resolves 'react' within race_player/node_modules unless we force it
+  // back to the frontend's copy, and two Reacts in one tree break hooks.
+  resolve: {
+    dedupe: ['react', 'react-dom'],
+  },
   build: {
     outDir: 'dist',
     emptyOutDir: true,

@@ -10,7 +10,6 @@ import { League } from './screens/League'
 import { Login } from './screens/Login'
 import { Race } from './screens/Race'
 import { Register } from './screens/Register'
-import { Results } from './screens/Results'
 import { Roster } from './screens/Roster'
 import { Staff } from './screens/Staff'
 import { Training } from './screens/Training'
@@ -30,7 +29,6 @@ const SCREENS: Record<string, React.ComponentType> = {
   '/finances': Finances,
   '/calendar': Calendar,
   '/league': League,
-  '/results': Results,
 }
 
 export function App() {

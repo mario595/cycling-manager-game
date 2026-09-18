@@ -47,6 +47,7 @@ from .serializers import (
     MeSerializer,
     MeTeamSerializer,
     PositionSerializer,
+    RaceDetailSerializer,
     RaceResultsSerializer,
     RiderSerializer,
     SquadSerializer,
@@ -306,6 +307,25 @@ class RiderListView(APIView):
         return Response(RiderSerializer(riders, many=True).data)
 
 
+class RaceDetailView(APIView):
+    """One race's own facts — identity, status, when, how far, and the
+    course profile. Unlike SquadView this is not about the caller's team:
+    any authenticated manager may read any race, including one their team
+    did not start. See specs/race-detail-view-plan.md, D1."""
+
+    def get(self, request, race_id: int):
+        race = get_object_or_404(Race, pk=race_id)
+        payload = {
+            "id": race.pk,
+            "name": race.name,
+            "status": race.status,
+            "starts_at": race.starts_at,
+            "distance_km": _distance_km(race),
+            "course": race.course,
+        }
+        return Response(RaceDetailSerializer(payload).data)
+
+
 class RaceResultsView(APIView):
     """A finished race's order, plus each team's points from it.
 
@@ -322,6 +342,29 @@ class RaceResultsView(APIView):
 
         results = race.results.select_related("rider__team").order_by("position")
         points = race.points.select_related("team").order_by("position")
+        scored = {p.team_id: p for p in points}
+        starters = (
+            Team.objects
+            .filter(race_squads__race=race)
+            .distinct()
+            .order_by("name")
+        )
+        points_payload = [
+            {
+                "team": {"id": p.team.pk, "name": p.team.name, "code": p.team.code},
+                "position": p.position,
+                "points": p.points,
+            }
+            for p in points
+        ] + [
+            {
+                "team": {"id": t.pk, "name": t.name, "code": t.code},
+                "position": None,
+                "points": 0,
+            }
+            for t in starters
+            if t.pk not in scored
+        ]
 
         payload = {
             "race": {"id": race.pk, "name": race.name, "status": race.status},
@@ -337,14 +380,7 @@ class RaceResultsView(APIView):
                 }
                 for r in results
             ],
-            "points": [
-                {
-                    "team": {"id": p.team.pk, "name": p.team.name, "code": p.team.code},
-                    "position": p.position,
-                    "points": p.points,
-                }
-                for p in points
-            ],
+            "points": points_payload,
         }
         return Response(RaceResultsSerializer(payload).data)
 

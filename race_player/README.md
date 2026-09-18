@@ -79,19 +79,28 @@ straight into `race_player/public/`.
   simulation side and the `Wind`/`WindBand` types in `types/race.ts`.
 
 ### Elevation Derivation
-Since absolute altitude is not stored in the engine logs, it must be derived from the segment data:
+Since absolute altitude is not stored in the engine logs, it must be derived from the segment data (`utils/profile.ts`):
 1. Initialize `elevation = 0`.
 2. For each segment in the course:
    - Calculate `elevation_change = segment.length * (segment.gradient / 100)`.
    - Add to cumulative `elevation`.
    - Store as part of the profile coordinate data.
 
+This `computeProfile()` is shared: the frontend's race-detail screen
+(`CourseProfile.tsx`) imports it across packages, so the calendar and this
+visualizer always agree on how a course looks.
+
 ## Core Features
 
 ### 1. Elevation Profile Visualization
-- **Type:** Custom SVG area chart (`ElevationProfile.tsx`).
+- **Type:** Custom SVG area chart — `CourseChart.tsx`, the shared chart that
+  the frontend's race-detail screen imports directly (no rider markers there).
 - **Coloring:** Gradient-colored area based on the slope (green for flat, blue for descents, yellow→red for climbs).
 - **Gradient Labels:** Shows `%` labels below each segment (only for segments wide enough to avoid overlap).
+- **`ElevationProfile.tsx` is the chart plus the riders.** It composes
+  `CourseChart` with an overlay of markers/blobs/tooltips, drawn on top via
+  the chart's overlay render-prop so they share the exact scale the course
+  was drawn with.
 - **Rendering unit is the pack, not the rider.** The profile consumes
   `Pack[]` from `computePacks` (the same packs `RiderList` renders), not a
   flat rider list — a bunch of 40+ riders at one x-coordinate is otherwise
@@ -232,7 +241,8 @@ race-player/
 ├── src/
 │   ├── components/
 │   │   ├── RaceViz.tsx         # Main container: playback loop, keyboard, pack computation
-│   │   ├── ElevationProfile.tsx# Custom SVG area chart with gradient coloring + labels
+│   │   ├── CourseChart.tsx     # SHARED elevation chart: segments, % labels, km markers, axes
+│   │   ├── ElevationProfile.tsx# CourseChart + rider markers/blobs/tooltips via the overlay prop
 │   │   ├── RiderMarker.tsx     # Custom SVG circle marker (memoized), team colour + leader shape
 │   │   ├── PackMarker.tsx      # Segmented-ring pack blob (memoized): size, team composition, leader pips
 │   │   ├── PlaybackControls.tsx# Play/Pause, speed selector, tick counter, wind compass
@@ -242,7 +252,8 @@ race-player/
 │   ├── types/
 │   │   └── race.ts             # TypeScript interfaces (Rider, Pack, ProfilePoint, Wind, etc.)
 │   ├── utils/
-│   │   ├── parseRaceLog.ts     # Parses JSONL + computes elevation profile
+│   │   ├── parseRaceLog.ts     # Parses JSONL, computes profile via utils/profile.ts
+│   │   ├── profile.ts          # SHARED elevation derivation (computeProfile) — imported by the frontend
 │   │   ├── interpolateRider.ts # Maps rider.pos to (x,y) on profile
 │   │   ├── computePacks.ts     # BFS pack cohesion mirroring race_engine logic
 │   │   ├── gradientColors.ts   # Maps gradient % to color pairs
@@ -250,7 +261,7 @@ race-player/
 │   │   ├── raceResults.ts      # Winner finish time + gap-to-winner per rider, group-finish detection
 │   │   ├── formatTime.ts       # formatGapTime (+3m 14s) / formatFinishTime (hh:mm:ss)
 │   │   ├── wind.ts             # windColor()/windLabel()/arrowLength()/unwrapAngle() (wind.test.ts)
-│   │   └── useProfileScale.ts  # Linear SVG scale with fixed margins
+│   │   └── useProfileScale.ts  # Linear SVG scale with fixed margins (profileScale + hook)
 │   ├── App.tsx                 # Sidebar + dynamic file fetch (the only glue point)
 │   └── main.tsx
 ├── scripts/
@@ -268,8 +279,10 @@ App.tsx
     └── RaceViz
         ├── PlaybackControls
         ├── ElevationProfile
-        │   ├── RiderMarker (memoized SVG marker, packs of 1-2)
-        │   └── PackMarker (memoized SVG blob, packs of 3+)
+        │   └── CourseChart         # the chart, shared with the frontend SPA
+        │       └── overlay → RiderMarker (memoized SVG marker, packs of 1-2)
+        │                 → PackMarker (memoized SVG blob, packs of 3+)
+        │                 → tooltips
         └── RiderList
             └── Pack groups + gap dividers
 ```
@@ -292,6 +305,13 @@ App.tsx
 ### Current (Standalone)
 - Serve via `vite dev` (HMR + `/api/races` middleware) or `serve_viewer.py` (static build + `/api/races` handler).
 - Fetch any `.jsonl` from `public/` via the file explorer sidebar.
+
+**The elevation chart is already integrated.** The frontend SPA's
+`CourseProfile.tsx` imports `CourseChart.tsx` and `utils/profile.ts`
+directly from this package's source (via a relative path out of
+`frontend/src/`), which Vite bundles into the Django-served SPA. The
+frontend dedupes `react`/`react-dom` in its `vite.config.ts` so the shared
+chart resolves to the SPA's React copy rather than this package's.
 
 ### Future (Django Integration)
 - **Method A (iframe):** Embed the built React app in a Django template.
