@@ -80,6 +80,9 @@ HTML. See `design/README.md` before touching a screen's layout or colours.
 .venv/bin/python -m pytest
 ```
 
+The same suite runs in CI on every pull request, with an 85% backend coverage
+floor — see `.github/workflows/ci.yml`.
+
 **Each git worktree gets its own database, test database and dev-server port**,
 derived from the worktree's directory name, so agents working in parallel do not
 drop each other's test database or mix two branches' migrations into one schema.

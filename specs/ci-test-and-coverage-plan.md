@@ -371,7 +371,7 @@ green (see Verification). Optionally validate the YAML parses first:
 (PyYAML is present transitively; if it is not, skip this — GitHub will report a
 syntax error on push.)
 
-### W4 — `README.md` and `AGENTS.md`: document it
+### W4 — `README.md` and `AGENTS.md`: document it — **done**
 
 See *Documentation update* below.
 
