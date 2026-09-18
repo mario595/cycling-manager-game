@@ -595,7 +595,7 @@ on **both** the stored `delta` and `fanbase_for`.
 
 ### W6 — `world/services.py`, `world/models.py`, `world/migrations/0007_*`: wire it into the tick **Load-bearing (D2)**
 
-Add the two `TickRun` counters and the loop body from the section above.
+**Done.** Add the two `TickRun` counters and the loop body from the section above.
 
 **Test:** `world/tests/test_tick.py` —
 `test_tick_pays_merchandise_after_updating_fanbase` (a team whose fanbase rose
