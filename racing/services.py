@@ -258,6 +258,7 @@ def simulate_race(race: Race, *, game_time: datetime) -> list[RaceResult]:
         RaceSquadRider.objects
         .filter(squad__race=race)
         .select_related("rider", "squad__team")
+        .order_by("rider__pk")
     )
     if not members:
         raise ValueError("no squads to race")
