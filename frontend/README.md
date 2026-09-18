@@ -8,7 +8,7 @@ all reading the real API. No screen renders invented data.
 | Route | Screen | State |
 |-------|--------|-------|
 | `/` | Dashboard | Built — season, standings, next race and squad status from the API, no fixture data |
-| `/roster` | Roster | Built — filter, sort and rider detail panel, from the API, no fixture data |
+| `/roster` | Roster | Built — filter, sort, rider detail panel and the same freshness bar as squad selection, from the API, no fixture data |
 | `/staff` | Staff | Built — hire/fire a trainer, from the API, no fixture data |
 | `/finances` | Finances | Built — balance and ledger history from the API, no fixture data |
 | `/training` | Training | Built — set the weekly focus, see last week's moves, from the API, no fixture data |
@@ -187,11 +187,20 @@ the squad-selection widget the mockup shows, and only what `specs/squad-
 selection.md` (now folded into `racing/README.md`) actually specifies.
 Deliberately dropped, because the spec doesn't cover it: the mockup's
 eight-rider squads (the spec fixes four), per-rider suitability scores
-(course-aware assessment is #45), `INJURED`/`FATIGUED` states (#41), the
-course profile SVG, terrain/temperature/wind/tier/points facts, and the
+(course-aware assessment is #45), the course profile SVG,
+terrain/temperature/wind/tier/points facts, and the
 final classification table for a past race. `Race.tsx` shows only name,
 date, distance and status, and reuses the mockup's checkbox-row and
-★-to-set-leader interaction for the part that is in scope.
+★-to-set-leader interaction for the part that is in scope. Each candidate row
+additionally shows a `FIT` meter alongside the five attribute bars — the
+rider's freshness on the same 0-10 display scale, clipped apart from the
+engine attributes so it reads as a status marker rather than a sixth skill
+([#59](https://github.com/mario595/cycling-manager/issues/59); see
+`api/README.md`). `Roster.tsx`'s cards draw the same readout — attributes
+and freshness through the single `LabelBar` primitive, each with its
+printed 0-10 value — so a rider reads identically on both screens. The
+mockup's discrete `INJURED`/`FATIGUED` rider states
+(#41) are still not shown — freshness is a continuous meter, not a flag.
 
 The mockup's **Calendar** screen additionally shows things this feature does
 not have — multiple season cards with a switcher, win/podium/points stats, a

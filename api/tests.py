@@ -10,6 +10,7 @@ from rest_framework.test import APIClient
 import world.services as world_services
 from competitions.services import score_race
 from racing.models import Race, RaceResult, RaceSquad
+from riders.display import to_display_scale
 from riders.models import DISPLAY_MAX, Rider
 from schedule.models import SEASON_WEEKS, Season, Week
 from staff.models import Trainer, TrainingWeekReport
@@ -374,6 +375,24 @@ def test_squad_candidates_use_display_scale(squad_race, squad_riders, squad_clie
     assert candidate["climb"] == 9
 
 
+def test_squad_riders_include_freshness_on_display_scale(squad_race, squad_riders, squad_client):
+    rider = squad_riders[0]
+    rider.freshness = 30
+    rider.save(update_fields=["freshness"])
+
+    response = squad_client.get(f"/api/racing/races/{squad_race.pk}/squad/")
+
+    candidate = next(c for c in response.data["candidates"] if c["id"] == rider.pk)
+    assert candidate["freshness"] == to_display_scale(30)
+    assert not isinstance(candidate["freshness"], str)
+
+
+def test_squad_riders_never_expose_recovery_rate(squad_race, squad_riders, squad_client):
+    response = squad_client.get(f"/api/racing/races/{squad_race.pk}/squad/")
+
+    assert "recovery_rate" not in response.data["candidates"][0]
+
+
 @pytest.fixture
 def roster_manager(db) -> User:
     return User.objects.create_user(email="roster-manager@example.com", password="s0meth1ng-good")
@@ -441,9 +460,24 @@ def test_rider_serializer_hides_traits(roster_rider, roster_client):
     rider_data = response.data[0]
     for hidden_field in (
         "potential", "peak_age", "decline_rate",
-        "injury_proneness", "training_affinity",
+        "injury_proneness", "training_affinity", "recovery_rate",
     ):
         assert hidden_field not in rider_data
+
+
+def test_rider_list_includes_freshness_on_display_scale(roster_rider, roster_client):
+    roster_rider.freshness = 30
+    roster_rider.save(update_fields=["freshness"])
+
+    response = roster_client.get("/api/riders/")
+
+    assert response.data[0]["freshness"] == to_display_scale(30)
+
+
+def test_rider_list_never_exposes_recovery_rate(roster_rider, roster_client):
+    response = roster_client.get("/api/riders/")
+
+    assert "recovery_rate" not in response.data[0]
 
 
 @pytest.fixture

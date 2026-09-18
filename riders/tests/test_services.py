@@ -5,12 +5,19 @@ import pytest
 from riders.generation import SPECIALITY_PROFILES
 from riders.models import ENGINE_ATTRIBUTES, Rider
 from riders.services import (
+    FRESHNESS_FLOOR,
+    FRESHNESS_MAX,
     MAX_ATTRIBUTE,
     MIN_ATTRIBUTE,
+    PENALTY_AT_FLOOR,
     _settle,
     advance_ages,
+    apply_race_cost,
     apply_weekly_growth,
+    apply_weekly_recovery,
     attribute_ceilings,
+    freshness_multiplier,
+    recovery_amount,
     training_deltas,
     weekly_deltas,
 )
@@ -314,3 +321,82 @@ def test_ageing_stops_at_the_model_maximum(db):
     rider.refresh_from_db()
 
     assert rider.age == 40
+
+
+def test_freshness_multiplier_is_one_at_full():
+    assert freshness_multiplier(FRESHNESS_MAX) == 1.0
+
+
+def test_freshness_multiplier_is_penalty_at_floor():
+    assert freshness_multiplier(FRESHNESS_FLOOR) == PENALTY_AT_FLOOR
+
+
+def test_freshness_multiplier_clamps_out_of_range_input():
+    # A freshness outside [FLOOR, MAX] (only reachable via admin or a
+    # fixture) must never scale attributes *above* their stored value.
+    assert freshness_multiplier(200) == 1.0
+    assert freshness_multiplier(0) == PENALTY_AT_FLOOR
+
+
+def test_recovery_amount_maps_recovery_rate_linearly():
+    slow = make_rider(recovery_rate=MIN_ATTRIBUTE)
+    fast = make_rider(recovery_rate=MAX_ATTRIBUTE)
+    average = make_rider(recovery_rate=50)
+
+    assert recovery_amount(slow) == 8
+    assert recovery_amount(fast) == 20
+    assert 8 < recovery_amount(average) < 20
+
+
+def test_apply_race_cost_floors_at_minimum(db):
+    rider = Rider.objects.create(
+        name="Racer", climb=1, sprint=1, flat=1, resistance=1, positioning=1, freshness=40,
+    )
+
+    changed = apply_race_cost([rider.pk])
+    rider.refresh_from_db()
+
+    assert changed == 1
+    assert rider.freshness == FRESHNESS_FLOOR  # 40 - 25 = 15, floored to 20
+
+
+def test_apply_race_cost_never_drops_below_the_floor(db):
+    rider = Rider.objects.create(
+        name="Exhausted", climb=1, sprint=1, flat=1, resistance=1, positioning=1, freshness=FRESHNESS_FLOOR + 2,
+    )
+
+    changed = apply_race_cost([rider.pk])
+    rider.refresh_from_db()
+
+    assert changed == 1
+    assert rider.freshness == FRESHNESS_FLOOR
+
+
+def test_apply_weekly_recovery_caps_at_full(db):
+    rider = Rider.objects.create(
+        name="Rested", climb=1, sprint=1, flat=1, resistance=1, positioning=1,
+        freshness=FRESHNESS_MAX - 5, recovery_rate=MAX_ATTRIBUTE,
+    )
+
+    changed = apply_weekly_recovery(exclude_ids=set())
+    rider.refresh_from_db()
+
+    assert changed == 1
+    assert rider.freshness == FRESHNESS_MAX
+
+
+def test_apply_weekly_recovery_skips_excluded_riders(db):
+    racer = Rider.objects.create(
+        name="Racer", climb=1, sprint=1, flat=1, resistance=1, positioning=1, freshness=60,
+    )
+    rested = Rider.objects.create(
+        name="Rested", climb=1, sprint=1, flat=1, resistance=1, positioning=1, freshness=60,
+    )
+
+    changed = apply_weekly_recovery(exclude_ids={racer.pk})
+    racer.refresh_from_db()
+    rested.refresh_from_db()
+
+    assert changed == 1
+    assert racer.freshness == 60
+    assert rested.freshness > 60

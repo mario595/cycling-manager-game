@@ -514,3 +514,97 @@ def test_tick_with_no_boundary_crossed_does_not_top_up(db, four_riders):
     tick()
 
     assert Trainer.objects.count() == before_count
+
+
+def test_tick_recovers_freshness_for_resting_riders(db, team):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_one = season.weeks.get(number=1)
+    rider = Rider.objects.create(
+        name="Rested", team=team,
+        climb=60, sprint=60, flat=60, resistance=60, positioning=60,
+        freshness=50, recovery_rate=100,
+    )
+    clock.set(week_one.starts_at + timedelta(hours=1))
+
+    run = tick()
+    rider.refresh_from_db()
+
+    assert run.weeks_processed == 1
+    assert rider.freshness == 70  # recovery_rate 100 -> RECOVERY_MAX (20)
+
+
+def test_tick_does_not_recover_a_rider_who_raced_that_week(db, team):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_one = season.weeks.get(number=1)
+    week_two = season.weeks.get(number=2)
+    racer = Rider.objects.create(
+        name="Racer", team=team,
+        climb=60, sprint=60, flat=60, resistance=60, positioning=60,
+    )
+    for i in range(3):
+        Rider.objects.create(
+            name=f"Teammate {i}", team=team,
+            climb=60, sprint=60, flat=60, resistance=60, positioning=60,
+        )
+    rester = Rider.objects.create(
+        name="Rester", team=None,
+        climb=60, sprint=60, flat=60, resistance=60, positioning=60,
+        recovery_rate=100,
+    )
+    Race.objects.create(
+        name="Week One Race",
+        course=[{"length": 500.0, "gradient": 0.0}],
+        starts_at=week_one.starts_at + timedelta(days=1),
+        week=week_one,
+        status=Race.Status.SCHEDULED,
+    )
+
+    clock.advance_to_next_due()
+    tick()                            # week 1 opens; its race runs
+    racer.refresh_from_db()
+    assert racer.freshness == 75      # paid the race cost
+
+    rester.freshness = 50
+    rester.save(update_fields=["freshness"])
+    clock.set(week_two.starts_at + timedelta(hours=1))
+    tick()                            # week 2 opens: week 1's racers skip recovery
+    racer.refresh_from_db()
+    rester.refresh_from_db()
+
+    assert racer.freshness == 75      # raced the week being settled -> no recovery
+    assert rester.freshness == 70     # rested -> +20
+
+
+def test_three_missed_weeks_recover_three_times(db, team, monkeypatch):
+    # One recovery pass per week boundary, not one collapsed pass for the
+    # whole gap. A purely resting rider is numerically identical either way
+    # (linear recovery, well under the ceiling), so the per-week loop is
+    # proven by counting calls — the same shape of proof as
+    # test_three_missed_weeks_apply_three_training_weeks' report count.
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_three = season.weeks.get(number=3)
+    rider = Rider.objects.create(
+        name="Rested", team=team,
+        climb=1, sprint=1, flat=1, resistance=1, positioning=1,
+        freshness=30, recovery_rate=50,
+    )
+
+    calls: list[set[int]] = []
+    original = world_services.apply_weekly_recovery
+
+    def _counted(**kwargs):
+        calls.append(set(kwargs["exclude_ids"]))
+        return original(**kwargs)
+
+    monkeypatch.setattr("world.services.apply_weekly_recovery", _counted)
+    clock.set(week_three.starts_at + timedelta(hours=1))
+
+    run = tick()
+
+    assert run.weeks_processed == 3
+    assert len(calls) == 3
+    rider.refresh_from_db()
+    assert rider.freshness == 30 + 3 * 14  # recovery_rate 50 -> ~14/week

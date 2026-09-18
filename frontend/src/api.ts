@@ -183,6 +183,7 @@ export interface SquadRider {
   flat: number
   resistance: number
   positioning: number
+  freshness: number
   selected: boolean
   is_leader: boolean
 }
@@ -233,6 +234,7 @@ export interface Rider {
   flat: number
   resistance: number
   positioning: number
+  freshness: number
 }
 
 export async function getRiders(): Promise<Rider[]> {
