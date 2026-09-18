@@ -381,6 +381,13 @@ hour boundary.
 
 ### W5 — `frontend/src/components/CourseProfile.tsx`: the elevation profile
 
+✅ Done — `<CourseProfile>` renders a filled polygon plus stroked polyline from
+cumulative `distance, altitude` points, scaled into the viewBox, using theme
+colours; flat courses normalise to mid-height without special-casing. Both
+tests green. (The plan's `): JSX.Element` return annotation was dropped —
+the repo's React 19 toolchain has no global `JSX` namespace, and components
+here omit return types.)
+
 **Test** (`frontend/src/components/CourseProfile.test.tsx`, new): a course
 with a climbing segment renders a `polyline` whose points are not all at the
 same y; a flat course renders without throwing.
