@@ -554,6 +554,55 @@ def test_race_results_requires_login(finished_race_with_points):
     assert response.status_code == 403
 
 
+def test_race_detail_returns_course_and_distance(db):
+    race = Race.objects.create(
+        name="Route Detail Race",
+        course=[{"length": 40000.0, "gradient": 0.0}, {"length": 10000.0, "gradient": 0.03}],
+        status=Race.Status.SCHEDULED,
+    )
+    client = APIClient()
+    user = User.objects.create_user(email="race-detail@example.com", password="s0meth1ng-good")
+    client.force_authenticate(user=user)
+
+    response = client.get(f"/api/racing/races/{race.pk}/")
+
+    assert response.status_code == 200
+    assert response.data["id"] == race.pk
+    assert response.data["name"] == "Route Detail Race"
+    assert response.data["status"] == "scheduled"
+    assert response.data["distance_km"] == 50.0
+    assert response.data["course"] == [
+        {"length": 40000.0, "gradient": 0.0},
+        {"length": 10000.0, "gradient": 0.03},
+    ]
+
+
+def test_race_detail_available_without_a_team(db):
+    race = Race.objects.create(
+        name="Team-less Race", course=[{"length": 40000.0, "gradient": 0.0}],
+    )
+    manager_without_a_team = User.objects.create_user(
+        email="no-team-detail@example.com", password="s0meth1ng-good",
+    )
+    client = APIClient()
+    client.force_authenticate(user=manager_without_a_team)
+
+    response = client.get(f"/api/racing/races/{race.pk}/")
+
+    assert response.status_code == 200
+
+
+def test_race_detail_requires_login(db):
+    race = Race.objects.create(
+        name="Private Race", course=[{"length": 40000.0, "gradient": 0.0}],
+    )
+    client = APIClient()
+
+    response = client.get(f"/api/racing/races/{race.pk}/")
+
+    assert response.status_code == 403
+
+
 def test_claim_returns_the_new_team(db, claim_client):
     Team.objects.create(name="Unclaimed Team", code="UNC")
 

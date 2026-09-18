@@ -146,6 +146,20 @@ class MeSerializer(serializers.Serializer):
     team = MeTeamSerializer(allow_null=True)
 
 
+class CourseSegmentSerializer(serializers.Serializer):
+    length = serializers.FloatField()
+    gradient = serializers.FloatField()
+
+
+class RaceDetailSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    status = serializers.CharField()
+    starts_at = serializers.DateTimeField(allow_null=True)
+    distance_km = serializers.FloatField()
+    course = CourseSegmentSerializer(many=True)
+
+
 class RaceResultTeamSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     name = serializers.CharField()

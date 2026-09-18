@@ -39,6 +39,7 @@ from .serializers import (
     MeSerializer,
     MeTeamSerializer,
     PositionSerializer,
+    RaceDetailSerializer,
     RaceResultsSerializer,
     RiderSerializer,
     SquadSerializer,
@@ -295,6 +296,25 @@ class RiderListView(APIView):
 
         riders = Rider.objects.filter(team=team)
         return Response(RiderSerializer(riders, many=True).data)
+
+
+class RaceDetailView(APIView):
+    """One race's own facts — identity, status, when, how far, and the
+    course profile. Unlike SquadView this is not about the caller's team:
+    any authenticated manager may read any race, including one their team
+    did not start. See specs/race-detail-view-plan.md, D1."""
+
+    def get(self, request, race_id: int):
+        race = get_object_or_404(Race, pk=race_id)
+        payload = {
+            "id": race.pk,
+            "name": race.name,
+            "status": race.status,
+            "starts_at": race.starts_at,
+            "distance_km": _distance_km(race),
+            "course": race.course,
+        }
+        return Response(RaceDetailSerializer(payload).data)
 
 
 class RaceResultsView(APIView):

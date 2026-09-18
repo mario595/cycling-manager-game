@@ -325,6 +325,8 @@ time column.
 
 ### W1 — `api/`: add the race-detail endpoint
 
+✅ Done — `RaceDetailSerializer` and `CourseSegmentSerializer` added, `RaceDetailView` and its `/api/racing/races/<int:race_id>/` route registered, three tests green.
+
 New `RaceDetailSerializer` and `CourseSegmentSerializer`
 (`api/serializers.py`), new `RaceDetailView` (`api/views.py`), new route
 (`api/urls.py`). No changes to existing endpoints.
