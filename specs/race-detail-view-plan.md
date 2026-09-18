@@ -394,6 +394,13 @@ same y; a flat course renders without throwing.
 
 ### W6 — `frontend/src/screens/Race.tsx`: the four states
 
+✅ Done — `Race.tsx` now fetches detail always, results only when the race is
+finished and the squad with its failure non-fatal (D2); it renders the
+profile + squad panel on an upcoming race, the two result tables on a
+finished one, and plain cards for `failed`/`running`. The four new tests
+green. (Spec item 4 was already done — `RiderRow` renders `LabelBar`, which
+prints the numeric value.)
+
 The restructure described above: detail-driven header and tiles, the profile
 on an upcoming race, the two tables on a finished one, plain cards for
 `failed` and `running`, and a squad panel that is absent rather than fatal
