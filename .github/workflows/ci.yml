@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+jobs:
+  fast:
+    name: Engine and frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      # No database needed: race_engine is plain Python (51 tests, <1s).
+      - name: Engine tests
+        run: python -m pytest race_engine
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            race_player/package-lock.json
+
+      # frontend/'s CourseProfile.tsx imports CourseChart, computeProfile and
+      # Segment directly from race_player/src/ (see frontend/README.md,
+      # "Conventions") rather than through a package dependency, so tsc needs
+      # race_player's own node_modules (react, its types) on disk to resolve
+      # that import's types during `npm run build`.
+      - run: npm ci
+        working-directory: race_player
+
+      - run: npm ci
+        working-directory: frontend
+
+      - run: npm run lint
+        working-directory: frontend
+
+      - run: npm run test
+        working-directory: frontend
+
+      # `build` is `tsc -b && vite build`, so this is the type check too.
+      - run: npm run build
+        working-directory: frontend
+
+  backend:
+    name: Django suite and coverage
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: cycling_manager
+          POSTGRES_USER: cycling
+          POSTGRES_PASSWORD: cycling
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cycling -d cycling_manager"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # base.py defaults this to 5433 for local Docker; a service container
+      # has no port clash, so it is the standard 5432 here. Without this the
+      # suite cannot reach the database.
+      POSTGRES_PORT: 5432
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Tests with coverage
+        run: python -m pytest --cov --cov-report=term-missing --cov-fail-under=85

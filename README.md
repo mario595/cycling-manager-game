@@ -122,6 +122,27 @@ cron, finds and processes whatever has come due. In development, step a mock
 clock forward deliberately with `manage.py mock_clock advance` and then run
 `manage.py tick` — see [`world/README.md`](world/README.md).
 
+## Continuous integration
+
+A GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every pull
+request and on every push to `master`. It is split into two jobs:
+
+- A fast job with no database — the `race_engine` tests plus the frontend's
+  lint, tests and build — so a broken engine or frontend shows up in under a
+  minute.
+- A Postgres-backed job running the whole backend suite and measuring
+  coverage, which fails if the number drops below 85%.
+
+Reproduce the coverage measurement locally the same way CI does:
+
+```bash
+.venv/bin/python -m pytest --cov
+```
+
+A red check does **not** block merging — branch protection is not available on
+this repository — so the discipline is manual: treat a failing check as a sign
+to fix the branch before merging it.
+
 ## Simulating a race
 
 The engine runs standalone, with no database and no web server:
