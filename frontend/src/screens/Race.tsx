@@ -2,9 +2,9 @@ import { useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 
 import type { Squad, SquadRider } from '../api'
-import { Bar, Button, Card, PageBody, PageHeading, StatTile } from '../components/primitives'
+import { Button, Card, LabelBar, PageBody, PageHeading, StatTile } from '../components/primitives'
 import { raceStatusLabel } from '../raceStatus'
-import { barColor, color, font } from '../theme'
+import { color, font } from '../theme'
 import { useAuth } from '../useAuth'
 import { useSquad } from '../useSquad'
 
@@ -245,29 +245,23 @@ function RiderRow({
       </div>
 
       <div style={{ flex: 1, minWidth: 0, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        {ATTRS.map(({ key, label }) => {
-          // rider[key] is the 0-10 display scale (see riders/display.py);
-          // Bar/barColor expect 0-100, so scale up for the bar only — the
-          // printed number stays 0-10.
-          const value = rider[key] as number
-          return (
-            <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 90 }}>
-              <span style={{ fontSize: 9.5, color: color.muted, fontFamily: font.mono, width: 18 }}>
-                {label.slice(0, 3).toUpperCase()}
-              </span>
-              <Bar value={value * 10} fill={barColor(value * 10)} />
-            </div>
-          )
-        })}
+        {ATTRS.map(({ key, label }) => (
+          // rider[key] and rider.freshness are the 0-10 display scale (see
+          // riders/display.py); LabelBar prints that value and scales it to
+          // 0-100 inside the bar.
+          <LabelBar key={key} label={label.slice(0, 3).toUpperCase()} value={rider[key] as number} />
+        ))}
 
-        {/* freshness: the same 0-10 display scale as the attributes, but a
-            status marker rather than an engine attribute — clipped apart so
-            it reads as a separate meter. */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 90, marginLeft: 4, paddingLeft: 9, borderLeft: `1px solid ${color.border}` }}>
-          <span style={{ fontSize: 9.5, color: color.mutedStrong, fontFamily: font.mono, width: 18 }}>
-            FIT
-          </span>
-          <Bar value={rider.freshness * 10} fill={barColor(rider.freshness * 10)} />
+        {/* freshness: a status marker rather than an engine attribute —
+            clipped apart so it reads as a separate meter. */}
+        <div
+          style={{
+            marginLeft: 4,
+            paddingLeft: 9,
+            borderLeft: `1px solid ${color.border}`,
+          }}
+        >
+          <LabelBar label="FIT" value={rider.freshness} />
         </div>
       </div>
 

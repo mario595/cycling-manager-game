@@ -234,6 +234,7 @@ export interface Rider {
   flat: number
   resistance: number
   positioning: number
+  freshness: number
 }
 
 export async function getRiders(): Promise<Rider[]> {

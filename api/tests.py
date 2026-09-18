@@ -460,9 +460,24 @@ def test_rider_serializer_hides_traits(roster_rider, roster_client):
     rider_data = response.data[0]
     for hidden_field in (
         "potential", "peak_age", "decline_rate",
-        "injury_proneness", "training_affinity",
+        "injury_proneness", "training_affinity", "recovery_rate",
     ):
         assert hidden_field not in rider_data
+
+
+def test_rider_list_includes_freshness_on_display_scale(roster_rider, roster_client):
+    roster_rider.freshness = 30
+    roster_rider.save(update_fields=["freshness"])
+
+    response = roster_client.get("/api/riders/")
+
+    assert response.data[0]["freshness"] == to_display_scale(30)
+
+
+def test_rider_list_never_exposes_recovery_rate(roster_rider, roster_client):
+    response = roster_client.get("/api/riders/")
+
+    assert "recovery_rate" not in response.data[0]
 
 
 @pytest.fixture
