@@ -74,6 +74,10 @@ class TickRun(models.Model):
         default=0,
         help_text="Ledger wage entries written this tick.",
     )
+    prize_entries = models.PositiveIntegerField(
+        default=0,
+        help_text="Ledger prize-money entries written this tick (#19).",
+    )
     error = models.TextField(
         blank=True, default="",
         help_text="Traceback if the run failed. Empty on success.",

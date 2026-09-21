@@ -454,7 +454,7 @@ by hand first, then call it — assert the missing row appears and the existing
 one is untouched). The last test proves decision 4; an early-return
 implementation fails it.
 
-### W3 — `competitions/services.py`: `prizes_by_team`, and `world/` wiring
+### W3 — `competitions/services.py`: `prizes_by_team`, and `world/` wiring — **done**
 The read-only payout computation, plus the second try block in `_execute`
 (with its `continue`), `TickRun.prize_entries` and its migration. One work
 item because neither half is independently useful — `world/` is the only

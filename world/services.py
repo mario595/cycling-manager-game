@@ -18,8 +18,8 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 from django.utils.module_loading import import_string
 
-from competitions.services import score_race
-from economy.services import charge_weekly_wages
+from competitions.services import prizes_by_team, score_race
+from economy.services import charge_weekly_wages, pay_race_prizes
 from racing.models import Race
 from racing.services import riders_who_raced, simulate_race
 from riders.models import Rider
@@ -103,6 +103,18 @@ def _execute(race_ids: list[int], tick: TickRun, at: datetime) -> None:
             race.status = Race.Status.FAILED
             race.save(update_fields=["status"])
             tick.error += f"race {race_id}:\n{traceback.format_exc()}\n"
+            continue                      # nothing to pay for a failed race
+
+        try:
+            prizes = prizes_by_team(race)
+            tick.prize_entries += pay_race_prizes(
+                race.pk, race_name=race.name, at=race.finished_at,
+                prizes_by_team=prizes,
+            )
+        except Exception:
+            # The race ran and scored; a payout failure must not rewrite
+            # that into a failed race. Record it and move on.
+            tick.error += f"race {race_id} prizes:\n{traceback.format_exc()}\n"
 
 
 def _completed_week(week) -> Week | None:
