@@ -24,14 +24,26 @@ class NoTrainerHired(StaffError):
     """The team has no trainer to fire."""
 
 
-def hire_trainer(team, trainer_id: int) -> Trainer:
+class InsufficientFunds(StaffError):
+    """The team cannot afford the hire fee."""
+
+
+def hire_trainer(team, trainer_id: int, *, charge=None) -> Trainer:
     """Move a pool trainer into `team`'s single slot.
 
     Locks the requested row for the duration, WITHOUT skip_locked: the
     caller asked for this specific trainer, so a contended row must make us
     wait and then report the truth, not silently behave as though the
     trainer never existed. See staff/README.md.
-    """
+
+    `charge` is an optional callable run immediately before the hire sticks
+    — the caller (api/) passes it to book the hire fee and refuses the hire
+    by raising InsufficientFunds (or anything). It must run AFTER the
+    post-lock availability re-check and BEFORE `trainer.team = team`; a
+    raise here rolls the whole transaction back, keeping trainer and ledger
+    in step. staff/ cannot import economy/ (AGENTS.md), so the callback is
+    deliberately injected rather than imported. Without charge, this call
+    is the fee-free seed path (a seed trainer exists to be claimed)."""
     with transaction.atomic():
         try:
             trainer = Trainer.objects.select_for_update().get(pk=trainer_id)
@@ -47,6 +59,9 @@ def hire_trainer(team, trainer_id: int) -> Trainer:
 
         if Trainer.objects.filter(team=team).exists():
             raise SlotOccupied("Your team already has a trainer.")
+
+        if charge is not None:
+            charge(trainer)
 
         trainer.team = team
         trainer.save(update_fields=["team", "updated_at"])

@@ -343,7 +343,7 @@ a zero row — D6), `test_dated_to_the_week_not_now`,
 `test_second_call_writes_nothing` (idempotency via the constraint),
 `test_balance_can_go_negative`.
 
-### W4 — `staff/services.py`: the `charge` callback in `hire_trainer`
+### W4 — `staff/services.py`: the `charge` callback in `hire_trainer` — **done**
 `InsufficientFunds`, the callback invoked inside the transaction after the
 checks. **Load-bearing:** the callback must run *after* the post-lock
 availability re-check and *before* commit. **Test:**
