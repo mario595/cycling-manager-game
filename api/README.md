@@ -106,8 +106,10 @@ DRF routers and serializers that aggregate other apps' data for the SPA.
   a stored column) and `entries`, newest first, each with `kind`,
   `description`, `amount`, `occurred_at`, `rider_count` and a `balance_after`
   running total computed in Python as the list is walked. `kind` is one of
-  `starting_balance`, `wages`, `takeover` or `prize_money` — a finished race
-  pays the placed riders of every team it entered. Same `team_for()`
+  `starting_balance`, `wages`, `takeover`, `prize_money` or `merchandise` —
+  a finished race pays the placed riders of every team it entered, and
+  merchandise pays weekly off the fanbase. The payload also carries the
+  team's `fanbase` and this week's `fanbase_change`. Same `team_for()`
   pattern as the staff endpoint: no team id in the URL. Unlike `staff/`, a
   caller with no team gets `{"balance": 0, "entries": []}` — the screen has
   an empty state, not an error. See `economy/README.md`.

@@ -10,7 +10,7 @@ import { color, font } from '../theme'
 import { useRaceDetail } from '../useRaceDetail'
 import { useRaceResults } from '../useRaceResults'
 import { useSquad } from '../useSquad'
-import { formatCredits } from './Finances'
+import { formatMoney } from './Finances'
 
 const SQUAD_SIZE = 4
 
@@ -208,7 +208,7 @@ function TeamPointsTable({ results }: { results: RaceResults }) {
                 whiteSpace: 'nowrap',
               }}
             >
-              {entry.prize > 0 ? `$${formatCredits(entry.prize)}` : '—'}
+              {entry.prize > 0 ? formatMoney(entry.prize) : '—'}
             </div>
           </div>
         ))}
@@ -238,7 +238,7 @@ function PayoutTable({ payout }: { payout: RacePayoutEntry[] }) {
             </div>
             <div style={{ flex: 1, fontSize: 13.5, color: color.muted }}>{entry.points} points</div>
             <div style={{ fontFamily: font.mono, fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap' }}>
-              {`$${formatCredits(entry.prize)}`}
+              {formatMoney(entry.prize)}
             </div>
           </div>
         ))}

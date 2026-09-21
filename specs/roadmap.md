@@ -1,11 +1,11 @@
 # Roadmap
 
-**Status:** agreed 2026-09-11, last revised 2026-09-18
+**Status:** agreed 2026-09-11, last revised 2026-09-21
 **Scope:** ordering only. This file says *what to build next, in what order, and
 what blocks what*. It does not say what any feature does — that is each issue,
 and later each spec.
 
-40 open issues.
+39 open issues.
 
 ## The question this roadmap answers
 
@@ -30,7 +30,7 @@ coming back to.
 | **The competitive loop** | [#15](https://github.com/mario595/cycling-manager/issues/15) race points · [#12](https://github.com/mario595/cycling-manager/issues/12) standings |
 | **Riders as assets** | [#1](https://github.com/mario595/cycling-manager/issues/1)/[#57](https://github.com/mario595/cycling-manager/issues/57) attributes · [#58](https://github.com/mario595/cycling-manager/issues/58) growth and decline · [#59](https://github.com/mario595/cycling-manager/issues/59) freshness |
 | **Staff and training** | [#35](https://github.com/mario595/cycling-manager/issues/35) trainers · [#36](https://github.com/mario595/cycling-manager/issues/36) weekly training focus |
-| **Money** | [#20](https://github.com/mario595/cycling-manager/issues/20) ledger — includes flat weekly rider wages |
+| **Money** | [#20](https://github.com/mario595/cycling-manager/issues/20) ledger — includes flat weekly rider wages · [#21](https://github.com/mario595/cycling-manager/issues/21) fanbase and merchandise revenue |
 | **Screens and plumbing** | [#47](https://github.com/mario595/cycling-manager/issues/47) race detail · [#77](https://github.com/mario595/cycling-manager/issues/77) results screen · [#73](https://github.com/mario595/cycling-manager/issues/73) mock UI stripped, login required · [#80](https://github.com/mario595/cycling-manager/issues/80) CI · [#52](https://github.com/mario595/cycling-manager/issues/52) sidebar fix |
 
 **The roadmap has been overridden three times without harm** — rider attributes,
@@ -40,20 +40,9 @@ to it.
 
 ---
 
-# Part 2 — In flight
+# Part 2 — What to build next, in order
 
-**[#21](https://github.com/mario595/cycling-manager/issues/21) — fanbase and
-merchandise revenue.** Spec and plan written and committed; no work items ticked.
-
-Gives the ledger its first income and the economy its lagging signal. Unblocks
-[#22](https://github.com/mario595/cycling-manager/issues/22)/[#23](https://github.com/mario595/cycling-manager/issues/23),
-which price sponsor offers off fanbase.
-
----
-
-# Part 3 — What to build next, in order
-
-## 3.1 — Finish the economy's first circuit
+## 2.1 — Finish the economy's first circuit
 
 Money exists and only goes out. Three small tickets close the loop, and each is
 directly unblocked by work already done.
@@ -62,12 +51,12 @@ directly unblocked by work already done.
 |---|---|---|---|
 | 1 | [#19](https://github.com/mario595/cycling-manager/issues/19) prize money | The obvious income, and the one that ties racing to money. Results and points already exist. | #20 ✅ #15 ✅ |
 | 2 | [#69](https://github.com/mario595/cycling-manager/issues/69) trainer fee and salary | #35 deliberately shipped trainers for free, parking the price here. Closes that gap. | #20 ✅ #35 ✅ |
-| 3 | [#22](https://github.com/mario595/cycling-manager/issues/22) → [#23](https://github.com/mario595/cycling-manager/issues/23) sponsorship | The third income stream, and the one with a decision in it. | **#21** (in flight) |
+| 3 | [#22](https://github.com/mario595/cycling-manager/issues/22) → [#23](https://github.com/mario595/cycling-manager/issues/23) sponsorship | The third income stream, and the one with a decision in it. | #21 ✅ |
 
 After these, a team has three income streams, two outgoings, and a balance that
 means something.
 
-## 3.2 — Make money matter
+## 2.2 — Make money matter
 
 A balance that can only be watched is a scoreboard. These give it teeth.
 
@@ -82,7 +71,7 @@ A balance that can only be watched is a scoreboard. These give it teeth.
 manager holds a place in a fixed-size Division while #44 races their team badly
 forever — a live problem the first time signups exceed teams.
 
-## 3.3 — The transfer market
+## 2.3 — The transfer market
 
 The largest coherent block left, and the first that makes a roster something you
 *build* rather than something you were given.
@@ -99,7 +88,7 @@ The largest coherent block left, and the first that makes a roster something you
 Completing this also unblocks **#27** (forced sales need buyers) and
 **#26** (post-season salary renegotiation needs a value to renegotiate against).
 
-## 3.4 — Rider supply
+## 2.4 — Rider supply
 
 Riders decline (#58) and nothing replaces them. Rosters ossify without this.
 
@@ -114,7 +103,7 @@ Riders decline (#58) and nothing replaces them. Rosters ossify without this.
 because potential is hidden. It is also what gives the scout in
 [#40](https://github.com/mario595/cycling-manager/issues/40) something to sell.
 
-## 3.5 — Racing gets richer
+## 2.5 — Racing gets richer
 
 | Order | Issue | Note | Blocked by |
 |---|---|---|---|
@@ -124,7 +113,7 @@ because potential is hidden. It is also what gives the scout in
 | 19 | [#18](https://github.com/mario595/cycling-manager/issues/18) classifications | **First feature that makes a squad of specialists worth assembling.** Earns its place sooner than its position suggests. | #16, #17, #9 |
 | 20 | [#41](https://github.com/mario595/cycling-manager/issues/41) injuries | Gives the stage-race squad lock its teeth, and the physio (#40) a job. | #9 |
 
-## 3.6 — The pyramid
+## 2.6 — The pyramid
 
 Deferred as a block until there are enough players to fill more than one
 Division. Building it now means balancing a structure nobody is in.
@@ -146,7 +135,7 @@ has moved that expiry closer.
 
 ---
 
-# Part 4 — Deferred, with reasons
+# Part 3 — Deferred, with reasons
 
 | Issue | Why it waits |
 |---|---|
@@ -170,7 +159,7 @@ The chains that actually constrain order:
 #20 ledger ✅ ──┬─→ #19 prize money
                 ├─→ #69 trainer pricing
                 ├─→ #25 per-rider salaries ──→ #31 value ──→ #29 agents ──→ #28 market ──→ #30 AI trades
-                └─→ #21 fanbase (in flight) ──→ #22 sponsors ──→ #23 renewal
+                └─→ #21 fanbase ✅ ──→ #22 sponsors ──→ #23 renewal
 
 #46 claiming ✅ ──→ #62 losing a team ──→ #63 inactivity
                                       └──→ #27 insolvency ←── #25, #28
@@ -194,7 +183,7 @@ texture).
 
 ## How to use this file
 
-Work the order in Part 3. For each issue, the next step is a spec, not code:
+Work the order in Part 2. For each issue, the next step is a spec, not code:
 
 ```
 /product-spec #<issue>

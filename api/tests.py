@@ -1043,6 +1043,14 @@ def make_ledger_entry(team, kind, amount, occurred_at, description):
     )
 
 
+def make_fanbase_entry(team, kind, delta, occurred_at, *, week=None, points=0):
+    from economy.models import FanbaseEntry
+    return FanbaseEntry.objects.create(
+        team=team, kind=kind, delta=delta, occurred_at=occurred_at,
+        week=week, points=points,
+    )
+
+
 def test_finances_requires_a_session(finances_team):
     client = APIClient()
 
@@ -1103,6 +1111,66 @@ def test_finances_for_a_user_with_no_team(db):
     assert response.status_code == 200
     assert response.data["balance"] == 0
     assert response.data["entries"] == []
+
+
+def test_finances_includes_fanbase_and_weekly_change(finances_client, finances_team):
+    at = datetime(2027, 3, 1, 0, 0, tzinfo=dt_timezone.utc)
+    make_fanbase_entry(finances_team, "starting", 10_000, at)
+    make_fanbase_entry(
+        finances_team, "weekly", 650, at + timedelta(weeks=1), points=20,
+    )
+    make_fanbase_entry(
+        finances_team, "weekly", -200, at + timedelta(weeks=2),
+    )
+
+    response = finances_client.get("/api/economy/finances/")
+
+    assert response.status_code == 200
+    assert response.data["fanbase"] == 10_450
+    assert response.data["fanbase_change"] == -200
+
+
+def test_finances_fanbase_change_is_zero_before_any_weekly_entry(finances_client, finances_team):
+    at = datetime(2027, 3, 1, 0, 0, tzinfo=dt_timezone.utc)
+    make_fanbase_entry(finances_team, "starting", 10_000, at)
+
+    response = finances_client.get("/api/economy/finances/")
+
+    assert response.status_code == 200
+    assert response.data["fanbase"] == 10_000
+    assert response.data["fanbase_change"] == 0
+
+
+def test_finances_without_a_team_returns_zero_fanbase(db):
+    manager_without_a_team = User.objects.create_user(
+        email="no-team-finances-fanbase@example.com", password="s0meth1ng-good",
+    )
+    client = APIClient()
+    client.force_authenticate(user=manager_without_a_team)
+
+    response = client.get("/api/economy/finances/")
+
+    assert response.status_code == 200
+    assert response.data["fanbase"] == 0
+    assert response.data["fanbase_change"] == 0
+
+
+def test_merchandise_entry_serializes_with_its_kind(finances_client, finances_team):
+    at = datetime(2027, 3, 1, 0, 0, tzinfo=dt_timezone.utc)
+    make_ledger_entry(
+        finances_team, "starting_balance", 500_000, at, "Starting balance",
+    )
+    make_ledger_entry(
+        finances_team, "merchandise", 400, at + timedelta(weeks=1),
+        "Merchandise revenue",
+    )
+
+    response = finances_client.get("/api/economy/finances/")
+
+    assert response.status_code == 200
+    entry = response.data["entries"][0]
+    assert entry["kind"] == "merchandise"
+    assert entry["amount"] == 400
 
 
 @override_settings(GAME_CLOCK_CLASS="world.clocks.MockClock")

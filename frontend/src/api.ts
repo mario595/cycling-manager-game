@@ -405,13 +405,13 @@ export async function setTrainingFocus(attribute: string): Promise<void> {
 }
 
 /** One ledger entry as the Finances screen needs it. `kind` is the machine
- * name (starting_balance/wages/takeover/prize_money); the screen renders the
+ * name (starting_balance/wages/takeover/prize_money/merchandise); the screen renders the
  * label. `rider_count` is set on wage entries only — null elsewhere.
  * `balance_after` is computed server-side: the running balance just after
  * this entry. */
 export interface LedgerEntry {
   id: number
-  kind: 'starting_balance' | 'wages' | 'takeover' | 'prize_money'
+  kind: 'starting_balance' | 'wages' | 'takeover' | 'prize_money' | 'merchandise'
   description: string
   amount: number
   occurred_at: string | null
@@ -420,9 +420,13 @@ export interface LedgerEntry {
 }
 
 /** A team's whole financial state in one payload: the running balance and
- * its full history, newest first. */
+ * its full history, newest first, plus the team's fanbase and how it moved
+ * this week (`fanbase_change` is 0 before the first weekly row — the server
+ * sends the change, not two raw numbers to diff). */
 export interface Finances {
   balance: number
+  fanbase: number
+  fanbase_change: number
   entries: LedgerEntry[]
 }
 

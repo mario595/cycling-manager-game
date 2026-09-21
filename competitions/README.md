@@ -14,6 +14,14 @@ computes *what is owed*; `economy.services.pay_race_prizes` records it.
 The two are wired together by `world/` (`world/README.md`), the same way
 scoring is.
 
+`competitions.services.points_by_team(week)` — one dict of a week's combined
+points, `{team_id: total}`, absent keys meaning zero — exists to feed
+`economy/`'s weekly fanbase adjustment (`economy/README.md`, *Why `economy/`
+does not query `RacePoints`*). `world/` calls it off the week that just
+completed and hands the result to `economy.services.apply_weekly_fanbase`,
+because `economy` may not import this app — the same inversion this file
+documents for `racing/` below.
+
 There is no `Group` or `Division` model yet — one implicit Group, one
 table, per `specs/race-points-and-standings.md`. See *Future work* below.
 

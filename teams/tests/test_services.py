@@ -6,8 +6,8 @@ import pytest
 from django.core.exceptions import ValidationError
 
 from accounts.models import User
-from economy.models import STARTING_BALANCE, LedgerEntry
-from economy.services import balance_for, entries_for
+from economy.models import STARTING_BALANCE, STARTING_FANBASE, FanbaseEntry, LedgerEntry
+from economy.services import balance_for, entries_for, fanbase_entries_for, fanbase_for
 from racing.models import Race, RaceResult
 from riders.models import Rider
 from teams.models import Team
@@ -122,3 +122,37 @@ def test_claim_preserves_prior_ledger_entries(db, user, team):
     entries = list(entries_for(team))
     assert any(e.pk == original.pk for e in entries)
     assert any(e.kind == LedgerEntry.Kind.TAKEOVER for e in entries)
+
+
+def test_claiming_a_team_resets_its_fanbase(db, user, team):
+    at = datetime(2027, 3, 1, 0, 0, tzinfo=dt_timezone.utc)
+    FanbaseEntry.objects.create(
+        team=team, kind=FanbaseEntry.Kind.STARTING, delta=STARTING_FANBASE,
+        occurred_at=at, description="Starting fanbase",
+    )
+    FanbaseEntry.objects.create(
+        team=team, kind=FanbaseEntry.Kind.WEEKLY, delta=20_000,
+        occurred_at=at, description="Weekly fanbase change",
+    )
+
+    claim_team(user, name="Mountain Goats", code="MGO", at=AT)
+
+    assert fanbase_for(team) == STARTING_FANBASE
+
+
+def test_claim_preserves_prior_fanbase_entries(db, user, team):
+    at = datetime(2027, 3, 1, 0, 0, tzinfo=dt_timezone.utc)
+    original = FanbaseEntry.objects.create(
+        team=team, kind=FanbaseEntry.Kind.STARTING, delta=STARTING_FANBASE,
+        occurred_at=at, description="Starting fanbase",
+    )
+    FanbaseEntry.objects.create(
+        team=team, kind=FanbaseEntry.Kind.WEEKLY, delta=20_000,
+        occurred_at=at, description="Weekly fanbase change",
+    )
+
+    claim_team(user, name="Mountain Goats", code="MGO", at=AT)
+
+    entries = list(fanbase_entries_for(team))
+    assert any(e.pk == original.pk for e in entries)
+    assert any(e.kind == FanbaseEntry.Kind.TAKEOVER for e in entries)

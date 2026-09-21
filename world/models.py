@@ -78,6 +78,14 @@ class TickRun(models.Model):
         default=0,
         help_text="Ledger prize-money entries written this tick (#19).",
     )
+    merchandise_entries = models.PositiveIntegerField(
+        default=0,
+        help_text="Ledger merchandise entries written this tick (#21).",
+    )
+    fanbase_entries = models.PositiveIntegerField(
+        default=0,
+        help_text="Fanbase change entries written this tick (#21).",
+    )
     error = models.TextField(
         blank=True, default="",
         help_text="Traceback if the run failed. Empty on success.",

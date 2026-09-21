@@ -65,6 +65,7 @@ def claim_team(user, *, name: str, code: str, roster_size: int = ROSTER_SIZE, at
         # economy/ at import time (AGENTS.md's dependency direction). Same
         # rule and reason as seed_teams.py importing racing.models inside
         # handle().
-        from economy.services import reset_to_starting_balance
+        from economy.services import reset_fanbase, reset_to_starting_balance
         reset_to_starting_balance(team, at=at)
+        reset_fanbase(team, at=at)
     return team
