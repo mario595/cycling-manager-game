@@ -327,7 +327,7 @@ climb specialist with the same peak price identically — catches a
 `getattr(trainer, "climb")` hardcode), `test_prices_are_whole_credits`.
 Pure functions, no DB.
 
-### W2 — `economy/`: the two new kinds, constraint and migration
+### W2 — `economy/`: the two new kinds, constraint and migration — **done**
 `Kind.TRAINER_FEE`, `Kind.TRAINER_SALARY`, the salary's `(team, week)`
 constraint, migration `0003`. Plus the `STARTING_BALANCE` comment fix (D8).
 **Test:** `economy/tests/test_models.py` —
