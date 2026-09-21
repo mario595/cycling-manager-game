@@ -89,13 +89,15 @@ DRF routers and serializers that aggregate other apps' data for the SPA.
   well-formed but the world's state refuses it. A malformed code or a name
   already taken returns 400. See `teams/README.md`, *Claiming a team*.
 - `GET /api/staff/` (`StaffSerializer`, `StaffView`) — the **caller's own**
-  team's staff: `trainer` (null when the slot is empty) and `pool` (every
+  team's staff: `trainer` (null when the slot is empty), `pool` (every
   unemployed trainer, but only populated when the slot is empty — a team
-  with a trainer has nothing to hire, so the pool is `[]`). Same `team_for()`
+  with a trainer has nothing to hire, so the pool is `[]`), and the team's
+  `balance` so the SPA can grey out a hire it cannot afford. Same `team_for()`
   pattern as the squad and roster endpoints: no team id in the URL, a
   caller with no team gets a 403. A trainer's five skills are shipped
-  through `to_display_scale`, same as a rider's attributes. See
-  `staff/README.md`.
+  through `to_display_scale`, same as a rider's attributes, alongside the
+  two prices derived from their speciality (`hire_fee`, `weekly_salary`) —
+  see `staff/README.md`, *What a trainer costs*.
 - `GET /api/economy/finances/` (`FinancesSerializer`, `FinancesView`) — the
   **caller's own** team's finances: `balance` (the sum of the ledger, never
   a stored column) and `entries`, newest first, each with `kind`,
@@ -106,10 +108,14 @@ DRF routers and serializers that aggregate other apps' data for the SPA.
   an empty state, not an error. See `economy/README.md`.
 - `POST /api/staff/trainer/hire/` (`HireTrainerSerializer`,
   `HireTrainerView`) — hire the pool trainer named by `trainer_id` into the
-  caller's empty slot. `204` on success. `409` (not `400`) when that
-  trainer was hired by someone else a moment earlier, or when the caller's
-  slot is already filled — the request is well-formed, but the world's
-  state refuses it, the same split `ClaimTeamView` documents.
+  caller's empty slot, debiting the hire fee from the team's ledger. `204`
+  on success. `409` (not `400`) when that trainer was hired by someone else
+  a moment earlier, when the caller's slot is already filled, or when the
+  team cannot afford the fee — the request is well-formed, but the world's
+  state refuses it, the same split `ClaimTeamView` documents. The debit and
+  the affordability check both run **inside** `hire_trainer`'s transaction
+  (the injected `charge` callback, `staff/README.md`), so a refused or
+  failed hire leaves no fee row and the trainer in the pool.
 - `POST /api/staff/trainer/fire/` (`FireTrainerView`) — return the caller's
   trainer to the shared pool. `204` on success, `409` if the caller has no
   trainer to fire. `POST`, not `DELETE`: nothing is destroyed, the trainer
