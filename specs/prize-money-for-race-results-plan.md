@@ -435,7 +435,7 @@ Add `PRIZE_BY_POSITION` and `prize_for()`. No callers yet.
 `test_prize_table_matches_points_table_positions` (asserts both tables cover
 exactly positions 1–10, so they can never drift apart).
 
-### W2 — `economy/`: the ledger can hold a prize
+### W2 — `economy/`: the ledger can hold a prize — **done**
 New `PRIZE_MONEY` kind, `race` and `position` fields, the conditional unique
 constraint, the index, migration `0002_prize_money`, and
 `pay_race_prizes(race_id, *, race_name, at, prizes_by_team)` — it takes

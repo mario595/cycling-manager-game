@@ -81,3 +81,40 @@ def test_non_wage_entries_are_not_constrained(db, team):
     )
 
     assert LedgerEntry.objects.filter(team=team).count() == 2
+
+
+def test_prize_entry_unique_per_team_race_position(db, team, race):
+    occurred_at = datetime(2027, 3, 1, 0, 0, tzinfo=dt_timezone.utc)
+    LedgerEntry.objects.create(
+        team=team,
+        kind=LedgerEntry.Kind.PRIZE_MONEY,
+        amount=15_000,
+        occurred_at=occurred_at,
+        race=race,
+        position=2,
+        description="Prize money — Test Stage",
+    )
+
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            LedgerEntry.objects.create(
+                team=team,
+                kind=LedgerEntry.Kind.PRIZE_MONEY,
+                amount=15_000,
+                occurred_at=occurred_at,
+                race=race,
+                position=2,
+                description="Prize money — Test Stage",
+            )
+
+    LedgerEntry.objects.create(
+        team=team,
+        kind=LedgerEntry.Kind.PRIZE_MONEY,
+        amount=8_000,
+        occurred_at=occurred_at,
+        race=race,
+        position=5,
+        description="Prize money — Test Stage",
+    )
+
+    assert LedgerEntry.objects.filter(team=team).count() == 2

@@ -30,6 +30,7 @@ class LedgerEntry(TimeStampedModel):
         STARTING_BALANCE = "starting_balance", "Starting balance"
         WAGES = "wages", "Weekly wages"
         TAKEOVER = "takeover", "Team taken over"
+        PRIZE_MONEY = "prize_money", "Prize money"
 
     team = models.ForeignKey(
         "teams.Team",
@@ -52,6 +53,23 @@ class LedgerEntry(TimeStampedModel):
         related_name="ledger_entries",
         help_text="Set on wages entries only. Null elsewhere.",
     )
+    race = models.ForeignKey(
+        "racing.Race",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="ledger_entries",
+        help_text=(
+            "Set on prize_money entries only. Null elsewhere. Declared as a "
+            "string so economy/ never imports racing/ at module scope — same "
+            "pattern as staff.TrainingWeekReport.week."
+        ),
+    )
+    position = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="The finishing position this prize was for, 1-10. Meaningful only on prize_money; null elsewhere.",
+    )
     rider_count = models.PositiveSmallIntegerField(
         default=0,
         help_text="How many riders this charge covered. Meaningful only on wages; 0 elsewhere.",
@@ -69,9 +87,15 @@ class LedgerEntry(TimeStampedModel):
                 condition=models.Q(kind="wages"),
                 name="one_wage_entry_per_team_per_week",
             ),
+            models.UniqueConstraint(
+                fields=["team", "race", "position"],
+                condition=models.Q(kind="prize_money"),
+                name="one_prize_entry_per_team_race_position",
+            ),
         ]
         indexes = [
             models.Index(fields=["team", "-occurred_at"], name="ledger_team_recent_idx"),
+            models.Index(fields=["race"], name="ledger_race_idx"),
         ]
 
     def __str__(self) -> str:
