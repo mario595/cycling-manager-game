@@ -469,7 +469,7 @@ the pure-function split (`economy/tests/` already splits by feature:
 `test_payment_never_leaves_the_range`, `test_no_history_pays_base`,
 `test_zero_average_does_not_divide_by_zero`.
 
-### W2 — `economy/models.py`: the two models, the kind, the constraints
+### W2 — `economy/models.py`: the two models, the kind, the constraints ✅ done
 Both models, `SPONSORSHIP` kind, the partial unique constraint, the two new
 constants, and the migration.
 **Test:** `economy/tests/test_models.py` — `test_one_active_contract_per_team_per_season`,
