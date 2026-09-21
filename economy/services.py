@@ -4,7 +4,17 @@ from django.db import IntegrityError, transaction
 from django.db.models import Count, QuerySet, Sum
 from teams.models import Team
 
-from .models import STARTING_BALANCE, WEEKLY_WAGE_PER_RIDER, LedgerEntry
+from .models import (
+    FANBASE_PER_POINT,
+    MERCHANDISE_FANBASE_PER_CREDIT,
+    MINIMUM_FANBASE,
+    STARTING_BALANCE,
+    STARTING_FANBASE,
+    WEEKLY_FANBASE_DECAY,
+    WEEKLY_WAGE_PER_RIDER,
+    FanbaseEntry,
+    LedgerEntry,
+)
 
 
 def balance_for(team) -> int:
@@ -19,6 +29,57 @@ def balance_for(team) -> int:
 def entries_for(team) -> QuerySet[LedgerEntry]:
     """A team's ledger entries, newest first (the model default)."""
     return LedgerEntry.objects.filter(team=team)
+
+
+def fanbase_for(team) -> int:
+    """A team's fanbase: the sum of its FanbaseEntry deltas. Derived,
+    never stored — same discipline as balance_for."""
+    return (
+        FanbaseEntry.objects.filter(team=team).aggregate(total=Sum("delta"))["total"] or 0
+    )
+
+
+def fanbase_entries_for(team) -> QuerySet[FanbaseEntry]:
+    """A team's fanbase history, newest first (the model default)."""
+    return FanbaseEntry.objects.filter(team=team)
+
+
+def ensure_starting_fanbase(team, *, at) -> FanbaseEntry:
+    """Give `team` its starting fanbase, once.
+
+    Idempotent (`get_or_create` on `kind=STARTING`), so a second call —
+    re-running `seed_teams`, a reclaimed team — never double-credits a team.
+    Mirror of `ensure_opening_balance`; `at` is game time, passed by the
+    caller (economy/ may not import world/, AGENTS.md).
+    """
+    entry, _ = FanbaseEntry.objects.get_or_create(
+        team=team,
+        kind=FanbaseEntry.Kind.STARTING,
+        defaults={
+            "delta": STARTING_FANBASE,
+            "occurred_at": at,
+            "description": "Starting fanbase",
+        },
+    )
+    return entry
+
+
+def reset_fanbase(team, *, at) -> FanbaseEntry | None:
+    """Bring `team`'s fanbase back to STARTING_FANBASE with a `takeover`
+    row. Returns None when it already is STARTING_FANBASE.
+
+    `at` is game time, the moment the takeover completes — the caller
+    passes `world.services.now()` itself. See `reset_to_starting_balance`."""
+    delta = STARTING_FANBASE - fanbase_for(team)
+    if delta == 0:
+        return None
+    return FanbaseEntry.objects.create(
+        team=team,
+        kind=FanbaseEntry.Kind.TAKEOVER,
+        delta=delta,
+        occurred_at=at,
+        description="Team taken over",
+    )
 
 
 def ensure_opening_balance(team, *, at) -> LedgerEntry:
@@ -98,4 +159,82 @@ def charge_weekly_wages(week) -> int:
                 written += 1
             except IntegrityError:
                 continue          # already charged; correct outcome, not an error
+    return written
+
+
+def apply_weekly_fanbase(week, *, points_by_team: dict[int, int]) -> int:
+    """Adjust every team's fanbase for `week`. Returns rows written.
+
+    The week each team is scored against is the caller's job: this function
+    takes the points as a plain dict — economy/ may not import competitions/
+    (AGENTS.md). `world/services.py` passes the week that just completed,
+    never the one opening (D2) — see economy/README.md, *Fanbase reads the
+    completed week*.
+
+    The delta is clamped so the resulting fanbase never falls below
+    MINIMUM_FANBASE, and the *clamped* delta is what is stored (D4): the
+    sum of rows is the fanbase, so clamping on read would make history and
+    displayed value disagree. Called once per crossed week boundary from
+    world.services.tick(); exactly-once comes from that WeekTransition row,
+    the (team, week) constraint below being a second line of defence.
+    """
+    current = dict(
+        FanbaseEntry.objects.values("team_id").annotate(total=Sum("delta"))
+        .values_list("team_id", "total")
+    )
+    written = 0
+    for team_id in Team.objects.values_list("pk", flat=True):
+        points = points_by_team.get(team_id, 0)
+        now_at = current.get(team_id) or 0
+        raw = points * FANBASE_PER_POINT - WEEKLY_FANBASE_DECAY
+        # Clamp the RESULT, store the delta that gets there (D4).
+        delta = max(now_at + raw, MINIMUM_FANBASE) - now_at
+        with transaction.atomic():
+            try:
+                FanbaseEntry.objects.create(
+                    team_id=team_id,
+                    kind=FanbaseEntry.Kind.WEEKLY,
+                    delta=delta,
+                    occurred_at=week.starts_at,
+                    week=week,
+                    points=points,
+                    description="Weekly fanbase change",
+                )
+                written += 1
+            except IntegrityError:
+                continue          # already applied; correct outcome, not an error
+    return written
+
+
+def pay_merchandise(week) -> int:
+    """Credit every team its merchandise income for `week`, computed off its
+    current fanbase. Returns entries written.
+
+    Called from world.services.tick() right after apply_weekly_fanbase —
+    merchandise is paid on the *now-updated* fanbase (D7). It recomputes each
+    team's fanbase from the rows rather than accepting a number, so the two
+    functions stay independently testable and a re-run cannot pay on a stale
+    figure. Once per week, same exactly-once shape as charge_weekly_wages.
+    """
+    current = dict(
+        FanbaseEntry.objects.values("team_id").annotate(total=Sum("delta"))
+        .values_list("team_id", "total")
+    )
+    written = 0
+    for team_id in Team.objects.values_list("pk", flat=True):
+        fanbase = max(current.get(team_id) or 0, 0)
+        amount = fanbase // MERCHANDISE_FANBASE_PER_CREDIT
+        with transaction.atomic():
+            try:
+                LedgerEntry.objects.create(
+                    team_id=team_id,
+                    kind=LedgerEntry.Kind.MERCHANDISE,
+                    amount=amount,
+                    occurred_at=week.starts_at,
+                    week=week,
+                    description="Merchandise revenue",
+                )
+                written += 1
+            except IntegrityError:
+                continue          # already paid; correct outcome, not an error
     return written

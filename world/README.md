@@ -120,6 +120,20 @@ reads `now()` once, then finds and processes whatever is due, in four steps:
    `world/migrations/0006`), so each `TickRun` row records how many wage
    entries its parse wrote; idempotency is the `(team, week)` constraint,
    the same defence `charge_weekly_wages` and `WeekTransition` lean on.
+   The same loop then settles the week's economy side (#21):
+   `economy.services.apply_weekly_fanbase(week, points_by_team=...)`
+   adjusts every team's fanbase and `economy.services.pay_merchandise(week)`
+   pays each team its merchandise income — **in that order** (merchandise is
+   paid on the *now-updated* fanbase), and both off the week that just
+   *completed*, exactly as training reads it (see *Training's race half reads
+   the week that just completed* below). `points_by_team` comes from
+   `competitions.services.points_by_team(week)`: this is where
+   `competitions/` meets `economy/`, because neither may import the other
+   (`economy/README.md`, *Why `economy/` does not query `RacePoints`*).
+   Each write is once per `(team, week)`, backed by the two `economy/`
+   constraints, and the rows each parse writes land on the new
+   `TickRun.fanbase_entries` / `TickRun.merchandise_entries` counters
+   (the columns added by `world/migrations/0007`).
    Ageing runs before growth, so a rider who turned 33 at this same
    boundary is evaluated against the new age immediately. None of this
    touches a race row, so it runs outside the claim transaction below, the

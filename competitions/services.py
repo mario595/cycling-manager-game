@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from django.db.models import Sum
 from racing.models import Race, RaceResult
-from schedule.models import Season
+from schedule.models import Season, Week
 
 from .models import RacePoints
 from .scoring import POINTS_BY_POSITION, points_for
@@ -54,6 +55,24 @@ def _countback_key(entry: dict) -> tuple:
     return (-entry["points"],) + tuple(
         -counts.get(position, 0) for position in sorted(POINTS_BY_POSITION)
     )
+
+
+def points_by_team(week: Week) -> dict[int, int]:
+    """Total race points each team scored in `week`. Teams that scored
+    nothing are absent from the mapping — callers treat a missing key as 0.
+
+    Read by world.services.tick() and handed to economy's fanbase
+    adjustment: economy/ may not import competitions/ (AGENTS.md), so the
+    caller does the join. Same shape as score_race being called from
+    world/ rather than from racing/.
+    """
+    rows = (
+        RacePoints.objects
+        .filter(race__week=week)
+        .values("team_id")
+        .annotate(total=Sum("points"))
+    )
+    return {row["team_id"]: row["total"] for row in rows}
 
 
 def standings(season: Season) -> list[dict]:

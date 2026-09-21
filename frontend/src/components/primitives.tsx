@@ -46,18 +46,22 @@ export function CardHeader({ title, action }: { title: string; action?: ReactNod
 
 /**
  * The small labelled number tiles in both page headers. `dark` inverts it for
- * the "next deadline" emphasis tile.
+ * the "next deadline" emphasis tile. `suffixColor` overrides the suffix's
+ * muted colour — the Finances tiles use it to show this week's change in
+ * green or red.
  */
 export function StatTile({
   label,
   value,
   suffix,
+  suffixColor,
   dark = false,
   minWidth = 120,
 }: {
   label: string
   value: string
   suffix?: string
+  suffixColor?: string
   dark?: boolean
   minWidth?: number
 }) {
@@ -93,7 +97,7 @@ export function StatTile({
         }}
       >
         {value}
-        {suffix ? <span style={{ fontSize: 12, color: color.muted }}>{suffix}</span> : null}
+        {suffix ? <span style={{ fontSize: 12, color: suffixColor ?? color.muted }}>{suffix}</span> : null}
       </div>
     </div>
   )

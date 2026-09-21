@@ -3,6 +3,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { Finances as FinancesPayload, Me } from '../api'
+import { color } from '../theme'
 import { useAuth } from '../useAuth'
 import { useFinances } from '../useFinances'
 import { Finances } from './Finances'
@@ -21,6 +22,8 @@ const manager: Me = {
 
 const finances: FinancesPayload = {
   balance: 485_600,
+  fanbase: 10_650,
+  fanbase_change: 650,
   entries: [
     {
       id: 2,
@@ -75,12 +78,12 @@ describe('Finances', () => {
   it('renders the balance and the entries, newest first', () => {
     renderFinances()
 
-    expect(screen.getByText('485,600')).toBeInTheDocument()
+    expect(screen.getByText('$485,600')).toBeInTheDocument()
     // Newest entry is first in the payload and rendered first.
     expect(screen.getByText('Weekly wages')).toBeInTheDocument()
     expect(screen.getByText(/WEEKLY WAGES/)).toBeInTheDocument()
-    expect(screen.getByText('after: 485,600')).toBeInTheDocument()
-    expect(screen.getByText('after: 500,000')).toBeInTheDocument()
+    expect(screen.getByText('after: $485,600')).toBeInTheDocument()
+    expect(screen.getByText('after: $500,000')).toBeInTheDocument()
   })
 
   it('shows the warning when the balance is negative', () => {
@@ -94,5 +97,64 @@ describe('Finances', () => {
     renderFinances()
 
     expect(screen.getByText(/Your balance is negative/)).toBeInTheDocument()
+    // The sign goes before the "$", not between it and the digits.
+    expect(screen.getByText('−$12,400')).toBeInTheDocument()
+  })
+
+  it('renders the fanbase tile with its weekly change', () => {
+    mockUseFinances.mockReturnValue({
+      finances: { ...finances, fanbase: 10_650, fanbase_change: 650 },
+      loading: false,
+      error: false,
+      refresh: vi.fn(),
+    })
+
+    renderFinances()
+
+    expect(screen.getByText('10,650')).toBeInTheDocument()
+    expect(screen.getByText('+650 this week')).toBeInTheDocument()
+  })
+
+  it('renders a negative weekly change in the negative colour', () => {
+    mockUseFinances.mockReturnValue({
+      finances: { ...finances, fanbase: 9_850, fanbase_change: -150 },
+      loading: false,
+      error: false,
+      refresh: vi.fn(),
+    })
+
+    renderFinances()
+
+    const change = screen.getByText('−150 this week')
+    expect(change).toBeInTheDocument()
+    expect(change).toHaveStyle({ color: color.negative })
+  })
+
+  it('renders a merchandise entry with its label and a positive amount', () => {
+    mockUseFinances.mockReturnValue({
+      finances: {
+        ...finances,
+        entries: [
+          {
+            id: 3,
+            kind: 'merchandise',
+            description: 'Merchandise revenue',
+            amount: 420,
+            occurred_at: '2027-03-08T00:00:00Z',
+            rider_count: null,
+            balance_after: 500_420,
+          },
+          ...finances.entries,
+        ],
+      },
+      loading: false,
+      error: false,
+      refresh: vi.fn(),
+    })
+
+    renderFinances()
+
+    expect(screen.getByText('Merchandise revenue')).toBeInTheDocument()
+    expect(screen.getByText('+$420')).toBeInTheDocument()
   })
 })

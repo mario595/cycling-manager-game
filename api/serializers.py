@@ -305,9 +305,16 @@ class LedgerEntrySerializer(serializers.Serializer):
 
 
 class FinancesSerializer(serializers.Serializer):
-    """The Finances screen's whole state: the running balance and the full
-    history, newest first, each entry carrying the balance after it was
-    written — the view computes `balance_after`; see economy/README.md."""
+    """The Finances screen's whole state: the running balance, the team's
+    fanbase and how it moved this week, and the full history, newest first,
+    each entry carrying the balance after it was written — the view computes
+    `balance_after`; see economy/README.md.
+
+    `fanbase_change` is the most recent `weekly` fanbase row's delta, or 0
+    when none exists yet — the player sees the change, not two raw numbers
+    to diff (economy/README.md, *Fanbase is derived too*)."""
 
     balance = serializers.IntegerField()
+    fanbase = serializers.IntegerField()
+    fanbase_change = serializers.IntegerField()
     entries = LedgerEntrySerializer(many=True)

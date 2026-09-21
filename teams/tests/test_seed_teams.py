@@ -3,8 +3,8 @@ from __future__ import annotations
 from django.core.management import call_command
 
 from accounts.models import User
-from economy.models import STARTING_BALANCE, LedgerEntry
-from economy.services import balance_for
+from economy.models import STARTING_BALANCE, STARTING_FANBASE, FanbaseEntry, LedgerEntry
+from economy.services import balance_for, fanbase_for
 from riders.models import Rider
 from teams.models import Team
 
@@ -61,6 +61,15 @@ def test_seeded_teams_have_an_opening_balance(db):
         assert balance_for(team) == STARTING_BALANCE
 
 
+def test_seed_teams_gives_every_team_a_starting_fanbase(db):
+    call_command("seed_teams", "--count=4", "--per-team=12")
+
+    for team in Team.objects.all():
+        entry = FanbaseEntry.objects.get(team=team, kind=FanbaseEntry.Kind.STARTING)
+        assert entry.delta == STARTING_FANBASE
+        assert fanbase_for(team) == STARTING_FANBASE
+
+
 def test_reseeding_does_not_double_credit(db):
     call_command("seed_teams", "--count=4", "--per-team=12")
     call_command("seed_teams", "--count=4", "--per-team=12")
@@ -71,6 +80,18 @@ def test_reseeding_does_not_double_credit(db):
         )
         assert opening_entries.count() == 1
         assert balance_for(team) == STARTING_BALANCE
+
+
+def test_reseeding_does_not_double_credit_fanbase(db):
+    call_command("seed_teams", "--count=4", "--per-team=12")
+    call_command("seed_teams", "--count=4", "--per-team=12")
+
+    for team in Team.objects.all():
+        starting_entries = FanbaseEntry.objects.filter(
+            team=team, kind=FanbaseEntry.Kind.STARTING,
+        )
+        assert starting_entries.count() == 1
+        assert fanbase_for(team) == STARTING_FANBASE
 
 
 def test_claim_for_does_not_double_credit(db):

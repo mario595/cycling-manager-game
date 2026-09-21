@@ -18,8 +18,8 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 from django.utils.module_loading import import_string
 
-from competitions.services import score_race
-from economy.services import charge_weekly_wages
+from competitions.services import points_by_team, score_race
+from economy.services import apply_weekly_fanbase, charge_weekly_wages, pay_merchandise
 from racing.models import Race
 from racing.services import riders_who_raced, simulate_race
 from riders.models import Rider
@@ -226,9 +226,22 @@ def tick() -> TickRun:
     weeks = process_week_transitions(at)
     riders_trained = 0
     wage_entries = 0
+    merchandise_entries = 0
+    fanbase_entries = 0
     for transition in weeks:            # per week, NOT weeks=len(weeks)
-        riders_trained += _apply_training_week(transition.week)
-        wage_entries += charge_weekly_wages(transition.week)
+        week = transition.week
+        riders_trained += _apply_training_week(week)
+        wage_entries += charge_weekly_wages(week)
+
+        # Fanbase reads the week that just COMPLETED, not the one opening:
+        # this loop runs before _claim()/_execute(), so `week`'s own races
+        # have not been simulated yet (economy/README.md, *Fanbase reads the
+        # completed week*). Same reason _apply_training_week uses
+        # _completed_week().
+        raced_week = _completed_week(week)
+        points = points_by_team(raced_week) if raced_week is not None else {}
+        fanbase_entries += apply_weekly_fanbase(week, points_by_team=points)
+        merchandise_entries += pay_merchandise(week)
 
     reclaimed = _reclaim_unfinished()
     claimed = _claim(limit=max(0, max_races - len(reclaimed)), at=at)
@@ -242,6 +255,8 @@ def tick() -> TickRun:
         riders_aged=riders_aged,
         riders_trained=riders_trained,
         wage_entries=wage_entries,
+        merchandise_entries=merchandise_entries,
+        fanbase_entries=fanbase_entries,
     )
     _execute(reclaimed + claimed, run, at=at)
     run.capped = capped
