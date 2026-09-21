@@ -4,10 +4,13 @@ import { color, font } from '../theme'
 import { useAuth } from '../useAuth'
 import { useFinances } from '../useFinances'
 
-/** Abstract whole-number "credits" — see specs/team-finances-ledger.md.
- * Thousands-separated, never decimals, no currency symbol. */
-function formatCredits(amount: number): string {
-  return amount.toLocaleString('en-US')
+/** The game's abstract currency — see AGENTS.md, *Displaying game money*.
+ * Thousands-separated, never decimals, prefixed "$" so it reads as money at
+ * a glance and is never mistaken for a fan count. The sign goes before the
+ * "$" (e.g. "−$12,400"), not between it and the digits. */
+function formatMoney(amount: number): string {
+  const sign = amount < 0 ? '−' : ''
+  return `${sign}$${Math.abs(amount).toLocaleString('en-US')}`
 }
 
 /** `occurred_at` is an ISO game-time string; render it as a calendar date. */
@@ -28,7 +31,7 @@ const KIND_LABELS: Record<LedgerEntry['kind'], string> = {
  * than a bare tile. */
 function fanbaseChangeSuffix(change: number): { text: string; color: string } {
   const sign = change < 0 ? '−' : '+'
-  const text = `${sign}${formatCredits(Math.abs(change))} this week`
+  const text = `${sign}${Math.abs(change).toLocaleString('en-US')} this week`
   return { text, color: change < 0 ? color.negative : color.positive }
 }
 
@@ -75,14 +78,13 @@ export function Finances() {
           <>
             <StatTile
               label="BALANCE"
-              value={formatCredits(finances.balance)}
-              suffix=" credits"
+              value={formatMoney(finances.balance)}
               minWidth={160}
               dark={false}
             />
             <StatTile
               label="FANBASE"
-              value={formatCredits(finances.fanbase)}
+              value={finances.fanbase.toLocaleString('en-US')}
               suffix={fanbaseChangeSuffix(finances.fanbase_change).text}
               suffixColor={fanbaseChangeSuffix(finances.fanbase_change).color}
               minWidth={160}
@@ -146,10 +148,10 @@ export function Finances() {
                   }}
                 >
                   {entry.amount < 0 ? '−' : '+'}
-                  {formatCredits(Math.abs(entry.amount))}
+                  {formatMoney(Math.abs(entry.amount))}
                 </div>
                 <div style={{ fontSize: 11.5, color: color.mutedStrong, fontFamily: font.mono, whiteSpace: 'nowrap' }}>
-                  after: {formatCredits(entry.balance_after)}
+                  after: {formatMoney(entry.balance_after)}
                 </div>
               </div>
             </div>

@@ -78,12 +78,12 @@ describe('Finances', () => {
   it('renders the balance and the entries, newest first', () => {
     renderFinances()
 
-    expect(screen.getByText('485,600')).toBeInTheDocument()
+    expect(screen.getByText('$485,600')).toBeInTheDocument()
     // Newest entry is first in the payload and rendered first.
     expect(screen.getByText('Weekly wages')).toBeInTheDocument()
     expect(screen.getByText(/WEEKLY WAGES/)).toBeInTheDocument()
-    expect(screen.getByText('after: 485,600')).toBeInTheDocument()
-    expect(screen.getByText('after: 500,000')).toBeInTheDocument()
+    expect(screen.getByText('after: $485,600')).toBeInTheDocument()
+    expect(screen.getByText('after: $500,000')).toBeInTheDocument()
   })
 
   it('shows the warning when the balance is negative', () => {
@@ -97,6 +97,8 @@ describe('Finances', () => {
     renderFinances()
 
     expect(screen.getByText(/Your balance is negative/)).toBeInTheDocument()
+    // The sign goes before the "$", not between it and the digits.
+    expect(screen.getByText('−$12,400')).toBeInTheDocument()
   })
 
   it('renders the fanbase tile with its weekly change', () => {
@@ -153,6 +155,6 @@ describe('Finances', () => {
     renderFinances()
 
     expect(screen.getByText('Merchandise revenue')).toBeInTheDocument()
-    expect(screen.getByText('+420')).toBeInTheDocument()
+    expect(screen.getByText('+$420')).toBeInTheDocument()
   })
 })

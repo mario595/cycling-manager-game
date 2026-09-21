@@ -47,6 +47,11 @@ Why a cached balance column is forbidden: it can drift from the rows it
 summarizes if a tick half-fails, and then the readout and the audit history
 disagree with nobody noticing. The sum cannot.
 
+Player-facing amounts are prefixed with `$` — see `AGENTS.md`, *Displaying
+game money*. `Kind`, field and variable names in this app stay
+`credit`-flavoured (`LedgerEntry`, `STARTING_BALANCE`,
+`WEEKLY_WAGE_PER_RIDER`); only the display changed, not the model.
+
 ## Wages run off week transitions
 
 `world.services.tick()` calls `schedule.services.process_week_transitions()`,

@@ -255,3 +255,17 @@ Two ways they come into being, and the distinction matters:
 
 The log format is knowingly verbose and slimming it is planned work — the static
 header is repeated on every line. Details in `racing/README.md`.
+
+## Displaying game money
+
+The game's currency is an abstract whole-number unit, never a real-world
+currency and never a decimal (see `economy/README.md`). Anywhere an amount of
+it is shown to the player, prefix it with **`$`** — `$471,982`,
+thousands-separated. The `$` is a genre convention (Sokker and similar
+management games use it the same way) rather than a claim that this is real
+money; it exists so a money amount is never mistaken for a plain count of
+something else on the same screen — a fanbase number, a rider count, a
+position — which get no symbol at all.
+
+Only amounts of the game's currency get the `$` prefix. A count of anything
+else (fanbase, riders, race points) is shown as a plain number.
