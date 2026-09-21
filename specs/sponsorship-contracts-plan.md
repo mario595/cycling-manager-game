@@ -506,7 +506,7 @@ Offer rounds on season open, `pay_sponsorship` in the weekly loop,
 `test_catch_up_tick_pays_each_week_separately`,
 `test_offer_rounds_are_not_duplicated_by_a_second_tick`.
 
-### W6 — `api/`: views, serializers, routes
+### W6 — `api/`: views, serializers, routes ✅ done
 `SponsorsView`, `SignOfferView`, serializers, two URLs.
 **Test:** `api/tests.py` — `test_sponsors_returns_a_round_for_a_new_team`,
 `test_sponsors_returns_the_contract_once_signed`,

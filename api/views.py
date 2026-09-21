@@ -13,11 +13,18 @@ from rest_framework.views import APIView
 from competitions.services import standings
 from economy.models import FanbaseEntry
 from economy.services import (
+    AlreadySponsored,
+    OfferNotAvailable,
+    active_contract,
     balance_for,
+    ensure_offer_round,
     entries_for,
     fanbase_entries_for,
     fanbase_for,
+    offers_for,
+    sign_offer,
 )
+from economy.sponsors import PROFILES_BY_KEY
 from racing.models import SQUAD_SIZE, Race
 from racing.services import SquadError, set_squad, suggested_squad
 from riders.models import ENGINE_ATTRIBUTES, Rider
@@ -52,6 +59,8 @@ from .serializers import (
     RiderSerializer,
     SquadSerializer,
     SquadWriteSerializer,
+    SignOfferSerializer,
+    SponsorsSerializer,
     StaffSerializer,
     StandingsSerializer,
     TrainingFocusSerializer,
@@ -560,3 +569,95 @@ class FinancesView(APIView):
             "fanbase_change": latest.delta if latest else 0,
             "entries": entries,
         }).data)
+
+
+def _offer_payload(offer) -> dict:
+    profile = PROFILES_BY_KEY[offer.profile]
+    return {
+        "id": offer.pk,
+        "sponsor_name": offer.sponsor_name,
+        "profile": offer.profile,
+        "label": profile.label,
+        "blurb": profile.blurb,
+        "weekly_base": offer.weekly_base,
+        "floor_amount": offer.floor_amount,
+        "ceiling_amount": offer.ceiling_amount,
+    }
+
+
+def _contract_payload(contract) -> dict:
+    profile = PROFILES_BY_KEY[contract.profile]
+    return {
+        "sponsor_name": contract.sponsor_name,
+        "profile": contract.profile,
+        "label": profile.label,
+        "blurb": profile.blurb,
+        "weekly_base": contract.weekly_base,
+        "floor_amount": contract.floor_amount,
+        "ceiling_amount": contract.ceiling_amount,
+        "signed_at": contract.signed_at,
+    }
+
+
+class SponsorsView(APIView):
+    """The caller's own team's sponsorship: the signed contract, or the
+    round to choose from.
+
+    No team id in the URL — the team is always the caller's own via
+    team_for(), the same pattern as StaffView. A user with no team gets the
+    empty shape rather than a 403, matching FinancesView.
+
+    A round is generated lazily here when the team has neither a contract
+    nor offers for the current season — ensure_offer_round is idempotent
+    (economy/README.md, D8), so this is safe to call on every GET. This is
+    what makes a freshly claimed team see offers immediately rather than
+    waiting for the next tick, and what covers a team claimed before any
+    season has been declared at all (current_position returns state
+    "no_season", season=None, and there is nothing to offer yet).
+    """
+
+    def get(self, request):
+        team = team_for(request.user)
+        if team is None:
+            return Response(SponsorsSerializer({"contract": None, "offers": []}).data)
+
+        position = current_position(now())
+        if position.season is None:
+            return Response(SponsorsSerializer({"contract": None, "offers": []}).data)
+
+        contract = active_contract(team, position.season)
+        if contract is not None:
+            return Response(SponsorsSerializer({
+                "contract": _contract_payload(contract), "offers": [],
+            }).data)
+
+        ensure_offer_round(team, position.season, at=now())
+        offers = offers_for(team, position.season)
+        return Response(SponsorsSerializer({
+            "contract": None,
+            "offers": [_offer_payload(o) for o in offers],
+        }).data)
+
+
+class SignOfferView(APIView):
+    """Sign one of the caller's own offers into an active contract.
+
+    409, not 400, for "not available" and "already sponsored": the request
+    is well-formed but the world's state refuses it — the same split
+    HireTrainerView documents.
+    """
+
+    def post(self, request):
+        team = team_for(request.user)
+        if team is None:
+            return Response({"detail": "You do not manage a team."}, status=403)
+
+        serializer = SignOfferSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            sign_offer(team, serializer.validated_data["offer_id"], at=now())
+        except (OfferNotAvailable, AlreadySponsored) as exc:
+            return Response({"detail": str(exc)}, status=409)
+
+        return Response(status=204)

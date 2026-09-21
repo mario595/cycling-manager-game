@@ -1176,3 +1176,112 @@ def test_finances_history_built_through_services_orders_by_game_time(db):
         assert entries[0]["balance_after"] == response.data["balance"]
     finally:
         world_services._clock = None
+
+
+@pytest.fixture
+def sponsors_manager(db) -> User:
+    return User.objects.create_user(email="sponsors-manager@example.com", password="s0meth1ng-good")
+
+
+@pytest.fixture
+def sponsors_team(db, sponsors_manager) -> Team:
+    return Team.objects.create(name="Sponsors Team", code="SPN", manager=sponsors_manager)
+
+
+@pytest.fixture
+def sponsors_client(sponsors_manager) -> APIClient:
+    client = APIClient()
+    client.force_authenticate(user=sponsors_manager)
+    return client
+
+
+@pytest.fixture
+def sponsors_season(db):
+    """An in-season MockClock position, so current_position(now()) resolves
+    to a real Season for SponsorsView — the same shape sponsors_team needs
+    to generate offers against. Resets the clock after the test, matching
+    the clock/finances tests above."""
+    world_services._clock = None
+    season_start = datetime(2027, 3, 1, 0, 0, tzinfo=dt_timezone.utc)
+    season = Season.objects.create(number=1, starts_at=season_start)
+    Week.objects.create(
+        season=season, number=1,
+        starts_at=season_start, ends_at=season_start + timedelta(weeks=1),
+    )
+    with override_settings(GAME_CLOCK_CLASS="world.clocks.MockClock"):
+        clock = world_services.get_clock()
+        clock.now()  # GameClock.load() — creates the row set() requires
+        clock.set(season_start + timedelta(hours=1))
+        yield season
+    world_services._clock = None
+
+
+def test_sponsors_requires_authentication(db):
+    client = APIClient()
+
+    assert client.get("/api/economy/sponsors/").status_code == 403
+
+
+def test_sponsors_without_a_team_is_empty_not_403(db):
+    manager_without_a_team = User.objects.create_user(
+        email="no-team-sponsors@example.com", password="s0meth1ng-good",
+    )
+    client = APIClient()
+    client.force_authenticate(user=manager_without_a_team)
+
+    response = client.get("/api/economy/sponsors/")
+
+    assert response.status_code == 200
+    assert response.data == {"contract": None, "offers": []}
+
+
+def test_sponsors_returns_a_round_for_a_new_team(sponsors_client, sponsors_team, sponsors_season):
+    response = sponsors_client.get("/api/economy/sponsors/")
+
+    assert response.status_code == 200
+    assert response.data["contract"] is None
+    assert len(response.data["offers"]) == 3
+    assert {o["profile"] for o in response.data["offers"]} == {"steady", "balanced", "demanding"}
+
+
+def test_sponsors_returns_the_contract_once_signed(sponsors_client, sponsors_team, sponsors_season):
+    first = sponsors_client.get("/api/economy/sponsors/")
+    offer_id = first.data["offers"][0]["id"]
+    sponsors_client.post("/api/economy/sponsors/sign/", {"offer_id": offer_id})
+
+    response = sponsors_client.get("/api/economy/sponsors/")
+
+    assert response.data["offers"] == []
+    assert response.data["contract"]["sponsor_name"] == first.data["offers"][0]["sponsor_name"]
+
+
+def test_sign_creates_the_contract(sponsors_client, sponsors_team, sponsors_season):
+    round_response = sponsors_client.get("/api/economy/sponsors/")
+    offer_id = round_response.data["offers"][0]["id"]
+
+    response = sponsors_client.post("/api/economy/sponsors/sign/", {"offer_id": offer_id})
+
+    assert response.status_code == 204
+    from economy.models import SponsorContract
+    assert SponsorContract.objects.filter(team=sponsors_team).count() == 1
+
+
+def test_sign_twice_is_409(sponsors_client, sponsors_team, sponsors_season):
+    round_response = sponsors_client.get("/api/economy/sponsors/")
+    offers = round_response.data["offers"]
+    sponsors_client.post("/api/economy/sponsors/sign/", {"offer_id": offers[0]["id"]})
+
+    response = sponsors_client.post("/api/economy/sponsors/sign/", {"offer_id": offers[1]["id"]})
+
+    assert response.status_code == 409
+
+
+def test_sign_someone_elses_offer_is_409(sponsors_client, sponsors_team, sponsors_season):
+    other_manager = User.objects.create_user(email="other-sponsors@example.com", password="s0meth1ng-good")
+    other_team = Team.objects.create(name="Other Sponsors Team", code="OSP", manager=other_manager)
+    from economy.services import ensure_offer_round
+    other_offers = ensure_offer_round(other_team, sponsors_season, at=now())
+
+    response = sponsors_client.post("/api/economy/sponsors/sign/", {"offer_id": other_offers[0].pk})
+
+    assert response.status_code == 409
