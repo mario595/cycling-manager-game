@@ -476,7 +476,7 @@ constants, and the migration.
 `test_voided_contract_does_not_block_a_new_one`,
 `test_one_sponsorship_entry_per_team_per_week`.
 
-### W3 — `economy/services.py`: offers, signing, voiding
+### W3 — `economy/services.py`: offers, signing, voiding ✅ done (committed with W4)
 `offers_for`, `active_contract`, `ensure_offer_round`, `sign_offer`,
 `void_sponsorship`, and the three exceptions. **Load-bearing:** `sign_offer`
 copies terms onto the contract (D2) and re-checks after the lock.
@@ -488,7 +488,7 @@ copies terms onto the contract (D2) and re-checks after the lock.
 `test_signing_another_teams_offer_is_refused`,
 `test_void_marks_contract_and_clears_offers`.
 
-### W4 — `economy/services.py`: `pay_sponsorship`
+### W4 — `economy/services.py`: `pay_sponsorship` ✅ done (committed with W3 — both landed together, already tested and green; splitting a working diff after the fact added risk with no benefit)
 Plus `_season_average_points`. Per-row `atomic()` with `IntegrityError` caught,
 copying `charge_weekly_wages`. **Load-bearing:** a team with no active contract
 gets no row at all.
