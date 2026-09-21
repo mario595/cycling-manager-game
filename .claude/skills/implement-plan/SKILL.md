@@ -19,7 +19,7 @@ commit it. Then start the next one.
 
 ## Before you start
 
-Do all five steps. Do not skip one because it looks unnecessary.
+Do all five steps, in this order. Do not skip one because it looks unnecessary.
 
 ### 1. Read
 
@@ -30,7 +30,33 @@ In this order:
 3. `AGENTS.md` — the app table, the dependency direction, the principles.
 4. The `README.md` of every app the plan touches.
 
-### 2. Start the database
+### 2. Go to the ticket's worktree
+
+**The worktree already exists.** `/product-spec` created it, and the spec and
+the plan are committed on its branch. Reuse it — do not create a second one, and
+do not work from the main checkout.
+
+```bash
+cd .claude/worktrees/<slug>        # <slug> from specs/<slug>-plan.md
+```
+
+Only if it is genuinely missing — an older ticket, or a plan written before this
+convention — create it as *The ticket's worktree* in
+`.claude/ticket-workflow.md` describes, from an up-to-date master. These skills
+are the project instruction that authorises a worktree.
+
+Confirm you are where you think you are before touching anything:
+
+```bash
+pwd && git branch --show-current && git log --oneline -3
+```
+
+The log should show the spec and plan commits. If it does not, you are in the
+wrong place — **stop and ask** rather than starting work on master.
+
+Everything from here runs inside this worktree.
+
+### 3. Start the database
 
 ```bash
 docker compose up -d
@@ -39,39 +65,14 @@ docker compose up -d
 Development uses PostgreSQL, and the tests need it. If it does not start, **stop
 and ask**. Do not switch the settings to SQLite to get around it.
 
-### 3. Record the baseline — before you change any file
+### 4. The test command
 
-```bash
-.venv/bin/python -m pytest -q
-```
-
-Write down the result: how many passed, how many failed. That is your baseline.
-
-**If anything fails now, stop and report it.** Do not start work in a red repo —
-you will not be able to tell your breakage from the breakage that was already
-there.
-
-### 4. Make a worktree
-
-This skill is the project instruction that authorises a worktree. Use the
-`EnterWorktree` tool with the feature slug as the name (`game-clock`). If that
-tool is not available:
-
-```bash
-git worktree add .claude/worktrees/<slug> -b <slug>
-cd .claude/worktrees/<slug>
-```
-
-### 5. Work out the test command for the worktree
-
-`.venv/` is gitignored, so **a fresh worktree has no virtualenv**. Use the main
-checkout's one, from inside the worktree:
+`.venv/` is gitignored, so **a worktree has no virtualenv of its own**. Always
+run Python with the main checkout's interpreter, from inside the worktree:
 
 ```bash
 /home/mario/dev/cycling-manager/.venv/bin/python -m pytest -q
 ```
-
-Run it once now. It must match your baseline. If it errors, stop and ask.
 
 For the rest of this document, `PYTEST` means that command.
 
@@ -81,7 +82,18 @@ worktree at the same time cannot drop yours mid-run. `config/worktree.py` has
 the scheme. Never set `POSTGRES_DB` to work around a database problem — that
 opts you back into sharing.
 
----
+### 5. Record the baseline — before you change any file
+
+```bash
+PYTEST
+```
+
+Write down the result: how many passed, how many failed. That is your baseline,
+and it is the branch as it stands — spec and plan commits included — not master.
+
+**If anything fails now, stop and report it.** Do not start work in a red repo —
+you will not be able to tell your breakage from the breakage that was already
+there.
 
 ## The loop
 
