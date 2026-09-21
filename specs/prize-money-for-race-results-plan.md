@@ -486,7 +486,7 @@ branches.
 scheduled race and prizes render beside points for a finished one.
 `Finances.test.tsx` — a `prize_money` entry renders with its description.
 
-### W7 — documentation
+### W7 — documentation — **done**
 See below. Its own commit.
 
 ## Execution order

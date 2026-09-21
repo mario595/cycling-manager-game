@@ -54,20 +54,25 @@ DRF routers and serializers that aggregate other apps' data for the SPA.
   never appear in this or any other payload — see `riders/README.md`.
 - `GET /api/racing/races/<race_id>/` — one race's own facts
   (`RaceDetailSerializer`, `RaceDetailView`): id, name, status, starts_at,
-  distance and the raw `{length, gradient}` course segments. Readable by any
+  distance and the raw `{length, gradient}` course segments. It also carries
+  `payout` — the race's `{position, points, prize}` list for 1st through 10th,
+  from `competitions/scoring.py`'s two tables — so the SPA can show the prize
+  list before the race has run. Readable by any
   authenticated manager regardless of team — the contrast with `SquadView`
   below, which 403s a caller with no team. No status filter: a `scheduled`,
   `running`, `finished` or `failed` race all return `200`; the status is in
   the payload and the SPA decides what to draw.
 - `GET /api/racing/races/<race_id>/results/` — a finished race's finishing
-  order plus each team's points from it (`RaceResultsSerializer`,
+  order plus each team's points and prize money from it (`RaceResultsSerializer`,
   `RaceResultsView`). A race that has not reached `FINISHED` is a `404`, not
   a `200` with an empty list — "no results yet" and "no such race" would
   otherwise look the same to the SPA. `points` carries one row per team that
   started, scoring teams first ordered by position and then the rest by
-  name, with `position: null` and `points: 0` for a team that scored
-  nothing — the starter set comes from `RaceSquad`, not from which teams
-  recorded a result (see `racing/README.md`, *Squads*). `IsAuthenticated`,
+  name, with `position: null`, `points: 0` and `prize: 0` for a team that
+  scored nothing — the starter set comes from `RaceSquad`, not from which
+  teams recorded a result (see `racing/README.md`, *Squads*). `prize` is the
+  team's total winnings, summed from its `prize_money` ledger entries for the
+  race, so the results page and the ledger cannot disagree. `IsAuthenticated`,
   the project default.
 - `GET /api/competitions/standings/` — the current season's points table
   (`StandingsSerializer`, `StandingsView`, serializing
@@ -100,7 +105,9 @@ DRF routers and serializers that aggregate other apps' data for the SPA.
   **caller's own** team's finances: `balance` (the sum of the ledger, never
   a stored column) and `entries`, newest first, each with `kind`,
   `description`, `amount`, `occurred_at`, `rider_count` and a `balance_after`
-  running total computed in Python as the list is walked. Same `team_for()`
+  running total computed in Python as the list is walked. `kind` is one of
+  `starting_balance`, `wages`, `takeover` or `prize_money` — a finished race
+  pays the placed riders of every team it entered. Same `team_for()`
   pattern as the staff endpoint: no team id in the URL. Unlike `staff/`, a
   caller with no team gets `{"balance": 0, "entries": []}` — the screen has
   an empty state, not an error. See `economy/README.md`.

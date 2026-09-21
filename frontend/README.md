@@ -182,9 +182,15 @@ re-exported, reconcile `src/theme.ts` against it first.
 The mockup's **Race day** screen is now **built** as `Race.tsx`, apart from
 the deliberate exclusions. It shows the race's name, date, distance and
 status, the course elevation profile on every reachable state (before the
-race and after it has finished), the squad-selection widget for the
+race and after it has finished), a **prize list** (`PayoutTable`) — the
+`{position, points, prize}` table from the race detail payload, shown on the
+upcoming screen as well as after the race — the squad-selection widget for the
 manager's own team before the race, and — for a finished race — the rider
-results and team points tables. The course profile is **`race_player`'s
+results and team points tables, the latter now headed **"Team points and
+prizes"** and carrying each team's winnings beside its points. Prize amounts
+are `$`-prefixed game money, formatted through `Finances.tsx`'s
+`formatCredits`, which `Race.tsx` now imports. The course profile is
+**`race_player`'s
 elevation chart, reused**: `CourseProfile.tsx` imports `CourseChart`,
 `computeProfile` and the `Segment` type directly from `race_player/src/`,
 so the SPA's calendar and the visualizer derive and draw a course
@@ -237,6 +243,8 @@ for, with nothing invented around them.
 as a domain. It follows the same staff-composition rule, and its copy comes
 from the ledger's own kinds (`economy/README.md`): a balance headline that
 flags a negative balance, and the history list rendered newest-first with
-the per-entry kind label, date and amount. The design's "CLUB" grouping is
+the per-entry kind label, date and amount. `prize_money` renders as
+"Prize money" beside the other kinds. Its `formatCredits` helper is exported,
+since `Race.tsx` formats prize money with it too. The design's "CLUB" grouping is
 aspirational — the SPA has no such section — so `/finances` is a nav item in
 the TEAM section, next to the staff and training screens it visually matches.

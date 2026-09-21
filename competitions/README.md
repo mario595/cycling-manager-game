@@ -6,6 +6,14 @@ Turning a finished race's results into points, and those points into a
 season standings table. `RacePoints` is the one model here: one row per
 team per race, recording the position that scored and what it was worth.
 
+It also owns the **prize table** — `scoring.PRIZE_BY_POSITION` and
+`prizes_by_team` — but writes no model of its own for it. The money lands
+in `economy/`'s ledger, because a team's balance is the sum of its
+`LedgerEntry` rows and only `economy/` may write them. `competitions/`
+computes *what is owed*; `economy.services.pay_race_prizes` records it.
+The two are wired together by `world/` (`world/README.md`), the same way
+scoring is.
+
 There is no `Group` or `Division` model yet — one implicit Group, one
 table, per `specs/race-points-and-standings.md`. See *Future work* below.
 
@@ -26,6 +34,16 @@ onto a `RacePoints` row the moment a race is scored and are never
 recalculated — if the table is retuned later, races already scored keep
 what they were awarded at the time (`specs/race-points-and-standings.md`,
 *Rules and edge cases*).
+
+## The prize table sits beside it
+
+`PRIZE_BY_POSITION` pays 1st through 10th, the **same positions** the
+points table covers, so a test asserts the two tables never drift apart.
+Unlike points, which go to a team's single best finisher, **every** placed
+rider earns a prize: a team with riders 2nd and 5th is paid for both. The
+payout is written to `economy/`'s ledger when a race finishes, so — like
+`RacePoints` — the amount is frozen at payout time and a later retune does
+not rewrite past results.
 
 ## Why non-finishers are filtered
 
@@ -68,8 +86,6 @@ expressed as a multi-level SQL `ORDER BY` — clearer at this size.
   will need once more than one exists.
 - **Promotion and relegation** (#13) — reading the table to move teams
   between tiers at season end.
-- **Prize money** (#19) — a second reward on the same finishing
-  positions, structurally similar to `RacePoints` but a separate ticket.
 - **Race tiers** — every race currently awards from the same table;
   scaling points by a race's prestige is deferred until the calendar
   needs that shape.
