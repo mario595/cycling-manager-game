@@ -428,7 +428,7 @@ import it in `Race.tsx` rather than writing a second formatter.
 
 ## Work items
 
-### W1 — `competitions/scoring.py`: the payout table
+### W1 — `competitions/scoring.py`: the payout table — **done**
 Add `PRIZE_BY_POSITION` and `prize_for()`. No callers yet.
 **Test:** `competitions/tests/test_scoring.py` —
 `test_prize_by_position`, `test_position_outside_table_pays_nothing`,
