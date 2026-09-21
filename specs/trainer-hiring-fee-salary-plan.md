@@ -353,7 +353,7 @@ availability re-check and *before* commit. **Test:**
 `test_hire_without_charge_still_works` (the seed path),
 `test_charge_not_called_when_trainer_already_taken`.
 
-### W5 — `world/services.py` + `TickRun`: charge salaries each week
+### W5 — `world/services.py` + `TickRun`: charge salaries each week — **done**
 Build `salary_by_team` from `Trainer.objects.filter(team__isnull=False)` and
 call `charge_trainer_salaries` inside the existing per-week loop, next to
 `charge_weekly_wages`. Add the counter and migration `0008`.

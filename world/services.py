@@ -19,7 +19,12 @@ from django.utils import timezone
 from django.utils.module_loading import import_string
 
 from competitions.services import points_by_team, score_race
-from economy.services import apply_weekly_fanbase, charge_weekly_wages, pay_merchandise
+from economy.services import (
+    apply_weekly_fanbase,
+    charge_trainer_salaries,
+    charge_weekly_wages,
+    pay_merchandise,
+)
 from racing.models import Race
 from racing.services import riders_who_raced, simulate_race
 from riders.models import Rider
@@ -32,6 +37,7 @@ from riders.services import (
 from schedule.models import SeasonTransition, Week
 from schedule.services import process_transitions, process_week_transitions
 from staff.models import Trainer, TrainingWeekReport
+from staff.pricing import weekly_salary
 from staff.services import focus_for, top_up_pool
 
 from .clocks import Clock
@@ -228,10 +234,23 @@ def tick() -> TickRun:
     wage_entries = 0
     merchandise_entries = 0
     fanbase_entries = 0
+    trainer_salary_entries = 0
+
+    # Built once, outside the loop: a trainer's skill does not move between
+    # weeks within one tick (no hires happen mid-tick), so the same salary
+    # map is correct for every missed week. The *charge* still happens
+    # inside the loop, one dated row per week.
+    salary_by_team = {
+        trainer.team_id: weekly_salary(trainer)
+        for trainer in Trainer.objects.filter(team__isnull=False)
+    }
     for transition in weeks:            # per week, NOT weeks=len(weeks)
         week = transition.week
         riders_trained += _apply_training_week(week)
         wage_entries += charge_weekly_wages(week)
+        trainer_salary_entries += charge_trainer_salaries(
+            week, salary_by_team=salary_by_team,
+        )
 
         # Fanbase reads the week that just COMPLETED, not the one opening:
         # this loop runs before _claim()/_execute(), so `week`'s own races
@@ -257,6 +276,7 @@ def tick() -> TickRun:
         wage_entries=wage_entries,
         merchandise_entries=merchandise_entries,
         fanbase_entries=fanbase_entries,
+        trainer_salary_entries=trainer_salary_entries,
     )
     _execute(reclaimed + claimed, run, at=at)
     run.capped = capped
