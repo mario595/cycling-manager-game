@@ -1,9 +1,9 @@
 """Generating trainers: one skill drawn high as the speciality, the other
 four drawn from a lower, non-overlapping band.
 
-See specs/trainers-as-hireable-staff-plan.md, Design decisions 5, for why
-the bands must not overlap: it is what makes "exactly one skill is clearly
-the highest" true by construction rather than by luck.
+See staff/README.md, "Generation guarantees the speciality", for why the
+bands must not overlap: it is what makes "exactly one skill is clearly the
+highest" true by construction rather than by luck.
 """
 
 from __future__ import annotations

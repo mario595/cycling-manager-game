@@ -528,8 +528,7 @@ class FinancesView(APIView):
     No team id in the URL — the team is always the caller's own via
     team_for(), the same pattern as StaffView. A user with no team gets an
     empty ledger rather than a 403, so the Finances screen renders its calm
-    empty state instead of an error — see
-    specs/team-finances-ledger-plan.md, W6.
+    empty state instead of an error.
 
     `balance_after` is computed here per D7: walk the entries in
     chronological order accumulating a running total, then reverse into the
