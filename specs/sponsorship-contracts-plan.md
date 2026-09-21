@@ -513,7 +513,7 @@ Offer rounds on season open, `pay_sponsorship` in the weekly loop,
 `test_sign_creates_the_contract`, `test_sign_twice_is_409`,
 `test_sponsors_without_a_team_is_empty_not_403`.
 
-### W7 — `teams/services.py`: void on claim
+### W7 — `teams/services.py`: void on claim ✅ done
 The lazy import and the `void_sponsorship` call inside `claim_team`.
 **Load-bearing:** the import stays inside the function body.
 **Test:** `teams/tests/test_services.py` — `test_claiming_voids_the_previous_contract`,
