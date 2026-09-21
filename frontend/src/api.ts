@@ -403,7 +403,7 @@ export async function setTrainingFocus(attribute: string): Promise<void> {
  * this entry. */
 export interface LedgerEntry {
   id: number
-  kind: 'starting_balance' | 'wages' | 'takeover' | 'merchandise'
+  kind: 'starting_balance' | 'wages' | 'takeover' | 'merchandise' | 'sponsorship'
   description: string
   amount: number
   occurred_at: string | null
@@ -429,4 +429,46 @@ export async function getFinances(): Promise<Finances> {
     throw new Error(body?.detail ?? `finances request failed: ${response.status}`)
   }
   return response.json()
+}
+
+/** One unsigned sponsor offer, or (via SponsorContract) the signed one —
+ * same money shape either way, matching economy/sponsors.py's terms. */
+export interface SponsorOffer {
+  id: number
+  sponsor_name: string
+  profile: string
+  label: string
+  blurb: string
+  weekly_base: number
+  floor_amount: number
+  ceiling_amount: number
+}
+
+export interface SponsorContract {
+  sponsor_name: string
+  profile: string
+  label: string
+  blurb: string
+  weekly_base: number
+  floor_amount: number
+  ceiling_amount: number
+  signed_at: string
+}
+
+export interface Sponsors {
+  contract: SponsorContract | null
+  offers: SponsorOffer[]
+}
+
+export async function getSponsors(): Promise<Sponsors> {
+  const response = await fetch('/api/economy/sponsors/')
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new Error(body?.detail ?? `sponsors request failed: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function signOffer(offerId: number): Promise<void> {
+  return writeJson('/api/economy/sponsors/sign/', 'POST', { offer_id: offerId })
 }

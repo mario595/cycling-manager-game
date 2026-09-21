@@ -23,6 +23,7 @@ const KIND_LABELS: Record<LedgerEntry['kind'], string> = {
   wages: 'Weekly wages',
   takeover: 'Team takeover',
   merchandise: 'Merchandise revenue',
+  sponsorship: 'Sponsorship',
 }
 
 /** The fanbase tile's suffix: how the team's support moved this week, in the

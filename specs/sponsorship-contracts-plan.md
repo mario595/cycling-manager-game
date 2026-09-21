@@ -526,7 +526,7 @@ already uses for `ensure_opening_balance`. Note it in `AGENTS.md`'s seeding
 section.
 **Test:** `teams/tests/test_seed_teams.py` — `test_seeded_teams_get_an_offer_round`.
 
-### W9 — `frontend/`: the Sponsors screen
+### W9 — `frontend/`: the Sponsors screen ✅ done
 `api.ts`, `useSponsors.ts`, `Sponsors.tsx`, sidebar entry, route.
 **Load-bearing:** every money figure carries `$` and thousands separators.
 **Test:** `frontend/src/screens/Sponsors.test.tsx` —
