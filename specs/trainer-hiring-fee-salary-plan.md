@@ -364,7 +364,7 @@ a catch-up tick must write one row per missed week, dated to each.
 (three missed weeks → three rows with three distinct `occurred_at`),
 `test_no_salary_row_for_unstaffed_team`, `test_tick_twice_charges_once`.
 
-### W6 — `api/`: prices, balance, and the insufficient-funds 409
+### W6 — `api/`: prices, balance, and the insufficient-funds 409 — **done**
 Serializer fields, `StaffView`'s balance, the `charge` callback in
 `HireTrainerView`. **Test:** `api/tests.py` —
 `test_staff_payload_carries_prices_and_balance`,
