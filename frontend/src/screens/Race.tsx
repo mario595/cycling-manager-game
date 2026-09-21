@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 
-import type { CalendarRace, RaceDetail, RaceResultEntry, RaceResults, Squad, SquadRider } from '../api'
+import type { CalendarRace, RaceDetail, RacePayoutEntry, RaceResultEntry, RaceResults, Squad, SquadRider } from '../api'
 import { CourseProfile } from '../components/CourseProfile'
 import { Button, Card, CardHeader, LabelBar, PageBody, PageHeading, StatTile } from '../components/primitives'
 import { raceStatusLabel } from '../raceStatus'
@@ -10,6 +10,7 @@ import { color, font } from '../theme'
 import { useRaceDetail } from '../useRaceDetail'
 import { useRaceResults } from '../useRaceResults'
 import { useSquad } from '../useSquad'
+import { formatCredits } from './Finances'
 
 const SQUAD_SIZE = 4
 
@@ -97,6 +98,7 @@ function raceBody(
         <CourseProfile course={race.course} />
         <RiderResultsTable results={state.results} />
         <TeamPointsTable results={state.results} />
+        <PayoutTable payout={race.payout} />
       </>
     )
   }
@@ -109,6 +111,7 @@ function raceBody(
   return (
     <>
       <CourseProfile course={race.course} />
+      <PayoutTable payout={race.payout} />
       {state.squad ? (
         <SquadPanel
           squad={state.squad}
@@ -176,7 +179,7 @@ function RiderResultsTable({ results }: { results: RaceResults }) {
 function TeamPointsTable({ results }: { results: RaceResults }) {
   return (
     <Card>
-      <CardHeader title="Team points" />
+      <CardHeader title="Team points and prizes" />
       <div>
         {results.points.map((entry) => (
           <div
@@ -196,6 +199,47 @@ function TeamPointsTable({ results }: { results: RaceResults }) {
               </span>
             </div>
             <div style={{ fontFamily: font.mono, fontSize: 14, fontWeight: 600 }}>{entry.points}</div>
+            <div
+              style={{
+                fontFamily: font.mono,
+                fontSize: 14,
+                fontWeight: 600,
+                color: entry.prize > 0 ? color.positive : color.mutedStrong,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {entry.prize > 0 ? `$${formatCredits(entry.prize)}` : '—'}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
+function PayoutTable({ payout }: { payout: RacePayoutEntry[] }) {
+  return (
+    <Card>
+      <CardHeader title="Prize list" />
+      <div>
+        {payout.map((entry) => (
+          <div
+            key={entry.position}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              padding: '12px 20px',
+              borderBottom: `1px solid ${color.divider}`,
+            }}
+          >
+            <div style={{ width: 32, fontFamily: font.mono, fontSize: 13, color: color.mutedStrong }}>
+              {entry.position}
+            </div>
+            <div style={{ flex: 1, fontSize: 13.5, color: color.muted }}>{entry.points} points</div>
+            <div style={{ fontFamily: font.mono, fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap' }}>
+              {`$${formatCredits(entry.prize)}`}
+            </div>
           </div>
         ))}
       </div>

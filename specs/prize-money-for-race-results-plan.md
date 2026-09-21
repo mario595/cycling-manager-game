@@ -479,7 +479,7 @@ second test is the point of this work item.
 `test_race_results_prize_is_zero_for_unplaced_starters`,
 `test_race_detail_includes_payout_table` (on a *scheduled* race).
 
-### W6 — `frontend/`: show it
+### W6 — `frontend/`: show it — **done**
 Types, `KIND_LABELS`, the prize column, the `PayoutTable` card in both
 branches.
 **Test:** `frontend/src/screens/Race.test.tsx` — the payout table renders for a

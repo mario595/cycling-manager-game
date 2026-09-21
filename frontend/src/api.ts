@@ -263,6 +263,7 @@ export interface RaceResultPointsEntry {
   team: RaceResultTeam
   position: number | null
   points: number
+  prize: number
 }
 
 export interface RaceResults {
@@ -284,6 +285,12 @@ export interface CourseSegment {
   gradient: number
 }
 
+export interface RacePayoutEntry {
+  position: number
+  points: number
+  prize: number
+}
+
 export interface RaceDetail {
   id: number
   name: string
@@ -291,6 +298,7 @@ export interface RaceDetail {
   starts_at: string | null
   distance_km: number
   course: CourseSegment[]
+  payout: RacePayoutEntry[]
 }
 
 export async function getRaceDetail(raceId: number): Promise<RaceDetail> {
@@ -397,12 +405,13 @@ export async function setTrainingFocus(attribute: string): Promise<void> {
 }
 
 /** One ledger entry as the Finances screen needs it. `kind` is the machine
- * name (starting_balance/wages/takeover); the screen renders the label.
- * `rider_count` is set on wage entries only — null elsewhere. `balance_after`
- * is computed server-side: the running balance just after this entry. */
+ * name (starting_balance/wages/takeover/prize_money); the screen renders the
+ * label. `rider_count` is set on wage entries only — null elsewhere.
+ * `balance_after` is computed server-side: the running balance just after
+ * this entry. */
 export interface LedgerEntry {
   id: number
-  kind: 'starting_balance' | 'wages' | 'takeover'
+  kind: 'starting_balance' | 'wages' | 'takeover' | 'prize_money'
   description: string
   amount: number
   occurred_at: string | null

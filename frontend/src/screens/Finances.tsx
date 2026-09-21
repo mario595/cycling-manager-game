@@ -6,7 +6,7 @@ import { useFinances } from '../useFinances'
 
 /** Abstract whole-number "credits" — see specs/team-finances-ledger.md.
  * Thousands-separated, never decimals, no currency symbol. */
-function formatCredits(amount: number): string {
+export function formatCredits(amount: number): string {
   return amount.toLocaleString('en-US')
 }
 
@@ -19,6 +19,7 @@ const KIND_LABELS: Record<LedgerEntry['kind'], string> = {
   starting_balance: 'Starting balance',
   wages: 'Weekly wages',
   takeover: 'Team takeover',
+  prize_money: 'Prize money',
 }
 
 export function Finances() {

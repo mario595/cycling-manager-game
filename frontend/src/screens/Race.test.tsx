@@ -26,6 +26,11 @@ const upcomingRace: RaceDetail = {
     { length: 40000, gradient: 0.02 },
     { length: 10000, gradient: 0 },
   ],
+  payout: [
+    { position: 1, points: 20, prize: 20_000 },
+    { position: 2, points: 15, prize: 15_000 },
+    { position: 10, points: 1, prize: 1_000 },
+  ],
 }
 
 const finishedResults: RaceResults = {
@@ -47,8 +52,8 @@ const finishedResults: RaceResults = {
     },
   ],
   points: [
-    { team: { id: 1, name: 'Results Team', code: 'RES' }, position: 1, points: 20 },
-    { team: { id: 2, name: 'Zero Team', code: 'ZRO' }, position: null, points: 0 },
+    { team: { id: 1, name: 'Results Team', code: 'RES' }, position: 1, points: 20, prize: 20_000 },
+    { team: { id: 2, name: 'Zero Team', code: 'ZRO' }, position: null, points: 0, prize: 0 },
   ],
 }
 
@@ -115,6 +120,25 @@ describe('Race', () => {
     expect(container.querySelector('svg[aria-label="Elevation profile"]')).not.toBeNull()
   })
 
+  it('renders the payout table for an upcoming race', () => {
+    mockUseRaceDetail.mockReturnValue({ race: upcomingRace, loading: false, error: false })
+    mockUseRaceResults.mockReturnValue({ results: null, loading: false, error: false })
+    mockUseSquad.mockReturnValue({
+      squad,
+      loading: false,
+      error: false,
+      save: vi.fn(),
+      saving: false,
+      saveError: null,
+    })
+
+    renderRace()
+
+    expect(screen.getByText('Prize list')).toBeInTheDocument()
+    expect(screen.getByText('$20,000')).toBeInTheDocument()
+    expect(screen.getByText('$1,000')).toBeInTheDocument()
+  })
+
   it('renders the course profile and both tables for a finished race', () => {
     mockUseRaceDetail.mockReturnValue({
       race: { ...upcomingRace, status: 'finished' },
@@ -128,6 +152,9 @@ describe('Race', () => {
     expect(screen.getByText('Winner Rider')).toBeInTheDocument()
     expect(screen.getByText('Zero Team')).toBeInTheDocument()
     expect(screen.getByRole('img', { name: 'Elevation profile' })).toBeInTheDocument()
+    expect(screen.getByText('Team points and prizes')).toBeInTheDocument()
+    // Once in the team points table, once in the prize list.
+    expect(screen.getAllByText('$20,000')).toHaveLength(2)
   })
 
   it('renders without a squad panel when the manager has no team', () => {
