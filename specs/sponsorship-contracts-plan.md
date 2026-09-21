@@ -457,7 +457,7 @@ covers a team claimed before any season exists.
 
 ## Work items
 
-### W1 — `economy/sponsors.py`: profiles and the money maths
+### W1 — `economy/sponsors.py`: profiles and the money maths ✅ done
 New file: `SponsorProfile`, `PROFILES`, `offer_terms`, `payment_for`. No ORM,
 no Django. **Load-bearing:** the clamp in `payment_for` applies to the final
 amount, not the ratio.
