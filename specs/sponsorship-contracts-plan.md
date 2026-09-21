@@ -498,7 +498,7 @@ gets no row at all.
 `test_voided_contract_is_not_paid`, `test_entry_is_dated_to_the_week_start`,
 `test_second_call_for_the_same_week_writes_nothing`.
 
-### W5 — `world/services.py`: wire into the tick
+### W5 — `world/services.py`: wire into the tick ✅ done
 Offer rounds on season open, `pay_sponsorship` in the weekly loop,
 `TickRun.sponsorship_entries` and its migration.
 **Test:** `world/tests/test_tick.py` — `test_tick_generates_offer_rounds_on_season_open`,

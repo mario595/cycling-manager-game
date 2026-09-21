@@ -82,6 +82,10 @@ class TickRun(models.Model):
         default=0,
         help_text="Fanbase change entries written this tick (#21).",
     )
+    sponsorship_entries = models.PositiveIntegerField(
+        default=0,
+        help_text="Sponsorship ledger entries written this tick (#22).",
+    )
     error = models.TextField(
         blank=True, default="",
         help_text="Traceback if the run failed. Empty on success.",
