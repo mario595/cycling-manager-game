@@ -2,6 +2,7 @@ import { useState } from 'react'
 
 import { fireTrainer, hireTrainer, type Trainer } from '../api'
 import { Bar, Button, Card, PageBody, PageHeading } from '../components/primitives'
+import { formatMoney } from '../format'
 import { barColor, color, font } from '../theme'
 import { useAuth } from '../useAuth'
 import { useStaff } from '../useStaff'
@@ -83,7 +84,7 @@ export function Staff() {
         subtitle={
           staff.trainer
             ? 'Your trainer improves riders fastest in their speciality.'
-            : 'Hire a trainer from the pool below — it is free.'
+            : 'Hire a trainer from the pool below — you pay a fee now, then a weekly salary.'
         }
       />
 
@@ -103,24 +104,44 @@ export function Staff() {
             gap: 12,
           }}
         >
-          {staff.pool.map((trainer) => (
-            <TrainerCard
-              key={trainer.id}
-              trainer={trainer}
-              action={
-                <Button onClick={() => handleHire(trainer.id)} style={{ opacity: pending ? 0.6 : 1 }}>
-                  Hire
-                </Button>
-              }
-            />
-          ))}
+          {staff.pool.map((trainer) => {
+            const affordable = trainer.hire_fee <= staff.balance
+            return (
+              <TrainerCard
+                key={trainer.id}
+                trainer={trainer}
+                note={
+                  affordable
+                    ? undefined
+                    : "You cannot afford this trainer's fee."
+                }
+                action={
+                  <Button
+                    onClick={() => handleHire(trainer.id)}
+                    disabled={!affordable || pending}
+                    style={{ opacity: pending || !affordable ? 0.6 : 1 }}
+                  >
+                    Hire
+                  </Button>
+                }
+              />
+            )
+          })}
         </div>
       )}
     </PageBody>
   )
 }
 
-function TrainerCard({ trainer, action }: { trainer: Trainer; action: React.ReactNode }) {
+function TrainerCard({
+  trainer,
+  action,
+  note,
+}: {
+  trainer: Trainer
+  action: React.ReactNode
+  note?: string
+}) {
   return (
     <Card style={{ padding: '15px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -186,6 +207,28 @@ function TrainerCard({ trainer, action }: { trainer: Trainer; action: React.Reac
           )
         })}
       </div>
+
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 10,
+          borderTop: `1px solid ${color.dividerStrong}`,
+          paddingTop: 10,
+        }}
+      >
+        <span style={{ fontSize: 12, color: color.mutedStrong, fontFamily: font.mono }}>
+          Fee {formatMoney(trainer.hire_fee)}
+        </span>
+        <span style={{ fontSize: 12, color: color.mutedStrong, fontFamily: font.mono }}>
+          {formatMoney(trainer.weekly_salary)}/week
+        </span>
+      </div>
+
+      {note ? (
+        <div style={{ fontSize: 12, color: color.negative }}>{note}</div>
+      ) : null}
     </Card>
   )
 }

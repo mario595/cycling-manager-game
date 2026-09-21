@@ -371,7 +371,7 @@ Serializer fields, `StaffView`'s balance, the `charge` callback in
 `test_hire_debits_the_fee`, `test_hire_refused_when_balance_too_low` (409,
 and the trainer is still in the pool), `test_fire_refunds_nothing`.
 
-### W7 — `frontend/`: prices on the cards, disabled unaffordable hire
+### W7 — `frontend/`: prices on the cards, disabled unaffordable hire — **done**
 `src/format.ts`, the `api.ts` types, `Staff.tsx` (including the "it is free"
 subtitle), `Finances.tsx` labels. **Test:**
 `frontend/src/screens/Staff.test.tsx` — renders both prices, Hire disabled

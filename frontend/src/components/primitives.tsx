@@ -210,11 +210,13 @@ export function Button({
   children,
   variant = 'primary',
   onClick,
+  disabled = false,
   style,
 }: {
   children: ReactNode
   variant?: 'primary' | 'secondary'
   onClick?: () => void
+  disabled?: boolean
   style?: CSSProperties
 }) {
   const primary = variant === 'primary'
@@ -222,7 +224,8 @@ export function Button({
     <button
       type="button"
       onClick={onClick}
-      className={primary ? 'hover-dark' : 'hover-light'}
+      disabled={disabled}
+      className={disabled ? undefined : primary ? 'hover-dark' : 'hover-light'}
       style={{
         background: primary ? color.ink : color.canvas,
         color: primary ? '#FFFFFF' : color.ink,
@@ -231,7 +234,7 @@ export function Button({
         padding: '9px 15px',
         fontSize: 13,
         fontWeight: 500,
-        cursor: 'pointer',
+        cursor: disabled ? 'not-allowed' : 'pointer',
         ...style,
       }}
     >
