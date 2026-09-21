@@ -36,6 +36,11 @@ A registered user with no team calls `claim_team(user, name=..., code=..., at=..
    too*. The `at` (game time) is passed in by the caller — `api/`'s view and
    `seed_teams` supply `world.services.now()` — because `teams/` must not
    import `world/`.
+6. Voids any sponsorship contract in force and clears unsigned offers —
+   `economy.services.void_sponsorship(team, at=...)`, same lazy import as
+   step 5 (#22; see `economy/README.md`, *Sponsorship*). A new manager is
+   never handed a contract they never agreed to; the API generates them a
+   fresh offer round on their first visit to the Sponsors screen.
 
 If no unmanaged team exists, `claim_team` raises `NoTeamAvailable`. A second
 claim by an already-managing user is not checked here — `Team.manager` is a
@@ -93,9 +98,10 @@ ever changes, the suite catches it immediately: a real cycle surfaces as an
 ### A special case: `economy/`
 
 `teams/` may import exactly the `economy/` functions it writes inside
-**function bodies, never at module scope**: `reset_to_starting_balance` and
-`reset_fanbase` in `claim_team`, plus `ensure_opening_balance` and
-`ensure_starting_fanbase` in `seed_teams`' `handle()`. This is the same
+**function bodies, never at module scope**: `reset_to_starting_balance`,
+`reset_fanbase` and `void_sponsorship` in `claim_team`, plus
+`ensure_opening_balance`, `ensure_starting_fanbase` and (when a season
+exists) `ensure_offer_round` in `seed_teams`' `handle()`. This is the same
 entry-point pattern as `seed_teams` importing `racing.models` inside
 `handle()` — `AGENTS.md`'s dependency graph says `economy -> teams`, and a
 module-scope `from economy.services import ...` would import `economy/` (and
@@ -130,13 +136,22 @@ starting fanbase via `ensure_starting_fanbase(team, at=...)` (#21; both
 imported inside `handle()`, same entry-point rule as `racing.models` —
 see *What `teams/` may import*). The `at` is the current game time — the
 command reads `world.services.now()` itself, like `schedule/`'s `load_season`
-does. The claim block runs **after** that loop, so the team a
-`--claim-for` takes out of the pool already sits at `STARTING_BALANCE` and
-`STARTING_FANBASE`; `claim_team`'s takeovers then compute zero deltas and
-write nothing, leaving the claimed team at the standard figures with exactly
-one `starting_balance` entry and one starting fanbase row — no double credit.
-A team claimed later, once wages have drained it and its fanbase has moved,
-gets the takeover row instead (`economy/README.md`).
+does. If a season is currently under way (`schedule.services.current_position(at)`
+resolves one), every team also gets a sponsor offer round via
+`economy.services.ensure_offer_round(team, season, at=...)` (#22); `seed_teams`
+normally runs before `load_season` (`AGENTS.md`'s seeding order), so a fresh
+world simply has no season yet and this step is skipped — re-running
+`seed_teams` once a season exists, or letting `world.services.tick()` cross
+the season's open boundary, is what actually populates offers. The claim
+block runs **after** that loop, so the team a `--claim-for` takes out of the
+pool already sits at `STARTING_BALANCE` and `STARTING_FANBASE`; `claim_team`'s
+takeovers then compute zero deltas and write nothing, leaving the claimed
+team at the standard figures with exactly one `starting_balance` entry and
+one starting fanbase row — no double credit. A team claimed later, once
+wages have drained it and its fanbase has moved, gets the takeover row
+instead (`economy/README.md`). `claim_team` also voids whatever sponsorship
+round the loop above may have generated and the API replaces it with a
+fresh one on the new manager's first visit — see *Claiming a team*.
 
 Imports `racing.models` inside `handle()`, not at module scope — same rule
 and reason as `riders/management/commands/reset_riders.py`: a management

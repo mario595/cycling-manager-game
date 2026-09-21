@@ -10,6 +10,7 @@ all reading the real API. No screen renders invented data.
 | `/` | Dashboard | Built — season, standings, next race and squad status from the API, no fixture data |
 | `/roster` | Roster | Built — filter, sort, rider detail panel and the same freshness bar as squad selection, from the API, no fixture data |
 | `/staff` | Staff | Built — hire/fire a trainer, from the API, no fixture data |
+| `/sponsors` | Sponsors | Built — sign one of three sponsor offers, or see the signed contract, from the API, no fixture data |
 | `/finances` | Finances | Built — balance and ledger history from the API, no fixture data |
 | `/training` | Training | Built — set the weekly focus, see last week's moves, from the API, no fixture data |
 | `/calendar` | Calendar | Built — twelve weeks from the API, no fixture data |
@@ -239,7 +240,18 @@ from the ledger's own kinds (`economy/README.md`): a balance headline that
 flags a negative balance, and the history list rendered newest-first with
 the per-entry kind label, date and amount. A second tile shows the team's
 fanbase with this week's change (green or red, per `economy/README.md`,
-*Fanbase is derived too*); merchandise payments appear as their own positive
-ledger lines. The design's "CLUB" grouping is aspirational — the SPA has no
-such section — so `/finances` is a nav item in the TEAM section, next to the
-staff and training screens it visually matches.
+*Fanbase is derived too*); merchandise and sponsorship payments each appear
+as their own positive ledger lines. The design's "CLUB" grouping is
+aspirational — the SPA has no such section — so `/finances` is a nav item
+in the TEAM section, next to the staff and training screens it visually
+matches.
+
+`Sponsors.tsx` is in the same position — `design/` predates sponsorship as
+a feature — and follows `Staff.tsx`'s card-grid composition: one card per
+offer (sponsor name, profile character, weekly baseline, the low–high range)
+with a Sign button, or a single card for the signed contract once one
+exists. Every money figure carries the `$` prefix (`AGENTS.md`, *Displaying
+game money*) — including both ends of a range, since the range is money too.
+`useSponsors.ts` polls the same way `useStaff.ts` does, and exposes
+`refresh()` so signing updates the screen immediately rather than waiting
+for the next poll.
