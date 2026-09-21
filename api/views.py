@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError
+from django.db.models import Sum
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
@@ -10,7 +11,9 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from competitions.scoring import POINTS_BY_POSITION, points_for, prize_for
 from competitions.services import standings
+from economy.models import LedgerEntry
 from economy.services import balance_for, entries_for
 from racing.models import SQUAD_SIZE, Race
 from racing.services import SquadError, set_squad, suggested_squad
@@ -316,6 +319,10 @@ class RaceDetailView(APIView):
             "starts_at": race.starts_at,
             "distance_km": _distance_km(race),
             "course": race.course,
+            "payout": [
+                {"position": p, "points": points_for(p), "prize": prize_for(p)}
+                for p in sorted(POINTS_BY_POSITION)
+            ],
         }
         return Response(RaceDetailSerializer(payload).data)
 
@@ -343,11 +350,19 @@ class RaceResultsView(APIView):
             .distinct()
             .order_by("name")
         )
+        prizes = (
+            LedgerEntry.objects
+            .filter(race=race, kind=LedgerEntry.Kind.PRIZE_MONEY)
+            .values("team_id")
+            .annotate(total=Sum("amount"))
+        )
+        prize_by_team = {p["team_id"]: p["total"] for p in prizes}
         points_payload = [
             {
                 "team": {"id": p.team.pk, "name": p.team.name, "code": p.team.code},
                 "position": p.position,
                 "points": p.points,
+                "prize": prize_by_team.get(p.team_id, 0),
             }
             for p in points
         ] + [
@@ -355,6 +370,7 @@ class RaceResultsView(APIView):
                 "team": {"id": t.pk, "name": t.name, "code": t.code},
                 "position": None,
                 "points": 0,
+                "prize": prize_by_team.get(t.pk, 0),
             }
             for t in starters
             if t.pk not in scored

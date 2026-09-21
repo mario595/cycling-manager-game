@@ -472,7 +472,7 @@ caller of both, mirroring `points_by_team` / `apply_weekly_fanbase`.
 raise; assert `race.status == FINISHED` and `tick.error` is non-empty). The
 second test is the point of this work item.
 
-### W5 — `api/`: serve prizes and the payout table
+### W5 — `api/`: serve prizes and the payout table — **done**
 `prize` on the results points entries; `payout` on race detail.
 **Test:** `api/tests.py` (a single module, not a package) —
 `test_race_results_includes_prize_per_team`,

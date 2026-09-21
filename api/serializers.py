@@ -151,6 +151,12 @@ class CourseSegmentSerializer(serializers.Serializer):
     gradient = serializers.FloatField()
 
 
+class RacePayoutEntrySerializer(serializers.Serializer):
+    position = serializers.IntegerField()
+    points = serializers.IntegerField()
+    prize = serializers.IntegerField()
+
+
 class RaceDetailSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     name = serializers.CharField()
@@ -158,6 +164,7 @@ class RaceDetailSerializer(serializers.Serializer):
     starts_at = serializers.DateTimeField(allow_null=True)
     distance_km = serializers.FloatField()
     course = CourseSegmentSerializer(many=True)
+    payout = RacePayoutEntrySerializer(many=True)
 
 
 class RaceResultTeamSerializer(serializers.Serializer):
@@ -183,6 +190,7 @@ class RaceResultPointsEntrySerializer(serializers.Serializer):
     team = RaceResultTeamSerializer()
     position = serializers.IntegerField(allow_null=True)
     points = serializers.IntegerField()
+    prize = serializers.IntegerField()
 
 
 class RaceResultRaceSerializer(serializers.Serializer):
