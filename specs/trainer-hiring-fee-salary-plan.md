@@ -335,7 +335,7 @@ constraint, migration `0003`. Plus the `STARTING_BALANCE` comment fix (D8).
 `IntegrityError`), `test_several_trainer_fees_per_team_allowed` (the fee has
 no constraint — this is the one someone will "helpfully" add).
 
-### W3 — `economy/services.py`: `charge_trainer_salaries` and `charge_trainer_fee`
+### W3 — `economy/services.py`: `charge_trainer_salaries` and `charge_trainer_fee` — **done**
 **Load-bearing:** the injected `salary_by_team` dict, and no `staff/` import.
 **Test:** `economy/tests/test_trainer_costs.py` —
 `test_charges_only_teams_in_the_dict` (an unstaffed team gets **no** row, not
