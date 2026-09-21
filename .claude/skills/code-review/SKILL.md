@@ -79,11 +79,17 @@ which usually means a hand-edited migration.
 ### The one exception
 
 If the diff makes you doubt one specific behaviour, run **that one test**, not
-the suite:
+the suite. Run it in the ticket's existing worktree — do not make a review
+worktree of your own:
 
 ```bash
+cd .claude/worktrees/<slug>        # <slug> from specs/<slug>.md
+git pull                           # the branch may have moved since you last looked
 /home/mario/dev/cycling-manager/.venv/bin/python -m pytest -q path/to/test_file.py::test_case
 ```
+
+`.claude/ticket-workflow.md` describes the worktree convention. If the worktree
+is gone, say so and review statically rather than recreating it.
 
 That needs Postgres running, so it costs something — do it when you have a real
 doubt to settle, not as a matter of routine.

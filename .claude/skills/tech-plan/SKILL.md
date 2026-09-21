@@ -113,12 +113,25 @@ have to make later with less context than you have.
 Everything else: decide, and record the decision with its reasoning in the plan.
 If you do ask, batch it into one round and give each question your recommendation.
 
-## Step 3 — Write the plan
+## Step 3 — Write the plan, in the ticket's worktree
 
-Write to `specs/<slug>-plan.md`, where `<slug>` matches the product spec
-(`specs/game-clock.md` → `specs/game-clock-plan.md`). One plan per feature, even
-when it spans several apps. If the file exists, revise it rather than adding a
-second.
+**Work in the ticket's worktree, not the main checkout.** `/product-spec` made
+it; reuse it. Follow *The ticket's worktree* in `.claude/ticket-workflow.md`:
+
+```bash
+cd .claude/worktrees/<slug>        # <slug> from specs/<slug>.md
+```
+
+If it is not there — the spec predates this convention, or was written
+elsewhere — create it as that document describes, from an up-to-date master.
+Never make a second worktree for a ticket, and never write the plan on master.
+
+Write to `specs/<slug>-plan.md` inside it (`specs/game-clock.md` →
+`specs/game-clock-plan.md`). One plan per feature, even when it spans several
+apps. If the file exists, revise it rather than adding a second.
+
+Commit it on the ticket's branch and push, so the snapshot comment's pointer
+resolves for anyone who follows it.
 
 ### Structure
 

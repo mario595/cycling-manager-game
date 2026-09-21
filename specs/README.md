@@ -9,7 +9,12 @@ which reads the relevant domain `README.md`, asks clarifying questions, challeng
 scope, and only then writes the file. Run it with `/product-spec` followed by the
 rough feature idea.
 
-One file per feature, kebab-case: `specs/mechanical-problems.md`.
+One file per feature, kebab-case: `specs/mechanical-problems.md`. That name is
+the ticket's slug: it also names the branch, the worktree under
+`.claude/worktrees/`, and through the worktree the ticket's own database and
+dev port. `/product-spec` creates that worktree and every later skill reuses
+it, so the spec, the plan and the code all land on one branch and one pull
+request. See `.claude/ticket-workflow.md`.
 
 Order of work: **spec → plan → code.** A spec says what; a plan says how.
 
