@@ -637,6 +637,21 @@ def test_race_detail_returns_course_and_distance(db):
         {"length": 40000.0, "gradient": 0.0},
         {"length": 10000.0, "gradient": 0.03},
     ]
+
+
+def test_race_detail_includes_payout_table(db):
+    race = Race.objects.create(
+        name="Payout Detail Race",
+        course=[{"length": 40000.0, "gradient": 0.0}],
+        status=Race.Status.SCHEDULED,
+    )
+    client = APIClient()
+    user = User.objects.create_user(email="race-payout@example.com", password="s0meth1ng-good")
+    client.force_authenticate(user=user)
+
+    response = client.get(f"/api/racing/races/{race.pk}/")
+
+    assert response.status_code == 200
     assert response.data["payout"] == [
         {"position": position, "points": points_for(position), "prize": prize_for(position)}
         for position in range(1, 11)
