@@ -5,7 +5,7 @@
 what blocks what*. It does not say what any feature does — that is each issue,
 and later each spec.
 
-39 open issues.
+38 open issues.
 
 ## The question this roadmap answers
 
@@ -30,7 +30,7 @@ coming back to.
 | **The competitive loop** | [#15](https://github.com/mario595/cycling-manager/issues/15) race points · [#12](https://github.com/mario595/cycling-manager/issues/12) standings |
 | **Riders as assets** | [#1](https://github.com/mario595/cycling-manager/issues/1)/[#57](https://github.com/mario595/cycling-manager/issues/57) attributes · [#58](https://github.com/mario595/cycling-manager/issues/58) growth and decline · [#59](https://github.com/mario595/cycling-manager/issues/59) freshness |
 | **Staff and training** | [#35](https://github.com/mario595/cycling-manager/issues/35) trainers · [#36](https://github.com/mario595/cycling-manager/issues/36) weekly training focus |
-| **Money** | [#20](https://github.com/mario595/cycling-manager/issues/20) ledger — includes flat weekly rider wages · [#21](https://github.com/mario595/cycling-manager/issues/21) fanbase and merchandise revenue |
+| **Money** | [#20](https://github.com/mario595/cycling-manager/issues/20) ledger — includes flat weekly rider wages · [#21](https://github.com/mario595/cycling-manager/issues/21) fanbase and merchandise revenue · [#19](https://github.com/mario595/cycling-manager/issues/19) prize money |
 | **Screens and plumbing** | [#47](https://github.com/mario595/cycling-manager/issues/47) race detail · [#77](https://github.com/mario595/cycling-manager/issues/77) results screen · [#73](https://github.com/mario595/cycling-manager/issues/73) mock UI stripped, login required · [#80](https://github.com/mario595/cycling-manager/issues/80) CI · [#52](https://github.com/mario595/cycling-manager/issues/52) sidebar fix |
 
 **The roadmap has been overridden three times without harm** — rider attributes,
@@ -44,14 +44,14 @@ to it.
 
 ## 2.1 — Finish the economy's first circuit
 
-Money exists and only goes out. Three small tickets close the loop, and each is
-directly unblocked by work already done.
+Money now has income (#19 prize money, #21 merchandise) but wages still
+outrun it. Two small tickets close the loop, and each is directly unblocked
+by work already done.
 
 | Order | Issue | Why now | Blocked by |
 |---|---|---|---|
-| 1 | [#19](https://github.com/mario595/cycling-manager/issues/19) prize money | The obvious income, and the one that ties racing to money. Results and points already exist. | #20 ✅ #15 ✅ |
-| 2 | [#69](https://github.com/mario595/cycling-manager/issues/69) trainer fee and salary | #35 deliberately shipped trainers for free, parking the price here. Closes that gap. | #20 ✅ #35 ✅ |
-| 3 | [#22](https://github.com/mario595/cycling-manager/issues/22) → [#23](https://github.com/mario595/cycling-manager/issues/23) sponsorship | The third income stream, and the one with a decision in it. | #21 ✅ |
+| 1 | [#69](https://github.com/mario595/cycling-manager/issues/69) trainer fee and salary | #35 deliberately shipped trainers for free, parking the price here. Closes that gap. | #20 ✅ #35 ✅ |
+| 2 | [#22](https://github.com/mario595/cycling-manager/issues/22) → [#23](https://github.com/mario595/cycling-manager/issues/23) sponsorship | The third income stream, and the one with a decision in it. | #21 ✅ |
 
 After these, a team has three income streams, two outgoings, and a balance that
 means something.
@@ -156,7 +156,7 @@ has moved that expiry closer.
 The chains that actually constrain order:
 
 ```
-#20 ledger ✅ ──┬─→ #19 prize money
+#20 ledger ✅ ──┬─→ #19 prize money ✅
                 ├─→ #69 trainer pricing
                 ├─→ #25 per-rider salaries ──→ #31 value ──→ #29 agents ──→ #28 market ──→ #30 AI trades
                 └─→ #21 fanbase ✅ ──→ #22 sponsors ──→ #23 renewal
