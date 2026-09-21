@@ -317,7 +317,8 @@ disable unaffordable hires without a second request.
 
 ## Work items
 
-### W1 — `staff/pricing.py`: the price functions
+### W1 — `staff/pricing.py`: the price functions — **done**
+
 New module per Design decision 1 and 7. **Test:**
 `staff/tests/test_pricing.py` — `test_salary_scales_with_speciality`
 (a 95-speciality trainer costs more than a 70), `test_fee_is_twelve_weeks`,
