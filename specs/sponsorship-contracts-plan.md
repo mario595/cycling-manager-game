@@ -519,7 +519,7 @@ The lazy import and the `void_sponsorship` call inside `claim_team`.
 **Test:** `teams/tests/test_services.py` — `test_claiming_voids_the_previous_contract`,
 `test_claiming_clears_unsigned_offers`.
 
-### W8 — `teams/management/commands/seed_teams.py`: seed a round
+### W8 — `teams/management/commands/seed_teams.py`: seed a round ✅ done
 Give seeded teams an offer round so the feature is visible without waiting for
 a season boundary, using the same in-`handle()` import pattern the command
 already uses for `ensure_opening_balance`. Note it in `AGENTS.md`'s seeding

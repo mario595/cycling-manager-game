@@ -176,13 +176,27 @@ class Command(BaseCommand):
             # `at` is the game time the entries are stamped with — a seed
             # command is an entry point, so it reads the clock itself, the
             # same way schedule's load_season does (AGENTS.md).
-            from economy.services import ensure_opening_balance, ensure_starting_fanbase
+            from economy.services import (
+                ensure_offer_round,
+                ensure_opening_balance,
+                ensure_starting_fanbase,
+            )
+            from schedule.services import current_position
             from world.services import now
 
             at = now()
+            # The season the world is currently in, if any — load_season
+            # normally runs after seed_teams (AGENTS.md's seeding order), so
+            # a fresh world has no season yet and offer generation is
+            # skipped; re-running seed_teams once a season exists (or
+            # calling world.services.tick(), which also generates rounds on
+            # season open) is what actually populates it.
+            season = current_position(at).season
             for team in Team.objects.all():
                 ensure_opening_balance(team, at=at)
                 ensure_starting_fanbase(team, at=at)
+                if season is not None:
+                    ensure_offer_round(team, season, at=at)
 
             claimed = None
             claim_for = options["claim_for"]
