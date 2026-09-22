@@ -407,7 +407,7 @@ takes that team, renames it, and resets balance/fanbase — i.e. the existing
 claim path is unchanged by W2.
 **Test:** `::test_released_team_can_be_claimed_again`.
 
-### W4 — `teams/management/commands/release_team.py`: the operator entry point
+### W4 — `teams/management/commands/release_team.py`: the operator entry point ✅ done
 The command as specified, `world.services.now()` imported inside `handle()`.
 **Tests:** `teams/tests/test_release_team_command.py` (new) —
 `::test_releases_by_id`, `::test_releases_by_name`,
