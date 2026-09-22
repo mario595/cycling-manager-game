@@ -452,6 +452,7 @@ def test_rider_list_returns_the_callers_own_team(roster_rider, roster_client):
     assert rider_data["height_cm"] == 170
     assert rider_data["weight_kg"] == 60
     assert rider_data["climb"] == 9  # display scale, not the stored 94
+    assert rider_data["weekly_salary"] == roster_rider.weekly_salary
 
 
 def test_rider_serializer_hides_traits(roster_rider, roster_client):
@@ -481,6 +482,15 @@ def test_rider_list_never_exposes_recovery_rate(roster_rider, roster_client):
     response = roster_client.get("/api/riders/")
 
     assert "recovery_rate" not in response.data[0]
+
+
+def test_rider_list_weekly_salary_is_exact_not_display_scale(roster_rider, roster_client):
+    roster_rider.weekly_salary = 3450
+    roster_rider.save(update_fields=["weekly_salary"])
+
+    response = roster_client.get("/api/riders/")
+
+    assert response.data[0]["weekly_salary"] == 3450
 
 
 @pytest.fixture
@@ -1169,7 +1179,21 @@ def test_finances_for_a_user_with_no_team(db):
 
     assert response.status_code == 200
     assert response.data["balance"] == 0
+    assert response.data["weekly_wage_bill"] == 0
     assert response.data["entries"] == []
+
+
+def test_finances_weekly_wage_bill_is_current_roster_payroll(finances_client, finances_team):
+    # Deliberately not the ledger's last wages entry — the bill reflects
+    # the roster as it stands now, per FinancesSerializer's docstring.
+    attrs = dict(climb=50, sprint=50, flat=50, resistance=50, positioning=50)
+    Rider.objects.create(team=finances_team, name="A", weekly_salary=1500, **attrs)
+    Rider.objects.create(team=finances_team, name="B", weekly_salary=2200, **attrs)
+
+    response = finances_client.get("/api/economy/finances/")
+
+    assert response.status_code == 200
+    assert response.data["weekly_wage_bill"] == 3700
 
 
 def test_finances_includes_fanbase_and_weekly_change(finances_client, finances_team):

@@ -203,7 +203,7 @@ def generate_rider(
     height_cm, weight_kg = _roll_build(speciality, rng)
     potential = _roll_potential(quality, max(attributes.values()), age, peak_age, rng)
 
-    return Rider(
+    rider = Rider(
         name=_roll_name(nationality, rng),
         nationality=nationality,
         speciality=speciality,
@@ -218,6 +218,13 @@ def generate_rider(
         training_affinity=_roll_training_affinity(speciality, rng),
         **attributes,
     )
+    # Imported here, not at module scope: riders.pricing imports
+    # SPECIALITY_PROFILES from this module, so a module-scope import back
+    # would be circular. See specs/rider-salaries-plan.md, generation.py
+    # section.
+    from .pricing import weekly_salary_for
+    rider.weekly_salary = weekly_salary_for(rider)
+    return rider
 
 
 def generate_roster(

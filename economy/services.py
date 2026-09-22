@@ -4,6 +4,7 @@ import random
 
 from django.db import IntegrityError, transaction
 from django.db.models import Count, QuerySet, Sum
+from django.db.models.functions import Coalesce
 from teams.models import Team
 
 from .models import (
@@ -14,7 +15,6 @@ from .models import (
     STARTING_BALANCE,
     STARTING_FANBASE,
     WEEKLY_FANBASE_DECAY,
-    WEEKLY_WAGE_PER_RIDER,
     FanbaseEntry,
     LedgerEntry,
     SponsorContract,
@@ -141,6 +141,18 @@ def reset_to_starting_balance(team, *, at) -> LedgerEntry | None:
     )
 
 
+def payroll_for(team) -> int:
+    """This team's current weekly wage bill: the sum of its riders' actual
+    salaries, never a flat per-head rate (#25). 0 for an empty roster, not
+    None — same Coalesce reasoning as charge_weekly_wages, below."""
+    return (
+        Team.objects.filter(pk=team.pk)
+        .annotate(payroll=Coalesce(Sum("riders__weekly_salary"), 0))
+        .values_list("payroll", flat=True)
+        .get()
+    )
+
+
 def charge_weekly_wages(week) -> int:
     """Debit every team one combined wage entry for `week`. Returns how
     many entries were written.
@@ -150,22 +162,29 @@ def charge_weekly_wages(week) -> int:
     WeekTransition row (unique on `week`, written before this runs); the
     (team, week) constraint below is a second line of defence.
 
+    The charge is the sum of each team's riders' actual weekly_salary, not
+    WEEKLY_WAGE_PER_RIDER times a head count (#25) — that constant now only
+    anchors the calibration in riders.pricing. Sum() returns None for a
+    team with no riders; Coalesce(..., 0) is what keeps that team's entry a
+    real zero rather than a crash.
+
     One atomic() per create, never one around the loop: an IntegrityError
     poisons the enclosing transaction in Django. Same shape as
     schedule.services.process_transitions and staff's
     _write_training_reports, for the same reason.
     """
-    counts = dict(
-        Team.objects.annotate(n=Count("riders")).values_list("pk", "n")
-    )
+    totals = Team.objects.annotate(
+        n=Count("riders"),
+        payroll=Coalesce(Sum("riders__weekly_salary"), 0),
+    ).values_list("pk", "n", "payroll")
     written = 0
-    for team_id, rider_count in counts.items():
+    for team_id, rider_count, payroll in totals:
         with transaction.atomic():
             try:
                 LedgerEntry.objects.create(
                     team_id=team_id,
                     kind=LedgerEntry.Kind.WAGES,
-                    amount=-(rider_count * WEEKLY_WAGE_PER_RIDER),
+                    amount=-payroll,
                     occurred_at=week.starts_at,
                     week=week,
                     rider_count=rider_count,

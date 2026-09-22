@@ -86,6 +86,12 @@ export function Finances() {
               minWidth={160}
               dark={false}
             />
+            <StatTile
+              label="WEEKLY WAGES"
+              value={formatMoney(finances.weekly_wage_bill)}
+              minWidth={160}
+              dark={false}
+            />
           </>
         }
       />

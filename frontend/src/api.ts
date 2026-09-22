@@ -220,7 +220,8 @@ export async function putSquad(raceId: number, riderIds: number[], leaderId: num
 
 /** Ratings are the 0-10 display scale — see riders/display.py. The five
  * hidden traits (potential, peak age, decline rate, injury proneness,
- * training affinity) never reach this client at all. */
+ * training affinity) never reach this client at all. `weekly_salary` is
+ * exact whole credits, never mapped onto the display scale. */
 export interface Rider {
   id: number
   name: string
@@ -235,6 +236,7 @@ export interface Rider {
   resistance: number
   positioning: number
   freshness: number
+  weekly_salary: number
 }
 
 export async function getRiders(): Promise<Rider[]> {
@@ -436,11 +438,13 @@ export interface LedgerEntry {
 /** A team's whole financial state in one payload: the running balance and
  * its full history, newest first, plus the team's fanbase and how it moved
  * this week (`fanbase_change` is 0 before the first weekly row — the server
- * sends the change, not two raw numbers to diff). */
+ * sends the change, not two raw numbers to diff), and `weekly_wage_bill` —
+ * the roster's current payroll, not the ledger's last wages entry. */
 export interface Finances {
   balance: number
   fanbase: number
   fanbase_change: number
+  weekly_wage_bill: number
   entries: LedgerEntry[]
 }
 

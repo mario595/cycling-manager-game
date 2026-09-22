@@ -14,9 +14,10 @@ simulation itself (`race_engine/`).
 Every rider carries two kinds of attribute:
 
 - **Visible**: `speciality`, `nationality`, `height_cm`, `weight_kg`, `age`,
-  `freshness`, and the five engine attributes (`climb`, `sprint`, `flat`,
-  `resistance`, `positioning`). These are what `api.RiderSerializer` and
-  `api.SquadRiderSerializer` ship to the player.
+  `freshness`, `weekly_salary`, and the five engine attributes (`climb`,
+  `sprint`, `flat`, `resistance`, `positioning`). These are what
+  `api.RiderSerializer` and `api.SquadRiderSerializer` ship to the player
+  (`weekly_salary` is roster-only — see *Salary*, below).
 - **Hidden**: `potential`, `peak_age`, `decline_rate`, `injury_proneness`,
   `training_affinity`, `recovery_rate`, `growth_debt`. **Never add one of
   these to a serializer.** The whole premise of the hidden-trait design is that the
@@ -212,6 +213,52 @@ riders who finished a race in the week being settled. This keeps the
 dependency direction in `AGENTS.md` intact — `riders/` may not import
 `racing/` or `world/`, so the consumption and the recovery both live where
 the caller lives.
+
+## Salary
+
+`weekly_salary` is a rider's weekly wage, stored in whole credits, visible
+on the roster and never mapped through `to_display_scale` — it is money,
+not a 0-100 attribute ([#25](https://github.com/mario595/cycling-manager/issues/25)).
+`pricing.weekly_salary_for(rider)` is the single formula that computes it,
+from two inputs only:
+
+- **`strength(rider)`** — the five engine attributes, weighted by
+  `SPECIALITY_PROFILES` (the same table `generation.py` uses to shape a
+  starting roster), so a Climber's price tracks their climb more than their
+  sprint.
+- **`age_multiplier(rider.age)`** — a mild adjustment, at most ±15%, that
+  reads the visible `age` field only.
+
+**No hidden trait feeds it, deliberately.** `potential` says how good a
+rider could become; pricing off it would put a number on screen that
+silently reveals a trait the player is never shown directly, which
+*Visible vs hidden* above treats as a defect everywhere else it could
+happen. Two riders who look identical on the roster page cost the same,
+even if one has far more room to grow — an accepted imprecision, not an
+oversight.
+
+**Set once, frozen for the season.** `generate_rider()` calls
+`weekly_salary_for` and stores the result; nothing recomputes it
+afterwards, including the age curve and weekly training moving the same
+rider's attributes every week. What happens to a salary at a season
+boundary — recalculated, renegotiated, refused — is
+[#26](https://github.com/mario595/cycling-manager/issues/26)'s decision,
+not this app's.
+
+**Calibrated against generated rosters, not the 1-100 range.** A
+generated rider's attributes cluster well under 100 (`QUALITY_SPREAD`,
+`_MAX_STARTING_ATTRIBUTE` above), so `pricing.py`'s constants
+(`SALARY_AT_MIN_STRENGTH`, `SALARY_AT_MAX_STRENGTH`, the strength
+exponent) were picked by sampling `generate_rider`, not by reasoning about
+the theoretical range — see `riders/tests/test_pricing.py`'s two
+calibration tests, which pin the spread at roughly 10x between a weak and
+a strong generated rider and the average at `economy.models.
+WEEKLY_WAGE_PER_RIDER`. Retuning the formula means re-running those tests
+until they pass again, not eyeballing the constants.
+
+`economy.services.charge_weekly_wages` sums every team's riders'
+`weekly_salary` each week — see `economy/README.md`, *Wages run off week
+transitions*.
 
 ## Generation
 
