@@ -2,17 +2,10 @@ import { useState } from 'react'
 
 import { signOffer, type SponsorContract, type SponsorOffer } from '../api'
 import { Button, Card, PageBody, PageHeading } from '../components/primitives'
+import { formatMoney } from '../format'
 import { color, font } from '../theme'
 import { useAuth } from '../useAuth'
 import { useSponsors } from '../useSponsors'
-
-/** The game's abstract currency — see AGENTS.md, *Displaying game money*.
- * Thousands-separated, never decimals, prefixed "$" — matching
- * Finances.tsx's formatMoney. The range's two ends are both money, so both
- * get the prefix. */
-function formatMoney(amount: number): string {
-  return `$${amount.toLocaleString('en-US')}`
-}
 
 export function Sponsors() {
   const { me, loading: authLoading } = useAuth()

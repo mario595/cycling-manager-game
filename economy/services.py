@@ -438,3 +438,50 @@ def pay_sponsorship(week, *, points_by_team: dict[int, int]) -> int:
             except IntegrityError:
                 continue          # already paid; correct outcome, not an error
     return written
+
+
+def charge_trainer_salaries(week, *, salary_by_team: dict[int, int]) -> int:
+    """Debit every team with a trainer its trainer's weekly salary for
+    `week`. Returns entries written.
+
+    `salary_by_team` maps team pk to that team's trainer's weekly salary —
+    world/ (which may import staff/ and economy/) builds it; economy/
+    derives nothing from staff/ (AGENTS.md). Same exactly-once shape as
+    charge_weekly_wages: one atomic() per create so an IntegrityError on an
+    already-charged team cannot poison the loop.
+    """
+    written = 0
+    for team_id, salary in salary_by_team.items():
+        with transaction.atomic():
+            try:
+                LedgerEntry.objects.create(
+                    team_id=team_id,
+                    kind=LedgerEntry.Kind.TRAINER_SALARY,
+                    amount=-salary,
+                    occurred_at=week.starts_at,
+                    week=week,
+                    description="Trainer salary",
+                )
+                written += 1
+            except IntegrityError:
+                continue          # already charged; correct outcome, not an error
+    return written
+
+
+def charge_trainer_fee(team, *, amount: int, at, description: str) -> LedgerEntry:
+    """Debit `team` the one-off fee for hiring a trainer. Returns the row.
+
+    `amount` is negative (debits only), `at` is game time, `description`
+    names the trainer. The caller — api/StaffView, or the day an AI team
+    hires (world/) — passes both itself, per the custom-`at` convention used
+    across this module. No IntegrityError handling here: unlike the weekly
+    charges the fee has no (team, week) constraint (that one-salary rule is
+    W2's by design — a team may pay several fees over a season).
+    """
+    return LedgerEntry.objects.create(
+        team=team,
+        kind=LedgerEntry.Kind.TRAINER_FEE,
+        amount=amount,
+        occurred_at=at,
+        description=description,
+    )

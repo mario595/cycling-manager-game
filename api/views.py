@@ -17,6 +17,7 @@ from economy.services import (
     OfferNotAvailable,
     active_contract,
     balance_for,
+    charge_trainer_fee,
     ensure_offer_round,
     entries_for,
     fanbase_entries_for,
@@ -29,7 +30,9 @@ from racing.models import SQUAD_SIZE, Race
 from racing.services import SquadError, set_squad, suggested_squad
 from riders.models import ENGINE_ATTRIBUTES, Rider
 from schedule.services import current_position
+from staff.pricing import hire_fee
 from staff.services import (
+    InsufficientFunds,
     NoTrainerHired,
     SlotOccupied,
     TrainerNotAvailable,
@@ -446,15 +449,20 @@ class StaffView(APIView):
 
         trainer = trainer_for(team)
         pool = [] if trainer is not None else list(available_trainers())
-        return Response(StaffSerializer({"trainer": trainer, "pool": pool}).data)
+        return Response(
+            StaffSerializer(
+                {"trainer": trainer, "pool": pool, "balance": balance_for(team)}
+            ).data
+        )
 
 
 class HireTrainerView(APIView):
-    """Hire one pool trainer into the caller's empty slot.
+    """Hire one pool trainer into the caller's empty slot, debiting the
+    hire fee.
 
-    409, not 400, for "already hired" and "slot occupied": the request is
-    well-formed but the world's state refuses it — the same split
-    ClaimTeamView documents.
+    409, not 400, for "already hired", "slot occupied" and "cannot
+    afford it": the request is well-formed but the world's state refuses
+    it — the same split ClaimTeamView documents.
     """
 
     def post(self, request):
@@ -465,9 +473,20 @@ class HireTrainerView(APIView):
         serializer = HireTrainerSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        def charge(trainer):
+            fee = hire_fee(trainer)
+            if balance_for(team) < fee:
+                raise InsufficientFunds("You cannot afford this trainer's fee.")
+            charge_trainer_fee(
+                team,
+                amount=-fee,
+                at=now(),
+                description=f"Hired {trainer.name}",
+            )
+
         try:
-            hire_trainer(team, serializer.validated_data["trainer_id"])
-        except (TrainerNotAvailable, SlotOccupied) as exc:
+            hire_trainer(team, serializer.validated_data["trainer_id"], charge=charge)
+        except (TrainerNotAvailable, SlotOccupied, InsufficientFunds) as exc:
             return Response({"detail": str(exc)}, status=409)
 
         return Response(status=204)

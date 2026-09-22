@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 
 import type { Rider } from '../api'
-import { Bar, Card, LabelBar, PageBody, PageHeading, StatTile } from '../components/primitives'
+import { Bar, Card, Chip, ChipLabel, LabelBar, PageBody, PageHeading, StatTile } from '../components/primitives'
 import { barColor, color, font } from '../theme'
 import { useAuth } from '../useAuth'
 import { useRoster } from '../useRoster'
@@ -148,52 +148,6 @@ export function Roster() {
         {selected ? <RiderPanel rider={selected} onClose={() => setPicked(null)} /> : null}
       </div>
     </PageBody>
-  )
-}
-
-function ChipLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <span
-      style={{
-        fontSize: 10.5,
-        letterSpacing: '1.2px',
-        color: color.mutedStrong,
-        fontFamily: font.mono,
-        marginRight: 2,
-      }}
-    >
-      {children}
-    </span>
-  )
-}
-
-function Chip({
-  children,
-  active,
-  onClick,
-}: {
-  children: React.ReactNode
-  active: boolean
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      style={{
-        padding: '6px 12px',
-        borderRadius: 8,
-        fontSize: 12.5,
-        cursor: 'pointer',
-        border: `1px solid ${active ? color.ink : color.borderButton}`,
-        background: active ? color.ink : color.surface,
-        color: active ? '#FFFFFF' : '#565A61',
-        fontWeight: active ? 600 : 400,
-      }}
-    >
-      {children}
-    </button>
   )
 }
 

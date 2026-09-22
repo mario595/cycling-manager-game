@@ -7,7 +7,10 @@ from core.models import TimeStampedModel
 #: The balance every team starts on, and that a claim resets to. Game
 #: balance, not deployment configuration — deliberately here, not in
 #: settings. A twelve-rider team burns WEEKLY_WAGE_PER_RIDER * 12 = 14,400
-#: a week, so this covers roughly 34 weeks — comfortably past a season.
+#: a week, so this covers roughly 34 weeks — down to roughly 26 once the
+#: team also carries a top-end trainer on SALARY_AT_MAX_SPECIALITY = 4,500
+#: a week. Still comfortably past a season, and not worth retuning before
+#: prize money (#19) and sponsorship (#22) land.
 STARTING_BALANCE = 500_000
 #: The flat wage one rider costs per week. What #25 replaces with a
 #: per-rider salary.
@@ -60,6 +63,8 @@ class LedgerEntry(TimeStampedModel):
         TAKEOVER = "takeover", "Team taken over"
         MERCHANDISE = "merchandise", "Merchandise revenue"
         SPONSORSHIP = "sponsorship", "Sponsorship"
+        TRAINER_SALARY = "trainer_salary", "Trainer salary"
+        TRAINER_FEE = "trainer_fee", "Trainer hire fee"
 
     team = models.ForeignKey(
         "teams.Team",
@@ -80,7 +85,7 @@ class LedgerEntry(TimeStampedModel):
         null=True,
         blank=True,
         related_name="ledger_entries",
-        help_text="Set on wages entries only. Null elsewhere.",
+        help_text="Set on wages, sponsorship and trainer salary entries only. Null elsewhere.",
     )
     rider_count = models.PositiveSmallIntegerField(
         default=0,
@@ -108,6 +113,11 @@ class LedgerEntry(TimeStampedModel):
                 fields=["team", "week"],
                 condition=models.Q(kind="sponsorship"),
                 name="one_sponsorship_entry_per_team_per_week",
+            ),
+            models.UniqueConstraint(
+                fields=["team", "week"],
+                condition=models.Q(kind="trainer_salary"),
+                name="one_trainer_salary_per_team_per_week",
             ),
         ]
         indexes = [

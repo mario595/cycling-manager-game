@@ -1,17 +1,9 @@
 import { type LedgerEntry } from '../api'
 import { Card, CardHeader, PageBody, PageHeading, StatTile } from '../components/primitives'
+import { formatMoney } from '../format'
 import { color, font } from '../theme'
 import { useAuth } from '../useAuth'
 import { useFinances } from '../useFinances'
-
-/** The game's abstract currency — see AGENTS.md, *Displaying game money*.
- * Thousands-separated, never decimals, prefixed "$" so it reads as money at
- * a glance and is never mistaken for a fan count. The sign goes before the
- * "$" (e.g. "−$12,400"), not between it and the digits. */
-function formatMoney(amount: number): string {
-  const sign = amount < 0 ? '−' : ''
-  return `${sign}$${Math.abs(amount).toLocaleString('en-US')}`
-}
 
 /** `occurred_at` is an ISO game-time string; render it as a calendar date. */
 function formatDate(occurredAt: string | null): string {
@@ -24,6 +16,8 @@ const KIND_LABELS: Record<LedgerEntry['kind'], string> = {
   takeover: 'Team takeover',
   merchandise: 'Merchandise revenue',
   sponsorship: 'Sponsorship',
+  trainer_fee: 'Trainer hire fee',
+  trainer_salary: 'Trainer salary',
 }
 
 /** The fanbase tile's suffix: how the team's support moved this week, in the

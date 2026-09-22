@@ -9,9 +9,9 @@ generation (`generation.py`), and the season-boundary top-up
 weekly training focus and its rollover record — `TrainingFocus` and
 `TrainingWeekReport`, the heart of
 [#36](https://github.com/mario595/cycling-manager/issues/36); see *Weekly
-training*, below. Not a fee or a salary for the slot — that is
-[#69](https://github.com/mario595/cycling-manager/issues/69), deferred until
-the ledger (`economy/`) exists. Not the physio or scout roles the original
+training*, below. What a trainer *costs* — the hire fee and the weekly
+salary — is derived from their speciality in `pricing.py`, never stored; see
+*What a trainer costs*, below. Not the physio or scout roles the original
 brief also names — both wait on their own dependencies
 ([#41](https://github.com/mario595/cycling-manager/issues/41) for physio,
 transfers/youth intake for scout).
@@ -48,6 +48,44 @@ between "clear speciality" and "close second", and #36 needs to scale a
 training effect off the trainer's exact score in the focused skill, not off
 a number already rounded away.
 
+## What a trainer costs
+
+A trainer costs a one-off **hire fee** and a **weekly salary**, both derived
+from their speciality score by `pricing.py` and **never stored** (Design
+decision 1). There is no `fee` or `salary` column on `Trainer` and no
+migration to backfill: a trainer's skills are fixed for life, so a stored
+price could only ever drift from the skills it is supposed to reflect.
+
+- `weekly_salary(trainer)` interpolates linearly from
+  `SALARY_AT_MIN_SPECIALITY` (1,500) at the bottom of the speciality band (70)
+  to `SALARY_AT_MAX_SPECIALITY` (4,500) at the top (95), rounded to the
+  nearest 50 so prices read as prices rather than hash output. The score is
+  read through the derived `speciality` property
+  (`getattr(trainer, trainer.speciality)`), so a sprinter prices off sprint,
+  not off whichever attribute happens to be first.
+- `hire_fee(trainer)` is `FEE_WEEKS_OF_SALARY` (12) × the weekly salary.
+
+**The fee is the cooldown firing deliberately does not have** (Design
+decision 7). `fire_trainer` is free, instant and has no penalty, so without a
+fee a manager could fire before a lean week and rehire after it at no cost.
+Twelve weeks is a full season, so dodging a few weeks never pays; and because
+a trainer's skills never change, a rehire can never be cheaper than the first
+hire. Overrule the constant if the balance feels wrong — it is one line.
+
+**Hiring takes an injected `charge` callback, not an `economy/` import**
+(Design decisions 2 and 3):
+
+```python
+hire_trainer(team, trainer_id, *, charge=None)
+```
+
+`charge` runs inside `hire_trainer`'s transaction, after the post-lock
+availability re-check and before the hire is written, so a raise (the API's
+`InsufficientFunds`, or anything else) rolls the whole thing back and leaves
+the trainer in the pool. `staff/` may not import `economy/` (`AGENTS.md`), so
+the caller passes the debit — `api/StaffView` books the fee; the seed path
+passes no callback at all.
+
 ## The pool is shared, and hiring is contended
 
 Every unemployed trainer (`team__isnull=True`) is visible to every team —
@@ -74,6 +112,11 @@ row and try the next one. Hiring is the opposite: the manager asked for
 silently vanish from the query, and the caller would see "not available"
 indistinguishable from a genuine mistake, rather than "someone just took
 this one".
+
+The hire fee is debited through the same transaction as the hire (the
+injected `charge` callback, below in *What a trainer costs*), so a trainer
+and their fee can never end up out of step: either both land or neither
+does.
 
 ## Generation guarantees the speciality
 
@@ -158,11 +201,6 @@ mainly useful for demos and manual testing.
 
 ## Future work / possible improvements
 
-- **Fee and recurring salary** — [#69](https://github.com/mario595/cycling-manager/issues/69).
-  Unblocked: the ledger it debits from (`economy/`, [#20](https://github.com/mario595/cycling-manager/issues/20))
-  exists and the tick already writes per-week `wages` entries to every team
-  (`world/README.md`, *How a tick works*); a trainer salary is just another
-  ledger row. Hiring today is free.
 - **Physio slot** — once [#41](https://github.com/mario595/cycling-manager/issues/41)
   (injuries) gives it something to affect.
 - **Scout slot** — once transfers/youth intake give it something to narrow.
