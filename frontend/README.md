@@ -8,10 +8,10 @@ all reading the real API. No screen renders invented data.
 | Route | Screen | State |
 |-------|--------|-------|
 | `/` | Dashboard | Built — season, standings, next race and squad status from the API, no fixture data |
-| `/roster` | Roster | Built — filter, sort, rider detail panel and the same freshness bar as squad selection, from the API, no fixture data |
+| `/roster` | Roster | Built — filter, sort, rider detail panel, each rider's weekly salary, and the same freshness bar as squad selection, from the API, no fixture data |
 | `/staff` | Staff | Built — hire/fire a trainer, with each trainer's fee and weekly salary, from the API, no fixture data |
 | `/sponsors` | Sponsors | Built — sign one of three sponsor offers, or see the signed contract, from the API, no fixture data |
-| `/finances` | Finances | Built — balance and ledger history from the API, no fixture data |
+| `/finances` | Finances | Built — balance, weekly wage bill and ledger history from the API, no fixture data |
 | `/training` | Training | Built — set the weekly focus, see last week's moves, from the API, no fixture data |
 | `/calendar` | Calendar | Built — twelve weeks from the API, no fixture data |
 | `/race/:raceId` | Race | Built — the full race screen: course profile and squad before it runs, course profile and results after, from the API, no fixture data |
