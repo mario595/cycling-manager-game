@@ -8,6 +8,7 @@ from schedule.models import Season, Week
 from staff.generation import TRAINERS_PER_SEASON_BOUNDARY
 from staff.models import DEFAULT_FOCUS, Trainer, TrainingFocus, TrainingWeekReport
 from staff.services import (
+    InsufficientFunds,
     NoTrainerHired,
     SlotOccupied,
     TrainerNotAvailable,
@@ -57,6 +58,52 @@ def test_hire_when_slot_occupied_is_refused(trainer, team):
 def test_hire_unknown_id_is_refused(team):
     with pytest.raises(TrainerNotAvailable):
         hire_trainer(team, 999999)
+
+
+def test_hire_invokes_charge(trainer, team):
+    called = []
+
+    def charge(t):
+        called.append(t)
+
+    hire_trainer(team, trainer.pk, charge=charge)
+
+    assert called == [trainer]
+    trainer.refresh_from_db()
+    assert trainer.team_id == team.pk
+
+
+def test_charge_raising_rolls_back_the_hire(trainer, team):
+    def charge(t):
+        raise InsufficientFunds("Not enough credits.")
+
+    with pytest.raises(InsufficientFunds):
+        hire_trainer(team, trainer.pk, charge=charge)
+
+    trainer.refresh_from_db()
+    assert trainer.team is None
+    assert trainer in available_trainers()
+
+
+def test_hire_without_charge_still_works(trainer, team):
+    # The seed path: an unemployed trainer exists to be claimed, fee-free.
+    hire_trainer(team, trainer.pk)
+
+    trainer.refresh_from_db()
+    assert trainer.team_id == team.pk
+
+
+def test_charge_not_called_when_trainer_already_taken(trainer, team, other_team):
+    hire_trainer(team, trainer.pk)
+    called = []
+
+    def charge(t):
+        called.append(t)
+
+    with pytest.raises(TrainerNotAvailable):
+        hire_trainer(other_team, trainer.pk, charge=charge)
+
+    assert called == []
 
 
 def test_fire_returns_the_trainer_to_the_pool(trainer, team):

@@ -322,7 +322,9 @@ export async function getStandings(): Promise<Standings> {
 
 /** Skills are the 0-10 display scale, same convention as Rider — see
  * riders/display.py. `speciality` is the skill this trainer is best at,
- * derived server-side, not a separate rating. */
+ * derived server-side, not a separate rating. `hire_fee` is the one-off
+ * cost of hiring and `weekly_salary` what they cost every week, both
+ * derived server-side from the speciality (staff/pricing.py). */
 export interface Trainer {
   id: number
   name: string
@@ -335,11 +337,14 @@ export interface Trainer {
     resistance: number
     positioning: number
   }
+  hire_fee: number
+  weekly_salary: number
 }
 
 export interface Staff {
   trainer: Trainer | null
   pool: Trainer[]
+  balance: number
 }
 
 export async function getStaff(): Promise<Staff> {
@@ -397,13 +402,20 @@ export async function setTrainingFocus(attribute: string): Promise<void> {
 }
 
 /** One ledger entry as the Finances screen needs it. `kind` is the machine
- * name (starting_balance/wages/takeover/merchandise); the screen renders the
- * label. `rider_count` is set on wage entries only — null elsewhere.
+ * name (starting_balance/wages/takeover/merchandise/trainer_fee/
+ * trainer_salary); the screen renders the label. `rider_count` is set on
+ * wage entries only — null elsewhere.
  * `balance_after` is computed server-side: the running balance just after
  * this entry. */
 export interface LedgerEntry {
   id: number
-  kind: 'starting_balance' | 'wages' | 'takeover' | 'merchandise'
+  kind:
+    | 'starting_balance'
+    | 'wages'
+    | 'takeover'
+    | 'merchandise'
+    | 'trainer_fee'
+    | 'trainer_salary'
   description: string
   amount: number
   occurred_at: string | null

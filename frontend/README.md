@@ -9,7 +9,7 @@ all reading the real API. No screen renders invented data.
 |-------|--------|-------|
 | `/` | Dashboard | Built — season, standings, next race and squad status from the API, no fixture data |
 | `/roster` | Roster | Built — filter, sort, rider detail panel and the same freshness bar as squad selection, from the API, no fixture data |
-| `/staff` | Staff | Built — hire/fire a trainer, from the API, no fixture data |
+| `/staff` | Staff | Built — hire/fire a trainer, with each trainer's fee and weekly salary, from the API, no fixture data |
 | `/finances` | Finances | Built — balance and ledger history from the API, no fixture data |
 | `/training` | Training | Built — set the weekly focus, see last week's moves, from the API, no fixture data |
 | `/calendar` | Calendar | Built — twelve weeks from the API, no fixture data |
@@ -153,6 +153,10 @@ npm --prefix frontend run build && .venv/bin/python manage.py runserver
   hover rules, which inline styles cannot express.
 - **Colours come from `src/theme.ts`**, never as literals in components. The
   design repeats its hex codes inline; they are named once there instead.
+- **Money goes through `src/format.ts`'s `formatMoney`**, which thousands-
+  separates and prefixes `$` (the sign before the `$`), per `AGENTS.md`,
+  *Displaying game money*. It is shared by `Finances.tsx` and `Staff.tsx`
+  rather than reimplemented per screen.
 - **`src/navigation.ts` is the single source of truth** for the sidebar and
   the router both. A nav item cannot exist without a route.
 
@@ -224,7 +228,11 @@ before staff existed as a domain. It follows `Roster.tsx`'s existing
 card-and-bar composition (the same `Card`, `Bar`, `barColor` primitives, the
 same rider-card layout) rather than inventing a new visual language, so the
 screen looks consistent with the rest of the app even without a reference
-export.
+export. Since #69 each card also shows the trainer's hire fee and weekly
+salary (from the API), and the Hire button is **disabled with a visible
+reason** when the team's balance cannot cover the fee — the client-side twin
+of the API's insufficient-funds 409, so the manager is not offered a hire the
+server would refuse.
 
 `Training.tsx` is in the same position — `design/` predates weekly training
 as a feature — and follows the same rule, composing `PageHeading`, `Card`,

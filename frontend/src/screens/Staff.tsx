@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import { fireTrainer, hireTrainer, type Trainer } from '../api'
-import { Bar, Button, Card, PageBody, PageHeading } from '../components/primitives'
+import { Bar, Button, Card, Chip, ChipLabel, PageBody, PageHeading } from '../components/primitives'
+import { formatMoney } from '../format'
 import { barColor, color, font } from '../theme'
 import { useAuth } from '../useAuth'
 import { useStaff } from '../useStaff'
@@ -16,6 +17,15 @@ const SKILL_LABELS: { key: SkillKey; label: string }[] = [
   { key: 'positioning', label: 'Positioning' },
 ]
 
+type SortKey = 'hire_fee' | 'weekly_salary' | 'name' | SkillKey
+
+const SORT_OPTIONS: Array<{ key: SortKey; label: string }> = [
+  { key: 'hire_fee', label: 'Fee' },
+  { key: 'weekly_salary', label: 'Salary' },
+  { key: 'name', label: 'Name' },
+  ...SKILL_LABELS,
+]
+
 export function Staff() {
   const { me, loading: authLoading } = useAuth()
   const hasTeam = me?.team != null
@@ -23,6 +33,24 @@ export function Staff() {
   const { staff, loading, error, refresh } = useStaff()
   const [actionError, setActionError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
+  const [filter, setFilter] = useState<'All' | string>('All')
+  const [sort, setSort] = useState<SortKey>('hire_fee')
+
+  const specialities = useMemo(() => {
+    if (!staff) return []
+    return Array.from(new Set(staff.pool.map((t) => t.speciality))).sort()
+  }, [staff])
+
+  const visible = useMemo(() => {
+    if (!staff) return []
+    const list = staff.pool.filter((t) => filter === 'All' || t.speciality === filter)
+    return [...list].sort((a, b) => {
+      if (sort === 'name') return a.name.localeCompare(b.name)
+      if (sort === 'hire_fee') return a.hire_fee - b.hire_fee
+      if (sort === 'weekly_salary') return a.weekly_salary - b.weekly_salary
+      return b.skills[sort] - a.skills[sort]
+    })
+  }, [staff, filter, sort])
 
   if (authLoading || loading) return null
 
@@ -83,7 +111,7 @@ export function Staff() {
         subtitle={
           staff.trainer
             ? 'Your trainer improves riders fastest in their speciality.'
-            : 'Hire a trainer from the pool below — it is free.'
+            : 'Hire a trainer from the pool below — you pay a fee now, then a weekly salary.'
         }
       />
 
@@ -96,31 +124,82 @@ export function Staff() {
       {staff.trainer ? (
         <TrainerCard trainer={staff.trainer} action={<Button onClick={handleFire} style={{ opacity: pending ? 0.6 : 1 }}>Fire</Button>} />
       ) : (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(288px, 1fr))',
-            gap: 12,
-          }}
-        >
-          {staff.pool.map((trainer) => (
-            <TrainerCard
-              key={trainer.id}
-              trainer={trainer}
-              action={
-                <Button onClick={() => handleHire(trainer.id)} style={{ opacity: pending ? 0.6 : 1 }}>
-                  Hire
-                </Button>
-              }
-            />
-          ))}
-        </div>
+        <>
+          <Card style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '14px 16px' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+              <ChipLabel>SPECIALITY</ChipLabel>
+              {['All', ...specialities].map((f) => (
+                <Chip key={f} active={filter === f} onClick={() => setFilter(f)}>
+                  {f}
+                </Chip>
+              ))}
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+              <ChipLabel>SORT</ChipLabel>
+              {SORT_OPTIONS.map((o) => (
+                <Chip key={o.key} active={sort === o.key} onClick={() => setSort(o.key)}>
+                  {o.label}
+                </Chip>
+              ))}
+              <span
+                style={{
+                  marginLeft: 'auto',
+                  fontSize: 12,
+                  color: color.muted,
+                  fontFamily: font.mono,
+                }}
+              >
+                {visible.length} of {staff.pool.length} trainers
+              </span>
+            </div>
+          </Card>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(288px, 1fr))',
+              gap: 12,
+            }}
+          >
+            {visible.map((trainer) => {
+              const affordable = trainer.hire_fee <= staff.balance
+              return (
+                <TrainerCard
+                  key={trainer.id}
+                  trainer={trainer}
+                  note={
+                    affordable
+                      ? undefined
+                      : "You cannot afford this trainer's fee."
+                  }
+                  action={
+                    <Button
+                      onClick={() => handleHire(trainer.id)}
+                      disabled={!affordable || pending}
+                      style={{ opacity: pending || !affordable ? 0.6 : 1 }}
+                    >
+                      Hire
+                    </Button>
+                  }
+                />
+              )
+            })}
+          </div>
+        </>
       )}
     </PageBody>
   )
 }
 
-function TrainerCard({ trainer, action }: { trainer: Trainer; action: React.ReactNode }) {
+function TrainerCard({
+  trainer,
+  action,
+  note,
+}: {
+  trainer: Trainer
+  action: React.ReactNode
+  note?: string
+}) {
   return (
     <Card style={{ padding: '15px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -186,6 +265,28 @@ function TrainerCard({ trainer, action }: { trainer: Trainer; action: React.Reac
           )
         })}
       </div>
+
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 10,
+          borderTop: `1px solid ${color.dividerStrong}`,
+          paddingTop: 10,
+        }}
+      >
+        <span style={{ fontSize: 12, color: color.mutedStrong, fontFamily: font.mono }}>
+          Fee {formatMoney(trainer.hire_fee)}
+        </span>
+        <span style={{ fontSize: 12, color: color.mutedStrong, fontFamily: font.mono }}>
+          {formatMoney(trainer.weekly_salary)}/week
+        </span>
+      </div>
+
+      {note ? (
+        <div style={{ fontSize: 12, color: color.negative }}>{note}</div>
+      ) : null}
     </Card>
   )
 }

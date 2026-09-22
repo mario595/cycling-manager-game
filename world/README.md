@@ -120,6 +120,16 @@ reads `now()` once, then finds and processes whatever is due, in four steps:
    `world/migrations/0006`), so each `TickRun` row records how many wage
    entries its parse wrote; idempotency is the `(team, week)` constraint,
    the same defence `charge_weekly_wages` and `WeekTransition` lean on.
+   Directly after wages the same loop charges each **staffed** team its
+   trainer's weekly salary —
+   `economy.services.charge_trainer_salaries(week, salary_by_team=...)`,
+   where `salary_by_team` is built here from
+   `staff.pricing.weekly_salary` (this is the one place `staff/` meets
+   `economy/`; neither may import the other). One `trainer_salary` row per
+   staffed team per week, dated to `week.starts_at`, counted on
+   `TickRun.trainer_salary_entries` (`world/migrations/0008`). An unstaffed
+   team gets no row at all, unlike wages' `amount = 0` entry — see
+   `economy/README.md`, *Trainer salaries run off the same loop*.
    The same loop then settles the week's economy side (#21):
    `economy.services.apply_weekly_fanbase(week, points_by_team=...)`
    adjusts every team's fanbase and `economy.services.pay_merchandise(week)`
