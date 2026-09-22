@@ -248,10 +248,18 @@ matches.
 
 `Sponsors.tsx` is in the same position — `design/` predates sponsorship as
 a feature — and follows `Staff.tsx`'s card-grid composition: one card per
-offer (sponsor name, profile character, weekly baseline, the low–high range)
-with a Sign button, or a single card for the signed contract once one
-exists. Every money figure carries the `$` prefix (`AGENTS.md`, *Displaying
-game money*) — including both ends of a range, since the range is money too.
+offer (sponsor name, the low–high weekly range) with a Sign button, or a
+single card for the signed contract once one exists. **The card shows only
+the range, never `weekly_base` on its own** — `weekly_base` is the swing
+formula's anchor, not a number the player actually receives (unless the
+offer is `STEADY`, whose floor and ceiling equal it exactly), so surfacing
+it standalone read as a promised amount and confused players in practice.
+The range is the honoured contract (`economy/README.md`, *Sponsorship* —
+floor/ceiling are stored and never repriced), so it is what the player
+should read the offer by; a tight range already conveys "steady" and a wide
+one already conveys "volatile" without a separate profile label or blurb.
+Every money figure carries the `$` prefix (`AGENTS.md`, *Displaying game
+money*) — including both ends of the range, since the range is money too.
 `useSponsors.ts` polls the same way `useStaff.ts` does, and exposes
 `refresh()` so signing updates the screen immediately rather than waiting
 for the next poll.

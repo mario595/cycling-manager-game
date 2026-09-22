@@ -88,8 +88,7 @@ describe('Sponsors', () => {
   it('formats money with $', () => {
     renderSponsors()
 
-    expect(screen.getByText('$4,250')).toBeInTheDocument()
-    expect(screen.getByText('$5,000')).toBeInTheDocument()
+    expect(screen.getByText('$4,250 – $4,250')).toBeInTheDocument()
     expect(screen.getByText('$2,188 – $13,750')).toBeInTheDocument()
   })
 
@@ -126,7 +125,7 @@ describe('Sponsors', () => {
 
     expect(screen.getByText('Ridgeline Bikes')).toBeInTheDocument()
     expect(screen.queryByText('Sign')).not.toBeInTheDocument()
-    expect(screen.getByText('$3,000 – $8,000 range')).toBeInTheDocument()
+    expect(screen.getByText('$3,000 – $8,000')).toBeInTheDocument()
   })
 
   it('shows an error message when signing fails', async () => {

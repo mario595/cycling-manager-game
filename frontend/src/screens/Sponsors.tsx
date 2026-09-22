@@ -115,36 +115,26 @@ function OfferCard({ offer, action }: { offer: SponsorOffer; action: React.React
   return (
     <Card style={{ padding: '15px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <div
-            style={{
-              fontSize: 14.5,
-              fontWeight: 600,
-              letterSpacing: '-0.2px',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {offer.sponsor_name}
-          </div>
-          <div style={{ fontSize: 11, color: color.mutedStrong, fontFamily: font.mono }}>
-            {offer.label.toUpperCase()}
-          </div>
+        <div
+          style={{
+            flex: 1,
+            minWidth: 0,
+            fontSize: 14.5,
+            fontWeight: 600,
+            letterSpacing: '-0.2px',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {offer.sponsor_name}
         </div>
         {action}
       </div>
 
-      <div style={{ fontSize: 12.5, color: '#565A61' }}>{offer.blurb}</div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <div style={{ fontSize: 20, fontWeight: 700, fontFamily: font.mono }}>
-          {formatMoney(offer.weekly_base)}
-          <span style={{ fontSize: 12, fontWeight: 500, color: color.muted }}> / week</span>
-        </div>
-        <div style={{ fontSize: 12, color: color.mutedStrong, fontFamily: font.mono }}>
-          {formatMoney(offer.floor_amount)} – {formatMoney(offer.ceiling_amount)}
-        </div>
+      <div style={{ fontSize: 20, fontWeight: 700, fontFamily: font.mono }}>
+        {formatMoney(offer.floor_amount)} – {formatMoney(offer.ceiling_amount)}
+        <span style={{ fontSize: 12, fontWeight: 500, color: color.muted }}> / week</span>
       </div>
     </Card>
   )
@@ -158,20 +148,13 @@ function ContractCard({ contract }: { contract: SponsorContract }) {
           {contract.sponsor_name}
         </div>
         <div style={{ fontSize: 11, color: color.mutedStrong, fontFamily: font.mono }}>
-          {contract.label.toUpperCase()} · SIGNED
+          SIGNED
         </div>
       </div>
 
-      <div style={{ fontSize: 12.5, color: '#565A61' }}>{contract.blurb}</div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <div style={{ fontSize: 20, fontWeight: 700, fontFamily: font.mono }}>
-          {formatMoney(contract.weekly_base)}
-          <span style={{ fontSize: 12, fontWeight: 500, color: color.muted }}> / week baseline</span>
-        </div>
-        <div style={{ fontSize: 12, color: color.mutedStrong, fontFamily: font.mono }}>
-          {formatMoney(contract.floor_amount)} – {formatMoney(contract.ceiling_amount)} range
-        </div>
+      <div style={{ fontSize: 20, fontWeight: 700, fontFamily: font.mono }}>
+        {formatMoney(contract.floor_amount)} – {formatMoney(contract.ceiling_amount)}
+        <span style={{ fontSize: 12, fontWeight: 500, color: color.muted }}> / week</span>
       </div>
     </Card>
   )
