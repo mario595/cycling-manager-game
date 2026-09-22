@@ -11,6 +11,7 @@ import { Login } from './screens/Login'
 import { Race } from './screens/Race'
 import { Register } from './screens/Register'
 import { Roster } from './screens/Roster'
+import { Sponsors } from './screens/Sponsors'
 import { Staff } from './screens/Staff'
 import { Training } from './screens/Training'
 import { AuthProvider } from './useAuth'
@@ -26,6 +27,7 @@ const SCREENS: Record<string, React.ComponentType> = {
   '/roster': Roster,
   '/training': Training,
   '/staff': Staff,
+  '/sponsors': Sponsors,
   '/finances': Finances,
   '/calendar': Calendar,
   '/league': League,

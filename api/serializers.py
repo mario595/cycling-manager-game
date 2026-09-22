@@ -339,3 +339,47 @@ class FinancesSerializer(serializers.Serializer):
     fanbase = serializers.IntegerField()
     fanbase_change = serializers.IntegerField()
     entries = LedgerEntrySerializer(many=True)
+
+
+class SponsorOfferSerializer(serializers.Serializer):
+    """One unsigned offer as the Sponsors screen needs it: the four money
+    figures plus the profile's player-facing character, already resolved
+    from PROFILES_BY_KEY — the SPA renders label/blurb verbatim, it does
+    not know about profiles as a concept."""
+
+    id = serializers.IntegerField()
+    sponsor_name = serializers.CharField()
+    profile = serializers.CharField()
+    label = serializers.CharField()
+    blurb = serializers.CharField()
+    weekly_base = serializers.IntegerField()
+    floor_amount = serializers.IntegerField()
+    ceiling_amount = serializers.IntegerField()
+
+
+class SponsorContractSerializer(serializers.Serializer):
+    """The signed contract, same shape as SponsorOfferSerializer plus
+    `signed_at` — there is no `id` the SPA needs to key on since only one
+    contract is ever shown."""
+
+    sponsor_name = serializers.CharField()
+    profile = serializers.CharField()
+    label = serializers.CharField()
+    blurb = serializers.CharField()
+    weekly_base = serializers.IntegerField()
+    floor_amount = serializers.IntegerField()
+    ceiling_amount = serializers.IntegerField()
+    signed_at = serializers.DateTimeField()
+
+
+class SponsorsSerializer(serializers.Serializer):
+    """The Sponsors screen's whole state: either a signed contract or the
+    round to choose from — the same both-keys-always-present shape
+    StaffSerializer uses, so the SPA branches on one payload."""
+
+    contract = SponsorContractSerializer(allow_null=True)
+    offers = SponsorOfferSerializer(many=True)
+
+
+class SignOfferSerializer(serializers.Serializer):
+    offer_id = serializers.IntegerField()

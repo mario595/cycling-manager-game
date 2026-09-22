@@ -86,7 +86,13 @@ reads `now()` once, then finds and processes whatever is due, in four steps:
    from anything tracked in `staff/`: a `SeasonTransition` row is written at
    most once ever, so a tick that runs twice, or catches up several weeks
    late, cannot top up the trainer pool twice for the same boundary. See
-   `staff/README.md`.
+   `staff/README.md`. For every `OPENED` transition, `tick()` also calls
+   `economy.services.ensure_offer_round(team, season, at=now)` for every
+   team — a fresh round of three sponsor offers each season (#22; see
+   `economy/README.md`, *Sponsorship*). `ensure_offer_round` is itself
+   idempotent per `(team, season)`, so a tick that runs twice, or catches up
+   late, cannot double the round the same way it cannot double-fill the
+   trainer pool.
 1. **Ageing, growth, training and wages** — for every `CLOSED` transition
    `process_transitions` returned, every rider's age advances by one
    (`riders.services.advance_ages()`). Then
@@ -127,23 +133,30 @@ reads `now()` once, then finds and processes whatever is due, in four steps:
    `staff.pricing.weekly_salary` (this is the one place `staff/` meets
    `economy/`; neither may import the other). One `trainer_salary` row per
    staffed team per week, dated to `week.starts_at`, counted on
-   `TickRun.trainer_salary_entries` (`world/migrations/0008`). An unstaffed
-   team gets no row at all, unlike wages' `amount = 0` entry — see
-   `economy/README.md`, *Trainer salaries run off the same loop*.
-   The same loop then settles the week's economy side (#21):
+   `TickRun.trainer_salary_entries`. An unstaffed team gets no row at all,
+   unlike wages' `amount = 0` entry — see `economy/README.md`, *Trainer
+   salaries run off the same loop*.
+   The same loop then settles the week's economy side (#21, #22):
    `economy.services.apply_weekly_fanbase(week, points_by_team=...)`
-   adjusts every team's fanbase and `economy.services.pay_merchandise(week)`
-   pays each team its merchandise income — **in that order** (merchandise is
-   paid on the *now-updated* fanbase), and both off the week that just
-   *completed*, exactly as training reads it (see *Training's race half reads
-   the week that just completed* below). `points_by_team` comes from
-   `competitions.services.points_by_team(week)`: this is where
-   `competitions/` meets `economy/`, because neither may import the other
-   (`economy/README.md`, *Why `economy/` does not query `RacePoints`*).
-   Each write is once per `(team, week)`, backed by the two `economy/`
-   constraints, and the rows each parse writes land on the new
-   `TickRun.fanbase_entries` / `TickRun.merchandise_entries` counters
-   (the columns added by `world/migrations/0007`).
+   adjusts every team's fanbase, `economy.services.pay_merchandise(week)`
+   pays each team its merchandise income, and
+   `economy.services.pay_sponsorship(week, points_by_team=...)` pays each
+   team with an active contract its sponsorship — **in that order**:
+   merchandise is paid on the *now-updated* fanbase, and sponsorship's
+   season-to-date average (`economy/README.md`, *Sponsorship*) reads
+   settled `FanbaseEntry` rows, so it wants fanbase already current for the
+   week being paid too. All three read the week that just *completed*,
+   exactly as training reads it (see *Training's race half reads the week
+   that just completed* below). `points_by_team` comes from
+   `competitions.services.points_by_team(week)`, computed once and reused
+   for both fanbase and sponsorship: this is where `competitions/` meets
+   `economy/`, because neither may import the other (`economy/README.md`,
+   *Why `economy/` does not query `RacePoints`*).
+   Each write is once per `(team, week)`, backed by the relevant `economy/`
+   constraint, and the rows each pass writes land on the
+   `TickRun.fanbase_entries` / `TickRun.merchandise_entries` /
+   `TickRun.sponsorship_entries` counters. A team with no active contract
+   gets no sponsorship row for the week at all — not a zero-amount one.
    Ageing runs before growth, so a rider who turned 33 at this same
    boundary is evaluated against the new age immediately. None of this
    touches a race row, so it runs outside the claim transaction below, the

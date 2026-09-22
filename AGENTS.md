@@ -113,6 +113,12 @@ unmanaged, so a freshly registered player still has teams to claim.
 `mock_clock set <season start>` and `tick` then settle the world, but only under
 `GAME_CLOCK_CLASS=world.clocks.MockClock`.
 
+**`seed_teams` runs before `load_season` in the order above**, so at that
+point no season exists yet and no team gets a sponsor offer round — that
+step is skipped, not broken. Either re-run `seed_teams` once the season is
+declared, or move the mock clock to the season's start and `tick`: both
+generate every team's round (`economy/README.md`, *Sponsorship*).
+
 **If a feature needs more data to be visible, extend the relevant domain's seed
 script and note it here**, rather than inventing data by hand in a database.
 
@@ -137,11 +143,11 @@ up front — an empty app is just noise. The table below marks which exist.
 | `transfers/` | Transfers | *not yet* | Market for buying/selling riders, auctions, contracts, free agents, market value. (The youth academy is a **development squad** and lives in `riders/`.) |
 | `competitions/` | Competitions | **built**, `README.md` | Race points, prize money and season standings, one Group. The prize table is computed here but written to `economy/`'s ledger. Divisions, multiple Groups, promotion/relegation, classifications and season history still to come. A **Division** is a tier; a **Group** is a parallel section within one. |
 | `schedule/` | Schedule | **built**, `README.md` | Seasons, their twelve weeks, and the race calendar declared within them. **Not** `calendar/` — that shadows the stdlib module. |
-| `economy/` | Economy | **built**, `README.md` | The append-only ledger: every team's balance is the sum of its `LedgerEntry` rows — starting balance, weekly wages, race prize money, merchandise income, trainer hire fee and weekly trainer salary, claim takeover — and its fanbase, the sum of its `FanbaseEntry` rows. Sponsorship, budgets and rider salaries still to come. |
+| `economy/` | Economy | **built**, `README.md` | The append-only ledger: every team's balance is the sum of its `LedgerEntry` rows — starting balance, weekly wages, race prize money, trainer hire fee and weekly trainer salary, merchandise income, sponsorship, claim takeover — and its fanbase, the sum of its `FanbaseEntry` rows. A team picks one of three fanbase-sized sponsor offers per season; its weekly payment then swings with race results inside a promised range. Budgets and rider salaries still to come. |
 | `staff/` | Staff | **built**, `README.md` | Trainers hireable from a shared pool into one fixed slot per team at a speciality-derived hire fee plus a weekly salary, plus the team's weekly training focus and its rollover report. Physios and scouts still to come. |
-| `world/` | World Simulation | **built**, `README.md` | The game clock and the tick (which charges each team its weekly wages, adjusts fanbase and pays merchandise income). AI team decisions still to come. |
+| `world/` | World Simulation | **built**, `README.md` | The game clock and the tick (which charges each team its weekly wages and trainer salary, adjusts fanbase, pays merchandise income and sponsorship, and generates each team's sponsor offer round on season open). AI team decisions still to come. |
 | `api/` | API | **built**, `README.md` | DRF routers aggregating each app's serializers and views. |
-| `frontend/` | Frontend/UI | **built**, `README.md` | The React SPA. Built to `frontend/dist/`, served by Django. Seven real screens (dashboard, roster, staff, calendar, results, league table, finances) plus squad selection, all from the API, no fixture data. Unknown paths redirect to `/`; every route requires a session. |
+| `frontend/` | Frontend/UI | **built**, `README.md` | The React SPA. Built to `frontend/dist/`, served by Django. Eight real screens (dashboard, roster, staff, sponsors, calendar, results, league table, finances) plus squad selection, all from the API, no fixture data. Unknown paths redirect to `/`; every route requires a session. |
 
 ### Dependency direction
 

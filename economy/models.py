@@ -34,6 +34,15 @@ FANBASE_PER_POINT = 40
 #: How many fans earn one merchandise credit: fanbase // 25. Integer divisor
 #: keeps credits whole (the ledger is BigIntegerField, never Decimal).
 MERCHANDISE_FANBASE_PER_CREDIT = 25
+#: A sponsor's weekly baseline is fanbase // this, before the profile's own
+#: multiplier (economy/sponsors.py). At STARTING_FANBASE (10,000) a BALANCED
+#: offer (multiplier 1.0) pays 10,000 // 2 = 5,000/week — the largest single
+#: income stream against the 14,400/week wage bill (~35%, spec: "largest
+#: income stream") and nowhere near covering it alone. Tunable.
+SPONSOR_FANBASE_PER_CREDIT = 2
+#: Offers generated per round. Always one of each SponsorProfile (economy/
+#: sponsors.py) so the player sees the full spread of the decision.
+OFFERS_PER_ROUND = 3
 
 
 class LedgerEntry(TimeStampedModel):
@@ -54,6 +63,7 @@ class LedgerEntry(TimeStampedModel):
         TAKEOVER = "takeover", "Team taken over"
         PRIZE_MONEY = "prize_money", "Prize money"
         MERCHANDISE = "merchandise", "Merchandise revenue"
+        SPONSORSHIP = "sponsorship", "Sponsorship"
         TRAINER_SALARY = "trainer_salary", "Trainer salary"
         TRAINER_FEE = "trainer_fee", "Trainer hire fee"
 
@@ -76,7 +86,7 @@ class LedgerEntry(TimeStampedModel):
         null=True,
         blank=True,
         related_name="ledger_entries",
-        help_text="Set on wages and trainer salary entries only. Null elsewhere.",
+        help_text="Set on wages, sponsorship and trainer salary entries only. Null elsewhere.",
     )
     race = models.ForeignKey(
         "racing.Race",
@@ -121,6 +131,11 @@ class LedgerEntry(TimeStampedModel):
                 fields=["team", "week"],
                 condition=models.Q(kind="merchandise"),
                 name="one_merchandise_entry_per_team_per_week",
+            ),
+            models.UniqueConstraint(
+                fields=["team", "week"],
+                condition=models.Q(kind="sponsorship"),
+                name="one_sponsorship_entry_per_team_per_week",
             ),
             models.UniqueConstraint(
                 fields=["team", "week"],
@@ -199,3 +214,104 @@ class FanbaseEntry(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.team} — {self.description} ({self.delta})"
+
+
+_SPONSOR_PROFILE_CHOICES = [("steady", "Steady"), ("balanced", "Performance-driven"), ("demanding", "Results-hungry")]
+
+
+class SponsorOffer(TimeStampedModel):
+    """One unsigned sponsor offer, part of a team's round for a season.
+
+    Disposable: a round is regenerated wholesale (economy/README.md,
+    *Sponsorship*), which means deleting a team's unsigned offers. Kept as
+    a separate table from SponsorContract precisely so that delete can never
+    touch signed, permanent history — see economy/README.md, D1.
+    """
+
+    team = models.ForeignKey(
+        "teams.Team",
+        on_delete=models.CASCADE,
+        related_name="sponsor_offers",
+        help_text="Deleting a team deletes its unsigned offers; they have no meaning without it.",
+    )
+    season = models.ForeignKey(
+        "schedule.Season",
+        on_delete=models.CASCADE,
+        related_name="sponsor_offers",
+        help_text="The season this round of offers was generated for.",
+    )
+    profile = models.CharField(max_length=20, choices=_SPONSOR_PROFILE_CHOICES)
+    sponsor_name = models.CharField(max_length=80, help_text="Flavour, rolled at generation.")
+    weekly_base = models.PositiveIntegerField(help_text="Credits/week before results-based swing.")
+    floor_amount = models.PositiveIntegerField(help_text="The low end of the range shown at signing.")
+    ceiling_amount = models.PositiveIntegerField(help_text="The high end of the range shown at signing.")
+    sensitivity = models.FloatField(help_text="Copied from the profile at generation.")
+
+    class Meta:
+        ordering = ["pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["team", "season", "profile"],
+                name="one_offer_per_profile_per_team_per_season",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.team} — {self.sponsor_name} offer ({self.profile})"
+
+
+class SponsorContract(TimeStampedModel):
+    """One signed sponsorship contract, permanent financial history.
+
+    Terms are COPIED from the offer at signing, never read through `offer`
+    at payment time (economy/README.md, D2) — `offer` survives only as
+    provenance and is SET_NULL because the rest of that round's offers are
+    deleted once one is signed. A voided contract (claimed away from its
+    manager) is never deleted, only marked — see economy/README.md, D7.
+    """
+
+    team = models.ForeignKey(
+        "teams.Team",
+        on_delete=models.CASCADE,
+        related_name="sponsor_contracts",
+        help_text="Deleting a team deletes its sponsorship history; it has no meaning without it.",
+    )
+    season = models.ForeignKey(
+        "schedule.Season",
+        on_delete=models.PROTECT,
+        related_name="sponsor_contracts",
+        help_text="A season with contracts is financial history; it may not be deleted out from under them.",
+    )
+    offer = models.ForeignKey(
+        SponsorOffer,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="contract",
+        help_text="Provenance only. Terms are copied onto this row and never re-read from here.",
+    )
+    profile = models.CharField(max_length=20, choices=_SPONSOR_PROFILE_CHOICES)
+    sponsor_name = models.CharField(max_length=80)
+    weekly_base = models.PositiveIntegerField()
+    floor_amount = models.PositiveIntegerField()
+    ceiling_amount = models.PositiveIntegerField()
+    sensitivity = models.FloatField()
+    signed_at = models.DateTimeField(help_text="Game time, from the caller.")
+    voided_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Set when the team is claimed by someone else. Non-null means it never pays again.",
+    )
+
+    class Meta:
+        ordering = ["-signed_at", "-pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["team", "season"],
+                condition=models.Q(voided_at__isnull=True),
+                name="one_active_contract_per_team_per_season",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.team} — {self.sponsor_name} contract ({self.profile})"

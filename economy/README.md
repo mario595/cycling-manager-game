@@ -20,8 +20,12 @@ from, on the same discipline as the ledger (`#21`; see *Fanbase is derived
 too* below). Merchandise income is the point of fanbase: a team's weekly
 `LedgerEntry` is floor-divided out of its current fanbase.
 
-Not sponsorship (a separate ticket, *Future work* below), and nothing
-players spend on yet.
+`SponsorOffer` and `SponsorContract` — a team's sponsorship (`#22`; see
+*Sponsorship* below). A team picks one of three fanbase-sized offers each
+season, and its weekly payment then swings with race results inside a
+promised range.
+
+Nothing players spend on yet.
 
 The dependency direction is `economy -> core, teams, riders, schedule`.
 Nothing may import `economy/` except `world/` and `api/` — with the single
@@ -195,6 +199,91 @@ Clamping on read instead would make stored history and the displayed value
 disagree — the rows would say "−500" while the fanbase stood still — and any
 later arithmetic off those rows would compound the lie.
 
+## Sponsorship
+
+A team picks at most one sponsor per season, from three offers generated at
+season open (and again whenever the team is claimed). Signing turns an
+offer into a permanent `SponsorContract`; the weekly payment then varies
+with race results but always stays inside the range shown at signing. See
+`specs/sponsorship-contracts.md` and its plan for the product and technical
+story in full — this section is the load-bearing rules a future change must
+not break.
+
+**Two models, not one with a flag.** `SponsorOffer` is disposable — a round
+is regenerated wholesale (season open, or a claim), which means deleting a
+team's unsigned offers. `SponsorContract` is permanent financial history.
+Keeping them separate makes that delete structurally unable to touch signed
+history: the query that clears a round can never accidentally clear a
+contract, because contracts are not rows in that table.
+
+**A contract copies its terms; it never reads them through its offer.**
+`weekly_base`, `floor_amount`, `ceiling_amount` and `sensitivity` are
+columns on `SponsorContract` itself, copied at signing — `sign_offer`
+(`economy/services.py`) writes them onto the contract before deleting the
+rest of the round. `offer` survives only as a nullable, `SET_NULL`
+provenance link. The offer that produced a contract is usually deleted
+minutes later (the rest of its round, on signing; the whole thing, on a
+later void) — a contract that read `weekly_base` through `self.offer` would
+go blind, or worse, silently repriced, the moment that row is gone.
+
+**The floor and ceiling are stored, not recomputed at payment time.** The
+range shown at signing is a promise; recomputing it later from
+`SPONSOR_FANBASE_PER_CREDIT` or a profile's fractions would let a constant
+tuning change silently reprice a contract someone already signed against a
+different number.
+
+**Payment is computed against the team's own season-to-date average**, not
+the field's. `economy.services._season_average_points` reads the team's own
+`FanbaseEntry.points` for every settled week this season (this app already
+owns that number — no need to touch `competitions/`) and
+`economy.sponsors.payment_for` scales the contract's `weekly_base` by how
+this week's points compare to that average, clamped into
+`[floor_amount, ceiling_amount]`. A team with no settled week yet this
+season (week 1, or freshly claimed) has no average and is paid
+`weekly_base` exactly — the same result a zero-sensitivity `STEADY`
+contract always gets. Relative-to-field was rejected: it would make a
+team's income a function of *other* teams' results, illegible on a
+finances screen.
+
+**Three fixed profiles, always all three in a round.**
+`economy/sponsors.py`'s `PROFILES` — `steady` (flat, lower baseline),
+`balanced`, `demanding` (higher baseline, wider swing) — are a constant
+table, not rolled. A round is always one of each, so the three cards on the
+Sponsors screen are never near-identical; rolling three independent
+sensitivities could produce exactly that.
+
+**A team with no contract gets no ledger row for that week — not a
+zero-amount one.** Unlike wages (charged to every team, `rider_count=0`
+included), an empty sponsorship slot is the normal long-run state for a
+team that never signed, matching how `#69`'s trainer salary already treats
+an unfilled slot.
+
+**Claiming a team voids its contract; it does not delete it.**
+`teams.services.claim_team` calls `economy.services.void_sponsorship`
+(imported inside the function body — see *What `economy/` may import*),
+which sets `voided_at` on any active contract and clears unsigned offers.
+The contract row survives as history; it simply stops paying. A new round
+is not generated here — `claim_team` has no `Season` to hand it, and
+`teams/` may not import `schedule/`. `api.views.SponsorsView` generates the
+fresh round lazily on the newly-claimed manager's first read.
+
+**Idempotent per `(team, season)`.** `ensure_offer_round` no-ops if the
+team already has offers for that season or an active contract — the
+`UniqueConstraint` on `(team, season, profile)` backs this the same way
+`(team, week)` backs wages. This is what lets both `world.services.tick()`
+(on every `SeasonTransition.Kind.OPENED`) and the API's lazy path call it
+freely without ever doubling a round.
+
+**Weekly payment joins the tick after merchandise.**
+`world.services.tick()` calls `economy.services.pay_sponsorship(week,
+points_by_team=...)` right after `pay_merchandise(week)`, reusing the same
+`points_by_team` dict already built for fanbase — `economy/` may not import
+`competitions/` (`AGENTS.md`), so the caller supplies points, same
+inversion `apply_weekly_fanbase` already uses. Running after fanbase
+matters because `_season_average_points` reads settled `FanbaseEntry` rows;
+by the time sponsorship pays, this week's own fanbase row already exists
+but is excluded (`week__number__lt`), so only genuinely prior weeks count.
+
 ## What `economy/` may import
 
 `core`, `teams`, `riders`, `schedule` — matching `AGENTS.md`'s dependency
@@ -209,8 +298,10 @@ string `"racing.Race"`, so nothing in `economy/` imports `racing/`. Likewise
 
 ## Future work
 
-- **Sponsorship** (#22/#23) — the remaining income source; sponsor offers
-  read `fanbase_for`.
+- **Sponsor renewal** (#23) — at season end, whether the incumbent sponsor
+  re-offers, and at what price. Narrower than it once looked: in-season
+  payment is already performance-sensitive (see *Sponsorship* above), so
+  #23 only has to decide what happens *between* seasons.
 - **A player lever on fanbase** — #21 deliberately has none; nothing lets a
   manager spend or invest in fanbase yet.
 - **Per-rider salaries** — #25 replaces the flat `WEEKLY_WAGE_PER_RIDER`
