@@ -4,6 +4,7 @@ from rest_framework import serializers
 
 from riders.display import to_display_scale
 from riders.models import ENGINE_ATTRIBUTES
+from staff.pricing import hire_fee, weekly_salary
 
 
 class ClockSerializer(serializers.Serializer):
@@ -224,28 +225,40 @@ class StandingsSerializer(serializers.Serializer):
 
 
 class TrainerSerializer(serializers.Serializer):
-    """One trainer as the Staff screen needs them: identity and the five
+    """One trainer as the Staff screen needs them: identity, the five
     skills on the 0-10 display scale, never the stored 1-100 — the same
-    rule every rider serializer follows (riders/display.py)."""
+    rule every rider serializer follows (riders/display.py) — and the two
+    prices derived from those skills (staff/pricing.py), so the card can
+    show what hiring costs before the manager commits."""
 
     id = serializers.IntegerField()
     name = serializers.CharField()
     nationality = serializers.CharField()
     speciality = serializers.CharField()
     skills = serializers.SerializerMethodField()
+    hire_fee = serializers.SerializerMethodField()
+    weekly_salary = serializers.SerializerMethodField()
 
     def get_skills(self, obj) -> dict[str, int]:
         return _display_scale_attributes(obj)
 
+    def get_hire_fee(self, obj) -> int:
+        return hire_fee(obj)
+
+    def get_weekly_salary(self, obj) -> int:
+        return weekly_salary(obj)
+
 
 class StaffSerializer(serializers.Serializer):
-    """The Staff screen's whole state: either a hired trainer or the pool.
-    Both keys are always present — `trainer` null when the slot is empty,
-    `pool` empty when it is filled — so the SPA branches on one payload
-    rather than calling two endpoints."""
+    """The Staff screen's whole state: either a hired trainer or the pool,
+    plus the team's balance so the SPA can disable a hire it cannot afford.
+    Both trainer keys are always present — `trainer` null when the slot is
+    empty, `pool` empty when it is filled — so the SPA branches on one
+    payload rather than calling two endpoints."""
 
     trainer = TrainerSerializer(allow_null=True)
     pool = TrainerSerializer(many=True)
+    balance = serializers.IntegerField()
 
 
 class HireTrainerSerializer(serializers.Serializer):

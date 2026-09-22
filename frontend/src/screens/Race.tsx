@@ -10,7 +10,7 @@ import { color, font } from '../theme'
 import { useRaceDetail } from '../useRaceDetail'
 import { useRaceResults } from '../useRaceResults'
 import { useSquad } from '../useSquad'
-import { formatMoney } from './Finances'
+import { formatMoney } from '../format'
 
 const SQUAD_SIZE = 4
 

@@ -11,7 +11,82 @@ point here so there is one place to fix when the board changes.
 | `/implement-plan` | `specs/<slug>-plan.md` | code, tests, a branch and a pull request | **Implemented** |
 | `/code-review` | the ticket and its pull request | a review on the PR | **Code reviewed** |
 
+All four work in **the ticket's worktree**, described below. `/product-spec`
+creates it; the rest reuse it.
+
 Repo: `mario595/cycling-manager`.
+
+---
+
+## The ticket's worktree
+
+Every ticket gets **one** worktree, created by `/product-spec` and reused by
+every skill after it. The spec, the plan and the code all land on the same
+branch, so the pull request carries the whole story of the ticket and nothing
+is left stranded on master.
+
+**The invariant is the directory: `.claude/worktrees/<slug>`.**
+
+`<slug>` is the spec's filename without its extension — `specs/game-clock.md`
+gives `game-clock`. The directory name is not cosmetic: `config/worktree.py`
+derives this branch's database and its dev-server port from it, so improvising a
+different name silently gives the ticket a different database.
+
+The branch name may not match the directory. The `EnterWorktree` tool names its
+own branch (`worktree-game-clock`), and that is fine — **the directory is what
+identifies the ticket's workspace**, not the branch.
+
+### Working out the slug
+
+- A spec exists → take it from the filename: `specs/<slug>.md`.
+- Only a ticket number → list `specs/` and find the one for that issue. Its
+  front matter names the issue.
+- Neither → you are `/product-spec` and you are coining it: kebab-case, from the
+  feature name, short. Everything downstream inherits it, so pick once and well.
+
+### Find it, or make it
+
+```bash
+SLUG=game-clock
+WT=".claude/worktrees/$SLUG"
+```
+
+If `$WT` exists, **use it** — `cd` into it, or pass its path to `EnterWorktree`.
+Do not create a second one.
+
+If it does not exist, create it from an up-to-date master:
+
+```bash
+git fetch origin
+git worktree add "$WT" -b "$SLUG" origin/master
+cd "$WT"
+```
+
+**If that fails with "branch already exists"**, the ticket already has a branch
+from an earlier run — check it out into the worktree instead of inventing a
+second name:
+
+```bash
+git worktree add "$WT" "$SLUG"
+```
+
+Never fall back to `<slug>-2`, `spec/<slug>` or any other variant. One ticket,
+one branch, one worktree.
+
+Prefer the `EnterWorktree` tool where it is available, since it also moves the
+session into the worktree; pass the slug as the name, or the path when the
+worktree already exists. These skills are the project instruction that
+authorises a worktree.
+
+### Rules
+
+- **Never work on a ticket from the main checkout.** That is what puts spec
+  branches on the wrong worktree and leaves the user's own checkout dirty.
+- **One worktree per ticket**, reused across all four skills.
+- **Do not delete it.** It is deleted when the ticket is done and merged, by the
+  user.
+- A worktree has no `.venv` — it is gitignored. Run Python with the main
+  checkout's interpreter: `/home/mario/dev/cycling-manager/.venv/bin/python`.
 
 ---
 

@@ -149,11 +149,32 @@ Wait for the user to agree, adjust, or overrule you. Being overruled is fine;
 record the decision as decided and move on. Do not re-litigate a settled point
 in the spec.
 
-## Step 4 — Write the spec
+## Step 4 — Make the ticket's worktree, then write the spec
 
-Only now write the file, to `specs/<feature-slug>.md` (kebab-case, e.g.
-`specs/mechanical-problems.md`). Create `specs/` if it does not exist. If a spec
-with that name already exists, update it rather than making a second one.
+**Coin the slug first.** Kebab-case, from the feature name, short:
+`mechanical-problems`, `game-clock`. Everything downstream inherits it — the
+spec file, the plan file, the branch, the worktree directory, and through that
+the ticket's database and dev port. Pick it once and pick it well.
+
+**Then create the ticket's worktree and work inside it.** Follow *The ticket's
+worktree* in `.claude/ticket-workflow.md`. In short:
+
+```bash
+git fetch origin
+git worktree add .claude/worktrees/<slug> -b <slug> origin/master
+cd .claude/worktrees/<slug>
+```
+
+(or the `EnterWorktree` tool with `<slug>` as the name, which also moves the
+session into it.)
+
+**Do not write the spec in the main checkout.** Every later skill picks this
+worktree up and adds to the same branch, so the pull request ends up carrying
+the spec, the plan and the code together. A spec committed on master, or on a
+branch in the user's own checkout, breaks that and leaves their checkout dirty.
+
+Now write the file, to `specs/<slug>.md` **inside the worktree**. If a spec with
+that name already exists, update it rather than making a second one.
 
 Use this structure:
 
@@ -220,7 +241,21 @@ Then tell the user the file path and summarise, in three or four lines, what the
 spec commits to and what it deliberately leaves out. Do not paste the spec back
 into the chat.
 
-## Step 6 — Hand the ticket on
+## Step 6 — Commit and push the branch
+
+Commit the spec in the worktree, then push the branch:
+
+```bash
+git add specs/<slug>.md
+git commit -m "Spec <the feature>"
+git push -u origin "$(git branch --show-current)"
+```
+
+Pushing matters because the snapshot comment you are about to post points at
+`specs/<slug>.md` in the repo. Unpushed, that pointer is dead for anyone but
+you.
+
+## Step 7 — Hand the ticket on
 
 Once the spec is written **and the user is happy with it**, the ticket moves to
 **Scoped**.

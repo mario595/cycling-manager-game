@@ -210,11 +210,13 @@ export function Button({
   children,
   variant = 'primary',
   onClick,
+  disabled = false,
   style,
 }: {
   children: ReactNode
   variant?: 'primary' | 'secondary'
   onClick?: () => void
+  disabled?: boolean
   style?: CSSProperties
 }) {
   const primary = variant === 'primary'
@@ -222,7 +224,8 @@ export function Button({
     <button
       type="button"
       onClick={onClick}
-      className={primary ? 'hover-dark' : 'hover-light'}
+      disabled={disabled}
+      className={disabled ? undefined : primary ? 'hover-dark' : 'hover-light'}
       style={{
         background: primary ? color.ink : color.canvas,
         color: primary ? '#FFFFFF' : color.ink,
@@ -231,8 +234,56 @@ export function Button({
         padding: '9px 15px',
         fontSize: 13,
         fontWeight: 500,
-        cursor: 'pointer',
+        cursor: disabled ? 'not-allowed' : 'pointer',
         ...style,
+      }}
+    >
+      {children}
+    </button>
+  )
+}
+
+/** The tiny mono label that sits before a row of filter/sort chips. */
+export function ChipLabel({ children }: { children: ReactNode }) {
+  return (
+    <span
+      style={{
+        fontSize: 10.5,
+        letterSpacing: '1.2px',
+        color: color.mutedStrong,
+        fontFamily: font.mono,
+        marginRight: 2,
+      }}
+    >
+      {children}
+    </span>
+  )
+}
+
+/** A toggle button for the filter and sort rows on list screens. */
+export function Chip({
+  children,
+  active,
+  onClick,
+}: {
+  children: ReactNode
+  active: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      style={{
+        padding: '6px 12px',
+        borderRadius: 8,
+        fontSize: 12.5,
+        cursor: 'pointer',
+        border: `1px solid ${active ? color.ink : color.borderButton}`,
+        background: active ? color.ink : color.surface,
+        color: active ? '#FFFFFF' : '#565A61',
+        fontWeight: active ? 600 : 400,
       }}
     >
       {children}

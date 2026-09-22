@@ -211,3 +211,41 @@ def test_wage_and_merchandise_entries_coexist_for_one_week(db, team, week):
     )
 
     assert LedgerEntry.objects.filter(team=team, week=week).count() == 2
+def test_one_trainer_salary_entry_per_team_per_week(db, team, week):
+    LedgerEntry.objects.create(
+        team=team,
+        kind=LedgerEntry.Kind.TRAINER_SALARY,
+        amount=-3_900,
+        occurred_at=week.starts_at,
+        week=week,
+        description="Trainer salary",
+    )
+
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            LedgerEntry.objects.create(
+                team=team,
+                kind=LedgerEntry.Kind.TRAINER_SALARY,
+                amount=-3_900,
+                occurred_at=week.starts_at,
+                week=week,
+                description="Trainer salary",
+            )
+
+
+def test_several_trainer_fees_per_team_allowed(db, team):
+    # The fee has no (team, week) constraint — a team can legitimately pay
+    # several hire fees over a season. This is the one someone will
+    # "helpfully" add by symmetry with the salary; the plan's W2 exists to
+    # stop it.
+    for at in (datetime(2027, 3, 1, 0, 0, tzinfo=dt_timezone.utc),
+               datetime(2027, 4, 1, 0, 0, tzinfo=dt_timezone.utc)):
+        LedgerEntry.objects.create(
+            team=team,
+            kind=LedgerEntry.Kind.TRAINER_FEE,
+            amount=-46_800,
+            occurred_at=at,
+            description="Trainer hire fee",
+        )
+
+    assert LedgerEntry.objects.filter(team=team, kind=LedgerEntry.Kind.TRAINER_FEE).count() == 2

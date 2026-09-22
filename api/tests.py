@@ -10,12 +10,13 @@ from rest_framework.test import APIClient
 import world.services as world_services
 from competitions.scoring import points_for, prize_for
 from competitions.services import score_race
-from economy.models import LedgerEntry
+from economy.models import STARTING_BALANCE, LedgerEntry
 from racing.models import Race, RaceResult, RaceSquad
 from riders.display import to_display_scale
 from riders.models import DISPLAY_MAX, Rider
 from schedule.models import SEASON_WEEKS, Season, Week
 from staff.models import Trainer, TrainingWeekReport
+from staff.pricing import hire_fee, weekly_salary
 from teams.models import Team
 from world.services import now
 
@@ -884,6 +885,19 @@ def test_staff_shows_the_trainer_when_hired(staff_client, staff_team, pool_train
     assert response.data["pool"] == []
 
 
+def test_staff_payload_carries_prices_and_balance(staff_client, staff_team, pool_trainer):
+    make_ledger_entry(
+        staff_team, "starting_balance", STARTING_BALANCE, now(), "Starting balance",
+    )
+
+    response = staff_client.get("/api/staff/")
+
+    assert response.data["balance"] == STARTING_BALANCE
+    trainer = response.data["pool"][0]
+    assert trainer["hire_fee"] == hire_fee(pool_trainer)
+    assert trainer["weekly_salary"] == weekly_salary(pool_trainer)
+
+
 def test_staff_skills_are_on_the_display_scale(staff_client, staff_team, pool_trainer):
     response = staff_client.get("/api/staff/")
 
@@ -894,11 +908,56 @@ def test_staff_skills_are_on_the_display_scale(staff_client, staff_team, pool_tr
 
 
 def test_hire_fills_the_slot(staff_client, staff_team, pool_trainer):
+    # A hire now costs a fee, so the team needs a balance for it to go
+    # through — the plain unaffordable case is its own test below.
+    make_ledger_entry(
+        staff_team, "starting_balance", STARTING_BALANCE, now(), "Starting balance",
+    )
+
     response = staff_client.post("/api/staff/trainer/hire/", {"trainer_id": pool_trainer.pk})
 
     assert response.status_code == 204
     follow_up = staff_client.get("/api/staff/")
     assert follow_up.data["trainer"]["id"] == pool_trainer.pk
+
+
+def test_hire_debits_the_fee(staff_client, staff_team, pool_trainer):
+    make_ledger_entry(
+        staff_team, "starting_balance", STARTING_BALANCE, now(), "Starting balance",
+    )
+
+    response = staff_client.post("/api/staff/trainer/hire/", {"trainer_id": pool_trainer.pk})
+
+    assert response.status_code == 204
+    follow_up = staff_client.get("/api/staff/")
+    assert follow_up.data["balance"] == STARTING_BALANCE - hire_fee(pool_trainer)
+    fee_entry = LedgerEntry.objects.get(team=staff_team, kind="trainer_fee")
+    assert fee_entry.amount == -hire_fee(pool_trainer)
+    assert pool_trainer.name in fee_entry.description
+
+
+def test_hire_refused_when_balance_too_low(staff_client, staff_team, pool_trainer):
+    make_ledger_entry(staff_team, "starting_balance", 100, now(), "Starting balance")
+
+    response = staff_client.post("/api/staff/trainer/hire/", {"trainer_id": pool_trainer.pk})
+
+    assert response.status_code == 409
+    pool_trainer.refresh_from_db()
+    assert pool_trainer.team_id is None
+    assert not LedgerEntry.objects.filter(team=staff_team, kind="trainer_fee").exists()
+
+
+def test_fire_refunds_nothing(staff_client, staff_team, pool_trainer):
+    make_ledger_entry(
+        staff_team, "starting_balance", STARTING_BALANCE, now(), "Starting balance",
+    )
+    staff_client.post("/api/staff/trainer/hire/", {"trainer_id": pool_trainer.pk})
+
+    response = staff_client.post("/api/staff/trainer/fire/")
+
+    assert response.status_code == 204
+    follow_up = staff_client.get("/api/staff/")
+    assert follow_up.data["balance"] == STARTING_BALANCE - hire_fee(pool_trainer)
 
 
 def test_hire_an_already_hired_trainer_returns_409(staff_client, staff_team, pool_trainer):

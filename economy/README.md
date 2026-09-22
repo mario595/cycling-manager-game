@@ -5,12 +5,15 @@
 `LedgerEntry` — the append-only financial history every team's balance is
 derived from. The balance itself is never stored: it is the sum of a team's
 `LedgerEntry.amount` values, computed on demand. This app owns the game's
-recurring money moves: the weekly wage bill (charged once per team per
-crossed week boundary, the game's only recurring outgoing) and the weekly
-**merchandise payout** derived from a team's fanbase (#21). It also owns the
-entries that give a team its starting money, the `takeover` row that resets a
-claimed team's balance, and the `prize_money` rows a finished race pays out
-(#19).
+recurring money moves: the weekly wage bill and, since
+[#69](https://github.com/mario595/cycling-manager/issues/69), the weekly
+trainer salary — each charged once per team per crossed week boundary — and
+the weekly **merchandise payout** derived from a team's fanbase, its first
+income since #21. #69 also adds the one-off `trainer_fee` row written when a
+team hires a trainer (see *Trainer salaries run off the same loop*). It also
+owns the entries that give a team its starting money, the `takeover` row that
+resets a claimed team's balance, and the `prize_money` rows a finished race
+pays out (#19).
 
 `FanbaseEntry` — the append-only history every team's fanbase is derived
 from, on the same discipline as the ledger (`#21`; see *Fanbase is derived
@@ -112,6 +115,36 @@ an interrupted payout completes on the next attempt and a re-run is a no-op.
 Each placement is written in its own `transaction.atomic()` with the
 `IntegrityError` caught and passed, the same idiom as `charge_weekly_wages`.
 
+## Trainer salaries run off the same loop
+
+`world.services.tick()` calls `economy.services.charge_trainer_salaries(week,
+salary_by_team=...)` inside the same per-week transition loop as
+`charge_weekly_wages`, immediately after it. A trainer's salary therefore gets
+the same three guarantees wages do: one row per crossed week, dated to that
+week's `starts_at` (never `now()`), a three-week catch-up producing three
+separate rows, and exactly-once backed by the `WeekTransition` row. The
+`(team, week)` partial unique constraint — this time where `kind =
+"trainer_salary"` — is the second line of defence, and each insert runs in its
+own `transaction.atomic()` with `IntegrityError` caught, the same per-row shape
+wages use.
+
+`salary_by_team` is **injected**, exactly as `apply_weekly_fanbase` takes
+`points_by_team`: `economy/` may not import `staff/` (`AGENTS.md`), so
+`world/` — allowed to know both — builds the `{team_pk: weekly_salary}` dict
+from `staff.pricing.weekly_salary` and passes it in. A trainer's skill never
+changes, so `world/` builds the dict once before the loop; the charge still
+runs inside it, one dated row per missed week.
+
+**There is deliberately no `amount = 0` row for a team with no trainer.** This
+is the one asymmetry with wages, and it is not a bug: every team has a wage
+bill (possibly zero) and is charged it every week, whereas "no trainer" means
+no salary obligation at all. A team with no trainer simply has no
+`trainer_salary` row, and the unique constraint above is unaffected. The hire
+fee is the mirror image: `charge_trainer_fee(team, amount=..., at=...,
+description=...)` writes a single negative row at the moment of hiring, with
+`week` left null and **no** `(team, week)` constraint — a team may legitimately
+pay several fees in a season, and a test asserts that.
+
 ## Fanbase is derived too
 
 A team's fanbase gets the same treatment as its balance: never a column on
@@ -182,8 +215,6 @@ string `"racing.Race"`, so nothing in `economy/` imports `racing/`. Likewise
   manager spend or invest in fanbase yet.
 - **Per-rider salaries** — #25 replaces the flat `WEEKLY_WAGE_PER_RIDER`
   with a salary derived from a rider's attributes or performance.
-- **Trainer fees and recurring salaries** — #69 points a trainer's cost at
-  this ledger.
 - **Insolvency** — #27, what happens when a balance goes and stays deeply
   negative. This ticket only flags a negative balance, never acts on it.
 - **A full-table read every tick** — `charge_weekly_wages` counts every

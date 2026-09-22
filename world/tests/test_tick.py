@@ -15,6 +15,8 @@ from economy.models import (
 from racing.models import Race, RaceResult
 from riders.models import Rider
 from schedule.models import SEASON_WEEKS, Season, Week
+from staff.models import Trainer
+from staff.pricing import weekly_salary
 from teams.models import Team
 from world.clocks import MockClock
 from world.services import get_clock, now, tick
@@ -173,6 +175,86 @@ def test_prize_failure_does_not_fail_the_race(db, team, riders, monkeypatch):
     assert run.races_finished == 1
     assert run.prize_entries == 0
     assert "prizes exploded" in run.error
+
+
+def make_trainer(team, **overrides):
+    defaults = dict(
+        name="Coach One", climb=90, sprint=40, flat=45, resistance=50, positioning=35,
+    )
+    defaults.update(overrides)
+    return Trainer.objects.create(team=team, **defaults)
+
+
+def test_tick_charges_trainer_salary(db, team, riders):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_one = season.weeks.get(number=1)
+    trainer = make_trainer(team)
+    clock.set(week_one.starts_at + timedelta(hours=1))
+
+    run = tick()
+
+    assert run.trainer_salary_entries == 1
+    entry = LedgerEntry.objects.get(team=team, kind=LedgerEntry.Kind.TRAINER_SALARY)
+    assert entry.week == week_one
+    assert entry.occurred_at == week_one.starts_at
+    assert entry.amount == -weekly_salary(trainer)
+
+
+def test_catch_up_charges_each_week_once(db, team, riders):
+    # The load-bearing test for Design decision 3: a three-week jump must
+    # produce three separate salary entries dated to three different weeks,
+    # never one lump sum and never skipped weeks.
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_three = season.weeks.get(number=3)
+    make_trainer(team)
+    clock.set(week_three.starts_at + timedelta(hours=1))
+
+    run = tick()
+
+    assert run.weeks_processed == 3
+    assert run.trainer_salary_entries == 3
+    entries = LedgerEntry.objects.filter(
+        team=team, kind=LedgerEntry.Kind.TRAINER_SALARY,
+    ).order_by("week__number")
+    assert entries.count() == 3
+    assert set(entries.values_list("week_id", flat=True)) == {
+        season.weeks.get(number=n).pk for n in (1, 2, 3)
+    }
+    assert set(entries.values_list("occurred_at", flat=True)) == {
+        season.weeks.get(number=n).starts_at for n in (1, 2, 3)
+    }
+
+
+def test_no_salary_row_for_unstaffed_team(db, team, riders):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_one = season.weeks.get(number=1)
+    clock.set(week_one.starts_at + timedelta(hours=1))
+
+    run = tick()
+
+    assert run.trainer_salary_entries == 0
+    assert not LedgerEntry.objects.filter(kind=LedgerEntry.Kind.TRAINER_SALARY).exists()
+
+
+def test_tick_twice_charges_once(db, team, riders):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_two = season.weeks.get(number=2)
+    make_trainer(team)
+    clock.set(week_two.starts_at + timedelta(hours=1))
+
+    first = tick()
+    clock.set(season.weeks.get(number=3).starts_at + timedelta(hours=1))
+    second = tick()
+
+    assert first.trainer_salary_entries == 2
+    assert second.trainer_salary_entries == 1
+    rows = LedgerEntry.objects.filter(team=team, kind=LedgerEntry.Kind.TRAINER_SALARY)
+    assert rows.count() == 3
+    assert rows.values("week_id").distinct().count() == 3
 
 
 def test_week_one_has_no_preceding_week_and_only_decays(db, team, riders):
