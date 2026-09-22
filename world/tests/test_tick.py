@@ -12,7 +12,7 @@ from economy.models import (
     FanbaseEntry,
     LedgerEntry,
 )
-from racing.models import Race
+from racing.models import Race, RaceResult
 from riders.models import Rider
 from schedule.models import SEASON_WEEKS, Season, Week
 from staff.models import Trainer
@@ -119,6 +119,62 @@ def test_tick_with_no_boundary_crossed_charges_nothing(db, team, riders):
 
     assert run.wage_entries == 0
     assert not LedgerEntry.objects.filter(kind=LedgerEntry.Kind.WAGES).exists()
+
+
+def test_tick_pays_prize_money_for_a_finished_race(db, team, riders):
+    clock: MockClock = get_clock()
+    race = Race.objects.create(
+        name="Due Race",
+        course=[{"length": 500.0, "gradient": 0.0}],
+        starts_at=now() + timedelta(hours=1),
+        status=Race.Status.SCHEDULED,
+    )
+    clock.advance_to_next_due()
+
+    run = tick()
+
+    race.refresh_from_db()
+    assert race.status == Race.Status.FINISHED
+    placed = list(
+        RaceResult.objects.filter(race=race, finish_time__isnull=False)
+        .values_list("position", flat=True)
+    )
+    assert placed
+    assert run.prize_entries == len(placed)
+    entries = list(
+        LedgerEntry.objects.filter(team=team, kind=LedgerEntry.Kind.PRIZE_MONEY)
+        .order_by("position")
+    )
+    assert len(entries) == len(placed)
+    assert [e.position for e in entries] == sorted(placed)
+    assert all(e.race_id == race.pk for e in entries)
+    assert all(e.amount > 0 for e in entries)
+    assert all(e.occurred_at == race.finished_at for e in entries)
+    assert all(e.description == f"Prize money — {race.name}" for e in entries)
+
+
+def test_prize_failure_does_not_fail_the_race(db, team, riders, monkeypatch):
+    clock: MockClock = get_clock()
+    race = Race.objects.create(
+        name="Due Race",
+        course=[{"length": 500.0, "gradient": 0.0}],
+        starts_at=now() + timedelta(hours=1),
+        status=Race.Status.SCHEDULED,
+    )
+    clock.advance_to_next_due()
+
+    def _raise(race):
+        raise RuntimeError("prizes exploded")
+
+    monkeypatch.setattr("world.services.prizes_by_team", _raise)
+
+    run = tick()
+
+    race.refresh_from_db()
+    assert race.status == Race.Status.FINISHED
+    assert run.races_finished == 1
+    assert run.prize_entries == 0
+    assert "prizes exploded" in run.error
 
 
 def make_trainer(team, **overrides):

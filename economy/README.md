@@ -7,20 +7,21 @@ derived from. The balance itself is never stored: it is the sum of a team's
 `LedgerEntry.amount` values, computed on demand. This app owns the game's
 recurring money moves: the weekly wage bill and, since
 [#69](https://github.com/mario595/cycling-manager/issues/69), the weekly
-trainer salary — each charged once per team per crossed week boundary — and,
-since #21, its first **income**: the weekly merchandise payout derived from a
-team's fanbase. #69 also adds the one-off `trainer_fee` row written when a
-team hires a trainer (see *Trainer salaries run off the same loop*). This app
-owns the entries that give a team its starting money and the `takeover` row
-that resets a claimed team's balance.
+trainer salary — each charged once per team per crossed week boundary — and
+the weekly **merchandise payout** derived from a team's fanbase, its first
+income since #21. #69 also adds the one-off `trainer_fee` row written when a
+team hires a trainer (see *Trainer salaries run off the same loop*). It also
+owns the entries that give a team its starting money, the `takeover` row that
+resets a claimed team's balance, and the `prize_money` rows a finished race
+pays out (#19).
 
 `FanbaseEntry` — the append-only history every team's fanbase is derived
 from, on the same discipline as the ledger (`#21`; see *Fanbase is derived
 too* below). Merchandise income is the point of fanbase: a team's weekly
 `LedgerEntry` is floor-divided out of its current fanbase.
 
-Not prize money or sponsorship (each a separate ticket, *Future work*
-below), and nothing players spend on yet.
+Not sponsorship (a separate ticket, *Future work* below), and nothing
+players spend on yet.
 
 The dependency direction is `economy -> core, teams, riders, schedule`.
 Nothing may import `economy/` except `world/` and `api/` — with the single
@@ -87,6 +88,32 @@ quietly* rather than aborting the rest of the week's payroll.
 Wages are charged to **every** team — managed or not, empty roster or not. A
 team with no riders gets a real entry at `amount = 0`, not a skipped one, so
 the history has no silent gaps.
+
+## Prize money reads the same way fanbase does
+
+`pay_race_prizes(race_id, *, race_name, at, prizes_by_team)` credits a team its
+winnings for one race. It takes the race as an **id** plus a plain
+`prizes_by_team` dict — `{team_id: [(position, amount), ...]}` — computed by
+`competitions.services.prizes_by_team`. It never reads a `Race` or a
+`RaceResult` itself, and never receives a model instance tied to another app's
+ORM. That is exactly the shape `world/` already hands `apply_weekly_fanbase`
+for `points_by_team`, and for the same reason: `economy/` may not import
+`racing/` or `competitions/` (see *What `economy/` may import*).
+
+The `race` FK is therefore declared as the string `"racing.Race"`, not an
+imported class, so `economy/models.py` imports nothing from `racing/`. It is
+the same import-free pattern as `racing/models.py`'s `Race.week` and
+`staff/models.py`'s `TrainingWeekReport.week` — a string FK is still a real
+dependency edge, it just does not load the other app's module.
+
+Exactly-once is the `(team, race, position)` partial unique constraint, **not**
+an early return. A payout writes several rows per team (a team can place two
+riders in the top ten), so "is there already a row for this team?" is the wrong
+question: it would leave a team paid for its 3rd-placed rider but not its 8th
+if the loop were interrupted. The constraint makes each *placement* unique, so
+an interrupted payout completes on the next attempt and a re-run is a no-op.
+Each placement is written in its own `transaction.atomic()` with the
+`IntegrityError` caught and passed, the same idiom as `charge_weekly_wages`.
 
 ## Trainer salaries run off the same loop
 
@@ -176,10 +203,14 @@ Like `staff/`, this app stands a bit apart from `teams/` (`teams` must not
 import `economy` at module scope) precisely so the takeover write can happen
 inside `claim_team` without creating a cycle.
 
+The prize-money `race` FK does **not** change this: it is declared as the
+string `"racing.Race"`, so nothing in `economy/` imports `racing/`. Likewise
+`prizes_by_team` arrives as plain data, so no `competitions/` import is needed.
+
 ## Future work
 
-- **Prize money** (#19) and **sponsorship** (#22/#23) — the remaining income
-  sources; #22/#23's sponsor offers read `fanbase_for`.
+- **Sponsorship** (#22/#23) — the remaining income source; sponsor offers
+  read `fanbase_for`.
 - **A player lever on fanbase** — #21 deliberately has none; nothing lets a
   manager spend or invest in fanbase yet.
 - **Per-rider salaries** — #25 replaces the flat `WEEKLY_WAGE_PER_RIDER`

@@ -186,9 +186,20 @@ re-exported, reconcile `src/theme.ts` against it first.
 The mockup's **Race day** screen is now **built** as `Race.tsx`, apart from
 the deliberate exclusions. It shows the race's name, date, distance and
 status, the course elevation profile on every reachable state (before the
-race and after it has finished), the squad-selection widget for the
+race and after it has finished), a **prize list** (`PayoutTable`) — the
+`{position, points, prize}` table from the race detail payload, shown only
+on the upcoming screen, where the money is not yet visible anywhere else —
+the squad-selection widget for the
 manager's own team before the race, and — for a finished race — the rider
-results and team points tables. The course profile is **`race_player`'s
+results and team points tables. Each placed rider carries **their own prize
+on their own row** (`RiderResultsTable`), because a team's winnings are the
+sum of its placed riders' — two riders from the same team in the points both
+show, rather than a team lump sum. The team table carries only points
+(no prizes), and a finished race drops the prize list: the winners' rows
+already carry the money. Prize amounts
+are game money, formatted through `Finances.tsx`'s
+`formatMoney`, which `Race.tsx` now imports. The course profile is
+**`race_player`'s
 elevation chart, reused**: `CourseProfile.tsx` imports `CourseChart`,
 `computeProfile` and the `Segment` type directly from `race_player/src/`,
 so the SPA's calendar and the visualizer derive and draw a course
@@ -248,6 +259,8 @@ flags a negative balance, and the history list rendered newest-first with
 the per-entry kind label, date and amount. A second tile shows the team's
 fanbase with this week's change (green or red, per `economy/README.md`,
 *Fanbase is derived too*); merchandise payments appear as their own positive
-ledger lines. The design's "CLUB" grouping is aspirational — the SPA has no
-such section — so `/finances` is a nav item in the TEAM section, next to the
-staff and training screens it visually matches.
+ledger lines, and `prize_money` renders as "Prize money" beside the other
+kinds. Its `formatMoney` helper is exported, since `Race.tsx` formats race
+prize money with it too. The design's "CLUB" grouping is
+aspirational — the SPA has no such section — so `/finances` is a nav item in
+the TEAM section, next to the staff and training screens it visually matches.

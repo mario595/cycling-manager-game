@@ -86,6 +86,35 @@ describe('Finances', () => {
     expect(screen.getByText('after: $500,000')).toBeInTheDocument()
   })
 
+  it('renders a prize_money entry with its description', () => {
+    mockUseFinances.mockReturnValue({
+      finances: {
+        ...finances,
+        entries: [
+          {
+            id: 3,
+            kind: 'prize_money',
+            description: 'Prize money — Circuit of Example',
+            amount: 20_000,
+            occurred_at: '2027-03-15T12:00:00Z',
+            rider_count: null,
+            balance_after: 505_600,
+          },
+          ...finances.entries,
+        ],
+      },
+      loading: false,
+      error: false,
+      refresh: vi.fn(),
+    })
+
+    renderFinances()
+
+    expect(screen.getByText('Prize money — Circuit of Example')).toBeInTheDocument()
+    expect(screen.getByText(/PRIZE MONEY/)).toBeInTheDocument()
+    expect(screen.getByText('+$20,000')).toBeInTheDocument()
+  })
+
   it('shows the warning when the balance is negative', () => {
     mockUseFinances.mockReturnValue({
       finances: { ...finances, balance: -12_400 },

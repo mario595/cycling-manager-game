@@ -8,6 +8,7 @@ from django.test import override_settings
 from rest_framework.test import APIClient
 
 import world.services as world_services
+from competitions.scoring import points_for, prize_for
 from competitions.services import score_race
 from economy.models import STARTING_BALANCE, LedgerEntry
 from racing.models import Race, RaceResult, RaceSquad
@@ -568,6 +569,46 @@ def test_unfinished_race_results_404(db):
     assert response.status_code == 404
 
 
+def test_race_results_includes_prize_per_team(finished_race_with_points):
+    at = datetime(2027, 3, 2, 0, 0, tzinfo=dt_timezone.utc)
+    team = finished_race_with_points.points.get().team
+    for position, amount in [(1, 20_000), (5, 8_000)]:
+        LedgerEntry.objects.create(
+            team=team, kind=LedgerEntry.Kind.PRIZE_MONEY, amount=amount,
+            occurred_at=at, race=finished_race_with_points, position=position,
+            description=f"Prize money — {finished_race_with_points.name}",
+        )
+
+    client = APIClient()
+    user = User.objects.create_user(email="viewer3@example.com", password="s0meth1ng-good")
+    client.force_authenticate(user=user)
+
+    response = client.get(f"/api/racing/races/{finished_race_with_points.pk}/results/")
+
+    assert response.status_code == 200
+    scored_row = next(
+        p for p in response.data["points"]
+        if p["team"]["id"] == team.pk and p["position"] is not None
+    )
+    assert scored_row["prize"] == 28_000
+
+
+def test_race_results_prize_is_zero_for_unplaced_starters(finished_race_with_points):
+    non_scoring = Team.objects.create(name="Zero Team", code="ZRO")
+    RaceSquad.objects.create(race=finished_race_with_points, team=non_scoring)
+
+    client = APIClient()
+    user = User.objects.create_user(email="viewer4@example.com", password="s0meth1ng-good")
+    client.force_authenticate(user=user)
+
+    response = client.get(f"/api/racing/races/{finished_race_with_points.pk}/results/")
+
+    assert response.status_code == 200
+    zero_row = next(p for p in response.data["points"] if p["team"]["id"] == non_scoring.pk)
+    assert zero_row["points"] == 0
+    assert zero_row["prize"] == 0
+
+
 def test_race_results_requires_login(finished_race_with_points):
     client = APIClient()
 
@@ -596,6 +637,25 @@ def test_race_detail_returns_course_and_distance(db):
     assert response.data["course"] == [
         {"length": 40000.0, "gradient": 0.0},
         {"length": 10000.0, "gradient": 0.03},
+    ]
+
+
+def test_race_detail_includes_payout_table(db):
+    race = Race.objects.create(
+        name="Payout Detail Race",
+        course=[{"length": 40000.0, "gradient": 0.0}],
+        status=Race.Status.SCHEDULED,
+    )
+    client = APIClient()
+    user = User.objects.create_user(email="race-payout@example.com", password="s0meth1ng-good")
+    client.force_authenticate(user=user)
+
+    response = client.get(f"/api/racing/races/{race.pk}/")
+
+    assert response.status_code == 200
+    assert response.data["payout"] == [
+        {"position": position, "points": points_for(position), "prize": prize_for(position)}
+        for position in range(1, 11)
     ]
 
 

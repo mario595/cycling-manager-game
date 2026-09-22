@@ -154,7 +154,8 @@ reads `now()` once, then finds and processes whatever is due, in four steps:
    production): every `scheduled` race whose `starts_at` is at or before
    `now()` is flipped to `running`, up to `catch_up_max_races` at a time.
 3. **Execute** — outside any transaction: simulate each claimed race,
-   record its result, then score it (`competitions.services.score_race`).
+   record its result, then score it (`competitions.services.score_race`),
+   then pay its prize money (`economy.services.pay_race_prizes`).
 
 **Training's race half reads the week that just completed, not the one being
 entered.** A `WeekTransition` is written when a week *opens*, and the steps
@@ -175,6 +176,21 @@ to orchestrate them, is where a finished race's points are awarded. A race
 that simulates but fails to score is treated as a broken race: the
 existing per-race `try`/`except` in `_execute` marks it `FAILED` and
 records the traceback, without stopping the rest of the tick.
+
+**Prize money is paid in a second, separate try block, and a payout
+failure does not fail the race.** After `score_race`, the tick computes
+`competitions.services.prizes_by_team(race)` and hands it to
+`economy.services.pay_race_prizes`. It is deliberately *not* inside the
+simulate-and-score block: a race that simulated and scored successfully is
+a real result, and a ledger write failing afterwards — a transient database
+error, say — must not mark it `FAILED` and destroy it. The failure is
+recorded on `tick.error` and the tick carries on. `TickRun.prize_entries`
+counts the rows written.
+
+The `continue` at the end of the first `except` matters: without it, a race
+that just failed to simulate would fall through and be paid a prize it
+never earned. Scoring and paying both hang off the same "the race actually
+ran" branch.
 
 `now()` is read once at the top of `tick()` and threaded through every step
 as `at`, rather than re-read at each one — against `RealClock` those would

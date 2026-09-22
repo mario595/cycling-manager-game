@@ -26,6 +26,12 @@ const upcomingRace: RaceDetail = {
     { length: 40000, gradient: 0.02 },
     { length: 10000, gradient: 0 },
   ],
+  payout: [
+    { position: 1, points: 20, prize: 20_000 },
+    { position: 2, points: 15, prize: 15_000 },
+    { position: 3, points: 12, prize: 12_000 },
+    { position: 10, points: 1, prize: 1_000 },
+  ],
 }
 
 const finishedResults: RaceResults = {
@@ -45,10 +51,22 @@ const finishedResults: RaceResults = {
       finish_time: 3642,
       finished: true,
     },
+    // A rider who abandons keeps a position but never finishes, so must not
+    // draw a prize even when that position pays one (see racing/services.py).
+    {
+      position: 3,
+      rider: { id: 3, name: 'DNF Rider' },
+      team: { id: 2, name: 'Zero Team', code: 'ZRO' },
+      finish_time: null,
+      finished: false,
+    },
   ],
   points: [
-    { team: { id: 1, name: 'Results Team', code: 'RES' }, position: 1, points: 20 },
-    { team: { id: 2, name: 'Zero Team', code: 'ZRO' }, position: null, points: 0 },
+    // Two placed riders in the same team: the API's points row carries the
+    // summed prize (35_000), but the SPA must not render it at the team
+    // level — the winnings live with the riders who earned them.
+    { team: { id: 1, name: 'Results Team', code: 'RES' }, position: 1, points: 20, prize: 35_000 },
+    { team: { id: 2, name: 'Zero Team', code: 'ZRO' }, position: null, points: 0, prize: 0 },
   ],
 }
 
@@ -115,6 +133,25 @@ describe('Race', () => {
     expect(container.querySelector('svg[aria-label="Elevation profile"]')).not.toBeNull()
   })
 
+  it('renders the payout table for an upcoming race', () => {
+    mockUseRaceDetail.mockReturnValue({ race: upcomingRace, loading: false, error: false })
+    mockUseRaceResults.mockReturnValue({ results: null, loading: false, error: false })
+    mockUseSquad.mockReturnValue({
+      squad,
+      loading: false,
+      error: false,
+      save: vi.fn(),
+      saving: false,
+      saveError: null,
+    })
+
+    renderRace()
+
+    expect(screen.getByText('Prize list')).toBeInTheDocument()
+    expect(screen.getByText('$20,000')).toBeInTheDocument()
+    expect(screen.getByText('$1,000')).toBeInTheDocument()
+  })
+
   it('renders the course profile and both tables for a finished race', () => {
     mockUseRaceDetail.mockReturnValue({
       race: { ...upcomingRace, status: 'finished' },
@@ -128,6 +165,34 @@ describe('Race', () => {
     expect(screen.getByText('Winner Rider')).toBeInTheDocument()
     expect(screen.getByText('Zero Team')).toBeInTheDocument()
     expect(screen.getByRole('img', { name: 'Elevation profile' })).toBeInTheDocument()
+    expect(screen.getByText('Team points')).toBeInTheDocument()
+    // Nowhere else to see it: no prize list on a finished race, so the
+    // winner's own row is the only $20,000 on the screen.
+    expect(screen.getAllByText('$20,000')).toHaveLength(1)
+    expect(screen.queryByText('Prize list')).toBeNull()
+    // A rider without a prize shows none; there is no prize list either.
+    expect(screen.getByText('DNF Rider')).toBeInTheDocument()
+    expect(screen.queryByText('$12,000')).toBeNull()
+  })
+
+  it('shows each placed rider own prize, not a team lump sum', () => {
+    mockUseRaceDetail.mockReturnValue({
+      race: { ...upcomingRace, status: 'finished' },
+      loading: false,
+      error: false,
+    })
+    mockUseRaceResults.mockReturnValue({ results: finishedResults, loading: false, error: false })
+
+    renderRace()
+
+    // Two riders from the same team (1st: $20,000, 2nd: $15,000) each carry
+    // their own prize on their row; without the prize list those are the
+    // only occurrences. The API-supplied team sum (35_000) is not shown
+    // anywhere, and the team table is back to points only.
+    expect(screen.getAllByText('$20,000')).toHaveLength(1)
+    expect(screen.getAllByText('$15,000')).toHaveLength(1)
+    expect(screen.queryByText('$35,000')).toBeNull()
+    expect(screen.queryByText('Team points and prizes')).toBeNull()
   })
 
   it('renders without a squad panel when the manager has no team', () => {
