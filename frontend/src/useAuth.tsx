@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 
 import {
+  acknowledgeSpell as apiAcknowledgeSpell,
   claimTeam as apiClaimTeam,
   getMe,
   login as apiLogin,
@@ -17,6 +18,7 @@ interface AuthState {
   login: (email: string, password: string) => Promise<void>
   logout: () => Promise<void>
   claim: (name: string, code: string) => Promise<void>
+  acknowledgeLostTeam: (spellId: number) => Promise<void>
 }
 
 const AuthContext = createContext<AuthState | null>(null)
@@ -66,7 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     await apiLogout()
-    setMe({ authenticated: false, display_name: null, team: null })
+    setMe({ authenticated: false, display_name: null, team: null, lost_team: null })
   }
 
   const claim = async (name: string, code: string) => {
@@ -74,8 +76,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setMe(await getMe())
   }
 
+  const acknowledgeLostTeam = async (spellId: number) => {
+    await apiAcknowledgeSpell(spellId)
+    setMe((current) => (current ? { ...current, lost_team: null } : current))
+  }
+
   return (
-    <AuthContext.Provider value={{ me, loading, register, login, logout, claim }}>
+    <AuthContext.Provider
+      value={{ me, loading, register, login, logout, claim, acknowledgeLostTeam }}
+    >
       {children}
     </AuthContext.Provider>
   )

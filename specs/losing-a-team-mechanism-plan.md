@@ -422,7 +422,7 @@ Serializer, `MeView` lookup, `AcknowledgeSpellView`, URL.
 `::test_acknowledge_spell_is_idempotent`,
 `::test_acknowledge_another_users_spell_404s`.
 
-### W6 — `frontend/`: show it once on `/claim`
+### W6 — `frontend/`: show it once on `/claim` ✅ done (79 frontend tests pass via `npx vitest run`)
 `api.ts`, `useAuth.tsx`, `ClaimTeam.tsx` as specified.
 **Verification is manual** (see below) — this repo has no frontend test
 runner.
