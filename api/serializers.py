@@ -142,10 +142,19 @@ class ClaimTeamSerializer(serializers.Serializer):
         return value.upper()
 
 
+class LostTeamSerializer(serializers.Serializer):
+    spell = serializers.IntegerField()
+    name = serializers.CharField()
+    code = serializers.CharField()
+    reason = serializers.CharField()
+    ended_at = serializers.DateTimeField()
+
+
 class MeSerializer(serializers.Serializer):
     authenticated = serializers.BooleanField()
     display_name = serializers.CharField(allow_null=True)
     team = MeTeamSerializer(allow_null=True)
+    lost_team = LostTeamSerializer(allow_null=True)
 
 
 class CourseSegmentSerializer(serializers.Serializer):

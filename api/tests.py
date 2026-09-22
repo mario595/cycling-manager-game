@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone as dt_timezone
 
 import pytest
 from django.test import override_settings
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 import world.services as world_services
@@ -17,7 +18,7 @@ from riders.models import DISPLAY_MAX, Rider
 from schedule.models import SEASON_WEEKS, Season, Week
 from staff.models import Trainer, TrainingWeekReport
 from staff.pricing import hire_fee, weekly_salary
-from teams.models import Team
+from teams.models import ManagerialSpell, Team
 from world.services import now
 
 from accounts.models import User
@@ -251,6 +252,105 @@ def test_me_sets_the_csrf_cookie(db):
 
     assert response.status_code == 200
     assert "csrftoken" in response.cookies
+
+
+def test_me_reports_lost_team_for_teamless_ex_manager(db):
+    user = User.objects.create_user(email="ex-manager@example.com", password="s0meth1ng-good")
+    ManagerialSpell.objects.create(
+        manager=user,
+        team_name="Lost Team",
+        team_code="LST",
+        ended_at=timezone.now(),
+        reason=ManagerialSpell.Reason.ADMIN,
+    )
+    client = APIClient()
+    client.force_authenticate(user=user)
+
+    response = client.get("/api/accounts/me/")
+
+    assert response.status_code == 200
+    assert response.data["team"] is None
+    assert response.data["lost_team"]["name"] == "Lost Team"
+    assert response.data["lost_team"]["code"] == "LST"
+    assert response.data["lost_team"]["reason"] == "Released by an operator"
+
+
+def test_me_omits_lost_team_once_acknowledged(db):
+    user = User.objects.create_user(email="ex-manager2@example.com", password="s0meth1ng-good")
+    ManagerialSpell.objects.create(
+        manager=user,
+        team_name="Lost Team",
+        team_code="LST",
+        ended_at=timezone.now(),
+        acknowledged_at=timezone.now(),
+        reason=ManagerialSpell.Reason.ADMIN,
+    )
+    client = APIClient()
+    client.force_authenticate(user=user)
+
+    response = client.get("/api/accounts/me/")
+
+    assert response.data["lost_team"] is None
+
+
+def test_me_omits_lost_team_when_user_has_claimed_again(db):
+    user = User.objects.create_user(email="ex-manager3@example.com", password="s0meth1ng-good")
+    ManagerialSpell.objects.create(
+        manager=user,
+        team_name="Lost Team",
+        team_code="LST",
+        ended_at=timezone.now(),
+        reason=ManagerialSpell.Reason.ADMIN,
+    )
+    Team.objects.create(name="New Team", code="NEW", manager=user)
+    client = APIClient()
+    client.force_authenticate(user=user)
+
+    response = client.get("/api/accounts/me/")
+
+    assert response.data["team"]["name"] == "New Team"
+    assert response.data["lost_team"] is None
+
+
+def test_acknowledge_spell_is_idempotent(db):
+    user = User.objects.create_user(email="ex-manager4@example.com", password="s0meth1ng-good")
+    spell = ManagerialSpell.objects.create(
+        manager=user,
+        team_name="Lost Team",
+        team_code="LST",
+        ended_at=timezone.now(),
+        reason=ManagerialSpell.Reason.ADMIN,
+    )
+    client = APIClient()
+    client.force_authenticate(user=user)
+
+    first = client.post(f"/api/teams/spells/{spell.pk}/acknowledge/")
+    second = client.post(f"/api/teams/spells/{spell.pk}/acknowledge/")
+
+    assert first.status_code == 204
+    assert second.status_code == 404
+    spell.refresh_from_db()
+    assert spell.acknowledged_at is not None
+
+
+def test_acknowledge_another_users_spell_404s(db):
+    owner = User.objects.create_user(email="owner@example.com", password="s0meth1ng-good")
+    other = User.objects.create_user(email="other@example.com", password="s0meth1ng-good")
+    spell = ManagerialSpell.objects.create(
+        manager=owner,
+        team_name="Lost Team",
+        team_code="LST",
+        ended_at=timezone.now(),
+        reason=ManagerialSpell.Reason.ADMIN,
+    )
+    client = APIClient()
+    client.force_authenticate(user=other)
+
+    response = client.post(f"/api/teams/spells/{spell.pk}/acknowledge/")
+
+    assert response.status_code == 404
+    spell.refresh_from_db()
+    assert spell.acknowledged_at is None
 
 
 @pytest.fixture

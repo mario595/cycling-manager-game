@@ -414,7 +414,7 @@ The command as specified, `world.services.now()` imported inside `handle()`.
 `::test_unknown_team_raises_command_error`,
 `::test_unmanaged_team_raises_command_error`.
 
-### W5 — `api/`: `lost_team` on `me`, and the acknowledge endpoint
+### W5 — `api/`: `lost_team` on `me`, and the acknowledge endpoint ✅ done
 Serializer, `MeView` lookup, `AcknowledgeSpellView`, URL.
 **Tests:** `api/tests.py::test_me_reports_lost_team_for_teamless_ex_manager`,
 `::test_me_omits_lost_team_once_acknowledged`,
