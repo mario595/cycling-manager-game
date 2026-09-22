@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 
-import type { CalendarRace, RaceDetail, RaceResultEntry, RaceResults, Squad, SquadRider } from '../api'
+import type { CalendarRace, RaceDetail, RacePayoutEntry, RaceResultEntry, RaceResults, Squad, SquadRider } from '../api'
 import { CourseProfile } from '../components/CourseProfile'
 import { Button, Card, CardHeader, LabelBar, PageBody, PageHeading, StatTile } from '../components/primitives'
 import { raceStatusLabel } from '../raceStatus'
@@ -10,6 +10,7 @@ import { color, font } from '../theme'
 import { useRaceDetail } from '../useRaceDetail'
 import { useRaceResults } from '../useRaceResults'
 import { useSquad } from '../useSquad'
+import { formatMoney } from '../format'
 
 const SQUAD_SIZE = 4
 
@@ -95,7 +96,7 @@ function raceBody(
     return (
       <>
         <CourseProfile course={race.course} />
-        <RiderResultsTable results={state.results} />
+        <RiderResultsTable results={state.results} payout={race.payout} />
         <TeamPointsTable results={state.results} />
       </>
     )
@@ -109,6 +110,7 @@ function raceBody(
   return (
     <>
       <CourseProfile course={race.course} />
+      <PayoutTable payout={race.payout} />
       {state.squad ? (
         <SquadPanel
           squad={state.squad}
@@ -129,14 +131,20 @@ function MessageCard({ text }: { text: string }) {
   )
 }
 
-function RiderResultsTable({ results }: { results: RaceResults }) {
+function RiderResultsTable({ results, payout }: { results: RaceResults; payout: RacePayoutEntry[] }) {
   const winner = results.results.find((r) => r.finished)
   const winnerTime = winner?.finish_time ?? null
+  const prizeByPosition = new Map(payout.map((p) => [p.position, p.prize]))
 
   const timeCell = (entry: RaceResultEntry): string => {
     if (!entry.finished || entry.finish_time === null || winnerTime === null) return 'DNF'
     if (entry.position === winner?.position) return formatRaceTime(winnerTime)
     return formatGap(entry.finish_time - winnerTime)
+  }
+
+  const prizeFor = (entry: RaceResultEntry): number => {
+    if (!entry.finished) return 0
+    return prizeByPosition.get(entry.position) ?? 0
   }
 
   return (
@@ -164,6 +172,9 @@ function RiderResultsTable({ results }: { results: RaceResults }) {
                   {entry.team.code}
                 </span>
               ) : null}
+            </div>
+            <div style={{ width: 64, textAlign: 'right', fontFamily: font.mono, fontSize: 13.5, fontWeight: 600, whiteSpace: 'nowrap', color: color.positive }}>
+              {prizeFor(entry) > 0 ? formatMoney(prizeFor(entry)) : ''}
             </div>
             <div style={{ fontFamily: font.mono, fontSize: 14, fontWeight: 600 }}>{timeCell(entry)}</div>
           </div>
@@ -196,6 +207,36 @@ function TeamPointsTable({ results }: { results: RaceResults }) {
               </span>
             </div>
             <div style={{ fontFamily: font.mono, fontSize: 14, fontWeight: 600 }}>{entry.points}</div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
+function PayoutTable({ payout }: { payout: RacePayoutEntry[] }) {
+  return (
+    <Card>
+      <CardHeader title="Prize list" />
+      <div>
+        {payout.map((entry) => (
+          <div
+            key={entry.position}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              padding: '12px 20px',
+              borderBottom: `1px solid ${color.divider}`,
+            }}
+          >
+            <div style={{ width: 32, fontFamily: font.mono, fontSize: 13, color: color.mutedStrong }}>
+              {entry.position}
+            </div>
+            <div style={{ flex: 1, fontSize: 13.5, color: color.muted }}>{entry.points} points</div>
+            <div style={{ fontFamily: font.mono, fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap' }}>
+              {formatMoney(entry.prize)}
+            </div>
           </div>
         ))}
       </div>

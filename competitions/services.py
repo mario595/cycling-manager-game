@@ -5,7 +5,7 @@ from racing.models import Race, RaceResult
 from schedule.models import Season, Week
 
 from .models import RacePoints
-from .scoring import POINTS_BY_POSITION, points_for
+from .scoring import POINTS_BY_POSITION, points_for, prize_for
 
 
 def score_race(race: Race) -> list[RacePoints]:
@@ -44,6 +44,41 @@ def score_race(race: Race) -> list[RacePoints]:
         if points_for(position) > 0
     ]
     return RacePoints.objects.bulk_create(to_create, ignore_conflicts=True)
+
+
+def prizes_by_team(race: Race) -> dict[int, list[tuple[int, int]]]:
+    """Every placed rider's prize for one finished race, keyed by team.
+
+    {team_id: [(position, amount), ...]} — a team with two riders in the
+    top 10 gets two entries in its list, unlike points which credit only
+    the best finisher. Read-only: writes nothing, touches no ledger.
+    economy/ cannot compute this itself (it may not import racing/ or
+    competitions/), so world/ calls this and passes the result into
+    economy.services.pay_race_prizes — the same shape points_by_team/
+    apply_weekly_fanbase already use for the identical constraint
+    (economy/README.md, *Why `economy/` does not query `RacePoints`*).
+
+    Raises ValueError if the race is not FINISHED.
+    """
+    if race.status != Race.Status.FINISHED:
+        raise ValueError(f"{race} is not finished; nothing to pay")
+
+    rows = (
+        RaceResult.objects
+        .filter(race=race, finish_time__isnull=False)     # non-finishers never pay
+        .values_list("rider__team_id", "position")
+        .order_by("position")
+    )
+
+    by_team: dict[int, list[tuple[int, int]]] = {}
+    for team_id, position in rows:
+        if team_id is None:                # team-less rider: spec item 5
+            continue
+        amount = prize_for(position)
+        if amount <= 0:
+            continue
+        by_team.setdefault(team_id, []).append((position, amount))
+    return by_team
 
 
 def _countback_key(entry: dict) -> tuple:

@@ -177,6 +177,41 @@ def charge_weekly_wages(week) -> int:
     return written
 
 
+def pay_race_prizes(race_id: int, *, race_name: str, at,
+                    prizes_by_team: dict[int, list[tuple[int, int]]]) -> int:
+    """Credit every team its prize money for one race. Returns rows written.
+
+    Takes the race as an id plus the amounts already computed by
+    competitions.services.prizes_by_team — economy/ may not import
+    racing/ or competitions/ (AGENTS.md), so it never reads a RaceResult
+    itself. The identical shape apply_weekly_fanbase takes points_by_team.
+
+    Idempotent through the (team, race, position) constraint, not an
+    early return: a partial payout (interrupted mid-loop) must be
+    completable on retry, unlike score_race's early return which only
+    ever needs to check for the presence of one row per team.
+    """
+    written = 0
+    description = f"Prize money — {race_name}"[:120]
+    for team_id, placements in prizes_by_team.items():
+        for position, amount in placements:
+            with transaction.atomic():
+                try:
+                    LedgerEntry.objects.create(
+                        team_id=team_id,
+                        kind=LedgerEntry.Kind.PRIZE_MONEY,
+                        amount=amount,
+                        occurred_at=at,
+                        race_id=race_id,
+                        position=position,
+                        description=description,
+                    )
+                    written += 1
+                except IntegrityError:
+                    continue      # already paid; correct outcome, not an error
+    return written
+
+
 def apply_weekly_fanbase(week, *, points_by_team: dict[int, int]) -> int:
     """Adjust every team's fanbase for `week`. Returns rows written.
 
