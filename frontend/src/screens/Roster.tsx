@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 
 import type { Rider } from '../api'
 import { Bar, Card, Chip, ChipLabel, LabelBar, PageBody, PageHeading, StatTile } from '../components/primitives'
+import { formatMoney } from '../format'
 import { barColor, color, font } from '../theme'
 import { useAuth } from '../useAuth'
 import { useRoster } from '../useRoster'
@@ -24,7 +25,7 @@ const ATTR_LABELS: { key: AttrKey; label: string }[] = [
   { key: 'positioning', label: 'Positioning' },
 ]
 
-type SortKey = 'name' | 'age' | 'climb' | 'sprint' | 'flat' | 'resistance' | 'positioning'
+type SortKey = 'name' | 'age' | 'climb' | 'sprint' | 'flat' | 'resistance' | 'positioning' | 'weekly_salary'
 
 const SORT_OPTIONS: Array<{ key: SortKey; label: string }> = [
   { key: 'name', label: 'Name' },
@@ -34,6 +35,7 @@ const SORT_OPTIONS: Array<{ key: SortKey; label: string }> = [
   { key: 'flat', label: 'Flat' },
   { key: 'resistance', label: 'Resistance' },
   { key: 'positioning', label: 'Positioning' },
+  { key: 'weekly_salary', label: 'Salary' },
 ]
 
 export function Roster() {
@@ -233,6 +235,7 @@ function RiderCard({
         style={{
           display: 'flex',
           alignItems: 'center',
+          justifyContent: 'space-between',
           gap: 10,
           borderTop: `1px solid ${color.divider}`,
           paddingTop: 10,
@@ -240,6 +243,9 @@ function RiderCard({
       >
         <span style={{ fontSize: 11, color: color.muted, fontFamily: font.mono }}>
           {rider.height_cm} cm · {rider.weight_kg} kg
+        </span>
+        <span style={{ fontSize: 11, color: color.mutedStrong, fontFamily: font.mono }}>
+          {formatMoney(rider.weekly_salary)}/wk
         </span>
       </div>
     </button>
@@ -252,6 +258,7 @@ function RiderPanel({ rider, onClose }: { rider: Rider; onClose: () => void }) {
     ['Height', `${rider.height_cm} cm`],
     ['Weight', `${rider.weight_kg} kg`],
     ['Speciality', rider.speciality],
+    ['Salary', `${formatMoney(rider.weekly_salary)}/wk`],
   ]
 
   return (

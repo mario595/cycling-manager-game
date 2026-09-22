@@ -375,7 +375,15 @@ existing hidden-trait assertion rather than writing a new one); the finances
 endpoint returns `weekly_wage_bill` equal to the roster's salary sum, and `0`
 for a user with no team.
 
-### W7 — `frontend/`: show it
+### W7 — `frontend/`: show it ✅
+
+The plan said "extend" `frontend/src/screens/Roster.test.tsx`, but that file
+did not exist (`Finances.test.tsx` did, and was extended as planned) — created
+it fresh, mirroring `Finances.test.tsx`'s mock/render pattern. Also fixed a
+pre-existing test-string collision `Finances.test.tsx` exposed: the new
+"WEEKLY WAGES" stat tile label coincides with the existing ledger entry-kind
+label of the same text, so the exact-match assertion was loosened to
+`getAllByText(...).length >= 2`.
 `api.ts` types, the Roster column and sort option, the Finances tile.
 **Tests**: `frontend/src/screens/Roster.test.tsx` — a rider's salary renders
 formatted with the `$` prefix, and sorting by Salary reorders the list.

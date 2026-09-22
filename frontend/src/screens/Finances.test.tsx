@@ -24,6 +24,7 @@ const finances: FinancesPayload = {
   balance: 485_600,
   fanbase: 10_650,
   fanbase_change: 650,
+  weekly_wage_bill: 14_400,
   entries: [
     {
       id: 2,
@@ -81,9 +82,18 @@ describe('Finances', () => {
     expect(screen.getByText('$485,600')).toBeInTheDocument()
     // Newest entry is first in the payload and rendered first.
     expect(screen.getByText('Weekly wages')).toBeInTheDocument()
-    expect(screen.getByText(/WEEKLY WAGES/)).toBeInTheDocument()
+    // Two elements now say "WEEKLY WAGES": the entry's kind label and the
+    // wage-bill stat tile (added by #25) — assert there are at least two
+    // rather than picking one, so this stays robust to either changing.
+    expect(screen.getAllByText(/WEEKLY WAGES/).length).toBeGreaterThanOrEqual(2)
     expect(screen.getByText('after: $485,600')).toBeInTheDocument()
     expect(screen.getByText('after: $500,000')).toBeInTheDocument()
+  })
+
+  it('renders the weekly wage bill tile', () => {
+    renderFinances()
+
+    expect(screen.getByText('$14,400')).toBeInTheDocument()
   })
 
   it('renders a prize_money entry with its description', () => {
