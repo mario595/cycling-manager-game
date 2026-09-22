@@ -339,7 +339,7 @@ rejects 0. Migration behaviour is proven by W6's end-to-end check rather than a
 migration test — this repo has no migration-test harness and adding one is out
 of scope.
 
-### W4 — `riders/generation.py`: price riders at creation
+### W4 — `riders/generation.py`: price riders at creation ✅
 Set `weekly_salary` in `generate_rider`, breaking the circular import as
 described above.
 **Tests** (`riders/tests/test_generation.py`): a generated rider's

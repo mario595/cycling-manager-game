@@ -4,6 +4,7 @@ import random
 
 from riders.generation import BUILD_PROFILES, _roll_potential, generate_rider, generate_roster
 from riders.models import ENGINE_ATTRIBUTES, Rider
+from riders.pricing import weekly_salary_for
 from riders.services import FRESHNESS_MAX
 
 
@@ -36,6 +37,19 @@ def test_generation_is_deterministic():
     assert first.potential == second.potential
     for attribute in ENGINE_ATTRIBUTES:
         assert getattr(first, attribute) == getattr(second, attribute)
+
+
+def test_generated_rider_is_priced_by_pricing_module():
+    rider = generate_rider(rng=random.Random(3))
+
+    assert rider.weekly_salary == weekly_salary_for(rider)
+
+
+def test_generated_roster_has_a_spread_of_salaries():
+    rng = random.Random(4)
+    roster = generate_roster(12, rng=rng)
+
+    assert len(set(rider.weekly_salary for rider in roster)) > 1
 
 
 def test_young_rider_potential_is_above_current():
