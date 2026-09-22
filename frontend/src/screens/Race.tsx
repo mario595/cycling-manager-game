@@ -98,7 +98,6 @@ function raceBody(
         <CourseProfile course={race.course} />
         <RiderResultsTable results={state.results} payout={race.payout} />
         <TeamPointsTable results={state.results} />
-        <PayoutTable payout={race.payout} />
       </>
     )
   }
