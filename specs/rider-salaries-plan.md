@@ -367,7 +367,7 @@ existence half); the `(team, week)` constraint still makes a second call a no-op
 Also update `world/tests/test_tick.py`, which asserts
 `entry.amount == -(len(riders) * WEEKLY_WAGE_PER_RIDER)`.
 
-### W6 — `api/`: serialize salary and the wage bill
+### W6 — `api/`: serialize salary and the wage bill ✅
 `RiderSerializer`, `FinancesSerializer`, `FinancesView` per the section above.
 **Tests** (`api/tests.py`): the riders endpoint includes `weekly_salary` and it
 matches the stored value; it does **not** include any hidden trait (extend the

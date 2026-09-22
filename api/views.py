@@ -25,6 +25,7 @@ from economy.services import (
     fanbase_entries_for,
     fanbase_for,
     offers_for,
+    payroll_for,
     sign_offer,
 )
 from economy.sponsors import PROFILES_BY_KEY
@@ -584,7 +585,8 @@ class FinancesView(APIView):
         team = team_for(request.user)
         if team is None:
             return Response(FinancesSerializer({
-                "balance": 0, "fanbase": 0, "fanbase_change": 0, "entries": [],
+                "balance": 0, "fanbase": 0, "fanbase_change": 0,
+                "weekly_wage_bill": 0, "entries": [],
             }).data)
 
         entries = list(entries_for(team))
@@ -596,11 +598,12 @@ class FinancesView(APIView):
         latest = fanbase_entries_for(team).filter(
             kind=FanbaseEntry.Kind.WEEKLY,
         ).first()            # model ordering is -occurred_at, -pk
-    
+
         return Response(FinancesSerializer({
             "balance": balance_for(team),
             "fanbase": fanbase_for(team),
             "fanbase_change": latest.delta if latest else 0,
+            "weekly_wage_bill": payroll_for(team),
             "entries": entries,
         }).data)
 
