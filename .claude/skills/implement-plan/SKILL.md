@@ -19,7 +19,7 @@ commit it. Then start the next one.
 
 ## Before you start
 
-Do all five steps, in this order. Do not skip one because it looks unnecessary.
+Do all six steps, in this order. Do not skip one because it looks unnecessary.
 
 ### 1. Read
 
@@ -82,14 +82,25 @@ worktree at the same time cannot drop yours mid-run. `config/worktree.py` has
 the scheme. Never set `POSTGRES_DB` to work around a database problem — that
 opts you back into sharing.
 
-### 5. Record the baseline — before you change any file
+### 5. Bring master in — before you write a line
+
+Your branch may have been cut days ago, and other tickets have landed since.
+Merge master **now**, not at the end. Conflicts resolved here are conflicts
+against your own empty diff, which is the cheapest they will ever be; left until
+the PR, you resolve them against a whole feature and risk having built on a base
+that had already moved.
+
+Follow **Bringing master in** below, then come back here.
+
+### 6. Record the baseline — before you change any file
 
 ```bash
 PYTEST
 ```
 
 Write down the result: how many passed, how many failed. That is your baseline,
-and it is the branch as it stands — spec and plan commits included — not master.
+taken **after** the merge, so it measures the branch you are actually about to
+build on — current master plus this ticket's spec and plan commits.
 
 **If anything fails now, stop and report it.** Do not start work in a red repo —
 you will not be able to tell your breakage from the breakage that was already
@@ -262,8 +273,9 @@ are the ones that get broken:
 1. Run the full suite one last time. It must be green.
 2. Do the plan's **Documentation update** section. It is not optional.
 3. Commit that documentation change.
-4. **Bring master in and resolve any conflicts** — see below. Do this *before*
-   the user tries it, so what they verify is what will actually merge.
+4. **Bring master in again** — see below. You merged it before you started;
+   master has probably moved since. Do this *before* the user tries it, so what
+   they verify is what will actually merge.
    **This is a gate you may not skip before opening the PR: the branch must be
    conflict-free against latest master.**
 5. **Leave it running for review** — see below.
@@ -334,12 +346,24 @@ ticket. Commit what is finished, say exactly where you got to, and stop.
 
 ## Bringing master in
 
-Your branch was cut from master days or hours ago and other work has landed
-since. Merge it now, while you can still fix what breaks — not after the user
-has signed off on something that no longer applies.
+**You do this twice**: once before you write any code, and once more before the
+PR goes up, because master keeps moving while you work. Same procedure both
+times.
+
+Start by asking whether there is anything to merge at all:
 
 ```bash
 git fetch origin
+git log --oneline HEAD..origin/master
+```
+
+**Empty means master has not moved** — nothing to do, say so in a few words and
+carry on. A worktree `/product-spec` created this morning is often already
+current.
+
+Otherwise merge:
+
+```bash
 git merge origin/master
 ```
 
@@ -401,10 +425,10 @@ user looks at it, since master may have brought new ones:
 /home/mario/dev/cycling-manager/.venv/bin/python manage.py migrate
 ```
 
-### Just before you push
+### Once more, just before you push
 
 Master can move again while the user is clicking through. When you have the
-go-ahead, check once more and merge again if it has:
+go-ahead, check a last time and merge again if it has:
 
 ```bash
 git fetch origin && git log --oneline HEAD..origin/master
