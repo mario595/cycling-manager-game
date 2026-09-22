@@ -389,7 +389,7 @@ migrations. No service changes yet.
 **Test:** `teams/tests/test_models.py::test_managerial_spell_orders_newest_first`
 and `::test_team_managed_since_defaults_to_null`.
 
-### W2 — `teams/services.py`: `release_team`, and `claim_team` stamps `managed_since`
+### W2 — `teams/services.py`: `release_team`, and `claim_team` stamps `managed_since` ✅ done
 Both halves together — `release_team` reads what `claim_team` writes, and
 splitting them leaves a half-wired field.
 **Load-bearing:** the `select_for_update()` re-read, and the fact that release
@@ -401,7 +401,7 @@ count and `LedgerEntry` count are identical before and after),
 `::test_claim_team_stamps_managed_since`,
 `::test_release_team_tolerates_null_managed_since`.
 
-### W3 — `teams/tests/test_services.py`: released team is re-claimable
+### W3 — `teams/tests/test_services.py`: released team is re-claimable ✅ done (built alongside W2 — same file, same commit)
 Release a claimed team, then `claim_team` again, and assert the second claim
 takes that team, renames it, and resets balance/fanbase — i.e. the existing
 claim path is unchanged by W2.

@@ -20,8 +20,8 @@ from economy.services import (
 from racing.models import Race, RaceResult
 from riders.models import Rider
 from schedule.models import Season
-from teams.models import Team
-from teams.services import ROSTER_SIZE, NoTeamAvailable, claim_team
+from teams.models import ManagerialSpell, Team
+from teams.services import ROSTER_SIZE, NoTeamAvailable, claim_team, release_team
 
 #: Game time the takeover entries under test are stamped with. claim_team
 #: requires it so library code never reads the clock itself (AGENTS.md) —
@@ -190,3 +190,73 @@ def test_claiming_clears_unsigned_offers(db, user, team, season):
     claim_team(user, name="Mountain Goats", code="MGO", at=AT)
 
     assert offers_for(team, season).count() == 0
+
+
+def test_claim_team_stamps_managed_since(db, user, team):
+    claimed = claim_team(user, name="Mountain Goats", code="MGO", at=AT)
+
+    assert claimed.managed_since == AT
+
+
+def test_release_team_clears_manager_and_records_spell(db, user, team):
+    claim_team(user, name="Mountain Goats", code="MGO", at=AT)
+    team.refresh_from_db()
+    released_at = datetime(2027, 4, 1, tzinfo=dt_timezone.utc)
+
+    spell = release_team(team, reason=ManagerialSpell.Reason.ADMIN, at=released_at)
+
+    team.refresh_from_db()
+    assert team.manager_id is None
+    assert team.managed_since is None
+    assert spell.manager_id == user.pk
+    assert spell.team_id == team.pk
+    assert spell.team_name == "Mountain Goats"
+    assert spell.team_code == "MGO"
+    assert spell.started_at == AT
+    assert spell.ended_at == released_at
+    assert spell.reason == ManagerialSpell.Reason.ADMIN
+    assert spell.acknowledged_at is None
+
+
+def test_release_team_on_unmanaged_team_is_a_noop(db, team):
+    result = release_team(team, reason=ManagerialSpell.Reason.ADMIN, at=AT)
+
+    assert result is None
+    assert ManagerialSpell.objects.count() == 0
+
+
+def test_release_team_leaves_roster_and_ledger_untouched(db, user, team, rider):
+    claim_team(user, name="Mountain Goats", code="MGO", at=AT)
+    team.refresh_from_db()
+    rider_count_before = team.riders.count()
+    ledger_count_before = LedgerEntry.objects.filter(team=team).count()
+
+    release_team(team, reason=ManagerialSpell.Reason.ADMIN, at=AT)
+
+    assert team.riders.count() == rider_count_before
+    assert LedgerEntry.objects.filter(team=team).count() == ledger_count_before
+
+
+def test_release_team_tolerates_null_managed_since(db, user, team):
+    team.manager = user
+    team.save(update_fields=["manager"])
+
+    spell = release_team(team, reason=ManagerialSpell.Reason.ADMIN, at=AT)
+
+    assert spell.started_at is None
+
+
+def test_released_team_can_be_claimed_again(db, user, team):
+    other_user = User.objects.create_user(email="c@d.com", password="x", display_name="C")
+    claim_team(user, name="Mountain Goats", code="MGO", at=AT)
+    team.refresh_from_db()
+
+    release_team(team, reason=ManagerialSpell.Reason.ADMIN, at=AT)
+
+    reclaimed = claim_team(other_user, name="New Herd", code="NHD", at=AT)
+
+    assert reclaimed.pk == team.pk
+    assert reclaimed.manager_id == other_user.pk
+    assert reclaimed.name == "New Herd"
+    assert balance_for(reclaimed) == STARTING_BALANCE
+    assert fanbase_for(reclaimed) == STARTING_FANBASE
