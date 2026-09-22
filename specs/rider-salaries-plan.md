@@ -294,7 +294,7 @@ second multi-valued join to fan out against.
 
 ## Work items
 
-### W1 — `riders/pricing.py` + `riders/tests/test_pricing.py`: the formula
+### W1 — `riders/pricing.py` + `riders/tests/test_pricing.py`: the formula ✅
 New module per the signatures above, with constants named and documented. No
 model change yet, nothing calls it.
 **Tests** (`riders/tests/test_pricing.py`): a stronger rider costs more than a
@@ -305,7 +305,17 @@ an `int`; a rider with floor attributes still costs at least
 `SALARY_AT_MIN_STRENGTH`; `weekly_salary_for` touches no database (call it on an
 unsaved `Rider()` with no `db` fixture).
 
-### W2 — `riders/tests/test_pricing.py`: calibration
+### W2 — `riders/tests/test_pricing.py`: calibration ✅
+
+Landed with W1 in the same commit and the same file — the plan lists them
+separately, but the formula was calibrated (constants tuned against sampled
+`generate_rider` output, per Design decision 6) before it was written, so
+splitting the commit would have meant reverting and rewriting the same
+constants. `SALARY_AT_MIN_STRENGTH = 100`, `SALARY_AT_MAX_STRENGTH = 10_000`,
+`_STRENGTH_EXPONENT = 2.0` — over a 3000-rider seeded sample these land the
+p95/p5 spread at ~10x and the mean within ~2% of `WEEKLY_WAGE_PER_RIDER`
+(1,200), both asserted in `test_generated_roster_spans_roughly_tenfold` and
+`test_generated_roster_average_matches_flat_wage`.
 **Load-bearing — this is where the feature is actually tuned.** Two seeded tests
 over a generated population (a few hundred riders via `generate_rider(rng=...)`):
 the mean salary is within ±10% of `WEEKLY_WAGE_PER_RIDER`; the ratio of the 95th
