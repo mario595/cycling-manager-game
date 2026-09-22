@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -32,7 +32,29 @@ const staff: StaffPayload = {
       hire_fee: 46_800,
       weekly_salary: 3_900,
     },
+    {
+      id: 8,
+      name: 'Helper Two',
+      nationality: 'BE',
+      speciality: 'flat',
+      skills: { climb: 2, sprint: 5, flat: 8, resistance: 6, positioning: 5 },
+      hire_fee: 20_000,
+      weekly_salary: 1_700,
+    },
+    {
+      id: 9,
+      name: 'Sprinter Three',
+      nationality: 'IT',
+      speciality: 'sprint',
+      skills: { climb: 1, sprint: 9, flat: 5, resistance: 4, positioning: 6 },
+      hire_fee: 34_000,
+      weekly_salary: 2_800,
+    },
   ],
+}
+
+function visibleNames() {
+  return screen.getAllByText(/^(Coach One|Helper Two|Sprinter Three)$/).map((el) => el.textContent)
 }
 
 function renderStaff() {
@@ -73,14 +95,59 @@ describe('Staff', () => {
 
     renderStaff()
 
-    expect(screen.getByRole('button', { name: 'Hire' })).toBeDisabled()
-    expect(screen.getByText(/cannot afford/i)).toBeInTheDocument()
+    for (const button of screen.getAllByRole('button', { name: 'Hire' })) {
+      expect(button).toBeDisabled()
+    }
+    expect(screen.getAllByText(/cannot afford/i)).toHaveLength(3)
   })
 
   it('enables Hire when the balance covers the fee', () => {
     renderStaff()
 
-    expect(screen.getByRole('button', { name: 'Hire' })).toBeEnabled()
+    for (const button of screen.getAllByRole('button', { name: 'Hire' })) {
+      expect(button).toBeEnabled()
+    }
     expect(screen.queryByText(/cannot afford/i)).not.toBeInTheDocument()
+  })
+
+  it('lists the cheapest fee first by default', () => {
+    renderStaff()
+
+    expect(visibleNames()).toEqual(['Helper Two', 'Sprinter Three', 'Coach One'])
+  })
+
+  it('sorts by salary', () => {
+    renderStaff()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Salary' }))
+
+    expect(visibleNames()).toEqual(['Helper Two', 'Sprinter Three', 'Coach One'])
+  })
+
+  it('sorts by name', () => {
+    renderStaff()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Name' }))
+
+    expect(visibleNames()).toEqual(['Coach One', 'Helper Two', 'Sprinter Three'])
+  })
+
+  it('filters the pool by speciality', () => {
+    renderStaff()
+
+    fireEvent.click(screen.getByRole('button', { name: 'climb' }))
+
+    expect(visibleNames()).toEqual(['Coach One'])
+    expect(screen.getByText(/1 of 3 trainers/)).toBeInTheDocument()
+  })
+
+  it('returns every trainer when the All filter is back on', () => {
+    renderStaff()
+
+    fireEvent.click(screen.getByRole('button', { name: 'climb' }))
+    fireEvent.click(screen.getByRole('button', { name: 'All' }))
+
+    expect(visibleNames()).toEqual(['Helper Two', 'Sprinter Three', 'Coach One'])
+    expect(screen.getByText(/3 of 3 trainers/)).toBeInTheDocument()
   })
 })
