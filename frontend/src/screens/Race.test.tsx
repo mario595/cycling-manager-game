@@ -29,6 +29,7 @@ const upcomingRace: RaceDetail = {
   payout: [
     { position: 1, points: 20, prize: 20_000 },
     { position: 2, points: 15, prize: 15_000 },
+    { position: 3, points: 12, prize: 12_000 },
     { position: 10, points: 1, prize: 1_000 },
   ],
 }
@@ -50,9 +51,21 @@ const finishedResults: RaceResults = {
       finish_time: 3642,
       finished: true,
     },
+    // A rider who abandons keeps a position but never finishes, so must not
+    // draw a prize even when that position pays one (see racing/services.py).
+    {
+      position: 3,
+      rider: { id: 3, name: 'DNF Rider' },
+      team: { id: 2, name: 'Zero Team', code: 'ZRO' },
+      finish_time: null,
+      finished: false,
+    },
   ],
   points: [
-    { team: { id: 1, name: 'Results Team', code: 'RES' }, position: 1, points: 20, prize: 20_000 },
+    // Two placed riders in the same team: the API's points row carries the
+    // summed prize (35_000), but the SPA must not render it at the team
+    // level — the winnings live with the riders who earned them.
+    { team: { id: 1, name: 'Results Team', code: 'RES' }, position: 1, points: 20, prize: 35_000 },
     { team: { id: 2, name: 'Zero Team', code: 'ZRO' }, position: null, points: 0, prize: 0 },
   ],
 }
@@ -152,9 +165,32 @@ describe('Race', () => {
     expect(screen.getByText('Winner Rider')).toBeInTheDocument()
     expect(screen.getByText('Zero Team')).toBeInTheDocument()
     expect(screen.getByRole('img', { name: 'Elevation profile' })).toBeInTheDocument()
-    expect(screen.getByText('Team points and prizes')).toBeInTheDocument()
-    // Once in the team points table, once in the prize list.
+    expect(screen.getByText('Team points')).toBeInTheDocument()
+    // Once on the rider's own row, once in the prize list.
     expect(screen.getAllByText('$20,000')).toHaveLength(2)
+    // A rider without a prize shows none; the only $12,000 is the prize list.
+    expect(screen.getByText('DNF Rider')).toBeInTheDocument()
+    expect(screen.getAllByText('$12,000')).toHaveLength(1)
+  })
+
+  it('shows each placed rider own prize, not a team lump sum', () => {
+    mockUseRaceDetail.mockReturnValue({
+      race: { ...upcomingRace, status: 'finished' },
+      loading: false,
+      error: false,
+    })
+    mockUseRaceResults.mockReturnValue({ results: finishedResults, loading: false, error: false })
+
+    renderRace()
+
+    // Two riders from the same team (1st: $20,000, 2nd: $15,000) each carry
+    // their own prize on their row; the prize list repeats them, so both
+    // amounts appear twice. The API-supplied team sum (35_000) is not shown
+    // anywhere, and the team table is back to points only.
+    expect(screen.getAllByText('$20,000')).toHaveLength(2)
+    expect(screen.getAllByText('$15,000')).toHaveLength(2)
+    expect(screen.queryByText('$35,000')).toBeNull()
+    expect(screen.queryByText('Team points and prizes')).toBeNull()
   })
 
   it('renders without a squad panel when the manager has no team', () => {

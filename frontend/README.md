@@ -186,8 +186,11 @@ race and after it has finished), a **prize list** (`PayoutTable`) — the
 `{position, points, prize}` table from the race detail payload, shown on the
 upcoming screen as well as after the race — the squad-selection widget for the
 manager's own team before the race, and — for a finished race — the rider
-results and team points tables, the latter now headed **"Team points and
-prizes"** and carrying each team's winnings beside its points. Prize amounts
+results and team points tables. Each placed rider carries **their own prize
+on their own row** (`RiderResultsTable`), because a team's winnings are the
+sum of its placed riders' — two riders from the same team in the points both
+show, rather than a team lump sum. The team table carries only points
+(no prizes). Prize amounts
 are game money, formatted through `Finances.tsx`'s
 `formatMoney`, which `Race.tsx` now imports. The course profile is
 **`race_player`'s

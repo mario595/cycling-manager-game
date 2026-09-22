@@ -96,7 +96,7 @@ function raceBody(
     return (
       <>
         <CourseProfile course={race.course} />
-        <RiderResultsTable results={state.results} />
+        <RiderResultsTable results={state.results} payout={race.payout} />
         <TeamPointsTable results={state.results} />
         <PayoutTable payout={race.payout} />
       </>
@@ -132,14 +132,20 @@ function MessageCard({ text }: { text: string }) {
   )
 }
 
-function RiderResultsTable({ results }: { results: RaceResults }) {
+function RiderResultsTable({ results, payout }: { results: RaceResults; payout: RacePayoutEntry[] }) {
   const winner = results.results.find((r) => r.finished)
   const winnerTime = winner?.finish_time ?? null
+  const prizeByPosition = new Map(payout.map((p) => [p.position, p.prize]))
 
   const timeCell = (entry: RaceResultEntry): string => {
     if (!entry.finished || entry.finish_time === null || winnerTime === null) return 'DNF'
     if (entry.position === winner?.position) return formatRaceTime(winnerTime)
     return formatGap(entry.finish_time - winnerTime)
+  }
+
+  const prizeFor = (entry: RaceResultEntry): number => {
+    if (!entry.finished) return 0
+    return prizeByPosition.get(entry.position) ?? 0
   }
 
   return (
@@ -168,6 +174,9 @@ function RiderResultsTable({ results }: { results: RaceResults }) {
                 </span>
               ) : null}
             </div>
+            <div style={{ width: 64, textAlign: 'right', fontFamily: font.mono, fontSize: 13.5, fontWeight: 600, whiteSpace: 'nowrap', color: color.positive }}>
+              {prizeFor(entry) > 0 ? formatMoney(prizeFor(entry)) : ''}
+            </div>
             <div style={{ fontFamily: font.mono, fontSize: 14, fontWeight: 600 }}>{timeCell(entry)}</div>
           </div>
         ))}
@@ -179,7 +188,7 @@ function RiderResultsTable({ results }: { results: RaceResults }) {
 function TeamPointsTable({ results }: { results: RaceResults }) {
   return (
     <Card>
-      <CardHeader title="Team points and prizes" />
+      <CardHeader title="Team points" />
       <div>
         {results.points.map((entry) => (
           <div
@@ -199,17 +208,6 @@ function TeamPointsTable({ results }: { results: RaceResults }) {
               </span>
             </div>
             <div style={{ fontFamily: font.mono, fontSize: 14, fontWeight: 600 }}>{entry.points}</div>
-            <div
-              style={{
-                fontFamily: font.mono,
-                fontSize: 14,
-                fontWeight: 600,
-                color: entry.prize > 0 ? color.positive : color.mutedStrong,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {entry.prize > 0 ? formatMoney(entry.prize) : '—'}
-            </div>
           </div>
         ))}
       </div>
