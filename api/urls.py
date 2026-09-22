@@ -14,6 +14,8 @@ from .views import (
     RaceDetailView,
     RaceResultsView,
     RiderListView,
+    SignOfferView,
+    SponsorsView,
     SquadView,
     StaffView,
     StandingsView,
@@ -39,4 +41,6 @@ urlpatterns = [
     path("staff/trainer/fire/", FireTrainerView.as_view(), name="fire-trainer"),
     path("staff/training/", TrainingView.as_view(), name="training"),
     path("economy/finances/", FinancesView.as_view(), name="finances"),
+    path("economy/sponsors/", SponsorsView.as_view(), name="sponsors"),
+    path("economy/sponsors/sign/", SignOfferView.as_view(), name="sign-offer"),
 ]

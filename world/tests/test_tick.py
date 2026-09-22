@@ -11,7 +11,9 @@ from economy.models import (
     WEEKLY_WAGE_PER_RIDER,
     FanbaseEntry,
     LedgerEntry,
+    SponsorOffer,
 )
+from economy.services import sign_offer
 from racing.models import Race, RaceResult
 from riders.models import Rider
 from schedule.models import SEASON_WEEKS, Season, Week
@@ -397,3 +399,66 @@ def test_tick_run_counts_fanbase_and_merchandise_entries(db, team, riders):
     assert LedgerEntry.objects.filter(
         team=team, kind=LedgerEntry.Kind.MERCHANDISE
     ).count() == 1
+
+
+def test_tick_generates_offer_rounds_on_season_open(db, team, riders):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_one = season.weeks.get(number=1)
+    clock.set(week_one.starts_at + timedelta(hours=1))
+
+    tick()  # crosses the season's own starts_at boundary as well as week 1's
+
+    assert SponsorOffer.objects.filter(team=team, season=season).count() == 3
+
+
+def test_offer_rounds_are_not_duplicated_by_a_second_tick(db, team, riders):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_two = season.weeks.get(number=2)
+    clock.set(week_two.starts_at + timedelta(hours=1))
+
+    tick()
+    clock.set(season.weeks.get(number=3).starts_at + timedelta(hours=1))
+    tick()
+
+    assert SponsorOffer.objects.filter(team=team, season=season).count() == 3
+
+
+def test_tick_pays_sponsorship_for_contracted_teams(db, team, riders):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_one = season.weeks.get(number=1)
+    clock.set(week_one.starts_at + timedelta(hours=1))
+    tick()  # generates the offer round
+
+    offer = SponsorOffer.objects.filter(team=team, season=season).first()
+    contract = sign_offer(team, offer.pk, at=now())
+
+    week_two = season.weeks.get(number=2)
+    clock.set(week_two.starts_at + timedelta(hours=1))
+    run = tick()
+
+    assert run.sponsorship_entries == 1
+    entry = LedgerEntry.objects.get(team=team, kind=LedgerEntry.Kind.SPONSORSHIP, week=week_two)
+    assert contract.floor_amount <= entry.amount <= contract.ceiling_amount
+
+
+def test_catch_up_tick_pays_each_week_separately(db, team, riders):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_one = season.weeks.get(number=1)
+    clock.set(week_one.starts_at + timedelta(hours=1))
+    tick()
+
+    offer = SponsorOffer.objects.filter(team=team, season=season).first()
+    sign_offer(team, offer.pk, at=now())
+
+    week_four = season.weeks.get(number=4)
+    clock.set(week_four.starts_at + timedelta(hours=1))
+    run = tick()
+
+    assert run.sponsorship_entries == 3
+    assert LedgerEntry.objects.filter(
+        team=team, kind=LedgerEntry.Kind.SPONSORSHIP,
+    ).count() == 3

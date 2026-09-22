@@ -7,9 +7,19 @@ from django.core.exceptions import ValidationError
 
 from accounts.models import User
 from economy.models import STARTING_BALANCE, STARTING_FANBASE, FanbaseEntry, LedgerEntry
-from economy.services import balance_for, entries_for, fanbase_entries_for, fanbase_for
+from economy.services import (
+    active_contract,
+    balance_for,
+    ensure_offer_round,
+    entries_for,
+    fanbase_entries_for,
+    fanbase_for,
+    offers_for,
+    sign_offer,
+)
 from racing.models import Race, RaceResult
 from riders.models import Rider
+from schedule.models import Season
 from teams.models import Team
 from teams.services import ROSTER_SIZE, NoTeamAvailable, claim_team
 
@@ -156,3 +166,27 @@ def test_claim_preserves_prior_fanbase_entries(db, user, team):
     entries = list(fanbase_entries_for(team))
     assert any(e.pk == original.pk for e in entries)
     assert any(e.kind == FanbaseEntry.Kind.TAKEOVER for e in entries)
+
+
+@pytest.fixture
+def season(db) -> Season:
+    return Season.objects.create(number=1, starts_at=AT)
+
+
+def test_claiming_voids_the_previous_contract(db, user, team, season):
+    offers = ensure_offer_round(team, season, at=AT)
+    contract = sign_offer(team, offers[0].pk, at=AT)
+
+    claim_team(user, name="Mountain Goats", code="MGO", at=AT)
+
+    contract.refresh_from_db()
+    assert contract.voided_at is not None
+    assert active_contract(team, season) is None
+
+
+def test_claiming_clears_unsigned_offers(db, user, team, season):
+    ensure_offer_round(team, season, at=AT)
+
+    claim_team(user, name="Mountain Goats", code="MGO", at=AT)
+
+    assert offers_for(team, season).count() == 0

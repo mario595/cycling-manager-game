@@ -29,6 +29,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { path: '/roster', name: 'Roster' },
       { path: '/staff', name: 'Staff' },
+      { path: '/sponsors', name: 'Sponsors' },
       { path: '/finances', name: 'Finances' },
     ],
   },

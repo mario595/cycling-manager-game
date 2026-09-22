@@ -16,6 +16,7 @@ const KIND_LABELS: Record<LedgerEntry['kind'], string> = {
   takeover: 'Team takeover',
   prize_money: 'Prize money',
   merchandise: 'Merchandise revenue',
+  sponsorship: 'Sponsorship',
   trainer_fee: 'Trainer hire fee',
   trainer_salary: 'Trainer salary',
 }

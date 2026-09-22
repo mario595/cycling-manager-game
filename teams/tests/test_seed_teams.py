@@ -1,11 +1,21 @@
 from __future__ import annotations
 
+from datetime import timedelta
+
 from django.core.management import call_command
+from django.utils import timezone
 
 from accounts.models import User
-from economy.models import STARTING_BALANCE, STARTING_FANBASE, FanbaseEntry, LedgerEntry
-from economy.services import balance_for, fanbase_for
+from economy.models import (
+    STARTING_BALANCE,
+    STARTING_FANBASE,
+    FanbaseEntry,
+    LedgerEntry,
+    SponsorOffer,
+)
+from economy.services import balance_for, fanbase_for, offers_for
 from riders.models import Rider
+from schedule.models import Season
 from teams.models import Team
 
 
@@ -104,3 +114,27 @@ def test_claim_for_does_not_double_credit(db):
         team=claimed, kind=LedgerEntry.Kind.TAKEOVER,
     )
     assert takeovers.count() == 0  # claimed at exactly the starting balance
+
+
+def test_seeding_before_a_season_exists_skips_offer_generation(db):
+    # seed_teams normally runs before load_season (AGENTS.md's seeding
+    # order) — a fresh world has no season yet, so there is nothing to
+    # generate offers against.
+    call_command("seed_teams", "--count=4", "--per-team=12")
+
+    assert not SponsorOffer.objects.exists()
+
+
+def test_seeded_teams_get_an_offer_round(db):
+    # RealClock is active in tests without a MockClock override, so the
+    # season must actually bracket real "now" for current_position() to
+    # resolve it — start it a week ago rather than at an arbitrary date.
+    monday = timezone.now().replace(
+        hour=0, minute=0, second=0, microsecond=0,
+    ) - timedelta(days=timezone.now().weekday(), weeks=1)
+    season = Season.objects.create(number=1, starts_at=monday)
+
+    call_command("seed_teams", "--count=4", "--per-team=12")
+
+    for team in Team.objects.all():
+        assert offers_for(team, season).count() == 3
