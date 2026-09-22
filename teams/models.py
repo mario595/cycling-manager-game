@@ -47,6 +47,16 @@ class Team(TimeStampedModel):
         related_name="team",
         help_text="Null means the team is AI-controlled.",
     )
+    managed_since = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Game time the current manager claimed this team. Null when "
+            "unmanaged, and for a team claimed before this field existed. "
+            "Set by claim_team, cleared by release_team — see "
+            "teams/README.md, Releasing a team."
+        ),
+    )
 
     primary_colour = models.CharField(
         max_length=7,
@@ -69,3 +79,63 @@ class Team(TimeStampedModel):
     @property
     def is_ai_controlled(self) -> bool:
         return self.manager_id is None
+
+
+class ManagerialSpell(TimeStampedModel):
+    """A completed period during which one user managed one team.
+
+    Written by `release_team` when the spell ends — see teams/README.md,
+    *Managerial spells*. `team_name`/`team_code` are snapshotted at release
+    rather than read live through `team`, because #46 lets the next claimer
+    rename the team; a live read would silently rewrite an ex-manager's own
+    history the moment a stranger renames it.
+    """
+
+    class Reason(models.TextChoices):
+        INACTIVITY = "inactivity", "Manager inactive"
+        INSOLVENCY = "insolvency", "Team insolvent"
+        ADMIN = "admin", "Released by an operator"
+
+    manager = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        related_name="managerial_spells",
+        help_text="A deleted account's managerial history has no meaning.",
+    )
+    team = models.ForeignKey(
+        "teams.Team",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="managerial_spells",
+        help_text="Null if the team was later deleted (e.g. seed_teams --reset).",
+    )
+    team_name = models.CharField(
+        max_length=100,
+        help_text="The team's name at the moment of release. What is displayed.",
+    )
+    team_code = models.CharField(
+        max_length=3,
+        help_text="The team's code at the moment of release. What is displayed.",
+    )
+    started_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Game time the spell began, from Team.managed_since. Null "
+        "for a team claimed before that field existed.",
+    )
+    ended_at = models.DateTimeField(help_text="Game time of the release.")
+    reason = models.CharField(max_length=20, choices=Reason.choices)
+    acknowledged_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Real time the ex-manager was shown the message. Null "
+        "means not yet shown.",
+    )
+
+    class Meta:
+        ordering = ["-ended_at"]
+        indexes = [models.Index(fields=["manager", "acknowledged_at"])]
+
+    def __str__(self) -> str:
+        return f"{self.team_name} ({self.manager_id}, ended {self.ended_at})"

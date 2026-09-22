@@ -383,7 +383,7 @@ that guard is untouched.
 
 ## Work items
 
-### W1 — `teams/models.py`: `Team.managed_since` and `ManagerialSpell`
+### W1 — `teams/models.py`: `Team.managed_since` and `ManagerialSpell` ✅ done
 Add the field and the model exactly as *Data model* specifies, plus both
 migrations. No service changes yet.
 **Test:** `teams/tests/test_models.py::test_managerial_spell_orders_newest_first`
