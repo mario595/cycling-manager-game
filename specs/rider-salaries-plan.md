@@ -325,7 +325,7 @@ an exact figure). Tune W1's constants until both pass. Import
 `economy/` in library code, but a **test** importing it is fine; if that sits
 badly, hard-code 1200 with a comment naming the constant it tracks.
 
-### W3 — `riders/models.py` + two migrations: the stored field
+### W3 — `riders/models.py` + two migrations: the stored field ✅
 Add `weekly_salary` per the Data model section. Generate the schema migration.
 Then hand-write `0008_backfill_rider_salaries.py`: a `RunPython` that iterates
 existing riders, computes `weekly_salary_for`, and `bulk_update`s in batches.

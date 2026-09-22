@@ -120,6 +120,18 @@ class Rider(TimeStampedModel):
             "See riders/services.py."
         ),
     )
+    weekly_salary = models.PositiveIntegerField(
+        default=1200,
+        validators=[MinValueValidator(1)],
+        help_text=(
+            "Visible, exact whole credits (never mapped through "
+            "to_display_scale). Set once at creation by riders.pricing."
+            "weekly_salary_for and frozen until a season boundary decides "
+            "otherwise (#26) — never recomputed as attributes move. The "
+            "default here is only a migration/test convenience, not a real "
+            "rider's price."
+        ),
+    )
 
     # --- Hidden, between-race traits (never serialized — see class docstring) ---
     potential = models.PositiveSmallIntegerField(

@@ -27,3 +27,13 @@ def test_rider_speciality_rejects_value_outside_choices(rider):
     rider.speciality = "time-trialist"
     with pytest.raises(ValidationError):
         rider.full_clean()
+
+
+def test_weekly_salary_defaults_to_the_flat_wage(rider):
+    assert rider.weekly_salary == 1200
+
+
+def test_weekly_salary_rejects_zero(rider):
+    rider.weekly_salary = 0
+    with pytest.raises(ValidationError):
+        rider.full_clean()
