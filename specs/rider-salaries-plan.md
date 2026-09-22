@@ -347,7 +347,15 @@ described above.
 for a rider whose attributes are not default; a seeded `generate_roster(12)`
 produces a spread of distinct salaries.
 
-### W5 — `economy/services.py`: charge the real payroll
+### W5 — `economy/services.py`: charge the real payroll ✅
+
+Also fixed two existing tests (`economy/tests/test_wages.py`'s roster-count
+test, `world/tests/test_tick.py`'s riders fixture) that were asserting against
+`WEEKLY_WAGE_PER_RIDER` while building riders with `Rider.objects.create()` —
+every hand-built rider defaulted to `weekly_salary=1200`, so the assertion
+passed by coincidence (the field default equalling the old flat rate), not
+because the aggregation was under test. Rewritten with distinct explicit
+salaries so a regression to head-count-times-flat-rate would actually fail.
 Rewrite `charge_weekly_wages` per the section above and add `payroll_for`.
 **Tests** (`economy/tests/test_wages.py`): the existing tests reference
 `WEEKLY_WAGE_PER_RIDER` and will fail — update them. A team of three riders with
