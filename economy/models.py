@@ -12,8 +12,12 @@ from core.models import TimeStampedModel
 #: a week. Still comfortably past a season, and not worth retuning before
 #: prize money (#19) and sponsorship (#22) land.
 STARTING_BALANCE = 500_000
-#: The flat wage one rider costs per week. What #25 replaces with a
-#: per-rider salary.
+#: What a rider costs per week, on average. No longer charged directly —
+#: #25 gave every rider their own weekly_salary (riders.pricing), each
+#: calibrated so a generated population averages close to this figure.
+#: Kept as the anchor that calibration is checked against
+#: (riders/tests/test_pricing.py) and the figure STARTING_BALANCE's
+#: comment above reasons from.
 WEEKLY_WAGE_PER_RIDER = 1_200
 #: The fanbase every team starts on, and that a claim resets to. Game
 #: balance, not deployment configuration — deliberately here, not in

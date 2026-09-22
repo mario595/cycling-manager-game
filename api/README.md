@@ -52,6 +52,8 @@ DRF routers and serializers that aggregate other apps' data for the SPA.
   stored 1-100); the hidden traits (`potential`, `peak_age`, `decline_rate`,
   `injury_proneness`, `training_affinity`) and the hidden `recovery_rate`
   never appear in this or any other payload — see `riders/README.md`.
+  `weekly_salary` ships as the exact stored credits, not through
+  `to_display_scale` — see `riders/README.md`, *Salary*.
 - `GET /api/racing/races/<race_id>/` — one race's own facts
   (`RaceDetailSerializer`, `RaceDetailView`): id, name, status, starts_at,
   distance and the raw `{length, gradient}` course segments. It also carries
@@ -113,10 +115,14 @@ DRF routers and serializers that aggregate other apps' data for the SPA.
   of every team it entered, merchandise pays weekly off the fanbase, and
   trainer moves are the one-off fee and the weekly salary. The payload also
   carries the
-  team's `fanbase` and this week's `fanbase_change`. Same `team_for()`
-  pattern as the staff endpoint: no team id in the URL. Unlike `staff/`, a
-  caller with no team gets `{"balance": 0, "entries": []}` — the screen has
-  an empty state, not an error. See `economy/README.md`.
+  team's `fanbase`, this week's `fanbase_change`, and `weekly_wage_bill` —
+  the roster's current payroll from `economy.services.payroll_for`, not the
+  ledger's last `wages` entry, so it reflects a roster changed since payday
+  (`economy/README.md`, *Wages run off week transitions*). Same
+  `team_for()` pattern as the staff endpoint: no team id in the URL. Unlike
+  `staff/`, a caller with no team gets `{"balance": 0, "weekly_wage_bill":
+  0, "entries": []}` — the screen has an empty state, not an error. See
+  `economy/README.md`.
 - `POST /api/staff/trainer/hire/` (`HireTrainerSerializer`,
   `HireTrainerView`) — hire the pool trainer named by `trainer_id` into the
   caller's empty slot, debiting the hire fee from the team's ledger. `204`

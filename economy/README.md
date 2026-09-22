@@ -5,7 +5,9 @@
 `LedgerEntry` — the append-only financial history every team's balance is
 derived from. The balance itself is never stored: it is the sum of a team's
 `LedgerEntry.amount` values, computed on demand. This app owns the game's
-recurring money moves: the weekly wage bill and, since
+recurring money moves: the weekly wage bill — since
+[#25](https://github.com/mario595/cycling-manager/issues/25), the sum of
+each rider's own `weekly_salary`, never a flat per-head rate — and, since
 [#69](https://github.com/mario595/cycling-manager/issues/69), the weekly
 trainer salary — each charged once per team per crossed week boundary — and
 the weekly **merchandise payout** derived from a team's fanbase, its first
@@ -92,6 +94,20 @@ quietly* rather than aborting the rest of the week's payroll.
 Wages are charged to **every** team — managed or not, empty roster or not. A
 team with no riders gets a real entry at `amount = 0`, not a skipped one, so
 the history has no silent gaps.
+
+**The charge is a sum of each rider's own `weekly_salary`
+([#25](https://github.com/mario595/cycling-manager/issues/25)), not a head
+count times `WEEKLY_WAGE_PER_RIDER`.** That constant still exists — it is
+now only the average a generated rider's salary is calibrated to land near,
+never charged directly; see `riders/README.md`, *Salary*. `charge_weekly_wages`
+annotates `Sum("riders__weekly_salary")` alongside the existing rider-count
+annotation and wraps it in `Coalesce(..., 0)` — a team with no riders makes
+`Sum` return `None`, and `amount=-None` would raise rather than write the
+real zero row the paragraph above requires. `economy.services.payroll_for(team)`
+exposes the same sum for one team, on demand, for the Finances screen's
+wage-bill tile — it reads the roster as it stands *now*, not the last
+`LedgerEntry` written, since a manager can buy or sell a rider between
+paydays.
 
 ## Prize money reads the same way fanbase does
 
@@ -304,8 +320,6 @@ string `"racing.Race"`, so nothing in `economy/` imports `racing/`. Likewise
   #23 only has to decide what happens *between* seasons.
 - **A player lever on fanbase** — #21 deliberately has none; nothing lets a
   manager spend or invest in fanbase yet.
-- **Per-rider salaries** — #25 replaces the flat `WEEKLY_WAGE_PER_RIDER`
-  with a salary derived from a rider's attributes or performance.
 - **Insolvency** — #27, what happens when a balance goes and stays deeply
   negative. This ticket only flags a negative balance, never acts on it.
 - **A full-table read every tick** — `charge_weekly_wages` counts every

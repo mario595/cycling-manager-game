@@ -4,8 +4,8 @@ from datetime import datetime, timedelta, timezone as dt_timezone
 
 import pytest
 
-from economy.models import WEEKLY_WAGE_PER_RIDER, LedgerEntry
-from economy.services import balance_for, charge_weekly_wages
+from economy.models import LedgerEntry
+from economy.services import balance_for, charge_weekly_wages, payroll_for
 from riders.models import Rider
 from schedule.models import Season, Week
 from teams.models import Team
@@ -48,15 +48,17 @@ def test_charges_every_team_once(db, team, other_team, week):
     assert LedgerEntry.objects.filter(kind=LedgerEntry.Kind.WAGES, week=week).count() == 2
 
 
-def test_amount_is_roster_times_wage(db, team, week):
-    _rider(team)
-    _rider(team)
-    _rider(team)
+def test_amount_is_sum_of_actual_salaries(db, team, week):
+    # Riders with deliberately distinct salaries (#25) — proves the charge
+    # is a real sum, not a head count times a flat rate.
+    _rider(team, weekly_salary=1000)
+    _rider(team, weekly_salary=2500)
+    _rider(team, weekly_salary=1750)
 
     charge_weekly_wages(week)
 
     entry = LedgerEntry.objects.get(team=team, week=week)
-    assert entry.amount == -(3 * WEEKLY_WAGE_PER_RIDER)
+    assert entry.amount == -(1000 + 2500 + 1750)
     assert entry.rider_count == 3
 
 
@@ -82,7 +84,7 @@ def test_empty_roster_is_charged_zero_not_skipped(db, team, week):
 
 
 def test_second_call_for_same_week_writes_nothing(db, team, week):
-    _rider(team)
+    _rider(team, weekly_salary=1800)
     charge_weekly_wages(week)
     first = LedgerEntry.objects.get(team=team, week=week)
     total_after_first = LedgerEntry.objects.filter(team=team).count()
@@ -90,7 +92,7 @@ def test_second_call_for_same_week_writes_nothing(db, team, week):
     assert charge_weekly_wages(week) == 0
 
     first.refresh_from_db()
-    assert first.amount == -WEEKLY_WAGE_PER_RIDER
+    assert first.amount == -1800
     assert LedgerEntry.objects.filter(team=team).count() == total_after_first
 
 
@@ -101,3 +103,14 @@ def test_occurred_at_is_the_weeks_start(db, team, week):
 
     entry = LedgerEntry.objects.get(team=team, week=week)
     assert entry.occurred_at == week.starts_at
+
+
+def test_payroll_for_sums_the_teams_current_salaries(db, team):
+    _rider(team, weekly_salary=1000)
+    _rider(team, weekly_salary=2500)
+
+    assert payroll_for(team) == 3500
+
+
+def test_payroll_for_empty_roster_is_zero(db, team):
+    assert payroll_for(team) == 0

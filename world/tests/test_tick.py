@@ -8,7 +8,6 @@ from economy.models import (
     MERCHANDISE_FANBASE_PER_CREDIT,
     STARTING_FANBASE,
     WEEKLY_FANBASE_DECAY,
-    WEEKLY_WAGE_PER_RIDER,
     FanbaseEntry,
     LedgerEntry,
     SponsorOffer,
@@ -44,11 +43,15 @@ def team(db) -> Team:
 
 @pytest.fixture
 def riders(db, team) -> list[Rider]:
+    # Distinct weekly_salary per rider (#25) so a wage assertion that summed
+    # a head count times a flat rate, rather than the riders' actual
+    # salaries, would be caught rather than passing by coincidence.
     return [
         Rider.objects.create(
             name=f"Rider {i}",
             team=team,
             climb=60, sprint=60, flat=60, resistance=60, positioning=60,
+            weekly_salary=1000 + i * 250,
         )
         for i in range(4)
     ]
@@ -73,7 +76,7 @@ def test_tick_charges_wages_for_the_week_it_crosses(db, team, riders):
     entry = LedgerEntry.objects.get(team=team, kind=LedgerEntry.Kind.WAGES)
     assert entry.week == week_one
     assert entry.occurred_at == week_one.starts_at
-    assert entry.amount == -(len(riders) * WEEKLY_WAGE_PER_RIDER)
+    assert entry.amount == -sum(rider.weekly_salary for rider in riders)
 
 
 def test_catch_up_charges_each_missed_week_separately(db, team, riders):

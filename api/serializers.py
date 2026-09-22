@@ -98,6 +98,7 @@ class RiderSerializer(serializers.Serializer):
     height_cm = serializers.IntegerField()
     weight_kg = serializers.IntegerField()
     freshness = serializers.SerializerMethodField()
+    weekly_salary = serializers.IntegerField()
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -333,11 +334,18 @@ class FinancesSerializer(serializers.Serializer):
 
     `fanbase_change` is the most recent `weekly` fanbase row's delta, or 0
     when none exists yet — the player sees the change, not two raw numbers
-    to diff (economy/README.md, *Fanbase is derived too*)."""
+    to diff (economy/README.md, *Fanbase is derived too*).
+
+    `weekly_wage_bill` is the team's current payroll — the sum of its
+    riders' actual weekly_salary (#25), from economy.services.payroll_for.
+    Not read from the ledger's own wage entry: a manager can buy or sell a
+    rider mid-week, and the bill should say what leaves *next* payday, not
+    what left last time."""
 
     balance = serializers.IntegerField()
     fanbase = serializers.IntegerField()
     fanbase_change = serializers.IntegerField()
+    weekly_wage_bill = serializers.IntegerField()
     entries = LedgerEntrySerializer(many=True)
 
 
