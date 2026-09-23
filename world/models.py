@@ -98,6 +98,12 @@ class TickRun(models.Model):
         default=0,
         help_text="Teams released for inactivity this tick (#63).",
     )
+    agents_expired = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Free agents expired this tick: unattached EXPIRY_WEEKS+ "
+        "in-season weeks and priced in the pool's bottom "
+        "EXPIRY_VALUE_PERCENTILE (#29).",
+    )
     error = models.TextField(
         blank=True, default="",
         help_text="Traceback if the run failed. Empty on success.",

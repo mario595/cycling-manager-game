@@ -44,6 +44,8 @@ from staff.pricing import weekly_salary
 from staff.services import focus_for, top_up_pool
 from teams.models import ManagerialSpell, Team
 from teams.services import release_team
+from transfers.pricing import market_value_for
+from transfers.services import EXPIRY_VALUE_PERCENTILE, EXPIRY_WEEKS
 
 from .clocks import Clock
 from .models import GameClock, TickRun
@@ -200,6 +202,47 @@ def _release_inactive(week) -> tuple[int, str]:
     return released, error
 
 
+def _expire_free_agents(week) -> int:
+    """Delete every free agent unattached EXPIRY_WEEKS+ in-season weeks as
+    of this week boundary, and priced at or below the pool's
+    EXPIRY_VALUE_PERCENTILE at that moment. Returns riders deleted.
+
+    Mirrors _release_inactive's shape: counts Week rows via the same
+    pattern as _weeks_inactive (unattached_since is a game-time
+    DateTimeField, exactly like last_seen_at), and is called once per week
+    transition in the same loop. The percentile is computed fresh from the
+    whole pool's value on each pass — value is never stored, so there is
+    nothing to have gone stale. A pool too small for a meaningful bottom
+    EXPIRY_VALUE_PERCENTILE expires nobody (Design decision 5): a bottom
+    quintile of one or two riders is not a signal. A null `unattached_since`
+    (pre-migration data — specs/free-agents-plan.md, *Data model*) is
+    excluded, never treated as "unattached since the beginning of time."
+
+    Deletes the Rider row outright, exactly `reset_riders`'s precedent
+    (Design decision 6): the cascade takes the rider's RaceResult/
+    RaceSquadRider rows with it, which is acceptable because an expired
+    rider never raced for the releasing team, and killing a long-stale,
+    bottom-quintile free agent is the whole point of the mechanic.
+    """
+    pool = list(Rider.objects.filter(team__isnull=True))
+    bottom_count = int(len(pool) * EXPIRY_VALUE_PERCENTILE)
+    if bottom_count == 0:
+        return 0
+    values = sorted(market_value_for(r) for r in pool)
+    cutoff = values[bottom_count - 1]
+
+    boundary = week.starts_at
+    doomed = [
+        rider.pk
+        for rider in pool
+        if rider.unattached_since is not None
+        and market_value_for(rider) <= cutoff
+        and _weeks_inactive(rider.unattached_since, boundary) >= EXPIRY_WEEKS
+    ]
+    deleted, _ = Rider.objects.filter(pk__in=doomed).delete()
+    return deleted
+
+
 def _apply_training_week(week) -> int:
     """One week's growth, training and freshness recovery, settled together.
 
@@ -317,6 +360,7 @@ def tick() -> TickRun:
     sponsorship_entries = 0
     trainer_salary_entries = 0
     teams_released = 0
+    agents_expired = 0
     inactivity_error = ""
 
     # Built once, outside the loop: a trainer's skill does not move between
@@ -356,6 +400,14 @@ def tick() -> TickRun:
         teams_released += released
         inactivity_error += error
 
+        # After the release-inactive call, so `teams_released` and
+        # `agents_expired` reflect the same, most-settled world state for
+        # this week: a rider pooled by this week's release is never
+        # expired the same pass (their unattached_since postdates the
+        # boundary). Expiry only touches unattached riders, so it cannot
+        # change what this week already charged anyone.
+        agents_expired += _expire_free_agents(week)
+
     reclaimed = _reclaim_unfinished()
     claimed = _claim(limit=max(0, max_races - len(reclaimed)), at=at)
     capped = len(reclaimed) + len(claimed) >= max_races
@@ -373,6 +425,7 @@ def tick() -> TickRun:
         sponsorship_entries=sponsorship_entries,
         trainer_salary_entries=trainer_salary_entries,
         teams_released=teams_released,
+        agents_expired=agents_expired,
         error=inactivity_error,
     )
     _execute(reclaimed + claimed, run, at=at)

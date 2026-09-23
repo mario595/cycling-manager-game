@@ -33,6 +33,20 @@ CLAIM_COOLDOWN_WEEKS = 1
 #: team already over the cap can still race, train and release.
 ROSTER_CAP = 30
 
+#: In-season weeks a free agent may sit unattached before becoming
+#: *eligible* for expiry (Design decision 5). The week count itself is
+#: computed by the caller (`world/`, via the same Week-row rule
+#: `_weeks_inactive` uses) — `transfers/` may not import `schedule/`
+#: (AGENTS.md). Exported here, not local to the caller, because it is a
+#: transfer-balance decision, not a world-mechanics one.
+EXPIRY_WEEKS = 8
+
+#: An eligible free agent must also be priced at or below this percentile
+#: of every free agent's value at that moment — the pool's bottom quintile
+#: (Design decision 5). Value is never stored, so the percentile is
+#: computed fresh on every pass.
+EXPIRY_VALUE_PERCENTILE = 0.20
+
 
 class TransferError(Exception):
     """Base class for a free-agent action that cannot proceed."""

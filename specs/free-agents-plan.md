@@ -614,6 +614,9 @@ don't invent a second source of truth for the nav list).
   `test_roster_view_reports_release_cost_per_rider`.
 
 ### W6 — `world/`: `_expire_free_agents`, wired into `tick()`
+
+> **Status:** done.
+
 - `world/models.py`: `TickRun.agents_expired`, migration.
 - `world/services.py`: `_expire_free_agents(week)`, called from the
   per-week loop.
