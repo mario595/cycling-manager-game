@@ -105,7 +105,12 @@ reads `now()` once, then finds and processes whatever is due, in four steps:
    extra_deltas=...)`, adding that week's training deltas — the trainer's
    focused skill and last week's racing — through the one `growth_debt`
    ledger, writes a per-team `staff.TrainingWeekReport` of the
-   display-scale changes it made, and then settles freshness:
+   display-scale changes it made, records a `riders.RiderAttributeSnapshot`
+   for each rider named in that same return value
+   (`riders.services.record_week_snapshots`, reusing the records
+   `apply_weekly_growth` already returns rather than re-reading the table —
+   see [#95](https://github.com/mario595/cycling-manager/issues/95) and
+   `riders/README.md`, *Attribute history*), and then settles freshness:
    `riders.services.apply_weekly_recovery(exclude_ids=set(raced))` restores
    one week's recovery to every rider who did **not** finish a race in the
    week being settled ([#59](https://github.com/mario595/cycling-manager/issues/59);

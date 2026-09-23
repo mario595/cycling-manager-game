@@ -310,7 +310,7 @@ the migration is idempotent by running the forward function twice against a
 rider and getting one row. (If the repo has no migration-test harness, test the
 extracted helper function directly rather than inventing one.)
 
-### W6 — documentation
+### W6 — documentation ✅
 `riders/README.md` and `world/README.md`. See below.
 
 ## Execution order

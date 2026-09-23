@@ -167,6 +167,47 @@ for. Because both mechanisms settle together, a listed change is the visible
 number moving, not an attribution of how much came from which; that split
 would be fake precision on a 0-10 scale and is deliberately not offered.
 
+## Attribute history
+
+`RiderAttributeSnapshot` records a rider's five attributes over time, so a
+future screen ([#96](https://github.com/mario595/cycling-manager/issues/96))
+can eventually plot a career arc — see
+[#95](https://github.com/mario595/cycling-manager/issues/95) and
+`specs/rider-attribute-history.md`. A row holds all five attributes even when
+only one moved: the consumer plots five lines on one graph and needs a value
+for every attribute at every recorded moment, not just the one that changed.
+
+**Snapshots record the displayed 0-10 value, never the stored 1-100 value.**
+The whole point of the display scale (*Display scale*, above) is that a rider
+can improve without the shown number moving; recording the finer stored value
+would put growth into the database that the design deliberately hides from
+the player — the same leak `Visible vs hidden` calls a defect for a hidden
+trait. `riders.services.record_initial_snapshots` and `record_week_snapshots`
+both write through `to_display_scale`, never the raw attribute.
+
+**Two writers, matching the two moments a rider's attributes are set.** A
+baseline row (`week=None`) is written at creation —
+`record_initial_snapshots(riders)` is called immediately after
+`Rider.objects.bulk_create(...)` at each of the three places a rider comes
+into being (`teams.services.claim_team`, `seed_teams`, `reset_riders`) — so a
+graph is never empty and a rider who never changes still plots as a flat
+line. Thereafter, a row is written only in a week where at least one
+displayed value actually moved: `world.services._apply_training_week`
+already computes exactly that from `apply_weekly_growth`'s return, so
+`record_week_snapshots(rider_ids, week_id=...)` just writes it — one call per
+crossed week, so a tick that catches up several missed weeks attributes each
+week's change to that week, never bunching them into the week the tick
+happened to run.
+
+**`record_week_snapshots` takes a plain `week_id` int, not a `Week`.**
+`riders/` may not import `schedule/` (`AGENTS.md`) — `RiderAttributeSnapshot.
+week` is declared as the string `"schedule.Week"`, the same import-free
+pattern `staff.TrainingWeekReport.week` uses.
+
+**Nothing serializes this.** #96 is the consumer, once it exists; there is no
+API field, no admin surface beyond the default read-only list, and no
+frontend today.
+
 ## Freshness
 
 `freshness` is a rider's race readiness — a visible field, stored 1-100
