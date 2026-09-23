@@ -542,7 +542,7 @@ Tests — `api/tests/test_views.py`:
 - `test_roster_salary_review_serializes_from_and_to` — confirms the
   `source="from"` mapping produces `from_value` / `to_value`.
 
-### W6 — `frontend/`: the review panel on Roster
+### W6 — `frontend/`: the review panel on Roster — DONE
 
 The panel, the `api.ts` type, and the `Roster.test.tsx` mock update.
 
