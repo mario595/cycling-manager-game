@@ -547,7 +547,7 @@ def charge_transfer_fee(team, *, amount: int, at, description: str) -> LedgerEnt
     One kind covers both sides of the market: a signing fee and a severance
     charge are the same shape of transaction (money out, no week attached),
     distinguished by `description` ("Signed X" vs "Released X") — there is
-    deliberately no second Kind (free-agents-plan.md, Design decision 7).
+    deliberately no second Kind (Design decision 7).
     `amount` is negative, `at` is game time, `description` names the rider.
     The caller — api/'s free-agent views — passes both itself, per the
     custom-`at` convention used across this module. No (team, week)

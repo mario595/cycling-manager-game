@@ -9,8 +9,8 @@ callback exactly the way `hire_trainer` does — `transfers/` may not import
 
 `transfers/` may import only `riders/`, which is also why the
 claim-cooldown exemption receives its in-season week count from the caller
-instead of counting `schedule/`'s Week rows itself — see Design decision 2
-and 9 in specs/free-agents-plan.md.
+instead of counting `schedule/`'s Week rows itself — see `transfers/README.md`,
+*Free agents*.
 """
 
 from __future__ import annotations

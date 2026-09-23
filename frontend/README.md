@@ -1,6 +1,6 @@
 # Frontend
 
-The React SPA, served by Django from `frontend/dist/`: eight built screens,
+The React SPA, served by Django from `frontend/dist/`: nine built screens,
 all reading the real API. No screen renders invented data.
 
 ## What exists
@@ -8,12 +8,13 @@ all reading the real API. No screen renders invented data.
 | Route | Screen | State |
 |-------|--------|-------|
 | `/` | Dashboard | Built — season, standings, next race and squad status from the API, no fixture data |
-| `/roster` | Roster | Built — filter, sort, rider detail panel, each rider's weekly salary and market value, a squad-value total, and the same freshness bar as squad selection, from the API, no fixture data |
+| `/roster` | Roster | Built — filter, sort, rider detail panel, each rider's weekly salary, market value and release cost, a squad-value total, and the same freshness bar as squad selection, from the API, no fixture data |
 | `/staff` | Staff | Built — hire/fire a trainer, with each trainer's fee and weekly salary, from the API, no fixture data |
 | `/sponsors` | Sponsors | Built — sign one of three sponsor offers, or see the signed contract, from the API, no fixture data |
 | `/finances` | Finances | Built — balance, weekly wage bill and ledger history from the API, no fixture data |
 | `/training` | Training | Built — set the weekly focus, see last week's moves, from the API, no fixture data |
 | `/calendar` | Calendar | Built — twelve weeks from the API, no fixture data |
+| `/transfers` | Transfers | Built — the free-agent pool with each rider's signing fee, sign actions, and the team's balance, from the API, no fixture data |
 | `/race/:raceId` | Race | Built — the full race screen: course profile and squad before it runs, course profile and results after, from the API, no fixture data |
 | `/league` | League | Built — season standings table from the API, no fixture data |
 | `/login`, `/register` | Login, Register | Built — real accounts, no fixture data |
@@ -111,10 +112,11 @@ hooks everyone else uses: `useSeason` for the week label, `useStandings` for
 the manager's own rank and points, `useCalendar` (via `src/nextRace.ts`) for
 the next race, and `useNextRaceSquad` for whether that race's squad is set.
 
-`/calendar` and `/roster` render nothing while loading or on error, rather
-than inventing a shape — `src/useCalendar.ts` and `src/useRoster.ts` both
-follow the discipline `useSeason.ts` established: a screen showing invented
-data mid-fetch is indistinguishable from a real one with a bug in it.
+`/calendar`, `/roster` and `/transfers` render nothing while loading or on
+error, rather than inventing a shape — `src/useCalendar.ts`,
+`src/useRoster.ts` and `src/useFreeAgents.ts` all follow the discipline
+`useSeason.ts` established: a screen showing invented data mid-fetch is
+indistinguishable from a real one with a bug in it.
 
 ## How it is served
 

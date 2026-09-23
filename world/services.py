@@ -215,8 +215,8 @@ def _expire_free_agents(week) -> int:
     nothing to have gone stale. A pool too small for a meaningful bottom
     EXPIRY_VALUE_PERCENTILE expires nobody (Design decision 5): a bottom
     quintile of one or two riders is not a signal. A null `unattached_since`
-    (pre-migration data — specs/free-agents-plan.md, *Data model*) is
-    excluded, never treated as "unattached since the beginning of time."
+    (pre-migration riders) is excluded, never treated as "unattached since
+    the beginning of time."
 
     Deletes the Rider row outright, exactly `reset_riders`'s precedent
     (Design decision 6): the cascade takes the rider's RaceResult/

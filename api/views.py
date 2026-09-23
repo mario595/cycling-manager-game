@@ -403,7 +403,7 @@ class RiderListView(APIView):
 
 def _cooldown_weeks_opened(team, boundary) -> int:
     """In-season weeks opened since `team` was claimed, for the claim-cooldown
-    exemption (Design decision 2 in specs/free-agents-plan.md).
+    exemption (transfers/README.md, *Free agents*).
 
     `transfers/` may not import `schedule/` (AGENTS.md), so api/ — the only
     app allowed to know everything — counts for it, reusing the same
@@ -478,7 +478,7 @@ class ReleaseRiderView(APIView):
     """Send one of the caller's own riders to the free-agent pool.
 
     Charges severance unless the claim cooldown exempts the rider — see
-    Design decision 2 in specs/free-agents-plan.md. 409, not 400, for
+    transfers/README.md, *Free agents*. 409, not 400, for
     RiderNotOnRoster: the request is well-formed, the world's state refuses
     it. Release never fails on affordability — it is 0 within the cooldown
     and the game cannot hold a rider hostage, so severance is charged even

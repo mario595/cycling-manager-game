@@ -180,12 +180,21 @@ reads `now()` once, then finds and processes whatever is due, in four steps:
    actually crossed the threshold. A release that raises is caught and
    recorded on `TickRun.error` without stopping the week's remaining work —
    the same per-item guard *Execute* below uses for a broken race — and the
-   count of teams released lands on `TickRun.teams_released`.
-   Ageing runs before growth, so a rider who turned 33 at this same
-   boundary is evaluated against the new age immediately. None of this
-   touches a race row, so it runs outside the claim transaction below, the
-   same as race simulation does and for the same reason: a full-table
-   update must not extend the lock window race claiming holds.
+count of teams released lands on `TickRun.teams_released`.
+    After `_release_inactive`, `world.services._expire_free_agents(week)`
+    prunes the free-agent pool: it deletes every rider whose
+    `unattached_since` has crossed `transfers.services.EXPIRY_WEEKS` (eight)
+    in-season weeks (`_weeks_inactive`'s same Week-row count) and whose
+    value at that moment falls in the pool's bottom quintile
+    (`EXPIRY_VALUE_PERCENTILE`, 0.20). Value is never stored, so the
+    cutoff is computed fresh each pass, and a pool too small for a real
+    bottom quintile expires nobody. A rider with null `unattached_since`
+    (pre-migration free agents) is exempt, never treated as long-lost.
+    Ageing runs before growth, so a rider who turned 33 at this same
+    boundary is evaluated against the new age immediately. None of this
+    touches a race row, so it runs outside the claim transaction below, the
+    same as race simulation does and for the same reason: a full-table
+    update must not extend the lock window race claiming holds.
 2. **Claim** — inside one transaction, holding a row lock on the due race
    rows themselves (not a clock row — there is no longer one to lock in
    production): every `scheduled` race whose `starts_at` is at or before

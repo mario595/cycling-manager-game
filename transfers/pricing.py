@@ -69,8 +69,7 @@ def market_value_for(rider) -> int:
     return max(0, _round_to_nearest_1000(base))
 
 
-#: Fee percentages as fractions of market_value_for (free-agents-plan.md,
-#: Design decision 3). Signing at 60% lands roughly seven weeks of an
+#: Fee percentages as fractions of market_value_for (Design decision 3). Signing at 60% lands roughly seven weeks of an
 #: average rider's own wages (value ≈ one season ≈ twelve weeks, so 60% ≈
 #: seven) — a real but survivable hit against STARTING_BALANCE. Severance
 #: at half the signing rate: real cost, but releasing gives up an asset
