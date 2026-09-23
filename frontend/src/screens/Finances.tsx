@@ -19,6 +19,7 @@ const KIND_LABELS: Record<LedgerEntry['kind'], string> = {
   sponsorship: 'Sponsorship',
   trainer_fee: 'Trainer hire fee',
   trainer_salary: 'Trainer salary',
+  transfer_fee: 'Transfer fee',
 }
 
 /** The fanbase tile's suffix: how the team's support moved this week, in the

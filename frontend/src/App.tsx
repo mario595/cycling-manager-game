@@ -14,6 +14,7 @@ import { Roster } from './screens/Roster'
 import { Sponsors } from './screens/Sponsors'
 import { Staff } from './screens/Staff'
 import { Training } from './screens/Training'
+import { Transfers } from './screens/Transfers'
 import { AuthProvider } from './useAuth'
 
 /**
@@ -30,6 +31,7 @@ const SCREENS: Record<string, React.ComponentType> = {
   '/sponsors': Sponsors,
   '/finances': Finances,
   '/calendar': Calendar,
+  '/transfers': Transfers,
   '/league': League,
 }
 
@@ -59,7 +61,7 @@ export function App() {
             {/* Anything outside the nav — a stale bookmark, a typo — goes
                 home. It stays inside the Layout route so an unknown path
                 still passes through the session and team guards: a logged-out
-                visitor typing /transfers must reach /login, not the
+                visitor typing /rostr must reach /login, not the
                 dashboard. */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

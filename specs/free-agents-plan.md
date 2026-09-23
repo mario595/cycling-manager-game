@@ -641,6 +641,8 @@ don't invent a second source of truth for the nav list).
   `market_value`/`weekly_salary` are already present in that mock.
 - `frontend/src/App.tsx` / nav: new route.
 
+> **Status:** done.
+
 ## Execution order
 
 W1 → W2 → W3 → W4 → W5 → W6 → W7.

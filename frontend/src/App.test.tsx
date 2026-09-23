@@ -17,6 +17,7 @@ vi.mock('./screens/Dashboard', () => ({ Dashboard: () => <div data-testid="dashb
 vi.mock('./screens/Roster', () => ({ Roster: () => <div data-testid="roster" /> }))
 vi.mock('./screens/Staff', () => ({ Staff: () => <div data-testid="staff" /> }))
 vi.mock('./screens/Calendar', () => ({ Calendar: () => <div data-testid="calendar" /> }))
+vi.mock('./screens/Transfers', () => ({ Transfers: () => <div data-testid="transfers" /> }))
 vi.mock('./screens/League', () => ({ League: () => <div data-testid="league" /> }))
 vi.mock('./screens/Race', () => ({ Race: () => <div data-testid="race" /> }))
 vi.mock('./screens/Login', () => ({ Login: () => <div data-testid="login" /> }))
@@ -58,7 +59,7 @@ describe('App routing', () => {
   it('an unknown path sends a logged-in manager to the dashboard', () => {
     mockAuth(manager, false)
 
-    renderAppAt('/transfers')
+    renderAppAt('/typo')
 
     expect(screen.getByTestId('dashboard')).toBeInTheDocument()
     expect(screen.queryByTestId('login')).toBeNull()
@@ -67,9 +68,17 @@ describe('App routing', () => {
   it('an unknown path sends an anonymous visitor to /login', () => {
     mockAuth(anonymous, false)
 
-    renderAppAt('/transfers')
+    renderAppAt('/typo')
 
     expect(screen.getByTestId('login')).toBeInTheDocument()
     expect(screen.queryByTestId('dashboard')).toBeNull()
+  })
+
+  it('routes a logged-in manager to the Transfers screen', () => {
+    mockAuth(manager, false)
+
+    renderAppAt('/transfers')
+
+    expect(screen.getByTestId('transfers')).toBeInTheDocument()
   })
 })
