@@ -251,7 +251,7 @@ cycling-manager/
 
 ## Generated files
 
-Race logs (`*.jsonl`) are never source. They are gitignored; never commit them.
+Race logs (`*.jsonl.br`) are never source. They are gitignored; never commit them.
 
 Two ways they come into being, and the distinction matters:
 
@@ -262,9 +262,9 @@ Two ways they come into being, and the distinction matters:
   engine evolves, so re-running a stored seed on a newer engine will not
   reproduce the race it recorded. See `racing/README.md`.
 
-The log format is knowingly verbose and slimming it is planned work — the static
-header is repeated on every line, and a single mountain stage runs to 75 MB.
-Tracked as [#88](https://github.com/mario595/cycling-manager/issues/88); details in `racing/README.md`.
+The format is one brotli-compressed header line plus sampled positional ticks
+(#88) — `mountain_stage.jsonl.br` is ~0.75 MB, down from 75.7 MB. Details in
+`racing/README.md`.
 
 ## Displaying game money
 
