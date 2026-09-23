@@ -140,7 +140,7 @@ up front — an empty app is just noise. The table below marks which exist.
 | `accounts/` | Accounts | **built**, `README.md` | Custom `User`, login by email. Register, log in, log out. |
 | `riders/` | Riders | **built**, `README.md` | Persisted riders: engine attributes plus speciality, build, age, generation, the weekly age curve (growth/decline), trainer-driven weekly training, rider freshness (fatigue and weekly recovery), and a per-rider weekly salary set at generation and frozen for the season. |
 | `teams/` | Teams | **built**, `README.md` | Teams, codes, colours, manager link, claiming an unmanaged team (which resets its ledger balance and fanbase via takeover entries), and releasing a managed team back to the pool with a private record of the spell (#62). Staff/tactics still to come. |
-| `transfers/` | Transfers | *not yet* | Market for buying/selling riders, auctions, contracts, free agents, market value. (The youth academy is a **development squad** and lives in `riders/`.) |
+| `transfers/` | Transfers | **built**, `README.md` | A rider's market value — a pure, unstored valuation reusing `riders/`'s `strength()` with its own age curve. No models yet. Market for buying/selling riders, auctions, contracts and free agents still to come. (The youth academy is a **development squad** and lives in `riders/`.) |
 | `competitions/` | Competitions | **built**, `README.md` | Race points, prize money and season standings, one Group. The prize table is computed here but written to `economy/`'s ledger. Divisions, multiple Groups, promotion/relegation, classifications and season history still to come. A **Division** is a tier; a **Group** is a parallel section within one. |
 | `schedule/` | Schedule | **built**, `README.md` | Seasons, their twelve weeks, and the race calendar declared within them. **Not** `calendar/` — that shadows the stdlib module. |
 | `economy/` | Economy | **built**, `README.md` | The append-only ledger: every team's balance is the sum of its `LedgerEntry` rows — starting balance, weekly wages (the sum of each rider's own weekly salary), race prize money, trainer hire fee and weekly trainer salary, merchandise income, sponsorship, claim takeover — and its fanbase, the sum of its `FanbaseEntry` rows. A team picks one of three fanbase-sized sponsor offers per season; its weekly payment then swings with race results inside a promised range. Budgets still to come. |
@@ -158,6 +158,7 @@ accounts      -> (nothing)
 core          -> (nothing)
 riders        -> core, teams
 teams         -> core, accounts, riders
+transfers     -> riders
 staff         -> core, teams, riders, schedule
 schedule      -> core
 racing        -> riders, teams, race_engine, schedule
@@ -234,6 +235,8 @@ cycling-manager/
 │   └── README.md          # attributes, display scale, generation
 ├── teams/
 │   └── README.md          # codes, colours, claiming an unmanaged team
+├── transfers/
+│   └── README.md          # market value, value vs salary, what may import
 └── staff/
     └── README.md          # the trainer pool, the one-slot rule, hiring
 ```
