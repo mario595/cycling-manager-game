@@ -128,10 +128,19 @@ export interface MeTeam {
   code: string
 }
 
+export interface LostTeam {
+  spell: number
+  name: string
+  code: string
+  reason: string
+  ended_at: string
+}
+
 export interface Me {
   authenticated: boolean
   display_name: string | null
   team: MeTeam | null
+  lost_team: LostTeam | null
 }
 
 export async function getMe(): Promise<Me> {
@@ -171,6 +180,10 @@ export async function logout(): Promise<void> {
 
 export async function claimTeam(name: string, code: string): Promise<MeTeam> {
   return writeJson('/api/teams/claim/', 'POST', { name, code })
+}
+
+export async function acknowledgeSpell(spellId: number): Promise<void> {
+  return writeJson(`/api/teams/spells/${spellId}/acknowledge/`, 'POST')
 }
 
 export interface SquadRider {

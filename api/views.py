@@ -5,6 +5,7 @@ from django.db import IntegrityError
 from django.db.models import Sum
 from django.http import Http404
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework.permissions import AllowAny
@@ -47,7 +48,7 @@ from staff.services import (
     set_focus,
     trainer_for,
 )
-from teams.models import Team
+from teams.models import ManagerialSpell, Team
 from teams.services import NoTeamAvailable, claim_team
 from world.services import now
 
@@ -176,10 +177,26 @@ class MeView(APIView):
     def get(self, request):
         user = request.user
         team = team_for(user)
+        lost_team = None
+        if user.is_authenticated and team is None:
+            spell = (
+                ManagerialSpell.objects.filter(manager=user, acknowledged_at__isnull=True)
+                .order_by("-ended_at")
+                .first()
+            )
+            if spell is not None:
+                lost_team = {
+                    "spell": spell.pk,
+                    "name": spell.team_name,
+                    "code": spell.team_code,
+                    "reason": spell.get_reason_display(),
+                    "ended_at": spell.ended_at,
+                }
         payload = {
             "authenticated": user.is_authenticated,
             "display_name": user.display_name if user.is_authenticated else None,
             "team": {"id": team.pk, "name": team.name, "code": team.code} if team else None,
+            "lost_team": lost_team,
         }
         return Response(MeSerializer(payload).data)
 
@@ -301,6 +318,22 @@ class ClaimTeamView(APIView):
             MeTeamSerializer({"id": team.pk, "name": team.name, "code": team.code}).data,
             status=201,
         )
+
+
+class AcknowledgeSpellView(APIView):
+    """Mark the ex-manager's lost-team message as seen, so it is shown once.
+
+    404 for a spell that is not the caller's — never 403, which would
+    confirm the row exists.
+    """
+
+    def post(self, request, spell_id: int):
+        updated = ManagerialSpell.objects.filter(
+            pk=spell_id, manager=request.user, acknowledged_at__isnull=True
+        ).update(acknowledged_at=timezone.now())
+        if updated == 0:
+            return Response({"detail": "No such message."}, status=404)
+        return Response(status=204)
 
 
 class RiderListView(APIView):

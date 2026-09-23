@@ -3,6 +3,7 @@ from __future__ import annotations
 from django.urls import include, path
 
 from .views import (
+    AcknowledgeSpellView,
     CalendarView,
     ClaimTeamView,
     ClockView,
@@ -36,6 +37,11 @@ urlpatterns = [
     path("competitions/standings/", StandingsView.as_view(), name="standings"),
     path("riders/", RiderListView.as_view(), name="riders"),
     path("teams/claim/", ClaimTeamView.as_view(), name="claim-team"),
+    path(
+        "teams/spells/<int:spell_id>/acknowledge/",
+        AcknowledgeSpellView.as_view(),
+        name="acknowledge-spell",
+    ),
     path("staff/", StaffView.as_view(), name="staff"),
     path("staff/trainer/hire/", HireTrainerView.as_view(), name="hire-trainer"),
     path("staff/trainer/fire/", FireTrainerView.as_view(), name="fire-trainer"),

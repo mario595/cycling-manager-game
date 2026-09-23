@@ -18,6 +18,7 @@ function mockAuth(me: Me | null, loading: boolean) {
     login: vi.fn(),
     logout: vi.fn(),
     claim: vi.fn(),
+    acknowledgeLostTeam: vi.fn(),
   })
 }
 
@@ -25,6 +26,7 @@ const manager: Me = {
   authenticated: true,
   display_name: 'Mario',
   team: { id: 1, name: 'Squad Team', code: 'SQD' },
+  lost_team: null,
 }
 
 function renderLogin(state?: { from?: string }) {
