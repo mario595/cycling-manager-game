@@ -404,7 +404,7 @@ sample_interval)` here and `simulate_race` stores `sample_count` and
 `tick_interval`; the W3 assertions flipped to `log.sample_count` /
 `log.tick_interval`.)*
 
-### W5 — `race_player/`: types and parser
+### W5 — `race_player/`: types and parser ✅
 New `RaceHeader`/`RaceSample` types; `parseRaceLog` decodes the header and
 samples into the existing `RaceSnapshot` shape; `tickInterval` on `ParsedRace`;
 version check throws.
