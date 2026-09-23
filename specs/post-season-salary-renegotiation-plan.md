@@ -493,7 +493,7 @@ Tests — `economy/tests/test_models.py`:
 - `test_one_salary_review_per_team_per_season` — the second
   `create()` for the same `(team, season)` raises `IntegrityError`.
 
-### W3 — `economy/services.py`: `write_salary_reviews` and `latest_salary_review`
+### W3 — `economy/services.py`: `write_salary_reviews` and `latest_salary_review` — DONE
 
 Tests — `economy/tests/test_services.py`:
 - `test_write_salary_reviews_writes_one_per_managed_team`
