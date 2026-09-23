@@ -264,6 +264,7 @@ function RiderCard({
             {formatMoney(rider.weekly_salary)}/wk
           </span>
           <span style={{ fontSize: 10.5, color: color.muted, fontFamily: font.mono }}>
+            <span style={{ letterSpacing: '0.4px' }}>VALUE </span>
             {formatMoney(rider.market_value)}
           </span>
         </span>
