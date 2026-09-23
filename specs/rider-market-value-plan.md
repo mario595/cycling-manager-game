@@ -340,7 +340,7 @@ Add `market_value` to `RiderSerializer`, add `RosterSerializer`, rewrite
 - `test_roster_response_has_no_hidden_traits` — extend or assert alongside
   whatever existing test guards the payload keys
 
-### W5 — `frontend/`: consume the envelope and render value
+### W5 — `frontend/`: consume the envelope and render value [done]
 `api.ts`, `useRoster.ts` and `Roster.tsx` per the sections above, **in one
 commit** (D6 — the API shape changed).
 **Test:** `frontend/src/screens/Roster.test.tsx`:

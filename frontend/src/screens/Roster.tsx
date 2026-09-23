@@ -25,7 +25,16 @@ const ATTR_LABELS: { key: AttrKey; label: string }[] = [
   { key: 'positioning', label: 'Positioning' },
 ]
 
-type SortKey = 'name' | 'age' | 'climb' | 'sprint' | 'flat' | 'resistance' | 'positioning' | 'weekly_salary'
+type SortKey =
+  | 'name'
+  | 'age'
+  | 'climb'
+  | 'sprint'
+  | 'flat'
+  | 'resistance'
+  | 'positioning'
+  | 'weekly_salary'
+  | 'market_value'
 
 const SORT_OPTIONS: Array<{ key: SortKey; label: string }> = [
   { key: 'name', label: 'Name' },
@@ -36,13 +45,14 @@ const SORT_OPTIONS: Array<{ key: SortKey; label: string }> = [
   { key: 'resistance', label: 'Resistance' },
   { key: 'positioning', label: 'Positioning' },
   { key: 'weekly_salary', label: 'Salary' },
+  { key: 'market_value', label: 'Value' },
 ]
 
 export function Roster() {
   const { me, loading: authLoading } = useAuth()
   const hasTeam = me?.team != null
 
-  const { riders, loading, error } = useRoster()
+  const { riders, squadValue, loading, error } = useRoster()
   const [filter, setFilter] = useState<'All' | string>('All')
   const [sort, setSort] = useState<SortKey>('name')
   const [picked, setPicked] = useState<number | null>(null)
@@ -95,7 +105,12 @@ export function Roster() {
         title="Squad"
         titleSize={29}
         subtitle="Tap a rider for the full profile. Attributes are the five the race engine reads."
-        aside={<StatTile label="SQUAD SIZE" value={String(riders.length)} minWidth={104} />}
+        aside={
+          <>
+            <StatTile label="SQUAD SIZE" value={String(riders.length)} minWidth={104} />
+            <StatTile label="SQUAD VALUE" value={formatMoney(squadValue ?? 0)} minWidth={140} />
+          </>
+        }
       />
 
       <Card style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '14px 16px' }}>
@@ -244,8 +259,13 @@ function RiderCard({
         <span style={{ fontSize: 11, color: color.muted, fontFamily: font.mono }}>
           {rider.height_cm} cm · {rider.weight_kg} kg
         </span>
-        <span style={{ fontSize: 11, color: color.mutedStrong, fontFamily: font.mono }}>
-          {formatMoney(rider.weekly_salary)}/wk
+        <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
+          <span style={{ fontSize: 11, color: color.mutedStrong, fontFamily: font.mono }}>
+            {formatMoney(rider.weekly_salary)}/wk
+          </span>
+          <span style={{ fontSize: 10.5, color: color.muted, fontFamily: font.mono }}>
+            {formatMoney(rider.market_value)}
+          </span>
         </span>
       </div>
     </button>
@@ -259,6 +279,7 @@ function RiderPanel({ rider, onClose }: { rider: Rider; onClose: () => void }) {
     ['Weight', `${rider.weight_kg} kg`],
     ['Speciality', rider.speciality],
     ['Salary', `${formatMoney(rider.weekly_salary)}/wk`],
+    ['Value', formatMoney(rider.market_value)],
   ]
 
   return (
