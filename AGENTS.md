@@ -36,12 +36,22 @@ work item, then opens a PR and moves the ticket to **Implemented**; and
 `specs/README.md`, and `.claude/ticket-workflow.md` for the ticket handoff.
 
 **Closing a ticket:** once a ticket is implemented, before opening the pull
-request, update the `README.md` of every folder the feature touched with
-what was actually built, then delete that ticket's `specs/<slug>.md` and
-`specs/<slug>-plan.md`. The spec and plan are working documents for getting
-the feature built; once it exists, the documentation that matters lives in
-`README.md`, and a spec or plan left behind is a second, aging copy of
-decisions the code and the README already record.
+request, update the `README.md` of every folder the feature touched with what
+was actually built. **Keep the spec and the plan.** Set the `Status:` line in
+each to `implemented` and commit them with the rest of the work.
+
+They are kept because they record *why*, which a `README.md` does not. A README
+says what the code does today; it does not say which alternative was rejected,
+what was deliberately cut, what was deferred and on what reasoning, or why a
+limit is 72 hours rather than 24. That is exactly what the next ticket in the
+same area needs, and deleting it throws it away at the moment it becomes
+history.
+
+The division of labour: **`README.md` is current and maintained; `specs/` is
+historical and frozen.** A spec is never updated to match later changes — if the
+behaviour moves, the new ticket gets its own spec, and the old one stands as the
+record of what was decided then. So a spec that no longer matches the code is
+not stale, it is history, and `Status: implemented` says so.
 
 **Opening a ticket:** every new issue must be added to the
 [Cycling Manager Game](https://github.com/users/mario595/projects/5) project

@@ -180,7 +180,8 @@ data flow with the least risk". Say where to stop and commit.
 
 ## Documentation update (required, not optional)
 Which `README.md` files change and what each must say. A new app means a new
-`README.md` in the same change. Name the sections.
+`README.md` in the same change. Name the sections. Do not ask for the spec or
+the plan to be deleted — they stay, with `Status: implemented`.
 
 ## Verification
 How to prove the feature works end to end, beyond unit tests. Name the likeliest
