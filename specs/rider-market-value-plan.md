@@ -329,7 +329,7 @@ does — not by reasoning about the 1-100 range.
   of value exceeds that of salary over the same population, proving the
   age skew actually widens the spread rather than just rescaling it.
 
-### W4 — `api/`: serialize value and the squad total
+### W4 — `api/`: serialize value and the squad total [done]
 Add `market_value` to `RiderSerializer`, add `RosterSerializer`, rewrite
 `RiderListView.get` per the sections above.
 **Test:** `api/tests.py`:

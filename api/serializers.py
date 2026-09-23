@@ -5,6 +5,7 @@ from rest_framework import serializers
 from riders.display import to_display_scale
 from riders.models import ENGINE_ATTRIBUTES
 from staff.pricing import hire_fee, weekly_salary
+from transfers.pricing import market_value_for
 
 
 class ClockSerializer(serializers.Serializer):
@@ -99,6 +100,7 @@ class RiderSerializer(serializers.Serializer):
     weight_kg = serializers.IntegerField()
     freshness = serializers.SerializerMethodField()
     weekly_salary = serializers.IntegerField()
+    market_value = serializers.SerializerMethodField()
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -107,6 +109,18 @@ class RiderSerializer(serializers.Serializer):
 
     def get_freshness(self, instance) -> int:
         return _display_freshness(instance)
+
+    def get_market_value(self, instance) -> int:
+        return market_value_for(instance)
+
+
+class RosterSerializer(serializers.Serializer):
+    """The caller's own team's roster: every rider plus the squad's total
+    market value, so the roster screen's header total and its per-rider
+    figures can never disagree (#31)."""
+
+    riders = RiderSerializer(many=True)
+    squad_value = serializers.IntegerField()
 
 
 class SquadSerializer(serializers.Serializer):
