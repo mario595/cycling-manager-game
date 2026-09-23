@@ -566,6 +566,9 @@ don't invent a second source of truth for the nav list).
   `test_release_cost_is_full_severance_for_a_signed_rider`.
 
 ### W3 — `transfers/services.py`: `sign_free_agent`/`release_rider`, with locking
+
+> **Status:** done.
+
 - The two write paths, per *transfers/services.py* above. Exceptions:
   `RiderNotAvailable`, `RosterFull`, `InsufficientFunds`,
   `RiderNotOnRoster`.
