@@ -18,6 +18,7 @@ from riders.models import DISPLAY_MAX, Rider
 from schedule.models import SEASON_WEEKS, Season, Week
 from staff.models import Trainer, TrainingWeekReport
 from staff.pricing import hire_fee, weekly_salary
+from transfers.pricing import market_value_for
 from teams.models import ManagerialSpell, Team
 from world.services import now
 
@@ -543,8 +544,8 @@ def test_rider_list_returns_the_callers_own_team(roster_rider, roster_client):
     response = roster_client.get("/api/riders/")
 
     assert response.status_code == 200
-    assert len(response.data) == 1
-    rider_data = response.data[0]
+    assert len(response.data["riders"]) == 1
+    rider_data = response.data["riders"][0]
     assert rider_data["id"] == roster_rider.pk
     assert rider_data["name"] == "Roster Rider"
     assert rider_data["speciality"] == "Climber"
@@ -561,7 +562,7 @@ def test_rider_serializer_hides_traits(roster_rider, roster_client):
     assert on absence."""
     response = roster_client.get("/api/riders/")
 
-    rider_data = response.data[0]
+    rider_data = response.data["riders"][0]
     for hidden_field in (
         "potential", "peak_age", "decline_rate",
         "injury_proneness", "training_affinity", "recovery_rate",
@@ -575,13 +576,13 @@ def test_rider_list_includes_freshness_on_display_scale(roster_rider, roster_cli
 
     response = roster_client.get("/api/riders/")
 
-    assert response.data[0]["freshness"] == to_display_scale(30)
+    assert response.data["riders"][0]["freshness"] == to_display_scale(30)
 
 
 def test_rider_list_never_exposes_recovery_rate(roster_rider, roster_client):
     response = roster_client.get("/api/riders/")
 
-    assert "recovery_rate" not in response.data[0]
+    assert "recovery_rate" not in response.data["riders"][0]
 
 
 def test_rider_list_weekly_salary_is_exact_not_display_scale(roster_rider, roster_client):
@@ -590,7 +591,40 @@ def test_rider_list_weekly_salary_is_exact_not_display_scale(roster_rider, roste
 
     response = roster_client.get("/api/riders/")
 
-    assert response.data[0]["weekly_salary"] == 3450
+    assert response.data["riders"][0]["weekly_salary"] == 3450
+
+
+def test_roster_includes_market_value_per_rider(roster_rider, roster_client):
+    response = roster_client.get("/api/riders/")
+
+    rider_data = response.data["riders"][0]
+    assert rider_data["market_value"] == market_value_for(roster_rider)
+
+
+def test_roster_includes_squad_value_total(roster_team, roster_rider, roster_client):
+    second_rider = Rider.objects.create(
+        name="Second Rider", team=roster_team,
+        speciality=Rider.Speciality.SPRINTER, age=29,
+        height_cm=180, weight_kg=72,
+        climb=40, sprint=88, flat=70, resistance=55, positioning=48,
+    )
+
+    response = roster_client.get("/api/riders/")
+
+    values = [rider["market_value"] for rider in response.data["riders"]]
+    assert len(values) == 2
+    assert response.data["squad_value"] == sum(values)
+
+
+def test_rider_list_response_has_no_hidden_traits(roster_rider, roster_client):
+    response = roster_client.get("/api/riders/")
+
+    rider_data = response.data["riders"][0]
+    for hidden_field in (
+        "potential", "peak_age", "decline_rate",
+        "injury_proneness", "training_affinity", "recovery_rate", "growth_debt",
+    ):
+        assert hidden_field not in rider_data
 
 
 @pytest.fixture
@@ -925,7 +959,7 @@ def test_rider_serializer_has_no_role(roster_rider, roster_client):
     specs/leadership-is-per-race.md."""
     response = roster_client.get("/api/riders/")
 
-    assert "role" not in response.data[0]
+    assert "role" not in response.data["riders"][0]
 
 
 def test_squad_candidates_have_no_role(squad_race, squad_riders, squad_client):

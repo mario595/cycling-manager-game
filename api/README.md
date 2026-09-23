@@ -45,15 +45,22 @@ DRF routers and serializers that aggregate other apps' data for the SPA.
   carries `freshness` on that same 0-10 display scale; the hidden
   `recovery_rate` behind it never appears in this or any other payload — see
   `riders/README.md`, *Freshness*.
-- `GET /api/riders/` — the **caller's own** team's roster (`RiderSerializer`,
-  `RiderListView`). Same `team_for()` pattern as the squad endpoint: no team
-  id in the URL, a caller with no team gets a 403. Attributes and freshness
-  are shipped through `riders.display.to_display_scale` (0-10, never the
-  stored 1-100); the hidden traits (`potential`, `peak_age`, `decline_rate`,
+- `GET /api/riders/` — the **caller's own** team's roster
+  (`RosterSerializer`, `RiderListView`): `{riders: [...], squad_value}`.
+  Same `team_for()` pattern as the squad endpoint: no team id in the URL, a
+  caller with no team gets a 403. Attributes and freshness are shipped
+  through `riders.display.to_display_scale` (0-10, never the stored
+  1-100); the hidden traits (`potential`, `peak_age`, `decline_rate`,
   `injury_proneness`, `training_affinity`) and the hidden `recovery_rate`
   never appear in this or any other payload — see `riders/README.md`.
   `weekly_salary` ships as the exact stored credits, not through
-  `to_display_scale` — see `riders/README.md`, *Salary*.
+  `to_display_scale` — see `riders/README.md`, *Salary*. Each rider also
+  carries `market_value` (`transfers.pricing.market_value_for`, exact
+  credits, computed fresh on every request — never stored), and
+  `squad_value` is that same function summed over the response's own
+  riders in Python, not a separate query, so the two numbers can never
+  disagree (`transfers/README.md`, [#31](https://github.com/mario595/cycling-manager/issues/31)).
+  This response shape changed with #31: it was previously a bare array.
 - `GET /api/racing/races/<race_id>/` — one race's own facts
   (`RaceDetailSerializer`, `RaceDetailView`): id, name, status, starts_at,
   distance and the raw `{length, gradient}` course segments. It also carries

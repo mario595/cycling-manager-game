@@ -42,6 +42,7 @@ LOCAL_APPS = [
     "accounts",
     "riders",
     "teams",
+    "transfers",
     "staff",
     "economy",
     "schedule",

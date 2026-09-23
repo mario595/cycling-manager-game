@@ -35,6 +35,7 @@ from racing.services import SquadError, set_squad, suggested_squad
 from riders.models import ENGINE_ATTRIBUTES, Rider
 from schedule.services import current_position
 from staff.pricing import hire_fee
+from transfers.pricing import market_value_for
 from staff.services import (
     InsufficientFunds,
     NoTrainerHired,
@@ -67,6 +68,7 @@ from .serializers import (
     RaceDetailSerializer,
     RaceResultsSerializer,
     RiderSerializer,
+    RosterSerializer,
     SquadSerializer,
     SquadWriteSerializer,
     SignOfferSerializer,
@@ -376,8 +378,11 @@ class RiderListView(APIView):
         if team is None:
             return Response({"detail": "You do not manage a team."}, status=403)
 
-        riders = Rider.objects.filter(team=team)
-        return Response(RiderSerializer(riders, many=True).data)
+        riders = list(Rider.objects.filter(team=team))
+        return Response(RosterSerializer({
+            "riders": riders,
+            "squad_value": sum(market_value_for(r) for r in riders),
+        }).data)
 
 
 class RaceDetailView(APIView):
