@@ -377,7 +377,7 @@ The `LoginView` subclass and the URL ordering.
 credentials through `api/accounts/login/`, assert the field moved to game
 time), `::test_failed_login_does_not_stamp_last_seen_at`.
 
-### W4 — `world/services.py`: `_weeks_inactive`
+### W4 — `world/services.py`: `_weeks_inactive` ✅ (committed with W5 — see note there)
 The counting function alone, tested directly against declared seasons. Easiest
 piece to get subtly wrong and the cheapest to test in isolation.
 **Tests:** `world/tests/test_inactivity.py` (new) —
@@ -386,7 +386,13 @@ piece to get subtly wrong and the cheapest to test in isolation.
 assert a span crossing it counts only in-season weeks),
 `::test_week_opening_exactly_at_last_seen_is_not_counted`.
 
-### W5 — `world/services.py`: `_release_inactive` and the `tick()` wiring
+### W5 — `world/services.py`: `_release_inactive` and the `tick()` wiring ✅
+(Note: implemented in the same commit as W4. `_release_inactive` calls
+`_weeks_inactive` directly and both are exercised by the same test file
+(`world/tests/test_inactivity.py`), so splitting them into two commits
+would have meant committing dead code in the first. All of W4's and W5's
+tests pass and were individually verified against a sabotaged
+implementation before landing.)
 The release pass, the `TickRun.teams_released` counter and its migration, the
 error accumulation.
 **Load-bearing:** per-transition, not per-tick; `at=boundary`, not the tick's

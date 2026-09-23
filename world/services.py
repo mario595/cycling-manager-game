@@ -42,12 +42,19 @@ from schedule.services import process_transitions, process_week_transitions
 from staff.models import Trainer, TrainingWeekReport
 from staff.pricing import weekly_salary
 from staff.services import focus_for, top_up_pool
-from teams.models import Team
+from teams.models import ManagerialSpell, Team
+from teams.services import release_team
 
 from .clocks import Clock
 from .models import GameClock, TickRun
 
 _clock: Clock | None = None
+
+#: Consecutive in-season game-weeks with no login before a manager's team is
+#: released (#63). A game-balance constant, not per-environment
+#: configuration — contrast GameClock.catch_up_max_races, which exists to be
+#: raised temporarily during an incident; this one does not.
+INACTIVITY_WEEKS = 10
 
 
 def get_clock() -> Clock:
@@ -142,6 +149,55 @@ def _completed_week(week) -> Week | None:
     if week.number <= 1:
         return None
     return Week.objects.filter(season=week.season, number=week.number - 1).first()
+
+
+def _weeks_inactive(last_seen_at: datetime, boundary: datetime) -> int:
+    """In-season weeks that opened in `[last_seen_at, boundary)`.
+
+    Counting Week rows rather than dividing a timedelta by seven days is
+    what makes "off-season doesn't count" (#63) fall out for free: weeks
+    only exist inside a declared season, so a gap between seasons
+    contributes no rows regardless of how much real or game time it spans.
+
+    `starts_at__gte` (not `__gt`) is deliberate: a manager who logged in at
+    the exact instant a week opened has seen that week.
+    """
+    return Week.objects.filter(starts_at__gte=last_seen_at, starts_at__lt=boundary).count()
+
+
+def _release_inactive(week) -> tuple[int, str]:
+    """Release the team of every manager inactive for INACTIVITY_WEEKS
+    in-season weeks as of this week boundary (#63).
+
+    Counted in game-time weeks that actually opened, so off-season gaps
+    contribute nothing. A null last_seen_at is exempt: the account has
+    never logged in.
+
+    Returns (teams released, accumulated error text) rather than writing
+    directly onto a TickRun — tick() has not created its TickRun row yet at
+    the point in the week loop where this runs.
+    """
+    boundary = week.starts_at
+    released = 0
+    error = ""
+    managed = Team.objects.filter(
+        manager__isnull=False, manager__last_seen_at__isnull=False,
+    ).select_related("manager")
+
+    for team in managed:
+        if _weeks_inactive(team.manager.last_seen_at, boundary) < INACTIVITY_WEEKS:
+            continue
+        try:
+            # release_team returns None for an already-unmanaged team
+            # (teams/README.md, Releasing a team) — keeps this count honest
+            # if a concurrent tick got there first.
+            if release_team(team, reason=ManagerialSpell.Reason.INACTIVITY, at=boundary) is not None:
+                released += 1
+        except Exception:
+            # One bad release must not strand this week's wages or
+            # training — same shape as _execute's per-race guard.
+            error += f"release team {team.pk}:\n{traceback.format_exc()}\n"
+    return released, error
 
 
 def _apply_training_week(week) -> int:
@@ -260,6 +316,8 @@ def tick() -> TickRun:
     fanbase_entries = 0
     sponsorship_entries = 0
     trainer_salary_entries = 0
+    teams_released = 0
+    inactivity_error = ""
 
     # Built once, outside the loop: a trainer's skill does not move between
     # weeks within one tick (no hires happen mid-tick), so the same salary
@@ -292,6 +350,12 @@ def tick() -> TickRun:
         # already relies on.
         sponsorship_entries += pay_sponsorship(week, points_by_team=points)
 
+        # After the economy calls: releasing a team must not change what
+        # this week's wages/training/fanbase already charged it for.
+        released, error = _release_inactive(week)
+        teams_released += released
+        inactivity_error += error
+
     reclaimed = _reclaim_unfinished()
     claimed = _claim(limit=max(0, max_races - len(reclaimed)), at=at)
     capped = len(reclaimed) + len(claimed) >= max_races
@@ -308,6 +372,8 @@ def tick() -> TickRun:
         fanbase_entries=fanbase_entries,
         sponsorship_entries=sponsorship_entries,
         trainer_salary_entries=trainer_salary_entries,
+        teams_released=teams_released,
+        error=inactivity_error,
     )
     _execute(reclaimed + claimed, run, at=at)
     run.capped = capped
