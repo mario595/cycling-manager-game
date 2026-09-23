@@ -233,8 +233,11 @@ export async function putSquad(raceId: number, riderIds: number[], leaderId: num
 
 /** Ratings are the 0-10 display scale — see riders/display.py. The five
  * hidden traits (potential, peak age, decline rate, injury proneness,
- * training affinity) never reach this client at all. `weekly_salary` is
- * exact whole credits, never mapped onto the display scale. */
+ * training affinity) never reach this client at all. `weekly_salary` and
+ * `market_value` are both exact whole credits, never mapped onto the
+ * display scale — the first is what the rider costs to keep, frozen for
+ * the season; the second is what they're worth, recomputed on every read
+ * (#31). */
 export interface Rider {
   id: number
   name: string
@@ -250,9 +253,17 @@ export interface Rider {
   positioning: number
   freshness: number
   weekly_salary: number
+  market_value: number
 }
 
-export async function getRiders(): Promise<Rider[]> {
+/** The caller's own team's roster: every rider plus the squad's total
+ * market value (#31) — a single response so the two can never disagree. */
+export interface Roster {
+  riders: Rider[]
+  squad_value: number
+}
+
+export async function getRiders(): Promise<Roster> {
   const response = await fetch('/api/riders/')
   if (!response.ok) {
     throw new Error(`riders request failed: ${response.status}`)

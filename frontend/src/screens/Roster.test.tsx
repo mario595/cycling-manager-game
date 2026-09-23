@@ -36,6 +36,7 @@ const riders: Rider[] = [
     positioning: 6,
     freshness: 10,
     weekly_salary: 3200,
+    market_value: 40000,
   },
   {
     id: 2,
@@ -52,6 +53,7 @@ const riders: Rider[] = [
     positioning: 6,
     freshness: 10,
     weekly_salary: 900,
+    market_value: 95000,
   },
 ]
 
@@ -73,12 +75,12 @@ beforeEach(() => {
     claim: vi.fn(),
     acknowledgeLostTeam: vi.fn(),
   })
-  mockUseRoster.mockReturnValue({ riders, loading: false, error: false })
+  mockUseRoster.mockReturnValue({ riders, squadValue: 135000, loading: false, error: false })
 })
 
 describe('Roster', () => {
   it('renders nothing while loading', () => {
-    mockUseRoster.mockReturnValue({ riders: null, loading: true, error: false })
+    mockUseRoster.mockReturnValue({ riders: null, squadValue: null, loading: true, error: false })
 
     const { container } = renderRoster()
 
@@ -101,5 +103,33 @@ describe('Roster', () => {
     // Descending, so the higher salary card renders first.
     expect(cards[0]).toHaveTextContent('$3,200/wk')
     expect(cards[1]).toHaveTextContent('$900/wk')
+  })
+
+  it("renders each rider's market value formatted as money", () => {
+    renderRoster()
+
+    expect(screen.getByText('$40,000')).toBeInTheDocument()
+    expect(screen.getByText('$95,000')).toBeInTheDocument()
+  })
+
+  it('renders the squad value total in the header', () => {
+    renderRoster()
+
+    expect(screen.getByText('$135,000')).toBeInTheDocument()
+  })
+
+  it('sorts by value when the Value chip is picked, differently from Salary', () => {
+    renderRoster()
+
+    fireEvent.click(screen.getByText('Value'))
+
+    // Scoped to the rider cards (buttons), so the header's squad-value
+    // stat tile — which matches the same money pattern — is excluded.
+    const cardNames = screen.getAllByRole('button').map((button) => button.textContent)
+    const withValue = cardNames.filter((name) => /\$[\d,]+$/.test(name ?? ''))
+    // Descending by market_value, so Bruno ($95,000) renders before Alba
+    // ($40,000) — the opposite order from sorting by salary.
+    expect(withValue[0]).toContain('$95,000')
+    expect(withValue[1]).toContain('$40,000')
   })
 })

@@ -256,6 +256,16 @@ a strong generated rider and the average at `economy.models.
 WEEKLY_WAGE_PER_RIDER`. Retuning the formula means re-running those tests
 until they pass again, not eyeballing the constants.
 
+**A second price exists in `transfers/`** — market value
+([#31](https://github.com/mario595/cycling-manager/issues/31)), what a
+rider is worth rather than what they cost to keep. It reuses `strength()`
+unchanged but defines its own age curve rather than reusing
+`age_multiplier`: salary's curve is a mild, symmetric penalty around a
+prime band, which is right for a wage and wrong for a valuation that needs
+to price in years of career remaining. A change to `strength()` moves both
+prices; a change to `age_multiplier` moves only this one. See
+`transfers/README.md`, *Value vs salary*.
+
 `economy.services.charge_weekly_wages` sums every team's riders'
 `weekly_salary` each week — see `economy/README.md`, *Wages run off week
 transitions*.
