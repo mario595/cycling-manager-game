@@ -597,6 +597,9 @@ don't invent a second source of truth for the nav list).
 - Test: `economy/tests/test_services.py::test_charge_transfer_fee_writes_a_debit`.
 
 ### W5 — `api/`: serializers, views, urls
+
+> **Status:** done.
+
 - `api/serializers.py`: `FreeAgentSerializer`, `FreeAgentPoolSerializer`,
   `SignFreeAgentSerializer`, `ReleaseRiderSerializer`; add
   `release_cost` to `RiderSerializer` via context.
