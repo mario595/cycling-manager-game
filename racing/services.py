@@ -285,7 +285,7 @@ def simulate_race(race: Race, *, game_time: datetime) -> list[RaceResult]:
     # binary stream.
     with tempfile.TemporaryDirectory() as tmp:
         log_path = Path(tmp) / f"race-{race.pk}.jsonl.br"
-        states, sample_count = run_race_via_adapter(
+        states, sample_count, tick_interval = run_race_via_adapter(
             engine_riders, course, str(log_path), race.seed,
             to_team_codes(teams), race.wind_enabled, race.wind_band or None,
         )
@@ -302,10 +302,12 @@ def simulate_race(race: Race, *, game_time: datetime) -> list[RaceResult]:
     with transaction.atomic():
         RaceLog.objects.update_or_create(
             race=race,
-            # tick_count still names the column until W4's migration renames
-            # it to sample_count and adds tick_interval; the value stored here
-            # is the sample count from the engine.
-            defaults={"file": saved, "tick_count": sample_count, "size_bytes": size},
+            defaults={
+                "file": saved,
+                "sample_count": sample_count,
+                "tick_interval": tick_interval,
+                "size_bytes": size,
+            },
         )
         results = RaceResult.objects.bulk_create([
             RaceResult(

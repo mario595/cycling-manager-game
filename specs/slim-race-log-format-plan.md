@@ -388,13 +388,21 @@ W4 renames the column, adds `tick_interval`, and flips these assertions to
 `log.sample_count`/`log.tick_interval` — same boundary choice as W2/W3, so
 every commit stays green.)*
 
-### W4 — `racing/`: migration and admin
+### W4 — `racing/`: migration and admin ✅
 `0006_racelog_sampling.py` — rename `tick_count` → `sample_count`, add
 `tick_interval`, update `size_bytes` help text. Update `racing/admin.py:14`'s
 `list_display`. Update `RaceLog`'s docstring, which currently says slimming is
 "planned work".
 **Tests:** `.venv/bin/python manage.py makemigrations --check --dry-run` is
 clean after the migration is written.
+
+*(Implemented note: `makemigrations --noinput` guessed remove+add for the
+rename; the migration was hand-edited to a data-preserving `RenameField`. The
+rename means the seam must carry the interval for admin and tests to record
+it, so `run_race`/`run_race_via_adapter` grew to `(states, sample_count,
+sample_interval)` here and `simulate_race` stores `sample_count` and
+`tick_interval`; the W3 assertions flipped to `log.sample_count` /
+`log.tick_interval`.)*
 
 ### W5 — `race_player/`: types and parser
 New `RaceHeader`/`RaceSample` types; `parseRaceLog` decodes the header and

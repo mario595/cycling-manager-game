@@ -852,12 +852,13 @@ def run_race(
     team_codes: dict[str, dict[str, str]] | None = None,
     wind: bool = True,
     wind_band: str | None = None,
-) -> tuple[list[RiderState], int]:
-    """Run a race and return the results plus how many samples the log holds.
+) -> tuple[list[RiderState], int, int]:
+    """Run a race and return the results plus the log's sampling metadata.
 
-    Returns ``(results, sample_count)``. ``sample_count`` counts the sample
-    lines the logger wrote (0 when no log was requested); at W4 the interval
-    between samples travels the seam too, once a caller stores it.
+    Returns ``(results, sample_count, sample_interval)``. ``sample_count``
+    counts the sample lines the logger wrote (0 when no log was requested);
+    ``sample_interval`` is the race seconds between samples. Together they let
+    a caller record what the log contains without reading it back.
     """
     from .race_logger import RaceLogger
 
@@ -911,4 +912,4 @@ def run_race(
             flush=True,
         )
 
-    return state.get_results(), (logger.sample_count if logger else 0)
+    return state.get_results(), (logger.sample_count if logger else 0), (logger.sample_interval if logger else 0)

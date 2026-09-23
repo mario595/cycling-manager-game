@@ -138,13 +138,11 @@ def test_simulate_race_writes_log_and_results(running_race, four_riders):
 
     log = RaceLog.objects.get(race=running_race)
     # The log is brotli-compressed: one header line followed by the samples.
-    # tick_count still names the column until W4 renames it to sample_count,
-    # but the value stored is the engine's sample count.
     with log.file.open("rb") as fh:
         text = brotli.decompress(fh.read()).decode()
     lines = text.splitlines()
-    assert log.tick_count == len(lines) - 1
-    assert json.loads(lines[0])["tick_interval"] == 2
+    assert log.sample_count == len(lines) - 1
+    assert log.tick_interval == 2
     assert log.size_bytes == log.file.size
     assert log.file.name.endswith(".jsonl.br")
 
@@ -663,7 +661,7 @@ def test_simulate_race_does_not_deduct_from_non_finishers(running_race, four_rid
 
     def fake_run_race(riders, course, log_path, *args, **kwargs):
         Path(log_path).touch()
-        return states, 0
+        return states, 0, 2
 
     monkeypatch.setattr("racing.services.run_race_via_adapter", fake_run_race)
 
