@@ -90,6 +90,8 @@ replays.
 
 ### Planned: slim and compress the log format — NOT YET DONE
 
+Tracked as [#88](https://github.com/mario595/cycling-manager/issues/88).
+
 The current format is knowingly wasteful. Deferred deliberately; do it before
 storage becomes a real problem, not after.
 
@@ -102,9 +104,18 @@ The redundancy is large and easy to remove:
 - Ticks are 1 second. The player almost certainly cannot show the difference
   between 1 s and 2 s sampling.
 
-With those three changes plus gzip, the 5.5 MB sample should land in the low
-hundreds of kilobytes. That single change makes every storage question easier,
-so it comes first.
+Measured on `race_player/public/mountain_stage.jsonl` — 75.7 MB, 18,961 lines,
+16 riders — the repetition alone is ~26.6 MB (35%): 5.8 MB of `segments`,
+3.8 MB of `teams`, 17.0 MB of per-rider `name`/`team`/`role`.
+
+**gzip alone takes the file to 3.6% of its size** (~2.7 MB), because the
+repetition is so regular. It is the highest-leverage change and needs no format
+change at all. That single change makes every storage question easier, so it
+comes first.
+
+Worth pairing with [#70](https://github.com/mario595/cycling-manager/issues/70) (course markers), which adds a new kind of log
+record and already requires touching the format — doing both at once changes the
+format and `race_player/` once rather than twice.
 
 ### Rejected: regenerating logs from a seed
 

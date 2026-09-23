@@ -260,7 +260,8 @@ Two ways they come into being, and the distinction matters:
   reproduce the race it recorded. See `racing/README.md`.
 
 The log format is knowingly verbose and slimming it is planned work — the static
-header is repeated on every line. Details in `racing/README.md`.
+header is repeated on every line, and a single mountain stage runs to 75 MB.
+Tracked as [#88](https://github.com/mario595/cycling-manager/issues/88); details in `racing/README.md`.
 
 ## Displaying game money
 
