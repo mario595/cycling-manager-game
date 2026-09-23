@@ -358,7 +358,7 @@ everything (`AGENTS.md`), and `world/services.py` already imports
 
 ## Work items
 
-### W1 — `accounts/models.py`: `User.last_seen_at`
+### W1 — `accounts/models.py`: `User.last_seen_at` ✅
 The field and its migration, exactly as *Data model* specifies. Nothing reads
 or writes it yet.
 **Test:** `accounts/tests.py::test_last_seen_at_defaults_to_null`.

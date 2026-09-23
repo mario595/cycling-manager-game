@@ -62,6 +62,17 @@ class User(AbstractUser):
         help_text="Public name shown to other managers. Falls back to username.",
     )
 
+    last_seen_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Game time of the user's most recent login — NOT django.contrib.auth's "
+            "last_login, which is real time. Null means never logged in. Written "
+            "only by api.services.touch_last_seen; see world/README.md, The clock "
+            "discipline rule, and accounts/README.md, Last seen is game time."
+        ),
+    )
+
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS: list[str] = []
 

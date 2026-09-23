@@ -133,3 +133,9 @@ def test_logout_ends_the_session(db):
 
     assert response.status_code == 204
     assert "_auth_user_id" not in client.session
+
+
+def test_last_seen_at_defaults_to_null(db):
+    user = User.objects.create_user(email="mario@example.com", password="s0meth1ng-good")
+
+    assert user.last_seen_at is None
