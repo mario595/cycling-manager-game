@@ -83,11 +83,16 @@ Repo rules this plan is bound by (`AGENTS.md`):
    `rider.joined_team_at == team.managed_since` (they joined at the exact
    moment of that claim — i.e., they're part of the roster `claim_team`
    generated, not a rider signed in afterward), and fewer than
-   `CLAIM_COOLDOWN_WEEKS` (1) in-season weeks have opened between
-   `managed_since` and now. This needs no new model — `Team.managed_since`
-   already exists (`teams/models.py`) — and correctly excludes a rider the
-   manager signed after claiming, who was never "assigned, not chosen."
-   **Do not** compare `joined_team_at >= managed_since`: `claim_team`
+`CLAIM_COOLDOWN_WEEKS` (1) in-season weeks have opened between
+    `managed_since` and now. This needs no new model — `Team.managed_since`
+    already exists (`teams/models.py`) — and correctly excludes a rider the
+    manager signed after claiming, who was never "assigned, not chosen."
+    **The week count is computed by the caller (`api/`), not in
+    `transfers/`**: `transfers/` may import only `riders/` (AGENTS.md), so
+    `release_cost_for(team, rider, *, weeks_opened)` and
+    `release_rider(..., weeks_opened)` receive it as an argument — the same
+    caller-counts shape Design decision 9 already settles for expiry.
+    **Do not** compare `joined_team_at >= managed_since`: `claim_team`
    assigns every generated rider the *same* `at`, so `==` is exact and
    deliberately excludes a same-week signing (which would get a *different*
    `at`, from `now()` at sign time).
@@ -543,6 +548,9 @@ don't invent a second source of truth for the nav list).
   `unattached_since == at`.
 
 ### W2 — `transfers/`: pricing extensions (fees) and `services.py`
+
+> **Status:** done.
+
 - `transfers/pricing.py`: `SIGNING_FEE_RATE`, `SEVERANCE_FEE_RATE`,
   `signing_fee_for`, `severance_fee_for`.
 - `transfers/services.py` (new): `free_agents()`,

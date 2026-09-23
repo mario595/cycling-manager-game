@@ -6,7 +6,7 @@ import statistics
 from riders.generation import generate_rider
 from riders.models import Rider
 from riders.pricing import weekly_salary_for
-from transfers.pricing import career_horizon, market_value_for
+from transfers.pricing import career_horizon, market_value_for, severance_fee_for, signing_fee_for
 
 
 def _rider(**attrs) -> Rider:
@@ -110,6 +110,26 @@ def test_no_hidden_trait_is_read():
 
 def test_career_horizon_is_flat_at_and_below_peak():
     assert career_horizon(18) == career_horizon(23) == 1.0
+
+
+def test_signing_fee_is_60_percent_of_value():
+    rider = _rider(climb=70, sprint=65, flat=60, resistance=55, positioning=50)
+
+    fee = signing_fee_for(rider)
+
+    # The same nearest-1000 rounding market_value_for itself uses
+    # (Design decision 3 — no second rounding convention for fees).
+    assert fee == 1000 * round(0.60 * market_value_for(rider) / 1000)
+    assert fee > 0
+
+
+def test_severance_fee_is_30_percent_of_value():
+    rider = _rider(climb=70, sprint=65, flat=60, resistance=55, positioning=50)
+
+    fee = severance_fee_for(rider)
+
+    assert fee == 1000 * round(0.30 * market_value_for(rider) / 1000)
+    assert fee > 0
 
 
 def test_career_horizon_never_exceeds_its_bounds():
