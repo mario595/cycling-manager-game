@@ -348,7 +348,7 @@ Delete the pre-format fallbacks per decision 10. `isLeader(rider)` becomes
 
 ## Work items
 
-### W1 — `race_engine/race_logger.py`: header, sampling, positional samples
+### W1 — `race_engine/race_logger.py`: header, sampling, positional samples ✅
 Rewrite `RaceLogger` per decisions 1-5, 7, 8. **Not yet compressed** — write
 plain text, so this item is verifiable by reading the file. `sample_interval`
 defaults to 2; `sample_count` property added.
