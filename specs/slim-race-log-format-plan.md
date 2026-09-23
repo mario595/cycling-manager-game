@@ -413,13 +413,19 @@ fixture decodes to full rider objects with names and teams from the header;
 flags decode to the right booleans; `tickInterval` is surfaced; a wrong `v`
 throws; a file with no header throws.
 
-### W6 — `race_player/`: tick-to-seconds in the UI
+### W6 — `race_player/`: tick-to-seconds in the UI ✅
 `formatDuration` takes seconds; `RaceViz`'s interval scales by `tickInterval`;
 `tickInterval` threaded through props; `teamColors.ts` fallbacks deleted per
 decision 10.
 **Tests:** existing vitest suite stays green; add a case asserting
 `formatDuration` renders `0h 2m 4s` for 124 seconds, and that a race with
 `tickInterval: 2` and 62 samples reports a total of 2m 2s not 1m 1s.
+
+*(Implemented note: the plan's two assertions pin `formatDuration` to the full
+`{h}h {m}m {s}s` form — it now renders leading-zero units instead of dropping
+them, so both land as `0h 2m 4s` / `0h 2m 2s`. `formatDuration` is exported for
+the test; `Rider.team` became `string | null` and `role` required, and
+`teamCode`/`teamName` widened to `string | null` accordingly.)*
 
 ### W7 — regenerate the sample logs
 Regenerate all six `race_player/public/*.jsonl` as `.jsonl.br` via

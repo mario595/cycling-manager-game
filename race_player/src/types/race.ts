@@ -20,8 +20,9 @@ export interface Wind {
 export interface Rider {
   id: string
   name: string
-  team?: string
-  role?: 'leader' | 'support'
+  /** Null only for a rider genuinely on no team (the engine allows team_id=None). */
+  team: string | null
+  role: 'leader' | 'support'
   pos: number
   speed: number
   energy: number
@@ -44,7 +45,7 @@ export interface RaceSnapshot {
 export interface RaceHeaderRider {
   id: string
   name: string
-  team: string
+  team: string | null
   role: 'leader' | 'support'
 }
 
