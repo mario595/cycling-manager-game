@@ -80,7 +80,7 @@ beforeEach(() => {
 
 describe('Roster', () => {
   it('renders nothing while loading', () => {
-    mockUseRoster.mockReturnValue({ riders: null, loading: true, error: false })
+    mockUseRoster.mockReturnValue({ riders: null, squadValue: null, loading: true, error: false })
 
     const { container } = renderRoster()
 
