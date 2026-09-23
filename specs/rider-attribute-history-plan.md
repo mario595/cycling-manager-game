@@ -282,7 +282,7 @@ stored values were recorded — this is the check that proves D2);
 `record_week_snapshots` writes one row per id with the given `week_id`; calling
 it twice for the same week writes nothing the second time and does not raise.
 
-### W3 — the three creation sites: baseline on creation
+### W3 — the three creation sites: baseline on creation ✅
 `teams/services.py`, `teams/management/commands/seed_teams.py`,
 `riders/management/commands/reset_riders.py`.
 **Load-bearing:** use the list `bulk_create` returns, not the list passed in

@@ -27,6 +27,8 @@ def test_creates_unmanaged_teams_with_rosters(db):
     assert all(t.manager_id is None for t in teams)
     for t in teams:
         assert t.riders.count() == 12
+        for rider in t.riders.all():
+            assert rider.attribute_snapshots.filter(week=None).count() == 1
 
 
 def test_reset_leaves_managed_teams_alone(db):

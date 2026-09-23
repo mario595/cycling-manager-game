@@ -6,7 +6,7 @@ from django.core.management.base import CommandError
 
 from racing.models import Race, RaceResult, RaceSquad
 from racing.services import set_squad
-from riders.models import Rider
+from riders.models import Rider, RiderAttributeSnapshot
 from teams.models import Team
 
 
@@ -58,3 +58,20 @@ def test_replaces_population(db, team, second_team, four_riders, race, capsys):
     assert new_riders.filter(team=second_team).count() == 12
     assert RaceResult.objects.count() == 0
     assert RaceSquad.objects.count() == 0
+
+
+def test_replaces_population_gives_every_new_rider_a_baseline_snapshot_and_no_orphans(
+    db, team, second_team, rider,
+):
+    old_snapshot = RiderAttributeSnapshot.objects.create(
+        rider=rider, week=None, climb=5, sprint=5, flat=5, resistance=5, positioning=5,
+    )
+
+    call_command("reset_riders", "--yes", "--per-team=12")
+
+    new_riders = Rider.objects.all()
+    assert new_riders.count() == 24
+    for r in new_riders:
+        assert r.attribute_snapshots.filter(week=None).count() == 1
+    assert RiderAttributeSnapshot.objects.count() == 24
+    assert not RiderAttributeSnapshot.objects.filter(pk=old_snapshot.pk).exists()

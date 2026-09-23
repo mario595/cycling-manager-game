@@ -5,6 +5,7 @@ from django.db import transaction
 
 from riders.generation import generate_roster
 from riders.models import Rider
+from riders.services import record_initial_snapshots
 from teams.models import Team
 
 DEFAULT_RIDERS_PER_TEAM = 12
@@ -55,7 +56,8 @@ class Command(BaseCommand):
             created = 0
             for team in teams:
                 roster = generate_roster(per_team, team=team)
-                Rider.objects.bulk_create(roster)
+                created_riders = Rider.objects.bulk_create(roster)
+                record_initial_snapshots(created_riders)
                 created += len(roster)
 
         self.stdout.write(
