@@ -1448,6 +1448,49 @@ def test_touch_last_seen_writes_game_time(db):
         world_services._clock = None
 
 
+@override_settings(GAME_CLOCK_CLASS="world.clocks.MockClock")
+def test_login_stamps_last_seen_at(db):
+    """Posting through the real URL, not calling the view directly — this
+    is what actually proves api.urls routes accounts/login/ to api's
+    LoginView ahead of the plain one accounts.urls also registers."""
+    from world.services import get_clock
+
+    world_services._clock = None
+    try:
+        clock: MockClock = get_clock()
+        clock.now()  # GameClock.load() — creates the row set() requires
+        game_time = datetime(2027, 3, 1, 0, 0, tzinfo=dt_timezone.utc)
+        clock.set(game_time)
+
+        User.objects.create_user(email="login-stamp@example.com", password="s0meth1ng-good")
+        client = APIClient()
+
+        response = client.post("/api/accounts/login/", {
+            "email": "login-stamp@example.com",
+            "password": "s0meth1ng-good",
+        }, format="json")
+
+        assert response.status_code == 200
+        user = User.objects.get(email="login-stamp@example.com")
+        assert user.last_seen_at == game_time
+    finally:
+        world_services._clock = None
+
+
+def test_failed_login_does_not_stamp_last_seen_at(db):
+    User.objects.create_user(email="login-fail@example.com", password="s0meth1ng-good")
+    client = APIClient()
+
+    response = client.post("/api/accounts/login/", {
+        "email": "login-fail@example.com",
+        "password": "wrong-password-1",
+    }, format="json")
+
+    assert response.status_code == 400
+    user = User.objects.get(email="login-fail@example.com")
+    assert user.last_seen_at is None
+
+
 @pytest.fixture
 def sponsors_manager(db) -> User:
     return User.objects.create_user(email="sponsors-manager@example.com", password="s0meth1ng-good")

@@ -10,6 +10,7 @@ from .views import (
     FinancesView,
     FireTrainerView,
     HireTrainerView,
+    LoginView,
     MeView,
     PositionView,
     RaceDetailView,
@@ -26,6 +27,11 @@ from .views import (
 app_name = "api"
 
 urlpatterns = [
+    # Ahead of the accounts.urls include below: this route must win so
+    # that POST /api/accounts/login/ stamps last_seen_at (api/views.py's
+    # LoginView), not the plain accounts.views.LoginView it subclasses —
+    # see accounts/README.md, Last seen is game time.
+    path("accounts/login/", LoginView.as_view(), name="login"),
     path("accounts/", include("accounts.urls")),
     path("accounts/me/", MeView.as_view(), name="me"),
     path("world/clock/", ClockView.as_view(), name="clock"),

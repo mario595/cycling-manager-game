@@ -52,6 +52,9 @@ from teams.models import ManagerialSpell, Team
 from teams.services import NoTeamAvailable, claim_team
 from world.services import now
 
+from accounts.views import LoginView as AccountsLoginView
+
+from .services import touch_last_seen
 from .serializers import (
     CalendarSerializer,
     ClaimTeamSerializer,
@@ -159,6 +162,28 @@ class CalendarView(APIView):
             "current_week": position.week.number if position.week else None,
             "weeks": [_week_payload(w) for w in weeks],
         }).data)
+
+
+class LoginView(AccountsLoginView):
+    """accounts' login, plus stamping the game-time last-seen.
+
+    The stamp lives here rather than in accounts/views.py because accounts/
+    imports nothing (AGENTS.md) and this needs world.services.now() — see
+    accounts/README.md, Last seen is game time. Subclassed rather than
+    reimplemented so the authentication logic, the vague failure message and
+    the response shape all stay in one place.
+
+    Routed in api/urls.py ahead of include("accounts.urls"), so this is the
+    view that actually serves POST /api/accounts/login/.
+    """
+
+    def post(self, request):
+        response = super().post(request)
+        if response.status_code == 200 and request.user.is_authenticated:
+            # is_authenticated is only true here because super().post()
+            # already called login(), which populates request.user.
+            touch_last_seen(request.user, now())
+        return response
 
 
 class MeView(APIView):

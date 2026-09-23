@@ -370,7 +370,7 @@ clock to a known instant, call it, assert the stored value is that instant and
 **not** `timezone.now()`. The assertion that the two differ is the point;
 under `RealClock` this test would pass while proving nothing.
 
-### W3 — `api/`: login stamps `last_seen_at`
+### W3 — `api/`: login stamps `last_seen_at` ✅
 The `LoginView` subclass and the URL ordering.
 **Load-bearing:** the route must precede `include("accounts.urls")`.
 **Tests:** `api/tests.py::test_login_stamps_last_seen_at` (post real
