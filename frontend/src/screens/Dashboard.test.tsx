@@ -26,6 +26,7 @@ const manager: Me = {
   authenticated: true,
   display_name: 'Mario',
   team: { id: 1, name: 'Squad Team', code: 'SQD' },
+  lost_team: null,
 }
 
 const position: Position = {
@@ -78,6 +79,7 @@ beforeEach(() => {
     login: vi.fn(),
     logout: vi.fn(),
     claim: vi.fn(),
+    acknowledgeLostTeam: vi.fn(),
   })
   mockUseSeason.mockReturnValue({ position, loading: false, error: false })
   mockUseCalendar.mockReturnValue({ calendar, loading: false, error: false })

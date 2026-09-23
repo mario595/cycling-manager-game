@@ -3,10 +3,10 @@
 ## What this app owns
 
 `Team` — name, code, colours, and the `manager` link to `accounts.User`.
-`services.claim_team()`, the only writer of that link. The `seed_teams`
-management command, which populates a claimable world. Not rosters (`riders/`
-owns `Rider`), not standings (`competitions/`), not money (`economy/` owns
-the ledger).
+`services.claim_team()` and `services.release_team()`, the two writers of
+that link. The `seed_teams` and `release_team` management commands. Not
+rosters (`riders/` owns `Rider`), not standings (`competitions/`), not money
+(`economy/` owns the ledger).
 
 ## Claiming a team
 
@@ -42,6 +42,10 @@ A registered user with no team calls `claim_team(user, name=..., code=..., at=..
    never handed a contract they never agreed to; the API generates them a
    fresh offer round on their first visit to the Sponsors screen.
 
+The claim also stamps `Team.managed_since = at` — the moment `release_team`
+(below) reads when the spell it records ends, and clears when the team is
+released.
+
 If no unmanaged team exists, `claim_team` raises `NoTeamAvailable`. A second
 claim by an already-managing user is not checked here — `Team.manager` is a
 `OneToOneField`, so it raises `IntegrityError`; the caller
@@ -54,6 +58,69 @@ while its roster does not (reset the present).
 **A claim is atomic or it does not happen.** A half-claimed team — renamed
 but with no roster — must never be observable. Everything above runs inside
 one `transaction.atomic()`.
+
+## Releasing a team
+
+`release_team(team, *, reason, at)` (#62) is `claim_team`'s counterpart:
+it returns a managed team to the unmanaged pool. It is **not** claim's
+inverse, and deliberately so — it clears `Team.manager` and
+`Team.managed_since` and writes one `ManagerialSpell` (below), and touches
+**nothing else**: not the roster, not the ledger, not the fanbase, not the
+sponsorship. A released team must be indistinguishable from a team that was
+never managed, because #44's default squad selection has to pick it up
+exactly as it would any other unmanaged team. All of the *resetting* — fresh
+roster, balance, fanbase, voided sponsorship — happens on the *next* claim,
+the same as it always has; release does none of it.
+
+Locks the row with `select_for_update()`, **without** `skip_locked` — the
+opposite of `claim_team`'s lock. `claim_team` is shopping for any free team
+and should move on to the next one if this row is contended; `release_team`
+acts on one specific, named team and must not silently no-op just because
+another transaction happens to hold it. Re-reading the row under the lock
+(rather than trusting the `team` instance the caller passed in) is what
+makes the "does this team still have a manager" check honest against a
+concurrent release.
+
+Returns `None`, and writes nothing, if the team already has no manager —
+not an exception. Both of the tickets expected to call this (#63, #27) will
+be scanning many teams and can race each other; "already released" is a
+normal outcome for them, not a failure.
+
+Until #63 (inactivity) or #27 (insolvency) exist, the only way to call this
+outside a test is by hand:
+
+```bash
+python manage.py release_team <team-id-or-name> [--reason admin]
+```
+
+## Managerial spells
+
+`ManagerialSpell` is the record of one completed period during which a user
+managed a team — written by `release_team`, never by `claim_team`. It
+carries `team_name`/`team_code` **snapshotted at release**, not read live
+through its `team` FK: #46 lets the next claimer rename the team, and a live
+read would silently rewrite an ex-manager's own history the moment a
+stranger renames the team they used to run. The FK itself is kept (nullable,
+`SET_NULL`) only so the row survives the team being deleted outright (e.g.
+`seed_teams --reset`).
+
+It lives here, in `teams/`, rather than in `accounts/` — despite being "the
+account's record of teams previously managed" in player-facing terms —
+because `accounts/` imports nothing and sits at the root of `AGENTS.md`'s
+dependency graph (`accounts/README.md`). A model there with a FK to
+`teams.Team` would invert that. The record is about a team's managerial
+history; `teams/` already may import `accounts`, so the FK to
+`accounts.User` runs the correct way.
+
+`acknowledged_at` is what makes the ex-manager's "you lost this team" message
+show exactly once: `GET /api/accounts/me/` reports the caller's most recent
+spell with `acknowledged_at IS NULL` as `lost_team` (only when the caller
+currently has no team), and `POST /api/teams/spells/<id>/acknowledge/` sets
+it — see `api/README.md`. This is real time (`django.utils.timezone.now()`,
+like `world.TickRun.finished_at`), not game time — it records when a person
+actually saw a screen, which has nothing to do with the game's clock.
+`started_at`/`ended_at` are game time, from `Team.managed_since` and the
+caller's `at`.
 
 ## Codes are not unique
 
@@ -172,6 +239,8 @@ command is an entry point, and `teams/`'s library code (`models.py`,
 - **A manager choosing the team's colours at claim time.** Currently the
   claimed team's jersey colours carry over unchanged; changing them is a
   team-settings feature, not part of claiming.
-- **What happens when a player abandons a team.** Nothing in the game can
-  currently remove a manager from a team — no account deletion, no
-  inactivity rule — so this has nowhere to attach yet.
+- **What happens when a player abandons a team.** **Done** — see *Releasing
+  a team* and *Managerial spells* above (#62). What is still missing is
+  anything that actually *decides when*: #63 (inactivity) and #27
+  (insolvency) are the tickets expected to call `release_team`; until
+  either lands, only the `release_team` management command can.
