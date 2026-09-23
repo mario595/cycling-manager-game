@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import random
+import statistics
+
+from riders.generation import generate_rider
 from riders.models import Rider
+from riders.pricing import weekly_salary_for
 from transfers.pricing import career_horizon, market_value_for
 
 
@@ -110,3 +115,43 @@ def test_career_horizon_is_flat_at_and_below_peak():
 def test_career_horizon_never_exceeds_its_bounds():
     for age in range(18, 41):
         assert 0.15 <= career_horizon(age) <= 1.0
+
+
+#: A twelve-week season (schedule/README.md), the "roughly a season's
+#: wages" anchor the spec's D4 promises. Not imported from schedule/:
+#: transfers/ may only import riders/ (AGENTS.md), and a test importing it
+#: would tie this test's pass/fail to schedule/'s import graph rather than
+#: to the number itself.
+_WEEKS_PER_SEASON = 12
+
+
+def test_average_value_is_about_one_season_of_wages():
+    # Calibration, not correctness: proves Design decision 4 held. Sampled
+    # over a real generated population, like riders/tests/test_pricing.py's
+    # own calibration tests, not reasoned about from the theoretical range.
+    rng = random.Random(20260922)
+    riders = [generate_rider(rng=rng) for _ in range(3000)]
+
+    mean_salary = statistics.mean(weekly_salary_for(r) for r in riders)
+    mean_value = statistics.mean(market_value_for(r) for r in riders)
+
+    target = mean_salary * _WEEKS_PER_SEASON
+    assert abs(mean_value - target) / target <= 0.15
+
+
+def test_generated_roster_value_spans_wider_than_salary():
+    # Proves the age skew actually widens the spread rather than just
+    # rescaling salary's — if this ties or loses to salary's spread, D2/D3
+    # are not doing anything.
+    rng = random.Random(20260922)
+    riders = [generate_rider(rng=rng) for _ in range(3000)]
+
+    salaries = sorted(weekly_salary_for(r) for r in riders)
+    values = sorted(market_value_for(r) for r in riders)
+
+    def spread(sorted_values):
+        p5 = sorted_values[int(0.05 * len(sorted_values))]
+        p95 = sorted_values[int(0.95 * len(sorted_values))]
+        return p95 / p5
+
+    assert spread(values) > spread(salaries)

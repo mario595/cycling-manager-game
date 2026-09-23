@@ -317,7 +317,7 @@ helper (no database):
   identical visible fields but different `potential`, `peak_age` and
   `decline_rate`; assert equal value.
 
-### W3 — `transfers/pricing.py`: calibrate the constants
+### W3 — `transfers/pricing.py`: calibrate the constants [done]
 Tune `VALUE_AT_MIN_STRENGTH` and `VALUE_AT_MAX_STRENGTH` by sampling
 `riders.generation.generate_rider`, exactly as `riders/tests/test_pricing.py`
 does — not by reasoning about the 1-100 range.

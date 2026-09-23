@@ -12,8 +12,8 @@ from riders.pricing import strength
 #: the theoretical 1-100 range — see transfers/tests/test_pricing.py's
 #: calibration tests, which pin the average generated rider's value to
 #: roughly one season of their own wages.
-VALUE_AT_MIN_STRENGTH = 1_200
-VALUE_AT_MAX_STRENGTH = 240_000
+VALUE_AT_MIN_STRENGTH = 800
+VALUE_AT_MAX_STRENGTH = 157_000
 
 #: Same convex shape as riders.pricing.weekly_salary_for, and the same
 #: exponent deliberately — the star premium should feel the same way in
