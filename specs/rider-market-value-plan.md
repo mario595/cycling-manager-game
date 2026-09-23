@@ -285,7 +285,7 @@ Three changes:
 
 ## Work items
 
-### W1 — `transfers/`: scaffold the app
+### W1 — `transfers/`: scaffold the app [done]
 Create `transfers/__init__.py`, `transfers/apps.py` (`TransfersConfig`),
 `transfers/migrations/__init__.py`, `transfers/tests/__init__.py`, and
 `transfers/README.md`. Add `"transfers"` to `LOCAL_APPS` in
