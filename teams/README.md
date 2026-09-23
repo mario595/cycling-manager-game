@@ -86,8 +86,10 @@ not an exception. Both of the tickets expected to call this (#63, #27) will
 be scanning many teams and can race each other; "already released" is a
 normal outcome for them, not a failure.
 
-Until #63 (inactivity) or #27 (insolvency) exist, the only way to call this
-outside a test is by hand:
+`ManagerialSpell.Reason.INACTIVITY` is now reachable (#63) — `world.services.tick()`
+calls `release_team` for every manager who has gone ten in-season game-weeks
+without logging in (see `world/README.md`, *How a tick works*). `ADMIN`
+remains the manual path, for testing and any hand intervention:
 
 ```bash
 python manage.py release_team <team-id-or-name> [--reason admin]

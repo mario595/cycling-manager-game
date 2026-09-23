@@ -408,7 +408,7 @@ three weeks in one jump, assert the counts used are per-boundary),
 `release_team` to raise; assert wages for that week were still charged and the
 traceback landed on `TickRun.error`).
 
-### W6 — documentation
+### W6 — documentation ✅
 See *Documentation update*. Its own commit.
 
 ## Execution order
