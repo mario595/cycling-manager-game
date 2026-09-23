@@ -301,7 +301,7 @@ two missed weeks at once and assert each week gets its own row for a rider that
 moved in both (D7 — this is the test that proves late ticks attribute
 correctly).
 
-### W5 — `riders/migrations/0010_*`: backfill existing riders
+### W5 — `riders/migrations/0010_*`: backfill existing riders ✅
 Data migration giving every existing rider a `week=NULL` baseline at their
 current values. Guard against re-running by skipping riders that already have a
 snapshot. Reverse operation: delete baseline rows (`week__isnull=True`).
