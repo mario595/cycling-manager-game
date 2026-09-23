@@ -25,6 +25,7 @@ from economy.services import (
     entries_for,
     fanbase_entries_for,
     fanbase_for,
+    latest_salary_review,
     offers_for,
     payroll_for,
     sign_offer,
@@ -382,6 +383,7 @@ class RiderListView(APIView):
         return Response(RosterSerializer({
             "riders": riders,
             "squad_value": sum(market_value_for(r) for r in riders),
+            "salary_review": latest_salary_review(team),
         }).data)
 
 

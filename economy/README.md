@@ -109,6 +109,58 @@ wage-bill tile — it reads the roster as it stands *now*, not the last
 `LedgerEntry` written, since a manager can buy or sell a rider between
 paydays.
 
+## Salary review
+
+At every season close, `riders.services.reprice_all()` recomputes every
+rider's `weekly_salary` from the pricing formula (after ageing — see
+`world/README.md`, *How a tick works*), and `economy.services.
+write_salary_reviews(season, changes)` writes one `SalaryReviewReport` per
+**managed** team recording what that did to the payroll. It mirrors
+`staff.TrainingWeekReport`: a season-change the player did not directly
+trigger, surfaced as a report rather than left silent.
+
+**Why the model lives here and not in `riders/`.** The report needs a
+`Team` FK and a `Season` FK; `riders/` may not depend on `schedule/` at
+all, and the report is a statement about a team's wage bill, which is this
+app's subject. Keeping it in `staff/` next to `TrainingWeekReport` would be
+wrong too — that model lives there because training focus is a staff
+concept, not because it is a report.
+
+**The shape.** One `SalaryReviewReport` row per `(team, season)`, enforced
+by a `UniqueConstraint` — the same second line of defence the `(team,
+week)` wage constraint gives the weekly charge, backing up the
+`SeasonTransition` row that guarantees repricing runs once. Each `create()`
+runs inside its own `transaction.atomic()` with the `IntegrityError`
+caught and passed, one row at a time: an `IntegrityError` poisons an
+enclosing transaction in Django, so catching it inside a shared one fails
+the next statement with `TransactionManagementError`. Copy the
+`process_transitions()` shape, never one `atomic()` around the whole loop.
+
+**Free agents are repriced but generate no report.** `reprice_all()`
+covers every rider; `write_salary_reviews` iterates managed teams only, so
+an unrostered rider's salary move is silent. A managed team with no
+qualifying changes still gets a report — `changes` is an empty list and
+`payroll_before == payroll_after`, so the season leaves a trace.
+
+Two deliberate imprecisions, both worth recording:
+
+- **`changes` is filtered, not exhaustive.** `reprice_all()` always writes
+  every rider's exact formula value, but only returns movements of at
+  least `SALARY_REVIEW_THRESHOLD` (`riders/pricing.py`); the threshold
+  filters the *report*, never the write, so a stored salary can never
+  drift from the formula on behalf of a quiet rounding step.
+- **`payroll_before` is derived, not captured**: `payroll_after` minus the
+  net of the *listed* changes. That is exact only because sub-threshold
+  changes are included in `payroll_after` but omitted from `changes` — a
+  deliberate "what the bill was counting only the movements we are showing
+  you", instead of a second per-team query for a number that differs by
+  at most a rounding step per rider. `payroll_after` itself is
+  `payroll_for(team)` read over the post-reprice roster, which is exact.
+
+`latest_salary_review(team)` (newest season first, `None` if there isn't
+one) feeds the Roster screen's salary-review panel; `api/` serializes it
+onto the roster payload as `salary_review`.
+
 ## Prize money reads the same way fanbase does
 
 `pay_race_prizes(race_id, *, race_name, at, prizes_by_team)` credits a team its

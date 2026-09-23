@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 
-import type { Rider } from '../api'
-import { Bar, Card, Chip, ChipLabel, LabelBar, PageBody, PageHeading, StatTile } from '../components/primitives'
+import type { Rider, SalaryReview } from '../api'
+import { Bar, Card, CardHeader, Chip, ChipLabel, LabelBar, PageBody, PageHeading, StatTile } from '../components/primitives'
 import { formatMoney } from '../format'
 import { barColor, color, font } from '../theme'
 import { useAuth } from '../useAuth'
@@ -52,7 +52,7 @@ export function Roster() {
   const { me, loading: authLoading } = useAuth()
   const hasTeam = me?.team != null
 
-  const { riders, squadValue, loading, error } = useRoster()
+  const { riders, squadValue, salaryReview, loading, error } = useRoster()
   const [filter, setFilter] = useState<'All' | string>('All')
   const [sort, setSort] = useState<SortKey>('name')
   const [picked, setPicked] = useState<number | null>(null)
@@ -112,6 +112,10 @@ export function Roster() {
           </>
         }
       />
+
+      {salaryReview && salaryReview.changes.length > 0 ? (
+        <SalaryReviewCard review={salaryReview} />
+      ) : null}
 
       <Card style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '14px 16px' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
@@ -411,5 +415,97 @@ function RiderPanel({ rider, onClose }: { rider: Rider; onClose: () => void }) {
         ))}
       </div>
     </div>
+  )
+}
+
+function signedMoney(amount: number): string {
+  if (amount > 0) return `+${formatMoney(amount)}`
+  return formatMoney(amount)
+}
+
+function SalaryReviewCard({ review }: { review: SalaryReview }) {
+  const changes = [...review.changes].sort(
+    (a, b) => Math.abs(b.to_value - b.from_value) - Math.abs(a.to_value - a.from_value),
+  )
+  const net = review.payroll_after - review.payroll_before
+
+  return (
+    <Card>
+      <CardHeader
+        title="Season-end salary review"
+        action={
+          <div style={{ fontSize: 11, letterSpacing: '0.8px', color: color.mutedStrong, fontFamily: font.mono }}>
+            SEASON {review.season_number}
+          </div>
+        }
+      />
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          padding: '13px 20px',
+          borderTop: `1px solid ${color.dividerStrong}`,
+        }}
+      >
+        <div style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 600 }}>Weekly wage bill</div>
+        <div style={{ fontSize: 13, fontFamily: font.mono, whiteSpace: 'nowrap' }}>
+          <span style={{ color: color.muted }}>{formatMoney(review.payroll_before)}</span>
+          <span style={{ color: color.accentInk, padding: '0 5px' }}>→</span>
+          <span style={{ fontWeight: 600 }}>{formatMoney(review.payroll_after)}</span>
+          <span
+            style={{
+              color: net > 0 ? color.positive : net < 0 ? color.negative : color.muted,
+              paddingLeft: 8,
+            }}
+          >
+            {signedMoney(net)}
+          </span>
+        </div>
+      </div>
+      {changes.map((change) => {
+        const delta = change.to_value - change.from_value
+        return (
+          <div
+            key={change.rider_id}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              padding: '11px 20px',
+              borderTop: `1px solid ${color.dividerStrong}`,
+            }}
+          >
+            <div
+              style={{
+                flex: 1,
+                minWidth: 0,
+                fontSize: 14,
+                fontWeight: 600,
+                letterSpacing: '-0.2px',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {change.rider_name}
+            </div>
+            <div style={{ fontSize: 13, fontFamily: font.mono, whiteSpace: 'nowrap' }}>
+              <span style={{ color: color.muted }}>{formatMoney(change.from_value)}</span>
+              <span style={{ color: color.accentInk, padding: '0 5px' }}>→</span>
+              <span style={{ fontWeight: 600 }}>{formatMoney(change.to_value)}</span>
+              <span
+                style={{
+                  color: delta > 0 ? color.positive : delta < 0 ? color.negative : color.muted,
+                  paddingLeft: 8,
+                }}
+              >
+                {signedMoney(delta)}
+              </span>
+            </div>
+          </div>
+        )
+      })}
+    </Card>
   )
 }
