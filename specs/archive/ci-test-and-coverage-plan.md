@@ -1,6 +1,6 @@
 # CI: run tests and enforce a coverage threshold — Implementation Plan
 
-**Spec:** `specs/ci-test-and-coverage.md` · **Issue:** #80 · **Status:** implemented
+**Spec:** `specs/archive/ci-test-and-coverage.md` · **Issue:** #80 · **Status:** implemented
 **Apps touched:** none. New files: `.github/workflows/ci.yml` (new), `.coveragerc` (new), `requirements.txt`, `README.md`, `AGENTS.md`, `config/settings/dev.py`
 
 ## Context you need

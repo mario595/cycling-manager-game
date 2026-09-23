@@ -1,6 +1,6 @@
 # Trainer hiring fee and recurring salary — Implementation Plan
 
-**Spec:** `specs/trainer-hiring-fee-salary.md` · **Issue:** #69 · **Status:** implemented
+**Spec:** `specs/archive/trainer-hiring-fee-salary.md` · **Issue:** #69 · **Status:** implemented
 **Apps touched:** `staff/`, `economy/`, `world/`, `api/`, `frontend/`
 
 ## Context you need
@@ -180,7 +180,7 @@ trainer salary entries written this tick (#69).")`. Migration
 
 ```python
 """What a trainer costs. Derived from the speciality score, never stored —
-see specs/trainer-hiring-fee-salary-plan.md, Design decision 1."""
+see specs/archive/trainer-hiring-fee-salary-plan.md, Design decision 1."""
 
 #: Weekly salary at the bottom of the speciality band (70) and at the top
 #: (95). Interpolated linearly between; a trainer's score cannot fall
@@ -411,7 +411,7 @@ the salary charge must sit inside the per-week loop.
 - **`AGENTS.md`** — the `staff/` row currently says "Trainers hireable from a
   shared pool into one fixed slot per team" with no mention of cost; add the
   fee and salary.
-- **Delete** `specs/trainer-hiring-fee-salary.md` and this plan when the
+- **Delete** `specs/archive/trainer-hiring-fee-salary.md` and this plan when the
   ticket closes, per `AGENTS.md`, *Closing a ticket*.
 
 ## Verification

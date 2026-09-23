@@ -9,7 +9,7 @@ season.
 
 ## Why this exists
 
-`specs/rider-attributes.md` gave every rider a hidden potential, peak age
+`specs/archive/rider-attributes.md` gave every rider a hidden potential, peak age
 and decline rate, and a visible age — but nothing reads them. A rider
 generated today has the same five numbers forever, no matter how many
 seasons pass. That makes keeping or replacing a rider a decision with no

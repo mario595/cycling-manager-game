@@ -1,6 +1,6 @@
 # Team finances ledger — Implementation Plan
 
-**Spec:** `specs/team-finances-ledger.md` · **Issue:** #20 · **Status:** implemented
+**Spec:** `specs/archive/team-finances-ledger.md` · **Issue:** #20 · **Status:** implemented
 **Apps touched:** `economy/` (new), `world/`, `teams/`, `api/`, `frontend/`
 
 ## Context you need

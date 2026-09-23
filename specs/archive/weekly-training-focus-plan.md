@@ -1,6 +1,6 @@
 # Weekly training focus — Implementation Plan
 
-**Spec:** `specs/weekly-training-focus.md` · **Issue:** #36 · **Status:** implemented
+**Spec:** `specs/archive/weekly-training-focus.md` · **Issue:** #36 · **Status:** implemented
 **Apps touched:** `staff/`, `riders/`, `racing/`, `world/`, `api/`, `frontend/`
 
 > **Blocked on [#71](https://github.com/mario595/cycling-manager/pull/71) (#58, rider growth and decline) merging to master.**
@@ -249,7 +249,7 @@ def course_training_attribute(course: list[dict]) -> str:
     Pure function over the stored Race.course JSON — deliberately not a
     read of race_engine.models.Terrain, which only racing/adapters.py may
     import (AGENTS.md). Never returns "positioning": no course shape
-    distinctly rewards draft skill. See specs/weekly-training-focus-plan.md,
+    distinctly rewards draft skill. See specs/archive/weekly-training-focus-plan.md,
     Design decision 4.
     """
 ```

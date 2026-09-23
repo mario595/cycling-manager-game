@@ -1,6 +1,6 @@
 # Player accounts — Implementation Plan
 
-**Spec:** `specs/player-accounts.md` · **Issue:** #50 · **Status:** implemented
+**Spec:** `specs/archive/player-accounts.md` · **Issue:** #50 · **Status:** implemented
 **Apps touched:** `accounts/`, `api/`, `frontend/`, `config/`
 
 ## Context you need
@@ -223,7 +223,7 @@ username; ours derives one.
 class UserManager(BaseUserManager):
     """Creates users keyed on email. `username` is still a required, unique
     column inherited from AbstractUser, so it is derived rather than asked
-    for — see specs/player-accounts-plan.md, D1."""
+    for — see specs/archive/player-accounts-plan.md, D1."""
 
     use_in_migrations = True
 

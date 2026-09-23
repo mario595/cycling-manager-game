@@ -276,7 +276,7 @@ what recovers the ground, once per week in `world/`.
 ## Squads
 
 Before a race, a manager picks which four of their team's riders start and
-which one leads — see `specs/squad-selection.md` (now folded in here) for the
+which one leads — see `specs/archive/squad-selection.md` (now folded in here) for the
 player-facing feature. Two models record the choice:
 
 - **`RaceSquad(race, team)`** — one row per team per race, plus

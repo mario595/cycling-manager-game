@@ -1,6 +1,6 @@
 # Claiming a team — Implementation Plan
 
-**Spec:** `specs/claiming-a-team.md` · **Issue:** #46 · **Status:** implemented
+**Spec:** `specs/archive/claiming-a-team.md` · **Issue:** #46 · **Status:** implemented
 **Apps touched:** `teams/` (new `services.py`, new `README.md`, new
 `management/commands/seed_teams.py`), `api/`, `frontend/`
 
@@ -457,15 +457,15 @@ Commit after each work item. The suite must be green at every commit.
 - **`api/README.md`** — add `POST /api/teams/claim/` to the endpoint list, with
   its 201/400/409 responses and the note that it inherits `IsAuthenticated`.
 - **`accounts/README.md`** — it currently says what a new account gets is
-  "`specs/claiming-a-team.md` / #46". Once this ships, point at
+  "`specs/archive/claiming-a-team.md` / #46". Once this ships, point at
   `teams/README.md` instead, since the spec file gets deleted on close.
 - **`frontend/README.md`** — the `/claim` route, and the rule that a logged-in
   user with no team is redirected there rather than to the dashboard.
 - **`riders/README.md`** — one line under *Generation*: `generate_roster` now
   has a second caller, `teams.services.claim_team`.
 
-Per `CLAUDE.md`, delete `specs/claiming-a-team.md` and
-`specs/claiming-a-team-plan.md` before opening the PR.
+Per `CLAUDE.md`, delete `specs/archive/claiming-a-team.md` and
+`specs/archive/claiming-a-team-plan.md` before opening the PR.
 
 ## Verification
 

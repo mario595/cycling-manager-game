@@ -98,7 +98,7 @@ adding systems, which makes them cheap and disproportionately visible.
 | Order | Issue | Why | Blocked by |
 |---|---|---|---|
 | 9 | [#95](https://github.com/mario595/cycling-manager/issues/95) record rider attribute history | **Out of order deliberately.** History only accumulates forward — every season not recorded is gone permanently, so the cheapest version now beats a considered one later. | [#58](https://github.com/mario595/cycling-manager/issues/58) ✅ |
-| 10 | [#96](https://github.com/mario595/cycling-manager/issues/96) rider detail view | Radar chart, race history, derived stats — all from data that exists. The line graph follows once [#95](https://github.com/mario595/cycling-manager/issues/95) has something to plot. `specs/rider-attributes.md` requires hidden traits be *inferable*; this is where that happens. | — (partly [#95](https://github.com/mario595/cycling-manager/issues/95)) |
+| 10 | [#96](https://github.com/mario595/cycling-manager/issues/96) rider detail view | Radar chart, race history, derived stats — all from data that exists. The line graph follows once [#95](https://github.com/mario595/cycling-manager/issues/95) has something to plot. `specs/archive/rider-attributes.md` requires hidden traits be *inferable*; this is where that happens. | — (partly [#95](https://github.com/mario595/cycling-manager/issues/95)) |
 
 ## 2.5 — Racing gets richer
 

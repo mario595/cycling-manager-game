@@ -1,12 +1,12 @@
 # Race calendar — Implementation Plan
 
-**Spec:** `specs/race-calendar.md` · **Issue:** [#7](https://github.com/mario595/cycling-manager/issues/7) · **Status:** implemented
+**Spec:** `specs/archive/race-calendar.md` · **Issue:** [#7](https://github.com/mario595/cycling-manager/issues/7) · **Status:** implemented
 **Apps touched:** `schedule/`, `racing/`, `api/`, `frontend/`
 
 ## Context you need
 
 This feature is an **extension of #5**, not a new thing beside it. Read
-`specs/season-plan.md` first — specifically decisions 3, 4 and 6 and the
+`specs/archive/season-plan.md` first — specifically decisions 3, 4 and 6 and the
 `load_season` section. Everything here plugs into machinery that plan builds.
 
 ### This plan assumes #5 has landed

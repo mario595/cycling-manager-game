@@ -302,7 +302,7 @@ Conventions:
 ### [#31] E4. Rider market value
 **Domains:** `transfers` NEW
 - A visible or inferable valuation to anchor bidding.
-- Explicitly deferred out of `specs/rider-attributes.md` as an output of the
+- Explicitly deferred out of `specs/archive/rider-attributes.md` as an output of the
   market rather than an attribute.
 
 ---
@@ -322,7 +322,7 @@ Conventions:
   squad.
 - Intake varies wildly in quality: some are hopeless regardless of training,
   some are promising but currently far below professional level.
-- Builds directly on hidden `potential` from `specs/rider-attributes.md`.
+- Builds directly on hidden `potential` from `specs/archive/rider-attributes.md`.
 - **Open:** how many per cycle; does the cost/level of the squad bias quality?
 
 ### [#34] F3. Promote, retain or discard youth riders
@@ -352,7 +352,7 @@ Conventions:
 - Each week the player picks one skill for the trainer to focus on.
 - Riders gain mostly in that skill, marginally in others.
 - Interacts with hidden potential, age curve and training affinity from
-  `specs/rider-attributes.md`.
+  `specs/archive/rider-attributes.md`.
 - **Open:** is the focus team-wide or per-rider? Does training cost freshness?
 
 ---
@@ -403,7 +403,7 @@ Conventions:
     Depends on I3.
   - **Scout** — information. Narrows the visible range on hidden potential for
     youth intake and transfer targets. The strongest of the new roles, because
-    `specs/rider-attributes.md` is built entirely on hidden attributes: a scout
+    `specs/archive/rider-attributes.md` is built entirely on hidden attributes: a scout
     turns F3 (promote/retain/discard) from a coin flip into a judgement.
 - **Decision taken:** fixed slots — one of each role per team, not a stackable
   pool. Keeps each hire meaningful instead of turning staffing into a budget
@@ -419,7 +419,7 @@ Conventions:
 
 ### [#41] I3. Injuries as a mechanic
 **Domains:** `riders`, `racing`
-- `specs/rider-attributes.md` defines injury-proneness as an attribute and
+- `specs/archive/rider-attributes.md` defines injury-proneness as an attribute and
   explicitly defers the mechanic itself.
 - Riders can be injured in a race, be unavailable for a period, and recover.
 - Gives H1 (squad locked after stage 1) its teeth, and gives the physio in I2
@@ -563,7 +563,7 @@ and [#46] both begin at "a user signs up", an event the game cannot produce.
 ## L. Losing a team *(added 2026-09-15)*
 
 A manager can stop managing. The team returns to the unmanaged pool and is
-re-claimable. `specs/claiming-a-team.md` deferred "what happens to an abandoned
+re-claimable. `specs/archive/claiming-a-team.md` deferred "what happens to an abandoned
 team" explicitly, waiting for *anything in the game that can remove a manager
 from a team* — this is that thing.
 

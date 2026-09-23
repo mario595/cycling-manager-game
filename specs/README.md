@@ -18,12 +18,16 @@ request. See `.claude/ticket-workflow.md`.
 
 Order of work: **spec → plan → code.** A spec says what; a plan says how.
 
-**Nothing here is deleted.** When a ticket ships, its spec and plan stay, with
-`Status:` set to `implemented`. `README.md` files are the current, maintained
-description of how the code works; `specs/` is the frozen record of what was
-decided and why — the alternatives rejected, the scope cut, the questions asked
-and answered. A spec that no longer matches the code is history, not rot; the
-next change writes a new spec rather than editing an old one.
+**Nothing here is deleted.** `specs/` holds the specs and plans for work in
+flight. When a ticket ships, its two files move to **`specs/archive/`** with
+`Status:` set to `implemented` — so this directory shows what is being worked on
+now, and the archive keeps the record of everything already built.
+
+`README.md` files are the current, maintained description of how the code works;
+`specs/archive/` is the frozen record of what was decided and why — the
+alternatives rejected, the scope cut, the questions asked and answered. A spec
+that no longer matches the code is history, not rot; the next change writes a new
+spec rather than editing an old one. See `specs/archive/README.md`.
 
 Both writing steps start from a GitHub issue and move it on when their output is
 agreed: `/product-spec` moves the ticket to **Scoped**, `/tech-plan` to

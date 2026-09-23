@@ -168,7 +168,7 @@ season does not replace it and does not claim that slot.
   into.
 - **Does #6 block this spec** — no. The clock's contract (a world datetime,
   hourly advance, scheduled things fire exactly once) is settled in
-  `specs/game-clock.md`, and is the entire surface this feature consumes. #6
+  `specs/archive/game-clock.md`, and is the entire surface this feature consumes. #6
   blocks building #5, not specifying it.
 
 ## Open questions

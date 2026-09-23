@@ -1,6 +1,6 @@
 # Rider attributes — Implementation Plan
 
-**Spec:** `specs/rider-attributes.md` · **Issue:** #57 · **Status:** implemented
+**Spec:** `specs/archive/rider-attributes.md` · **Issue:** #57 · **Status:** implemented
 **Apps touched:** `riders/`, `api/`, `frontend/`, `racing/` (test fixtures only)
 
 **Amendment, during W3:** the original plan never addressed how
@@ -231,7 +231,7 @@ Add one module constant beside `ENGINE_ATTRIBUTES`:
 
 ```python
 #: Attributes the player sees, mapped 1-100 -> 0-10 for display only.
-#: The stored value stays 1-100; see specs/rider-attributes-plan.md, decision 1.
+#: The stored value stays 1-100; see specs/archive/rider-attributes-plan.md, decision 1.
 DISPLAY_MAX = 10
 ```
 
@@ -246,7 +246,7 @@ def to_display_scale(value: int) -> int:
     """Map a stored 1-100 attribute onto the 0-10 scale the player sees.
 
     Deliberately lossy: two riders at 71 and 74 both show 7. That is the
-    point — see specs/rider-attributes.md, *Display scale*.
+    point — see specs/archive/rider-attributes.md, *Display scale*.
     """
 ```
 

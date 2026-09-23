@@ -1,6 +1,6 @@
 # Trainers as hireable staff — Implementation Plan
 
-**Spec:** `specs/trainers-as-hireable-staff.md` · **Issue:** #35 · **Status:** implemented
+**Spec:** `specs/archive/trainers-as-hireable-staff.md` · **Issue:** #35 · **Status:** implemented
 **Apps touched:** `staff/` (**new**), `world/`, `api/`, `frontend/`
 
 ## Context you need
@@ -751,10 +751,10 @@ following `Roster.tsx`'s card-and-bar composition.
 first consumer, the trainer pool top-up, and idempotency comes from
 `process_transitions`' return value rather than from anything in `staff/`.
 
-**Spec status** — set `specs/trainers-as-hireable-staff.md`'s `**Status:**`
+**Spec status** — set `specs/archive/trainers-as-hireable-staff.md`'s `**Status:**`
 to `implemented`. Per `AGENTS.md`, delete
-`specs/trainers-as-hireable-staff.md` and
-`specs/trainers-as-hireable-staff-plan.md` before opening the PR, once
+`specs/archive/trainers-as-hireable-staff.md` and
+`specs/archive/trainers-as-hireable-staff-plan.md` before opening the PR, once
 every README above is updated.
 
 ## Verification

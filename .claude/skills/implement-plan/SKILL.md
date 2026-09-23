@@ -288,11 +288,17 @@ are the ones that get broken:
 
 1. Run the full suite one last time. It must be green.
 2. Do the plan's **Documentation update** section. It is not optional.
-3. **Keep the spec and the plan.** Set `Status:` to `implemented` in both
-   `specs/<slug>.md` and `specs/<slug>-plan.md`, and commit them with the
-   documentation change. Do **not** delete them — they are the record of why the
-   feature is the way it is, and `AGENTS.md` explains the division: `README.md`
-   is current and maintained, `specs/` is historical and frozen.
+3. **Archive the spec and the plan.** Set `Status:` to `implemented` in both,
+   then move them into `specs/archive/`:
+
+   ```bash
+   git mv specs/<slug>.md specs/<slug>-plan.md specs/archive/
+   ```
+
+   Commit them with the documentation change, and fix any `specs/<slug>.md`
+   reference you just broke — a `README.md` pointing at the old path is a dead
+   link. Do **not** delete them: they are the record of why the feature is the
+   way it is. `README.md` is current and maintained; `specs/archive/` is frozen.
 4. **Bring master in again** — see below. You merged it before you started;
    master has probably moved since. Do this *before* the user tries it, so what
    they verify is what will actually merge.

@@ -1,6 +1,6 @@
 # Season — Implementation Plan
 
-**Spec:** `specs/season.md` · **Issue:** [#5](https://github.com/mario595/cycling-manager/issues/5) · **Status:** implemented
+**Spec:** `specs/archive/season.md` · **Issue:** [#5](https://github.com/mario595/cycling-manager/issues/5) · **Status:** implemented
 **Apps touched:** `schedule/` (**new**), `racing/`, `world/`, `api/`, `frontend/`, `config/`
 
 ## Context you need
@@ -47,7 +47,7 @@ most important fact in this plan.
   the SPA are invented placeholder text in `frontend/src/placeholderData.ts`.
 - **There is no race calendar (#7).** No race is created by any code path today;
   the first season will run twelve weeks with no races in it, exactly as
-  `specs/season.md` says it should.
+  `specs/archive/season.md` says it should.
 - **The clock does not advance and nothing "reaches" a moment.** `tick()` does
   not move time; it *processes what has become due*. This is the fact the
   next section is about.
@@ -87,7 +87,7 @@ When this is done:
 ### 1. The current season and week are **derived from the clock**, not stored — load-bearing
 
 This is the decision the rest of the plan hangs off, and it is the one most
-likely to be got wrong, because `specs/season.md` is written in the language of
+likely to be got wrong, because `specs/archive/season.md` is written in the language of
 the clock's *original* design ("a season starts because the world's clock reached
 its start moment").
 
@@ -122,7 +122,7 @@ independent of any event firing — so what is the tick for?
 
 It is for the side effects that later features will hang off the boundary:
 promotion/relegation, contract renewal, salary reviews (all explicitly out of
-scope here, `specs/season.md`). Those cannot be derived from `now()`; they must
+scope here, `specs/archive/season.md`). Those cannot be derived from `now()`; they must
 happen once and leave a mark.
 
 So the tick writes `SeasonTransition` rows — `(season, kind)` with
@@ -151,7 +151,7 @@ season boundary, or the features that later hook into it silently lose a cycle.
 ### 3. `Week` is a real row, because the calendar (#7) needs somewhere to hang
 
 Spec item 4 is explicit that weeks are "a real period the game can place things
-into", not a display derivation — and `specs/race-calendar.md` confirms it: a
+into", not a display derivation — and `specs/archive/race-calendar.md` confirms it: a
 season declares "which week and which day of the week each [race] falls on".
 
 So `Week` is a model with a FK to `Season`, a `number` (1–12) and its own
@@ -181,7 +181,7 @@ that has not started yet **replaces** it — a declared-but-not-started season i
 still a draft, and an admin fixing a typo before it begins is the normal case.
 
 **Do not** build a Django admin form, an API endpoint, or an interactive prompt
-for this. `specs/season.md` rules an admin UI out explicitly, and the roadmap
+for this. `specs/archive/season.md` rules an admin UI out explicitly, and the roadmap
 made the same call on #8.
 
 The file grows a `races` key when #7 lands. Write the loader so that an unknown
@@ -443,7 +443,7 @@ def process_transitions(at: datetime) -> list[SeasonTransition]:
 
     Today a transition is only a row. It is the hook later features
     (promotion/relegation, contracts, salaries) attach to; it ships empty
-    on purpose — see specs/season.md, "Out of scope".
+    on purpose — see specs/archive/season.md, "Out of scope".
     """
     written: list[SeasonTransition] = []
     plans = [
@@ -932,7 +932,7 @@ one that catches decision 9 being implemented as a clock-style fallback.
 | **`full_clean()` called from `Race.save()`.** The obvious way to make `clean()` run. It validates every field on every write, breaking existing fixtures and tests that create partial races. | W6 names it explicitly. In review: `racing/models.py` must call `self.clean()`, never `self.full_clean()`. |
 | **The SPA invents a season while loading.** Copying `useClock`'s fallback pattern gives `SEASON 3 · WK 14` on a failed fetch — a fabricated season number shown as real. | Decision 9, `seasonLabel` returning `null`, and the "delete every season" step in *Verification*. |
 | **`schedule/` grows a clock import.** `current_position()` would read much more nicely with `at=None` defaulting to `now()`, and someone will add it. It inverts the dependency direction. | Decision 7: `at` is required on both public functions. In review: `grep -rn "world" schedule/ --include=*.py` must match only `load_season.py`'s in-function import and the README. |
-| **Twelve weeks of empty season looks broken.** The first season ships with no races (no #7 yet), so a player sees a week number and nothing else. | Accepted and explicitly expected by `specs/season.md`. #7 is the next issue in the roadmap's Phase 1; nothing is built here to paper over it. |
+| **Twelve weeks of empty season looks broken.** The first season ships with no races (no #7 yet), so a player sees a week number and nothing else. | Accepted and explicitly expected by `specs/archive/season.md`. #7 is the next issue in the roadmap's Phase 1; nothing is built here to paper over it. |
 | **Nobody declares season 2.** The world sits in the off-season indefinitely. | That is the specified behaviour (item 11), not a failure. `TickRun.seasons_opened` staying 0 is the operator's signal; `world/README.md` gains no new alerting and none is wanted yet. |
 
 ## Open questions
@@ -944,7 +944,7 @@ spec describes season transitions in terms of the clock *reaching* a moment,
 which matched the game clock's original design. What shipped is a stateless
 production clock plus an hourly processing tick, so this plan delivers the same
 player-visible behaviour by deriving position from the time and using the tick
-only for the once-only record. Nothing in `specs/season.md`'s *In scope* or
+only for the once-only record. Nothing in `specs/archive/season.md`'s *In scope* or
 *Decisions taken* changes as a result — item 10's "exactly once, not triggered by
 anybody looking at the game" is satisfied by `SeasonTransition` — but the
 mechanism is not the one the prose pictures, and `schedule/README.md` says so.

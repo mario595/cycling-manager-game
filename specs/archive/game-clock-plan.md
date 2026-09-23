@@ -1,6 +1,6 @@
 # Game clock — Implementation Plan
 
-**Spec:** `specs/game-clock.md` · **Issue:** [#6](https://github.com/mario595/cycling-manager/issues/6) · **Status:** implemented
+**Spec:** `specs/archive/game-clock.md` · **Issue:** [#6](https://github.com/mario595/cycling-manager/issues/6) · **Status:** implemented
 **Apps touched:** `world/`, `racing/`, `api/`, `frontend/`, `config/`
 
 ## Context you need
@@ -8,7 +8,7 @@
 This is a **revision** of an already-implemented feature. A first version
 shipped on this branch with a stored `GameClock` row that `advance()` moved
 forward under a row lock, approximating real time. The revised spec (see
-`specs/game-clock.md`) rejects that: production's game time **is** real time,
+`specs/archive/game-clock.md`) rejects that: production's game time **is** real time,
 read live, with nothing stored or advanced. A separate, swappable clock exists
 purely for development and test, where a real engineer needs to freeze time or
 jump to the next event without waiting for it.
@@ -671,7 +671,7 @@ from `TickRun`. Migration `world/migrations/0002_mock_clock.py`. Update
 in any environment this branch has already been deployed to informally (it has
 not been deployed anywhere yet — confirm with `git log --oneline --
 '*/settings/prod.py'` and the absence of a deployment target in
-`specs/game-clock.md`'s Open questions before treating this as safe to just
+`specs/archive/game-clock.md`'s Open questions before treating this as safe to just
 drop; if genuinely nothing depends on the old columns, a straightforward
 `RemoveField`/`AddField` migration is correct and no data preservation step is
 needed).

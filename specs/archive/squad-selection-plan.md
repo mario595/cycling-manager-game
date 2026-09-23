@@ -1,6 +1,6 @@
 # Squad selection — Implementation Plan
 
-**Spec:** `specs/squad-selection.md` · **Issue:** [#37](https://github.com/mario595/cycling-manager/issues/37) · **Status:** implemented
+**Spec:** `specs/archive/squad-selection.md` · **Issue:** [#37](https://github.com/mario595/cycling-manager/issues/37) · **Status:** implemented
 **Apps touched:** `racing/`, `api/`, `frontend/`, `race_engine/` (one validation move)
 
 ## Context you need
@@ -346,7 +346,7 @@ def auto_pick_squad(team: Team) -> tuple[list[int], int]:
 
     Leaders first, then by total engine attributes descending, then by pk
     ascending — the pk tiebreak is what makes this deterministic and so
-    testable. Deliberately course-blind: see specs/squad-selection.md,
+    testable. Deliberately course-blind: see specs/archive/squad-selection.md,
     Out of scope, and #45.
 
     Raises SquadError if the team has fewer than four riders.
@@ -434,7 +434,7 @@ exist at all.
 def ensure_squads(race: Race) -> None:
     """Give every team with enough riders a squad for this race, if it has
     not got one. Called from simulate_race so a team whose manager never
-    chose still starts — specs/squad-selection.md, in scope item 8.
+    chose still starts — specs/archive/squad-selection.md, in scope item 8.
 
     A team with fewer than SQUAD_SIZE riders is skipped with a warning, not
     an exception: that is a broken roster (see the spec's Rules and edge
@@ -786,8 +786,8 @@ own; W7 and W8 change no Python.
 | `design/README.md` | The re-exported mockup adds the race screen with 8-rider squads, suitability scores and injury states. Record that the game's squad size is **four** and that the export's eight is not the spec — so the next person reconciling the export does not "fix" the app to match it. |
 | `AGENTS.md` | The `racing/` row still reads as the engine seam, which is still true — no change needed. Check the `transfers/` row's parenthetical about roster concerns is still accurate; it is. |
 
-Then, per `AGENTS.md`'s closing convention, **delete `specs/squad-selection.md`
-and `specs/squad-selection-plan.md`** before opening the PR.
+Then, per `AGENTS.md`'s closing convention, **delete `specs/archive/squad-selection.md`
+and `specs/archive/squad-selection-plan.md`** before opening the PR.
 
 ## Verification
 

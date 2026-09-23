@@ -1,6 +1,6 @@
 # Rider growth and decline — Implementation Plan
 
-**Spec:** `specs/rider-growth-and-decline.md` · **Issue:** #58 · **Status:** implemented
+**Spec:** `specs/archive/rider-growth-and-decline.md` · **Issue:** #58 · **Status:** implemented
 **Apps touched:** `riders/`, `schedule/`, `world/`
 
 ## Context you need

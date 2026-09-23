@@ -1,6 +1,6 @@
 # Strip the mock UI and require login — Implementation Plan
 
-**Spec:** `specs/strip-mock-ui-require-login.md` · **Issue:** #73 · **Status:** implemented
+**Spec:** `specs/archive/strip-mock-ui-require-login.md` · **Issue:** #73 · **Status:** implemented
 **Apps touched:** `frontend/`, `api/`
 
 ## Context you need

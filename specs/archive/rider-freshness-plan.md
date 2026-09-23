@@ -1,6 +1,6 @@
 # Rider freshness — Implementation Plan
 
-**Spec:** `specs/rider-freshness.md` · **Issue:** #59 · **Status:** implemented
+**Spec:** `specs/archive/rider-freshness.md` · **Issue:** #59 · **Status:** implemented
 **Apps touched:** `riders/`, `racing/`, `world/`, `api/`, `frontend/`
 
 ## Context you need
@@ -453,7 +453,7 @@ Commit after each work item.
 - **`frontend/README.md`** — the squad screen now shows freshness.
 - **`AGENTS.md`** — the `riders/` row says "Freshness (#59) still to come";
   remove that clause.
-- **Delete `specs/rider-freshness.md` and `specs/rider-freshness-plan.md`**
+- **Delete `specs/archive/rider-freshness.md` and `specs/archive/rider-freshness-plan.md`**
   before opening the PR, per `AGENTS.md`, *Closing a ticket*.
 
 ## Verification

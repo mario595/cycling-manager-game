@@ -1,6 +1,6 @@
 # Fanbase and merchandise revenue — Implementation Plan
 
-**Spec:** `specs/fanbase-and-merchandise-revenue.md` · **Issue:** [#21](https://github.com/mario595/cycling-manager/issues/21) · **Status:** implemented
+**Spec:** `specs/archive/fanbase-and-merchandise-revenue.md` · **Issue:** [#21](https://github.com/mario595/cycling-manager/issues/21) · **Status:** implemented
 **Apps touched:** `economy/`, `world/`, `api/`, `frontend/`
 
 ## Context you need

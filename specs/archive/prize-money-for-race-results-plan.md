@@ -1,6 +1,6 @@
 # Prize money for race results — Implementation Plan
 
-**Spec:** `specs/prize-money-for-race-results.md` · **Issue:** #19 · **Status:** implemented
+**Spec:** `specs/archive/prize-money-for-race-results.md` · **Issue:** #19 · **Status:** implemented
 **Apps touched:** `economy/`, `competitions/`, `world/`, `api/`, `frontend/`
 
 ## Context you need
@@ -209,7 +209,7 @@ Add beside the existing points table:
 ```python
 #: Prize money by finishing position, 1-indexed. Positions beyond this pay
 #: nothing. Frozen per race at award time by virtue of the append-only
-#: ledger — see specs/prize-money-for-race-results.md.
+#: ledger — see specs/archive/prize-money-for-race-results.md.
 PRIZE_BY_POSITION: dict[int, int] = {...}   # decision 6
 
 

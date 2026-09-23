@@ -273,7 +273,7 @@ A team picks at most one sponsor per season, from three offers generated at
 season open (and again whenever the team is claimed). Signing turns an
 offer into a permanent `SponsorContract`; the weekly payment then varies
 with race results but always stays inside the range shown at signing. See
-`specs/sponsorship-contracts.md` and its plan for the product and technical
+`specs/archive/sponsorship-contracts.md` and its plan for the product and technical
 story in full — this section is the load-bearing rules a future change must
 not break.
 

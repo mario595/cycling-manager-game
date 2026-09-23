@@ -1,6 +1,6 @@
 # Race detail view — Implementation Plan
 
-**Spec:** `specs/race-detail-view.md` · **Issue:** #47 · **Status:** implemented
+**Spec:** `specs/archive/race-detail-view.md` · **Issue:** #47 · **Status:** implemented
 **Apps touched:** `api/`, `frontend/`
 
 ## Context you need
@@ -140,7 +140,7 @@ class RaceDetailView(APIView):
     """One race's own facts — identity, status, when, how far, and the
     course profile. Unlike SquadView this is not about the caller's team:
     any authenticated manager may read any race, including one their team
-    did not start. See specs/race-detail-view-plan.md, D1.
+    did not start. See specs/archive/race-detail-view-plan.md, D1.
     """
 
     def get(self, request, race_id: int):
@@ -477,8 +477,8 @@ deliberately not folded in (spec, *Out of scope*).
 of which teams started a race, and the results API reads it to list
 non-scoring teams.
 
-Per `AGENTS.md`, delete `specs/race-detail-view.md` and
-`specs/race-detail-view-plan.md` before opening the pull request.
+Per `AGENTS.md`, delete `specs/archive/race-detail-view.md` and
+`specs/archive/race-detail-view-plan.md` before opening the pull request.
 
 ## Verification
 

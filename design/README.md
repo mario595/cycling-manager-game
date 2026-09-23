@@ -32,7 +32,7 @@ Any other sidebar item falls through to the Dashboard in the mockup. The real
 app routes those to a placeholder instead, so a click's outcome is visible.
 
 **The mockup's Race day squad is eight riders; the game's is four.** The
-export was re-generated ahead of `specs/squad-selection.md` being written,
+export was re-generated ahead of `specs/archive/squad-selection.md` being written,
 and shows an 8-rider squad with per-rider suitability scores and
 injured/fatigued states — none of which the spec, or the built screen,
 implement. **Squad size is four, fixed by the engine's verified realism

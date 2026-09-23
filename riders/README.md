@@ -99,7 +99,7 @@ past their best. Both constants are tuned so a season of growth or
 decline for the *representative* case — a young rider well below
 potential, or an average-`decline_rate` veteran comfortably past peak —
 lands at roughly one to two points on the display scale (10-20 stored
-points), the band `specs/rider-growth-and-decline.md` promised before it
+points), the band `specs/archive/rider-growth-and-decline.md` promised before it
 was deleted post-implementation (see `AGENTS.md`, *Closing a ticket*); a
 rider with a near-maximum `decline_rate` can still lose somewhat more.
 
@@ -290,7 +290,7 @@ the reverse. `SPECIALITY_PROFILES` weights each of the five attributes per
 speciality (a Climber's `climb` weight is 1.45, its `sprint` weight 0.55),
 `BUILD_PROFILES` gives each speciality a height/weight mean, and
 `FIRST_NAMES`/`LAST_NAMES` (keyed by nationality — only Spain exists today)
-supply a name. This order matches `specs/rider-attributes.md`'s decision
+supply a name. This order matches `specs/archive/rider-attributes.md`'s decision
 that speciality is innate, assigned from build, not derived after the fact
 from rolled attributes — "94 climb / 38 sprint comes out a Climber" has to
 be a guarantee, not a coincidence.
@@ -333,7 +333,7 @@ cascaded `RaceSquadRider` rows) that pointed at one, then generates
 
 **This is destructive by design, not a safety gap to close.** Existing
 riders are not backfilled with new attributes — they are replaced, and the
-race history attached to them goes with them. `specs/rider-attributes.md`
+race history attached to them goes with them. `specs/archive/rider-attributes.md`
 accepts this explicitly: this is a pre-launch world with no real players,
 and inventing a scheme to detach historical results from deleted riders
 would be protecting data nobody is attached to. Revisit this command's

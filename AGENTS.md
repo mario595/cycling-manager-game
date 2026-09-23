@@ -38,7 +38,9 @@ work item, then opens a PR and moves the ticket to **Implemented**; and
 **Closing a ticket:** once a ticket is implemented, before opening the pull
 request, update the `README.md` of every folder the feature touched with what
 was actually built. **Keep the spec and the plan.** Set the `Status:` line in
-each to `implemented` and commit them with the rest of the work.
+each to `implemented`, move both into `specs/archive/`, and commit them with the
+rest of the work. `specs/` is then only what is in flight; `specs/archive/` is
+everything already built.
 
 They are kept because they record *why*, which a `README.md` does not. A README
 says what the code does today; it does not say which alternative was rejected,
