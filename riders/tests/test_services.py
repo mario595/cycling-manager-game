@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone as dt_timezone
+
 import pytest
 
 from riders.generation import SPECIALITY_PROFILES
@@ -17,10 +19,12 @@ from riders.services import (
     apply_weekly_recovery,
     attribute_ceilings,
     freshness_multiplier,
+    mark_team_change,
     recovery_amount,
     training_deltas,
     weekly_deltas,
 )
+from teams.models import Team
 
 
 def make_rider(**overrides) -> Rider:
@@ -299,6 +303,30 @@ def test_debt_does_not_accumulate_once_an_attribute_is_clamped():
 
     assert new_value == MIN_ATTRIBUTE
     assert remainder == 0.0
+
+
+def test_mark_team_change_sets_joined_or_unattached(db):
+    team = Team.objects.create(name="Team Alpha", code="ALP")
+    at = datetime(2027, 3, 1, 0, 0, tzinfo=dt_timezone.utc)
+    later = datetime(2027, 3, 8, 0, 0, tzinfo=dt_timezone.utc)
+    free_agent = Rider.objects.create(
+        name="Free Agent", team=None, unattached_since=at,
+        climb=1, sprint=1, flat=1, resistance=1, positioning=1,
+    )
+    on_roster = Rider.objects.create(
+        name="On Roster", team=team, joined_team_at=at,
+        climb=1, sprint=1, flat=1, resistance=1, positioning=1,
+    )
+
+    mark_team_change([free_agent], team_now=team, at=later)
+    mark_team_change([on_roster], team_now=None, at=later)
+
+    free_agent.refresh_from_db()
+    on_roster.refresh_from_db()
+    assert free_agent.joined_team_at == later
+    assert free_agent.unattached_since is None
+    assert on_roster.unattached_since == later
+    assert on_roster.joined_team_at == at  # untouched by a release
 
 
 def test_ageing_advances_every_rider_including_free_agents(db):

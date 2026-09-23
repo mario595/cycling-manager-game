@@ -133,6 +133,29 @@ class Rider(TimeStampedModel):
         ),
     )
 
+    # --- Team-membership timing (game time, not wall clock) ---
+    joined_team_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Game time this rider's team was last set to a non-null value — "
+            "by generation, a team claim, or a free-agent signing. Null for a "
+            "rider that has never had joined_team_at stamped (pre-migration "
+            "data) or is currently unattached and was never tracked. Used to "
+            "gate the free claim-release cooldown (transfers/README.md)."
+        ),
+    )
+    unattached_since = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Game time this rider's team last became null — by a team claim "
+            "releasing its old roster, or a manager releasing them to the "
+            "free agent pool. Null while on a team. Drives pool expiry "
+            "(transfers/README.md)."
+        ),
+    )
+
     # --- Hidden, between-race traits (never serialized — see class docstring) ---
     potential = models.PositiveSmallIntegerField(
         default=70,

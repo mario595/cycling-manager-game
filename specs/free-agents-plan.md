@@ -517,6 +517,9 @@ don't invent a second source of truth for the nav list).
 ## Work items
 
 ### W1 — `riders/`: add `joined_team_at`/`unattached_since`, stamp them everywhere `team` changes
+
+> **Status:** done.
+
 - `riders/models.py`: the two new fields (Data model, above).
 - `riders/migrations/00XX_...py`: generated, no data migration.
 - `riders/services.py`: `mark_team_change(riders, *, team_now, at)`.
