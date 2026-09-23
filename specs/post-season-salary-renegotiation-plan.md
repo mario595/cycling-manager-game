@@ -485,7 +485,7 @@ Tests — `riders/tests/test_services.py`:
 - `test_reprice_all_is_stable_when_nothing_changed` — calling it twice in a
   row returns `[]` the second time.
 
-### W2 — `economy/`: the `SalaryReviewReport` model
+### W2 — `economy/`: the `SalaryReviewReport` model — DONE
 
 Model, `Meta.constraints`, `__str__`, and `makemigrations economy`.
 
