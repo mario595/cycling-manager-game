@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone as dt_timezone
 
+import brotli
 import pytest
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
@@ -136,7 +137,14 @@ def test_simulate_race_writes_log_and_results(running_race, four_riders):
     assert running_race.finished_at == game_time
 
     log = RaceLog.objects.get(race=running_race)
-    assert log.tick_count > 0
+    # The log is brotli-compressed: one header line followed by the samples.
+    with log.file.open("rb") as fh:
+        text = brotli.decompress(fh.read()).decode()
+    lines = text.splitlines()
+    assert log.sample_count == len(lines) - 1
+    assert log.tick_interval == 2
+    assert log.size_bytes == log.file.size
+    assert log.file.name.endswith(".jsonl.br")
 
     positions = sorted(
         RaceResult.objects.filter(race=running_race).values_list("position", flat=True)
@@ -516,8 +524,8 @@ def test_the_squad_leader_races_as_leader(running_race, team, four_riders):
     simulate_race(running_race, game_time=timezone.now())
 
     log = RaceLog.objects.get(race=running_race)
-    with log.file.open("rt") as fh:
-        first_line = json.loads(fh.readline())
+    with log.file.open("rb") as fh:
+        first_line = json.loads(brotli.decompress(fh.read()).decode().splitlines()[0])
     leader_entry = next(
         e for e in first_line["riders"] if e["id"] == str(four_riders[1].pk)
     )
@@ -653,7 +661,7 @@ def test_simulate_race_does_not_deduct_from_non_finishers(running_race, four_rid
 
     def fake_run_race(riders, course, log_path, *args, **kwargs):
         Path(log_path).touch()
-        return states
+        return states, 0, 2
 
     monkeypatch.setattr("racing.services.run_race_via_adapter", fake_run_race)
 

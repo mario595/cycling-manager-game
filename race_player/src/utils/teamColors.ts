@@ -35,8 +35,8 @@ function hashToIndex(id: string): number {
   return Math.abs(hash) % TEAM_PALETTE.length
 }
 
-export function teamColor(team?: string): string {
-  if (!team) return NEUTRAL_TEAM_COLOR
+export function teamColor(team: string | null): string {
+  if (team === null) return NEUTRAL_TEAM_COLOR
 
   const match = TEAM_ID_PATTERN.exec(team)
   if (match) {
@@ -50,15 +50,15 @@ export function teamColor(team?: string): string {
 }
 
 export function isLeader(rider: Rider): boolean {
-  return rider.role !== 'support'
+  return rider.role === 'leader'
 }
 
-export function teamCode(teamCodes: Record<string, string>, team?: string): string {
-  if (!team) return '—'
+export function teamCode(teamCodes: Record<string, string>, team: string | null): string {
+  if (team === null) return '—'
   return teamCodes[team] ?? '—'
 }
 
-export function teamName(teamNames: Record<string, string>, team?: string): string {
-  if (!team) return '—'
+export function teamName(teamNames: Record<string, string>, team: string | null): string {
+  if (team === null) return '—'
   return teamNames[team] ?? '—'
 }

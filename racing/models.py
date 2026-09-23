@@ -117,14 +117,22 @@ class RaceLog(TimeStampedModel):
     by the race player. It is written through Django's storage API so that
     moving it to object storage later is a settings change.
 
-    The current log format is verbose and uncompressed; slimming and gzipping
-    it is planned work, see `racing/README.md`.
+    The log is a single brotli-compressed JSONL file: one header line, then a
+    sampled tick-by-tick payload. ``sample_count`` tells a caller how many
+    samples the header plus ``tick_interval`` would predict, and ``size_bytes``
+    is the compressed file's size — the pair is interpretable without opening
+    the file. Storage, sampling and compression within the file are `race_engine`'s
+    job; this row just points at the stored result.
     """
 
     race = models.OneToOneField(Race, on_delete=models.CASCADE, related_name="log")
     file = models.FileField(upload_to="race_logs/")
-    tick_count = models.PositiveIntegerField(default=0)
-    size_bytes = models.PositiveBigIntegerField(default=0)
+    sample_count = models.PositiveIntegerField(default=0)
+    tick_interval = models.PositiveSmallIntegerField(default=2)
+    size_bytes = models.PositiveBigIntegerField(
+        default=0,
+        help_text="Size of the compressed log file on disk.",
+    )
 
     def __str__(self) -> str:
         return f"log for {self.race}"

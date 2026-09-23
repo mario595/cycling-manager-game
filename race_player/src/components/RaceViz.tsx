@@ -11,7 +11,7 @@ interface RaceVizProps {
 }
 
 export default function RaceViz({ raceData }: RaceVizProps) {
-  const { snapshots, profile, maxTicks } = raceData
+  const { snapshots, profile, maxTicks, tickInterval } = raceData
   const [tick, setTick] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [speed, setSpeed] = useState(1)
@@ -34,9 +34,9 @@ export default function RaceViz({ raceData }: RaceVizProps) {
         }
         return t + 1
       })
-    }, 1000 / speed)
+    }, (1000 * tickInterval) / speed)
     return () => clearInterval(interval)
-  }, [playing, speed, maxTicks])
+  }, [playing, speed, maxTicks, tickInterval])
 
   const handleTogglePlay = useCallback(() => {
     if (tick >= maxTicks) setTick(0)
@@ -99,6 +99,7 @@ export default function RaceViz({ raceData }: RaceVizProps) {
         onTogglePlay={handleTogglePlay}
         tick={tick}
         maxTicks={maxTicks}
+        tickInterval={tickInterval}
         speed={speed}
         onSpeedChange={setSpeed}
         onStep={handleStep}
