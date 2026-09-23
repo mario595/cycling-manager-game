@@ -588,6 +588,9 @@ don't invent a second source of truth for the nav list).
   place a bug would silently create money-losing or free riders.
 
 ### W4 — `economy/`: `charge_transfer_fee` and the new ledger kind
+
+> **Status:** done.
+
 - `economy/models.py`: `TRANSFER_FEE` kind choice, migration.
 - `economy/services.py`: `charge_transfer_fee`, copy `charge_trainer_fee`
   exactly (no per-week uniqueness).

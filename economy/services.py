@@ -539,3 +539,24 @@ def charge_trainer_fee(team, *, amount: int, at, description: str) -> LedgerEntr
         occurred_at=at,
         description=description,
     )
+
+
+def charge_transfer_fee(team, *, amount: int, at, description: str) -> LedgerEntry:
+    """Debit `team` a one-off free-agent transfer amount. Returns the row.
+
+    One kind covers both sides of the market: a signing fee and a severance
+    charge are the same shape of transaction (money out, no week attached),
+    distinguished by `description` ("Signed X" vs "Released X") — there is
+    deliberately no second Kind (free-agents-plan.md, Design decision 7).
+    `amount` is negative, `at` is game time, `description` names the rider.
+    The caller — api/'s free-agent views — passes both itself, per the
+    custom-`at` convention used across this module. No (team, week)
+    constraint: a team may sign and release several times a season.
+    """
+    return LedgerEntry.objects.create(
+        team=team,
+        kind=LedgerEntry.Kind.TRANSFER_FEE,
+        amount=amount,
+        occurred_at=at,
+        description=description,
+    )
