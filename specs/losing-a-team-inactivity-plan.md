@@ -363,7 +363,7 @@ The field and its migration, exactly as *Data model* specifies. Nothing reads
 or writes it yet.
 **Test:** `accounts/tests.py::test_last_seen_at_defaults_to_null`.
 
-### W2 — `api/services.py`: `touch_last_seen`
+### W2 — `api/services.py`: `touch_last_seen` ✅
 New module, one function.
 **Test:** `api/tests.py::test_touch_last_seen_writes_game_time` — set the mock
 clock to a known instant, call it, assert the stored value is that instant and
