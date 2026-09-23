@@ -360,7 +360,11 @@ lines not 11; sample rider arrays are in header order; flags pack and unpack;
 off the sample grid; `wind_band` in header and `[speed, angle]` per tick;
 wind keys absent entirely when disabled.
 
-### W2 — `race_engine/race_logger.py`: brotli compression
+### W2 — `race_engine/race_logger.py`: brotli compression ✅
+(This commit is red on its own: the moment the logger writes brotli,
+`simulate_race` line-counts the binary temp file and fails. W3, the commit
+immediately after, restores green — the user chose to keep the W2/W3 boundary
+rather than merge them.)
 Add the incremental compressor and the `.br` filename convention. Add
 `brotli>=1.1` to `requirements.txt`.
 **Tests:** the written file is brotli-decodable and round-trips to the exact

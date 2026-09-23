@@ -11,6 +11,9 @@ from __future__ import annotations
 
 import json
 
+import brotli
+import pytest
+
 from race_engine.models import Course, RaceState, Rider, RiderAttributes, Segment
 from race_engine.race_logger import FORMAT_VERSION, RaceLogger
 
@@ -23,8 +26,9 @@ def _state(riders, *, wind=True, wind_band=None) -> RaceState:
 
 
 def _lines(log_path) -> list:
-    with open(log_path) as f:
-        return [json.loads(line) for line in f]
+    with open(log_path, "rb") as f:
+        data = f.read()
+    return [json.loads(line) for line in brotli.decompress(data).decode().splitlines()]
 
 
 def test_header_carries_static_metadata_once(tmp_path):
@@ -198,3 +202,49 @@ def test_sample_count_counts_written_samples(tmp_path):
     logger.log(state)
     assert logger.sample_count == 1
     logger.close()
+
+
+def test_file_is_brotli_and_round_trips_to_the_same_lines(tmp_path):
+    state = _state(
+        [
+            Rider(id="c1", name="C1", attributes=ATTRS, team_id="t1", role="leader"),
+            Rider(id="c2", name="C2", attributes=ATTRS, team_id="t2", role="support"),
+        ],
+        wind=True, wind_band="light",
+    )
+
+    log_path = str(tmp_path / "race.jsonl")
+    logger = RaceLogger(log_path, team_codes={"t1": {"code": "ALP", "name": "Alpine Racing"}})
+    logger.log(state)
+    logger.close()
+
+    with open(log_path, "rb") as f:
+        raw = f.read()
+    # The bytes on disk must not be plain JSON text — they are compressed.
+    assert b'"v"' not in raw
+    lines = _lines(log_path)
+    header, sample = lines
+    assert header["v"] == FORMAT_VERSION
+    assert header["tick_interval"] == 2
+    assert header["teams"] == {"t1": {"code": "ALP", "name": "Alpine Racing"}}
+    assert header["wind_band"] == "light"
+    assert [r[4] for r in sample[1]] == [0, 0]  # neither rider pulling/surging/finished
+    assert sample[0] == 0
+
+
+def test_stream_is_incomplete_before_close(tmp_path):
+    state = _state([Rider(id="c1", name="C1", attributes=ATTRS)], wind=False)
+
+    log_path = str(tmp_path / "race.jsonl")
+    logger = RaceLogger(log_path)
+    logger.log(state)
+
+    with open(log_path, "rb") as f:
+        data = f.read()
+    with pytest.raises(brotli.error):
+        brotli.decompress(data)
+
+    logger.close()
+    with open(log_path, "rb") as f:
+        data = f.read()
+    assert _lines(log_path)[1][0] == 0

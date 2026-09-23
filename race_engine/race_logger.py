@@ -3,11 +3,14 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+import brotli
+
 if TYPE_CHECKING:
     from race_engine.models import RaceState
 
 FORMAT_VERSION = 1
 DEFAULT_SAMPLE_INTERVAL = 2
+BROTLI_QUALITY = 5
 
 
 class RaceLogger:
@@ -25,6 +28,11 @@ class RaceLogger:
     so a finish is never invisible, only its exact instant is quantised. The
     first tick is always written because ``state`` is not available until then
     and a t=0 sample is what the player shows before playback starts.
+
+    The file is written brotli-compressed (a `.jsonl.br` file), fed through an
+    incremental ``Compressor`` so a race-sized payload is never held twice in
+    memory. A stream is only complete after ``close()`` — ``finish()`` writes
+    the terminal block.
     """
 
     def __init__(
@@ -33,7 +41,8 @@ class RaceLogger:
         team_codes: dict[str, dict[str, str]] | None = None,
         sample_interval: int = DEFAULT_SAMPLE_INTERVAL,
     ) -> None:
-        self._file = open(path, "w")
+        self._raw = open(path, "wb")
+        self._compressor = brotli.Compressor(quality=BROTLI_QUALITY)
         self._team_codes = team_codes or {}
         self._sample_interval = sample_interval
         self._ticks_seen = 0
@@ -63,13 +72,19 @@ class RaceLogger:
         return self._samples_written
 
     def close(self) -> None:
-        self._file.close()
+        self._raw.write(self._compressor.finish())
+        self._raw.close()
 
     def __enter__(self) -> RaceLogger:
         return self
 
     def __exit__(self, *args: object) -> None:
         self.close()
+
+    def _emit(self, line: str) -> None:
+        chunk = self._compressor.process(line.encode())
+        if chunk:
+            self._raw.write(chunk)
 
     def _write_header(self, state: RaceState) -> None:
         header = {
@@ -93,7 +108,7 @@ class RaceLogger:
         }
         if state.wind is not None:
             header["wind_band"] = state.wind.band
-        self._file.write(json.dumps(header) + "\n")
+        self._emit(json.dumps(header) + "\n")
         self._header_written = True
 
     def _write_sample(self, state: RaceState) -> None:
@@ -114,5 +129,5 @@ class RaceLogger:
         sample: list[object] = [state.current_time, riders]
         if state.wind is not None:
             sample.append([round(state.wind.speed, 1), round(state.wind.angle % 360.0, 1)])
-        self._file.write(json.dumps(sample) + "\n")
+        self._emit(json.dumps(sample) + "\n")
         self._samples_written += 1
