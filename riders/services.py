@@ -14,6 +14,7 @@ from django.db.models.functions import Greatest
 from .display import to_display_scale
 from .generation import SPECIALITY_PROFILES
 from .models import ENGINE_ATTRIBUTES, Rider, RiderAttributeSnapshot
+from .pricing import SALARY_REVIEW_THRESHOLD, weekly_salary_for
 
 #: Fraction of the remaining gap to its ceiling an attribute closes each
 #: week, at maximum growth. Tuned so a young rider well below potential
@@ -238,6 +239,43 @@ def advance_ages() -> int:
     UPDATE statement via F(), not a per-row loop.
     """
     return Rider.objects.filter(age__lt=40).update(age=F("age") + 1)
+
+
+def reprice_all() -> list[dict]:
+    """Recompute every rider's weekly_salary from riders.pricing and save.
+
+    Returns one record per rider whose salary moved by at least
+    SALARY_REVIEW_THRESHOLD: {"rider_id", "rider_name", "team_id",
+    "from", "to"} in whole credits. Every rider's salary is written
+    regardless of the threshold; the threshold filters only what is
+    returned (plan D4).
+
+    Pure with respect to time, like advance_ages() and
+    apply_weekly_growth(): this app knows nothing about seasons or the
+    clock. world.services.tick() decides when to call it.
+    """
+    changes = []
+    updated = []
+    for rider in Rider.objects.all().only(
+        "id", "name", "team_id", "speciality", "age",
+        "weekly_salary", *ENGINE_ATTRIBUTES,
+    ):
+        new_salary = weekly_salary_for(rider)
+        if new_salary == rider.weekly_salary:
+            continue
+        if abs(new_salary - rider.weekly_salary) >= SALARY_REVIEW_THRESHOLD:
+            changes.append({
+                "rider_id": rider.pk,
+                "rider_name": rider.name,
+                "team_id": rider.team_id,
+                "from": rider.weekly_salary,
+                "to": new_salary,
+            })
+        rider.weekly_salary = new_salary
+        updated.append(rider)
+
+    Rider.objects.bulk_update(updated, ["weekly_salary"], batch_size=500)
+    return changes
 
 
 def freshness_multiplier(freshness: int) -> float:

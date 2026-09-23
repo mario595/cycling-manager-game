@@ -95,7 +95,16 @@ reads `now()` once, then finds and processes whatever is due, in four steps:
    trainer pool.
 1. **Ageing, growth, training and wages** — for every `CLOSED` transition
    `process_transitions` returned, every rider's age advances by one
-   (`riders.services.advance_ages()`). Then
+   (`riders.services.advance_ages()`). **Immediately after ageing, and only
+   for a `CLOSED` transition**, every rider's salary is repriced:
+   `riders.services.reprice_all()` recomputes each `weekly_salary` from the
+   pricing formula, and `economy.services.write_salary_reviews(transition.
+   season, changes)` writes one `SalaryReviewReport` per managed team
+   (#26; see `economy/README.md`, *Salary review*). Repricing must run
+   **after** ageing — next season's wage has to reflect the rider a manager
+   will actually have, age included, not the rider they had — and it is
+   exactly-once by the same rule ageing is: one `CLOSED` transition ever, so
+   the pass cannot run twice for one season. Then
    `schedule.services.process_week_transitions(at)` records any week
    boundary opened at or before `now()` that hasn't been recorded yet (see
    `schedule/README.md`, *Week transitions*), and each recorded transition

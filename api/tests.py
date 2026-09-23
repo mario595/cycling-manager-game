@@ -11,7 +11,7 @@ from rest_framework.test import APIClient
 import world.services as world_services
 from competitions.scoring import points_for, prize_for
 from competitions.services import score_race
-from economy.models import STARTING_BALANCE, LedgerEntry
+from economy.models import STARTING_BALANCE, LedgerEntry, SalaryReviewReport
 from racing.models import Race, RaceResult, RaceSquad
 from riders.display import to_display_scale
 from riders.models import DISPLAY_MAX, Rider
@@ -625,6 +625,51 @@ def test_rider_list_response_has_no_hidden_traits(roster_rider, roster_client):
         "injury_proneness", "training_affinity", "recovery_rate", "growth_debt",
     ):
         assert hidden_field not in rider_data
+
+
+def test_roster_includes_salary_review_when_one_exists(roster_team, roster_client):
+    season = Season.objects.create(number=4, starts_at=now() - timedelta(weeks=12))
+    SalaryReviewReport.objects.create(
+        team=roster_team, season=season,
+        changes=[{"rider_id": 7, "rider_name": "Star", "from": 1900, "to": 2400}],
+        payroll_before=1900, payroll_after=2400,
+    )
+
+    response = roster_client.get("/api/riders/")
+
+    review = response.data["salary_review"]
+    assert review["season_number"] == 4
+    assert review["payroll_before"] == 1900
+    assert review["payroll_after"] == 2400
+    assert review["changes"] == [{
+        "rider_id": 7, "rider_name": "Star", "from_value": 1900, "to_value": 2400,
+    }]
+
+
+def test_roster_salary_review_is_null_without_one(roster_team, roster_client):
+    response = roster_client.get("/api/riders/")
+
+    assert "salary_review" in response.data
+    assert response.data["salary_review"] is None
+
+
+def test_roster_salary_review_serializes_from_and_to(roster_team, roster_client):
+    # Load-bearing: stored changes carry the Python-keyword key "from". The
+    # serializer must map it to from_value via source=, never leak a "from"
+    # key that would be a syntax error to read in the SPA.
+    season = Season.objects.create(number=5, starts_at=now() - timedelta(weeks=12))
+    SalaryReviewReport.objects.create(
+        team=roster_team, season=season,
+        changes=[{"rider_id": 7, "rider_name": "Star", "from": 1900, "to": 2400}],
+        payroll_before=1900, payroll_after=2400,
+    )
+
+    response = roster_client.get("/api/riders/")
+
+    change = response.data["salary_review"]["changes"][0]
+    assert change["from_value"] == 1900
+    assert change["to_value"] == 2400
+    assert "from" not in change
 
 
 @pytest.fixture

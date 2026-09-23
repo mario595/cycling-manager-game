@@ -70,6 +70,14 @@ class TickRun(models.Model):
         help_text="How many riders had a *displayed* attribute change from training "
         "and/or racing this tick (#36).",
     )
+    riders_repriced = models.PositiveIntegerField(
+        default=0,
+        help_text="How many riders had their weekly salary changed at a season close this tick (#26).",
+    )
+    salary_reviews = models.PositiveIntegerField(
+        default=0,
+        help_text="Salary review reports written this tick (#26).",
+    )
     wage_entries = models.PositiveIntegerField(
         default=0,
         help_text="Ledger wage entries written this tick.",

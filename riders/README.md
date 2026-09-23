@@ -278,13 +278,22 @@ happen. Two riders who look identical on the roster page cost the same,
 even if one has far more room to grow — an accepted imprecision, not an
 oversight.
 
-**Set once, frozen for the season.** `generate_rider()` calls
-`weekly_salary_for` and stores the result; nothing recomputes it
-afterwards, including the age curve and weekly training moving the same
-rider's attributes every week. What happens to a salary at a season
-boundary — recalculated, renegotiated, refused — is
-[#26](https://github.com/mario595/cycling-manager/issues/26)'s decision,
-not this app's.
+**Set at creation, recomputed at every season close — frozen in between.**
+`generate_rider()` calls `weekly_salary_for` and stores the result. The
+weekly age curve and training move the same rider's attributes every week,
+but nothing changes their stored salary mid-season — the player's wage bill
+is predictable inside a season. At a season boundary that changes:
+`world.services.tick()` calls `reprice_all()`, which recomputes every
+rider's salary from the formula — *after* `advance_ages()` has aged them
+(`world/README.md`, *How a tick works*) — and `economy/services.py` writes
+one `SalaryReviewReport` per managed team (see `economy/README.md`, *Salary
+review*).
+
+`reprice_all()` (in `riders/services.py`) always writes every rider's exact
+formula value, but only returns the riders whose salary moved by at least
+`SALARY_REVIEW_THRESHOLD` — the threshold filters the *report*, never the
+write, so a stored salary can never drift from the formula on behalf of a
+quiet rounding step.
 
 **Calibrated against generated rosters, not the 1-100 range.** A
 generated rider's attributes cluster well under 100 (`QUALITY_SPREAD`,

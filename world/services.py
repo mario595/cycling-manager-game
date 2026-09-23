@@ -27,6 +27,7 @@ from economy.services import (
     pay_merchandise,
     pay_race_prizes,
     pay_sponsorship,
+    write_salary_reviews,
 )
 from racing.models import Race
 from racing.services import riders_who_raced, simulate_race
@@ -36,6 +37,7 @@ from riders.services import (
     apply_weekly_growth,
     apply_weekly_recovery,
     record_week_snapshots,
+    reprice_all,
     training_deltas,
 )
 from schedule.models import SeasonTransition, Week
@@ -302,8 +304,16 @@ def tick() -> TickRun:
     # evaluated against their new age this same tick.
     closed = [t for t in transitions if t.kind == SeasonTransition.Kind.CLOSED]
     riders_aged = 0
-    for _ in closed:
+    riders_repriced = 0
+    salary_reviews = 0
+    for transition in closed:
         riders_aged = advance_ages()
+        # Repricing AFTER ageing: next season's wage must reflect the rider a
+        # manager will actually have, age included (spec, *Ordering at the
+        # boundary*).
+        changes = reprice_all()
+        riders_repriced += len(changes)
+        salary_reviews += write_salary_reviews(transition.season, changes)
 
     # One offer round per team per crossed season open — ensure_offer_round
     # is idempotent per (team, season) itself (economy/README.md, D8), so a
@@ -371,6 +381,8 @@ def tick() -> TickRun:
         weeks_processed=len(weeks),
         riders_aged=riders_aged,
         riders_trained=riders_trained,
+        riders_repriced=riders_repriced,
+        salary_reviews=salary_reviews,
         wage_entries=wage_entries,
         merchandise_entries=merchandise_entries,
         fanbase_entries=fanbase_entries,

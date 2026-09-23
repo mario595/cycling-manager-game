@@ -42,6 +42,14 @@ _AGE_PENALTY_MAX = 0.15
 _MIN_AGE = 18
 _MAX_AGE = 40
 
+#: Smallest salary movement worth reporting to a manager (#26). The
+#: formula rounds to the nearest 50, so 50 is the smallest change it can
+#: produce at all; at 100 a rider must move two rounding steps, which
+#: filters the drift `age_multiplier` alone produces at a birthday while
+#: any real attribute movement still clears it. Filters the *report* only
+#: — every rider's stored salary is always updated exactly (plan D4).
+SALARY_REVIEW_THRESHOLD = 100
+
 
 def _round_to_nearest_50(value: float) -> int:
     """Integer nearest-50 rounding, so prices read as prices rather than as
