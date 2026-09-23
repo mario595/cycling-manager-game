@@ -510,7 +510,7 @@ Tests — `economy/tests/test_services.py`:
   row count is 1 after two calls.
 - `test_latest_salary_review_returns_newest_season`
 
-### W4 — `world/`: wire repricing into the season-close loop
+### W4 — `world/`: wire repricing into the season-close loop — DONE
 
 Extend the `CLOSED` loop, add the two `TickRun` counters and their
 migration.
