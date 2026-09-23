@@ -84,9 +84,16 @@ DRF routers and serializers that aggregate other apps' data for the SPA.
   `rank` is computed server-side from the sorted order — two teams level on
   points and countback are genuinely joint, and the server is where that is
   known. `IsAuthenticated`, like every endpoint the SPA reads.
-- `POST /api/accounts/register/`, `POST /api/accounts/login/`,
-  `POST /api/accounts/logout/` — owned by `accounts/`, included here under
-  `/api/accounts/`. See `accounts/README.md`.
+- `POST /api/accounts/register/`, `POST /api/accounts/logout/` — owned by
+  `accounts/`, included here under `/api/accounts/`. See `accounts/README.md`.
+- `POST /api/accounts/login/` (`api.views.LoginView`) — routed **here**,
+  ahead of the `include("accounts.urls")` line, so this view wins over the
+  plain `accounts.views.LoginView` it subclasses. It does everything that
+  view does and then stamps `request.user.last_seen_at` with
+  `world.services.now()` — game time, not `django.contrib.auth`'s
+  `last_login` — so `world/`'s inactivity trigger has something to measure
+  from. The override exists because `accounts/` imports nothing and cannot
+  reach `world/` itself (`accounts/README.md`, *Last seen is game time*).
 - `POST /api/teams/claim/` (`ClaimTeamSerializer`, `ClaimTeamView`) — assigns
   the caller an unmanaged team, renamed and recoded to their choosing
   (`name`, `code` in the body; a lowercase code is uppercased, not rejected).

@@ -94,6 +94,10 @@ class TickRun(models.Model):
         default=0,
         help_text="Sponsorship ledger entries written this tick (#22).",
     )
+    teams_released = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Teams released for inactivity this tick (#63).",
+    )
     error = models.TextField(
         blank=True, default="",
         help_text="Traceback if the run failed. Empty on success.",

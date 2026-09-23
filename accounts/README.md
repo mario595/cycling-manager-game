@@ -89,3 +89,26 @@ A user's managerial history — the teams they used to run, and why each
 ended — is not here either, for the same reason as team ownership above:
 it lives in `teams.ManagerialSpell` (`teams/README.md`, *Managerial
 spells*), because `accounts/` imports nothing.
+
+## Last seen is game time
+
+`User.last_seen_at` records when a manager was last seen logging in, and it
+is **not** `django.contrib.auth`'s `last_login`. `last_login` is stamped
+with real, wall-clock time; `last_seen_at` is stamped with **game** time —
+the same clock `teams.Team.managed_since` and every `schedule.Week` boundary
+use ([#63](https://github.com/mario595/cycling-manager/issues/63)). Under
+production's `RealClock` the two coincide and the distinction is invisible;
+under `MockClock` (dev and the test suite) they can be arbitrarily far
+apart, because `MockClock.now()` returns whatever a developer last set it
+to. Comparing a real-time login stamp against game-time week boundaries — as
+the inactivity trigger `world.services.tick()` does — would be wrong the
+moment the two clocks diverge, so this field exists instead of reusing
+`last_login`.
+
+The write does not happen here. `accounts/` imports nothing, so
+`accounts.views.LoginView` cannot call `world.services.now()` — `api/`
+subclasses `LoginView` and stamps `last_seen_at` there, routed ahead of this
+app's own login URL (`api/urls.py`; see `api/README.md`). `null` means the
+account has never logged in, and stays that way until it does — never
+backfilled to `last_login` or to "now" at migration time, both of which
+would put real time in a game-time column.

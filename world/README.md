@@ -157,6 +157,30 @@ reads `now()` once, then finds and processes whatever is due, in four steps:
    `TickRun.fanbase_entries` / `TickRun.merchandise_entries` /
    `TickRun.sponsorship_entries` counters. A team with no active contract
    gets no sponsorship row for the week at all — not a zero-amount one.
+   Last in the same per-week loop, after the economy calls:
+   `world.services._release_inactive(week)` releases the team of every
+   manager who has gone `INACTIVITY_WEEKS` (ten) in-season game-weeks
+   without logging in, via `teams.services.release_team(team,
+   reason=ManagerialSpell.Reason.INACTIVITY, at=week.starts_at)`
+   ([#63](https://github.com/mario595/cycling-manager/issues/63); see
+   `teams/README.md`, *Releasing a team*). "Ten weeks" is counted by
+   `world.services._weeks_inactive`, which counts `schedule.Week` rows
+   whose `starts_at` falls in `[user.last_seen_at, week.starts_at)` —
+   querying rather than a stored counter, so a gap between seasons
+   contributes no weeks for free (weeks only exist inside a declared
+   season). `last_seen_at` is a **game**-time field on `accounts.User`,
+   stamped at login by `api.services.touch_last_seen` — deliberately not
+   `django.contrib.auth`'s `last_login`, which is real time and would
+   compare incorrectly against game time under `MockClock` (see
+   `accounts/README.md`, *Last seen is game time*). A manager who has
+   never logged in (`last_seen_at` is null) is exempt. The release is
+   dated to `week.starts_at`, not the tick's own `at`, for the same reason
+   every other per-week write in this loop is: a tick that catches up
+   several weeks late must record each release at the boundary that
+   actually crossed the threshold. A release that raises is caught and
+   recorded on `TickRun.error` without stopping the week's remaining work —
+   the same per-item guard *Execute* below uses for a broken race — and the
+   count of teams released lands on `TickRun.teams_released`.
    Ageing runs before growth, so a rider who turned 33 at this same
    boundary is evaluated against the new age immediately. None of this
    touches a race row, so it runs outside the claim transaction below, the
