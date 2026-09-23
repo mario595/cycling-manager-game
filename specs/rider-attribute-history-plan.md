@@ -292,7 +292,7 @@ exactly one snapshot with `week=None`. `riders/tests/test_reset_riders.py` —
 after the command, every generated rider has exactly one baseline snapshot and
 no orphan snapshots survive from the deleted population.
 
-### W4 — `world/services.py`: the weekly snapshot
+### W4 — `world/services.py`: the weekly snapshot ✅
 Wire `record_week_snapshots` into `_apply_training_week`.
 **Test:** `world/tests/` — tick a week in which a rider's displayed value
 changes and assert one snapshot row for that rider tagged with that week; assert
