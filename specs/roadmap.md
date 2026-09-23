@@ -5,7 +5,7 @@
 what blocks what*. It does not say what any feature does — that is each issue,
 and later each spec.
 
-34 open issues.
+36 open issues.
 
 ## The question this roadmap answers
 
@@ -26,7 +26,7 @@ coming back to.
 |---|---|
 | **Time and the calendar** | [#6](https://github.com/mario595/cycling-manager/issues/6) clock · [#5](https://github.com/mario595/cycling-manager/issues/5) season · [#7](https://github.com/mario595/cycling-manager/issues/7) race calendar |
 | **Racing decisions** | [#37](https://github.com/mario595/cycling-manager/issues/37) squad selection · [#64](https://github.com/mario595/cycling-manager/issues/64) leadership is per-race · [#39](https://github.com/mario595/cycling-manager/issues/39) absent-manager default · [#44](https://github.com/mario595/cycling-manager/issues/44) unmanaged-team squads |
-| **Signing up** | [#50](https://github.com/mario595/cycling-manager/issues/50) accounts · [#46](https://github.com/mario595/cycling-manager/issues/46) claiming a team |
+| **Signing up** | [#50](https://github.com/mario595/cycling-manager/issues/50) accounts · [#46](https://github.com/mario595/cycling-manager/issues/46) claiming a team · [#62](https://github.com/mario595/cycling-manager/issues/62) losing a team (mechanism) |
 | **The competitive loop** | [#15](https://github.com/mario595/cycling-manager/issues/15) race points · [#12](https://github.com/mario595/cycling-manager/issues/12) standings |
 | **Riders as assets** | [#1](https://github.com/mario595/cycling-manager/issues/1)/[#57](https://github.com/mario595/cycling-manager/issues/57) attributes · [#58](https://github.com/mario595/cycling-manager/issues/58) growth and decline · [#59](https://github.com/mario595/cycling-manager/issues/59) freshness |
 | **Staff and training** | [#35](https://github.com/mario595/cycling-manager/issues/35) trainers · [#36](https://github.com/mario595/cycling-manager/issues/36) weekly training focus |
@@ -53,11 +53,10 @@ What remains is consequence: a balance that can only be watched is a scoreboard.
 
 | Order | Issue | Why | Blocked by |
 |---|---|---|---|
-| 1 | [#62](https://github.com/mario595/cycling-manager/issues/62) losing a team (mechanism) | Buildable since [#46](https://github.com/mario595/cycling-manager/issues/46) shipped. Closes that spec's deferred question about abandoned teams. | [#46](https://github.com/mario595/cycling-manager/issues/46) ✅ |
-| 2 | [#63](https://github.com/mario595/cycling-manager/issues/63) inactivity trigger | Needs only a timestamp and the clock. **The trigger that will actually fire** — players drift. | [#62](https://github.com/mario595/cycling-manager/issues/62) |
-| 3 | [#27](https://github.com/mario595/cycling-manager/issues/27) insolvency ladder | The second trigger. Embargo → forced sales → team lost. Needs somewhere to sell riders. | [#25](https://github.com/mario595/cycling-manager/issues/25) ✅ · [#62](https://github.com/mario595/cycling-manager/issues/62) · **[#28](https://github.com/mario595/cycling-manager/issues/28)/[#29](https://github.com/mario595/cycling-manager/issues/29)** |
+| 1 | [#63](https://github.com/mario595/cycling-manager/issues/63) inactivity trigger | Needs only a timestamp and the clock. **The trigger that will actually fire** — players drift. | [#62](https://github.com/mario595/cycling-manager/issues/62) ✅ |
+| 2 | [#27](https://github.com/mario595/cycling-manager/issues/27) insolvency ladder | The second trigger. Embargo → forced sales → team lost. Needs somewhere to sell riders. | [#25](https://github.com/mario595/cycling-manager/issues/25) ✅ · [#62](https://github.com/mario595/cycling-manager/issues/62) ✅ · **[#28](https://github.com/mario595/cycling-manager/issues/28)/[#29](https://github.com/mario595/cycling-manager/issues/29)** |
 
-**[#62](https://github.com/mario595/cycling-manager/issues/62) and [#63](https://github.com/mario595/cycling-manager/issues/63) jump the queue the moment there is a real playtest.** An absent
+**[#63](https://github.com/mario595/cycling-manager/issues/63) jumps the queue the moment there is a real playtest.** An absent
 manager holds a place in a fixed-size Division while [#44](https://github.com/mario595/cycling-manager/issues/44) races their team badly
 forever — a live problem the first time signups exceed teams.
 
@@ -70,10 +69,10 @@ The largest coherent block left, and the first that makes a roster something you
 
 | Order | Issue | Note | Blocked by |
 |---|---|---|---|
-| 4 | [#31](https://github.com/mario595/cycling-manager/issues/31) rider market value | Anchors every price. Needs riders to have been observed improving — [#58](https://github.com/mario595/cycling-manager/issues/58) made that possible. | [#58](https://github.com/mario595/cycling-manager/issues/58) ✅ [#25](https://github.com/mario595/cycling-manager/issues/25) |
-| 5 | [#29](https://github.com/mario595/cycling-manager/issues/29) free agents | [#46](https://github.com/mario595/cycling-manager/issues/46) already releases riders on every claim, so the pool exists and is currently inert. | [#31](https://github.com/mario595/cycling-manager/issues/31) |
-| 6 | [#28](https://github.com/mario595/cycling-manager/issues/28) auctions | The market itself. | [#29](https://github.com/mario595/cycling-manager/issues/29), [#20](https://github.com/mario595/cycling-manager/issues/20) ✅ |
-| 7 | [#30](https://github.com/mario595/cycling-manager/issues/30) AI teams trade | Without it the market is dead at launch — most teams have no manager. | [#28](https://github.com/mario595/cycling-manager/issues/28) |
+| 3 | [#31](https://github.com/mario595/cycling-manager/issues/31) rider market value | Anchors every price. Needs riders to have been observed improving — [#58](https://github.com/mario595/cycling-manager/issues/58) made that possible. | [#58](https://github.com/mario595/cycling-manager/issues/58) ✅ [#25](https://github.com/mario595/cycling-manager/issues/25) |
+| 4 | [#29](https://github.com/mario595/cycling-manager/issues/29) free agents | [#46](https://github.com/mario595/cycling-manager/issues/46) already releases riders on every claim, so the pool exists and is currently inert. | [#31](https://github.com/mario595/cycling-manager/issues/31) |
+| 5 | [#28](https://github.com/mario595/cycling-manager/issues/28) auctions | The market itself. | [#29](https://github.com/mario595/cycling-manager/issues/29), [#20](https://github.com/mario595/cycling-manager/issues/20) ✅ |
+| 6 | [#30](https://github.com/mario595/cycling-manager/issues/30) AI teams trade | Without it the market is dead at launch — most teams have no manager. | [#28](https://github.com/mario595/cycling-manager/issues/28) |
 
 Completing this also unblocks **[#27](https://github.com/mario595/cycling-manager/issues/27)** (forced sales need buyers) and
 **[#26](https://github.com/mario595/cycling-manager/issues/26)** (post-season salary renegotiation needs a value to renegotiate against).
@@ -84,10 +83,10 @@ Riders decline ([#58](https://github.com/mario595/cycling-manager/issues/58)) an
 
 | Order | Issue | Blocked by |
 |---|---|---|
-| 8 | [#42](https://github.com/mario595/cycling-manager/issues/42) retirement | [#58](https://github.com/mario595/cycling-manager/issues/58) ✅ |
-| 9 | [#32](https://github.com/mario595/cycling-manager/issues/32) development squad | [#20](https://github.com/mario595/cycling-manager/issues/20) ✅ |
-| 10 | [#33](https://github.com/mario595/cycling-manager/issues/33) youth intake | [#32](https://github.com/mario595/cycling-manager/issues/32) |
-| 11 | [#34](https://github.com/mario595/cycling-manager/issues/34) promote/retain/discard | [#33](https://github.com/mario595/cycling-manager/issues/33), [#29](https://github.com/mario595/cycling-manager/issues/29) |
+| 7 | [#42](https://github.com/mario595/cycling-manager/issues/42) retirement | [#58](https://github.com/mario595/cycling-manager/issues/58) ✅ |
+| 8 | [#32](https://github.com/mario595/cycling-manager/issues/32) development squad | [#20](https://github.com/mario595/cycling-manager/issues/20) ✅ |
+| 9 | [#33](https://github.com/mario595/cycling-manager/issues/33) youth intake | [#32](https://github.com/mario595/cycling-manager/issues/32) |
+| 10 | [#34](https://github.com/mario595/cycling-manager/issues/34) promote/retain/discard | [#33](https://github.com/mario595/cycling-manager/issues/33), [#29](https://github.com/mario595/cycling-manager/issues/29) |
 
 **[#34](https://github.com/mario595/cycling-manager/issues/34) is the payoff of the hidden-attribute design** — triage is a judgement only
 because potential is hidden. It is also what gives the scout in
@@ -97,12 +96,14 @@ because potential is hidden. It is also what gives the scout in
 
 | Order | Issue | Note | Blocked by |
 |---|---|---|---|
-| 12 | [#88](https://github.com/mario595/cycling-manager/issues/88) slim and compress the log format | A mountain stage is **75.7 MB**; gzip alone takes it to ~2.7 MB. Do it before storage hurts, not after. Pair with [#70](https://github.com/mario595/cycling-manager/issues/70) — that also changes the format, and doing both at once touches `race_player/` once. | — |
-| 13 | [#70](https://github.com/mario595/cycling-manager/issues/70) course markers | **The foundation.** `race_engine` has no event concept at all — it emits per-tick positions. Means a new log record type and a change to the season declaration format. Pair with the log slimming `racing/README.md` already wants. | — |
-| 14 | [#16](https://github.com/mario595/cycling-manager/issues/16)/[#17](https://github.com/mario595/cycling-manager/issues/17) sprint and mountain points | — | [#70](https://github.com/mario595/cycling-manager/issues/70) |
-| 15 | [#9](https://github.com/mario595/cycling-manager/issues/9) stage races | Multi-day races with a GC. | [#7](https://github.com/mario595/cycling-manager/issues/7) ✅ |
-| 16 | [#18](https://github.com/mario595/cycling-manager/issues/18) classifications | **First feature that makes a squad of specialists worth assembling.** Earns its place sooner than its position suggests. | [#16](https://github.com/mario595/cycling-manager/issues/16), [#17](https://github.com/mario595/cycling-manager/issues/17), [#9](https://github.com/mario595/cycling-manager/issues/9) |
-| 17 | [#41](https://github.com/mario595/cycling-manager/issues/41) injuries | Gives the stage-race squad lock its teeth, and the physio ([#40](https://github.com/mario595/cycling-manager/issues/40)) a job. | [#9](https://github.com/mario595/cycling-manager/issues/9) |
+| 11 | [#88](https://github.com/mario595/cycling-manager/issues/88) slim and compress the log format | A mountain stage is **75.7 MB**; gzip alone takes it to ~2.7 MB. Do it before storage hurts, not after. Pair with [#70](https://github.com/mario595/cycling-manager/issues/70) — that also changes the format, and doing both at once touches `race_player/` once. | — |
+| 12 | [#70](https://github.com/mario595/cycling-manager/issues/70) course markers | **The foundation.** `race_engine` has no event concept at all — it emits per-tick positions. Means a new log record type and a change to the season declaration format. Pair with the log slimming `racing/README.md` already wants. | — |
+| 13 | [#16](https://github.com/mario595/cycling-manager/issues/16)/[#17](https://github.com/mario595/cycling-manager/issues/17) sprint and mountain points | — | [#70](https://github.com/mario595/cycling-manager/issues/70) |
+| 14 | [#9](https://github.com/mario595/cycling-manager/issues/9) stage races | Multi-day races with a GC. | [#7](https://github.com/mario595/cycling-manager/issues/7) ✅ |
+| 15 | [#89](https://github.com/mario595/cycling-manager/issues/89) races have a type, one is a TT | Cheap, and [#9](https://github.com/mario595/cycling-manager/issues/9) probably wants it — real Grand Tours are often decided by a TT stage. Changes no simulation. | [#9](https://github.com/mario595/cycling-manager/issues/9) |
+| 16 | [#90](https://github.com/mario595/cycling-manager/issues/90) engine support for a solo effort | **The large one.** Every mechanic that decides a race today assumes a bunch — 221 references to drafting and pack behaviour in `race_engine/`. A TT is the deliberate absence of all of it, and not simply drafting switched off. | [#89](https://github.com/mario595/cycling-manager/issues/89) |
+| 17 | [#18](https://github.com/mario595/cycling-manager/issues/18) classifications | **First feature that makes a squad of specialists worth assembling.** Earns its place sooner than its position suggests. | [#16](https://github.com/mario595/cycling-manager/issues/16), [#17](https://github.com/mario595/cycling-manager/issues/17), [#9](https://github.com/mario595/cycling-manager/issues/9) |
+| 18 | [#41](https://github.com/mario595/cycling-manager/issues/41) injuries | Gives the stage-race squad lock its teeth, and the physio ([#40](https://github.com/mario595/cycling-manager/issues/40)) a job. | [#9](https://github.com/mario595/cycling-manager/issues/9) |
 
 ## 2.6 — The pyramid
 
@@ -111,12 +112,12 @@ Division. Building it now means balancing a structure nobody is in.
 
 | Order | Issue | Blocked by |
 |---|---|---|
-| 18 | [#10](https://github.com/mario595/cycling-manager/issues/10) Divisions and Groups | [#12](https://github.com/mario595/cycling-manager/issues/12) ✅ (shipped against one Group) |
-| 19 | [#11](https://github.com/mario595/cycling-manager/issues/11) opening a Division | [#10](https://github.com/mario595/cycling-manager/issues/10) |
-| 20 | [#45](https://github.com/mario595/cycling-manager/issues/45) heuristic AI | [#28](https://github.com/mario595/cycling-manager/issues/28), [#36](https://github.com/mario595/cycling-manager/issues/36) ✅ |
-| 21 | [#13](https://github.com/mario595/cycling-manager/issues/13) promotion and relegation | [#10](https://github.com/mario595/cycling-manager/issues/10), **[#45](https://github.com/mario595/cycling-manager/issues/45)** |
-| 22 | [#14](https://github.com/mario595/cycling-manager/issues/14) which Division a new player lands in | [#11](https://github.com/mario595/cycling-manager/issues/11) |
-| 23 | [#56](https://github.com/mario595/cycling-manager/issues/56) team code collisions | [#11](https://github.com/mario595/cycling-manager/issues/11) |
+| 19 | [#10](https://github.com/mario595/cycling-manager/issues/10) Divisions and Groups | [#12](https://github.com/mario595/cycling-manager/issues/12) ✅ (shipped against one Group) |
+| 20 | [#11](https://github.com/mario595/cycling-manager/issues/11) opening a Division | [#10](https://github.com/mario595/cycling-manager/issues/10) |
+| 21 | [#45](https://github.com/mario595/cycling-manager/issues/45) heuristic AI | [#28](https://github.com/mario595/cycling-manager/issues/28), [#36](https://github.com/mario595/cycling-manager/issues/36) ✅ |
+| 22 | [#13](https://github.com/mario595/cycling-manager/issues/13) promotion and relegation | [#10](https://github.com/mario595/cycling-manager/issues/10), **[#45](https://github.com/mario595/cycling-manager/issues/45)** |
+| 23 | [#14](https://github.com/mario595/cycling-manager/issues/14) which Division a new player lands in | [#11](https://github.com/mario595/cycling-manager/issues/11) |
+| 24 | [#56](https://github.com/mario595/cycling-manager/issues/56) team code collisions | [#11](https://github.com/mario595/cycling-manager/issues/11) |
 
 **[#13](https://github.com/mario595/cycling-manager/issues/13) is meaningless without [#45](https://github.com/mario595/cycling-manager/issues/45).** Unmanaged teams never improve, so a Season
 ends with every human team above every unmanaged one and teams move by headcount
@@ -138,7 +139,8 @@ has moved that expiry closer.
 | [#65](https://github.com/mario595/cycling-manager/issues/65) unique display names | Small, no dependencies, genuinely low priority. Grab it in a lull. |
 | [#8](https://github.com/mario595/cycling-manager/issues/8) admin season tool | A file loaded by a command already declares a season. A purpose-built editor for one admin is premature. |
 | [#24](https://github.com/mario595/cycling-manager/issues/24) merchandising investment | Explicitly deferred in its own ticket — a decision about a spreadsheet rather than about bike racing. |
-| [#2](https://github.com/mario595/cycling-manager/issues/2), [#3](https://github.com/mario595/cycling-manager/issues/3), [#4](https://github.com/mario595/cycling-manager/issues/4) new rider attributes | Each is an *in-race* attribute, so each costs a re-derivation of the six-course balance. Judged individually, never added by default. |
+| [#91](https://github.com/mario595/cycling-manager/issues/91) time-trialling attribute | Last stage of [#2](https://github.com/mario595/cycling-manager/issues/2), and **may prove unnecessary** — a time trial might be adequately decided by the existing `flat` and `resistance`. Test that before paying for a sixth in-race attribute, which costs a full re-derivation of the six-course realism balance. |
+| [#3](https://github.com/mario595/cycling-manager/issues/3), [#4](https://github.com/mario595/cycling-manager/issues/4) new rider attributes | Each is an *in-race* attribute, so each costs a re-derivation of the six-course balance. Judged individually, never added by default. |
 
 ---
 
@@ -152,7 +154,7 @@ The chains that actually constrain order:
                 ├─→ #25 per-rider salaries ✅ ──→ #31 value ──→ #29 agents ──→ #28 market ──→ #30 AI trades
                 └─→ #21 fanbase ✅ ──→ #22 sponsors ✅ ──→ #23 renewal ✅
 
-#46 claiming ✅ ──→ #62 losing a team ──→ #63 inactivity
+#46 claiming ✅ ──→ #62 losing a team ✅ ──→ #63 inactivity
                                       └──→ #27 insolvency ←── #25 ✅, #28
 
 #58 growth ✅ ──→ #42 retirement
