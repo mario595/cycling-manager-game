@@ -294,7 +294,7 @@ dependency graph). No models, no migration file.
 **Test:** none of its own; `.venv/bin/python -m pytest` must still collect
 and pass, proving the app is installed without breaking the suite.
 
-### W2 — `transfers/pricing.py`: the valuation function
+### W2 — `transfers/pricing.py`: the valuation function [done]
 Implement `career_horizon` and `market_value_for` per the module sketch
 above, with the constants left at a first guess — W3 calibrates them.
 **Test:** `transfers/tests/test_pricing.py`, mirroring
