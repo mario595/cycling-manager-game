@@ -530,7 +530,7 @@ Tests — `world/tests/test_services.py`:
 - `test_tick_reprices_once_per_closed_season` — a tick catching up two
   closed seasons writes two reports and applies two repricings.
 
-### W5 — `api/`: serialize the review onto the roster payload
+### W5 — `api/`: serialize the review onto the roster payload — DONE
 
 `SalaryChangeSerializer`, the `salary_review` key on `RosterSerializer`,
 and the `RiderListView` wiring.

@@ -114,13 +114,38 @@ class RiderSerializer(serializers.Serializer):
         return market_value_for(instance)
 
 
+class SalaryChangeSerializer(serializers.Serializer):
+    """One rider's wage movement at a season close. Whole credits, never
+    the display scale — this is money (riders/README.md, *Salary*)."""
+
+    rider_id = serializers.IntegerField()
+    rider_name = serializers.CharField()
+    from_value = serializers.IntegerField(source="from")
+    to_value = serializers.IntegerField(source="to")
+
+
 class RosterSerializer(serializers.Serializer):
     """The caller's own team's roster: every rider plus the squad's total
     market value, so the roster screen's header total and its per-rider
-    figures can never disagree (#31)."""
+    figures can never disagree (#31), and the latest post-season salary
+    review when one exists — `salary_review` null otherwise, so the SPA
+    branches on one response (the same whole-payload rule
+    TrainingSerializer follows)."""
 
     riders = RiderSerializer(many=True)
     squad_value = serializers.IntegerField()
+    salary_review = serializers.SerializerMethodField()
+
+    def get_salary_review(self, obj):
+        report = obj["salary_review"]
+        if report is None:
+            return None
+        return {
+            "season_number": report.season.number,
+            "payroll_before": report.payroll_before,
+            "payroll_after": report.payroll_after,
+            "changes": SalaryChangeSerializer(report.changes, many=True).data,
+        }
 
 
 class SquadSerializer(serializers.Serializer):
