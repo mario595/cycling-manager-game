@@ -273,7 +273,7 @@ second snapshot for the same `(rider, week)` raises `IntegrityError`; a case
 asserting two baseline rows (`week=None`) for the same rider both save, proving
 the constraint does not catch NULLs (D6).
 
-### W2 — `riders/services.py`: `record_initial_snapshots` and `record_week_snapshots`
+### W2 — `riders/services.py`: `record_initial_snapshots` and `record_week_snapshots` ✅
 Both functions plus `_display_values`. No callers yet.
 **Test:** `riders/tests/test_services.py` — `record_initial_snapshots` writes one
 row per rider with `week=None` and values equal to `to_display_scale` of each

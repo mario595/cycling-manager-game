@@ -13,7 +13,7 @@ from django.db.models.functions import Greatest
 
 from .display import to_display_scale
 from .generation import SPECIALITY_PROFILES
-from .models import ENGINE_ATTRIBUTES, Rider
+from .models import ENGINE_ATTRIBUTES, Rider, RiderAttributeSnapshot
 
 #: Fraction of the remaining gap to its ceiling an attribute closes each
 #: week, at maximum growth. Tuned so a young rider well below potential
@@ -289,3 +289,43 @@ def apply_weekly_recovery(*, exclude_ids: set[int]) -> int:
             to_update.append(rider)
     Rider.objects.bulk_update(to_update, ["freshness"])
     return len(to_update)
+
+
+def _display_values(rider: Rider) -> dict[str, int]:
+    """This rider's five attributes on the 0-10 scale the player sees."""
+    return {name: to_display_scale(getattr(rider, name)) for name in ENGINE_ATTRIBUTES}
+
+
+def record_initial_snapshots(riders: list[Rider]) -> int:
+    """Baseline snapshot (week=None) for each newly created rider.
+
+    Call immediately after Rider.objects.bulk_create, with the list
+    bulk_create returned — its instances carry the primary keys the
+    unsaved list passed to generate_roster/generate_rider does not.
+    Returns the number of rows written.
+    """
+    rows = [
+        RiderAttributeSnapshot(rider=rider, week=None, **_display_values(rider))
+        for rider in riders
+    ]
+    RiderAttributeSnapshot.objects.bulk_create(rows)
+    return len(rows)
+
+
+def record_week_snapshots(rider_ids: list[int], *, week_id: int) -> int:
+    """One snapshot per rider whose displayed value moved this week.
+
+    `week_id` is a plain int, not a Week: riders/ may not import schedule/
+    (AGENTS.md). ignore_conflicts guards the (rider, week) unique constraint
+    the same way _write_training_reports tolerates a duplicate report,
+    without needing a per-row transaction. Returns the number of rows
+    attempted (bulk_create with ignore_conflicts does not report how many
+    were actually inserted).
+    """
+    riders = Rider.objects.filter(pk__in=rider_ids)
+    rows = [
+        RiderAttributeSnapshot(rider=rider, week_id=week_id, **_display_values(rider))
+        for rider in riders
+    ]
+    RiderAttributeSnapshot.objects.bulk_create(rows, ignore_conflicts=True)
+    return len(rows)
