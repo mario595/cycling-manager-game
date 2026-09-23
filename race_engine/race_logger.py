@@ -71,6 +71,10 @@ class RaceLogger:
     def sample_count(self) -> int:
         return self._samples_written
 
+    @property
+    def sample_interval(self) -> int:
+        return self._sample_interval
+
     def close(self) -> None:
         self._raw.write(self._compressor.finish())
         self._raw.close()

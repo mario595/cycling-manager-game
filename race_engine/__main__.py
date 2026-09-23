@@ -49,7 +49,7 @@ def main(argv: list[str]) -> int:
         print(f"error: {exc}")
         return 1
 
-    results = run_race(
+    results, sample_count = run_race(
         cfg["riders"],
         cfg["course"],
         log_path=log_path,
@@ -59,7 +59,7 @@ def main(argv: list[str]) -> int:
         wind=cfg["wind_enabled"],
         wind_band=cfg["wind_band"],
     )
-    print(f"Log saved to: {log_path}")
+    print(f"Log saved to: {log_path} ({sample_count} samples)")
     print()
     print("Results:")
     for i, rs in enumerate(results, 1):

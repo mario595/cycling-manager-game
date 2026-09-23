@@ -279,17 +279,19 @@ def simulate_race(race: Race, *, game_time: datetime) -> list[RaceResult]:
     # The engine writes the log itself with a raw open(), and it may not
     # learn about Django. So it writes to a temp file and we hand the
     # finished file to storage — see racing/README.md, logs never bypass
-    # the storage API.
+    # the storage API. The log is brotli-compressed (a short one-word
+    # payload), so the size recorded is the compressed size, and the sample
+    # count comes back from the engine rather than by counting lines of a
+    # binary stream.
     with tempfile.TemporaryDirectory() as tmp:
-        log_path = Path(tmp) / f"race-{race.pk}.jsonl"
-        states = run_race_via_adapter(
+        log_path = Path(tmp) / f"race-{race.pk}.jsonl.br"
+        states, sample_count = run_race_via_adapter(
             engine_riders, course, str(log_path), race.seed,
             to_team_codes(teams), race.wind_enabled, race.wind_band or None,
         )
-        tick_count = sum(1 for _ in log_path.open())
         size = log_path.stat().st_size
         with log_path.open("rb") as fh:
-            saved = ContentFile(fh.read(), name=f"race-{race.pk}.jsonl")
+            saved = ContentFile(fh.read(), name=f"race-{race.pk}.jsonl.br")
 
     by_pk = {str(r.pk): r for r in db_riders}
     finishers = sorted(
@@ -300,7 +302,10 @@ def simulate_race(race: Race, *, game_time: datetime) -> list[RaceResult]:
     with transaction.atomic():
         RaceLog.objects.update_or_create(
             race=race,
-            defaults={"file": saved, "tick_count": tick_count, "size_bytes": size},
+            # tick_count still names the column until W4's migration renames
+            # it to sample_count and adds tick_interval; the value stored here
+            # is the sample count from the engine.
+            defaults={"file": saved, "tick_count": sample_count, "size_bytes": size},
         )
         results = RaceResult.objects.bulk_create([
             RaceResult(

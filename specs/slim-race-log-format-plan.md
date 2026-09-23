@@ -371,7 +371,7 @@ Add the incremental compressor and the `.br` filename convention. Add
 lines W1's tests assert; `close()` is required for a complete stream (a file
 read before `close()` must not be assumed complete).
 
-### W3 — `racing/`: adapter returns the sample count, services records it
+### W3 — `racing/`: adapter returns the sample count, services records it ✅
 `run_race` returns `(states, sample_count)`; `run_race_via_adapter` passes it
 through; `simulate_race` stops line-counting the file, names it `.jsonl.br`,
 and writes the new metadata.
@@ -380,6 +380,13 @@ and writes the new metadata.
 `tick_interval` is 2, and whose `size_bytes` equals the stored file's size;
 the stored filename ends `.jsonl.br`. Replace the existing
 `assert log.tick_count > 0` (line 139).
+
+*(Implemented note: the `sample_count`/`tick_interval` columns do not exist
+until W4's migration, so this commit keeps writing `tick_count` (the value is
+the sample count) and asserts `tick_interval` from the decompressed header;
+W4 renames the column, adds `tick_interval`, and flips these assertions to
+`log.sample_count`/`log.tick_interval` — same boundary choice as W2/W3, so
+every commit stays green.)*
 
 ### W4 — `racing/`: migration and admin
 `0006_racelog_sampling.py` — rename `tick_count` → `sample_count`, add
