@@ -14,8 +14,10 @@ course of straight segments. Time advances in integer **ticks**; **one tick = on
 second**. Each rider has a position along the course and two meters — **energy**
 (anaerobic burst reserve) and **stamina** (aerobic endurance) — plus attributes
 that determine their natural pace. The engine resolves every rider's per-tick
-state from these values each second and produces a JSONL log every tick for
-consumption (e.g. by visualizers).
+state from these values each second and produces a sampled, brotli-compressed
+JSONL log for consumption (e.g. by visualizers) — line 1 is a header, later
+lines are positional samples at a `tick_interval` grid (see "JSONL output
+format").
 
 The current rule-set is a set of *reflexes* (finish sprint, climb attack, gap
 chase) layered over emergent group behavior (drafting, pace-sharing, fatigue
@@ -166,8 +168,9 @@ makes it easy to keep multiple reusable race configurations side by side.
 
 ### CLI
 `python -m race_engine <config.json> [--seed N]` runs a race from a config
-file, writing the JSONL log to `race_player/public/<name>.jsonl` (overwriting
-if it exists). `--seed N` makes the run reproducible. Progress (percentage,
+file, writing the brotli-compressed log to `race_player/public/<name>.jsonl.br`
+(overwriting if it exists) and printing how many samples were written and at
+what interval. `--seed N` makes the run reproducible. Progress (percentage,
 tick, wall-clock time) is printed to stderr. `race_engine.config.load_config`
 returns `{"riders", "course", "name"}` after validation (`ConfigError` on
 malformed input).
@@ -887,20 +890,22 @@ after the cooldown elapses).
 
 ## JSONL output format
 
-`run_race` writes a JSONL file (one JSON object per line) with no terminal
-journal/effects data. Each line is a full snapshot of one tick at `"time"` t.
-The first line is t=0 (the neutral start) and subsequent lines are t=1, 2, …
-so a consumer can step frame-by-frame. `course_length` and `teams` are
-constant across all lines (same repeat-every-line convention as
-`course_length`/`segments`, so a consumer can start reading from any line
-without needing t=0). Riders array order is fixed and matches
-`state.rider_states` order.
+`run_race` writes a brotli-compressed JSONL file (`.jsonl.br`) with no terminal
+journal/effects data: **line 1 is a header** holding everything constant for
+the race, and **every later line is one sample** — a snapped t=0 sample, then
+every `sample_interval` ticks (default 2 s), plus any tick where a rider's
+`finished` flag changed. A finish is therefore never invisible, only its exact
+instant is quantised. `run_race` returns `(results, sample_count,
+sample_interval)` — a consumer that needs the sample count without reading the
+stream gets it here rather than counting lines of a binary file.
+
+### Header (line 1)
 
 ```json
 {
-  "time": 42,
+  "v": 1,
+  "tick_interval": 2,
   "course_length": 38000.0,
-  "wind": {"speed": 17.3, "angle": 214.6, "band": "moderate"},
   "segments": [
     {"length": 15000.0, "gradient": 0.0},
     {"length": 1000.0, "gradient": 5.0}
@@ -909,55 +914,59 @@ without needing t=0). Riders array order is fixed and matches
     "t1": {"code": "ALP", "name": "Alpine Racing"}
   },
   "riders": [
-    {
-      "id": "c1",
-      "name": "Climber 1",
-      "team": "t1",
-      "role": "leader",
-      "pos": 15234.56,
-      "speed": 13.42,
-      "energy": 62.1,
-      "stamina": 88.9,
-      "pulling": true,
-      "surging": false,
-      "finished": false,
-      "finish_time": null
-    }
-  ]
+    {"id": "c1", "name": "Climber 1", "team": "t1", "role": "leader"}
+  ],
+  "wind_band": "moderate"
 }
 ```
 
-`teams` is `{}` when the config declared no `race.teams` map (`RaceLogger`'s
-`team_codes` defaults to empty). A rider's own `"team"` field is the key to
-look up in this map for its `"code"`/`"name"`.
+- `v` is the format version; a consumer that does not recognize it must reject
+  the log rather than mis-parse it.
+- `segments`, `teams` and stable rider data otherwise repeated on every line of
+  the old format (order is fixed and matches `state.rider_states` order — the
+  array index of every sample *is* the rider identity, so an order drift would
+  silently swap identities mid-race).
+- `wind_band` is present only when wind is enabled; the per-tick wind itself —
+  which *changes* — does not belong here (see next).
 
-`wind` is **entirely absent** (not `null`) when `RaceState.wind is None` —
-wind disabled, or a log predating this feature. Consumers must treat it as
-optional. `speed` is km/h rounded to 1 dp; `angle` is degrees `[0, 360)`
-rounded to 1 dp, rider-relative (`0` = headwind, `90` = from the rider's
-right, `180` = tailwind, `270` = from the left — see Wind above); `band` is
-constant across all ticks of one race.
+### Samples (every later line)
 
-Field reference (rider entries):
+```json
+[42, [
+  [15234.5, 13.42, 62.1, 88.9, 0, null],
+  [15198.7, 13.31, 61.7, 87.2, 4, 18741]
+], [17.3, 214.6]]
+```
 
-| Field | Meaning |
-|---|---|
-| `id` | stable rider identifier |
-| `name` | display name |
-| `team` | team id (`Rider.team_id`; a team of one uses its own `id`) |
-| `role` | `"leader"` or `"support"` |
-| `pos` | meters from start, rounded to 2 dp |
-| `speed` | effective speed this tick, m/s, rounded to 2 dp |
-| `energy` | anaerobic reserve 0–100, rounded to 2 dp |
-| `stamina` | aerobic endurance 0–100, rounded to 2 dp |
-| `pulling` | setting the pace at the front of a multi-member pack this tick |
-| `surging` | in a surge effort this tick |
-| `finished` | crossed the line |
-| `finish_time` | finish tick, or `null` |
+- `[time, riders, wind?]` — `time` is race seconds.
+- `riders` is one positional array per rider, in header order:
 
-Bytes are exact (no line wrapping). Consumers may aggregate frames by `time`.
-Note there is currently **no** per-tick event/commentary stream; a visualizer
-derives narrative purely from these snapshots.
+| Index | Value | Meaning |
+|---|---|---|
+| `0` | `pos` | meters from start, rounded to 1 dp |
+| `1` | `speed` | effective speed this tick, m/s, rounded to 2 dp |
+| `2` | `energy` | anaerobic reserve 0–100, rounded to 1 dp |
+| `3` | `stamina` | aerobic endurance 0–100, rounded to 1 dp |
+| `4` | flags | bitmask — `1` pulling, `2` surging, `4` finished |
+| `5` | `finish_time` | race seconds at the finish, or `null` |
+
+`pos`/`speed`/`energy`/`stamina` are rounded to what a screen can draw;
+`finish_time` is deliberately **not** snapped to the sample grid — snapping it
+would manufacture ties in a bunch sprint that contradict the recorded order.
+- `wind`, when present, is `[speed, angle]` — km/h rounded to 1 dp and degrees
+  `[0, 360)` rounded to 1 dp, rider-relative (`0` = headwind, `90` = from the
+  rider's right, `180` = tailwind, `270` = from the left — see Wind above). The
+  `band` name is constant for the race and lives in the header; a consumer
+  merges it with each sample's pair. Both are entirely absent when wind is
+  disabled.
+- `teams` is `{}` when the config declared no `race.teams` map. A rider's
+  `"team"` in the header is the key to look up in that map for its
+  `"code"`/`"name"`.
+- Bytes are compressed (brotli quality 5, fed through an incremental
+  compressor so a race-sized payload is never held twice in memory) and a
+  stream is only complete after `close()`.
+- Note there is currently **no** per-tick event/commentary stream; a visualizer
+  derives narrative purely from these snapshots.
 
 ## Future work / possible improvements
 
