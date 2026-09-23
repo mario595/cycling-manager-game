@@ -427,7 +427,7 @@ them, so both land as `0h 2m 4s` / `0h 2m 2s`. `formatDuration` is exported for
 the test; `Rider.team` became `string | null` and `role` required, and
 `teamCode`/`teamName` widened to `string | null` accordingly.)*
 
-### W7 — regenerate the sample logs
+### W7 — regenerate the sample logs ✅
 Regenerate all six `race_player/public/*.jsonl` as `.jsonl.br` via
 `python -m race_engine race_engine/configs/<name>.json`. Delete the old ones.
 Four globs must move to `.jsonl.br` or the file explorer silently lists
@@ -438,6 +438,18 @@ target) and 74 (`PUBLIC.glob`).
 **Load-bearing:** serving `.br` needs `Content-Encoding: br` in both the Vite
 dev middleware and `RaceHandler`, or the browser hands the player compressed
 bytes and `JSON.parse` fails on line 1.
+
+*(Implemented note: W4 grew `run_race`'s return to a 3-tuple, which
+`race_engine/__main__.py` and `test_simulation.py` still unpacked as 2 — the
+test suite never runs those script mains, so the break only surfaced the first
+time `python -m race_engine` regenerated a log. Fixed here and verified by that
+run. Verification results: `mountain_stage.jsonl.br` is 780 KB (< the 2 MB
+target; it was 75 MB), all six logs decompress to a v1 header plus
+sample-count-matching sample lines, the static server lists them under
+`/api/races` and serves a log with `Content-Encoding: br` and a body
+`brotli.decompress` round-trips. `.gitignore` gained `*.jsonl.br` — the sample
+logs are dev artifacts like their `.jsonl` predecessors, never source; they
+stay local on this worktree.)*
 
 ## Execution order
 
