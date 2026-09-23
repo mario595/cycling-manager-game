@@ -1,6 +1,6 @@
 # Free agents — Implementation Plan
 
-**Spec:** `specs/free-agents.md` · **Issue:** #29 · **Status:** proposed
+**Spec:** `specs/free-agents.md` · **Issue:** #29 · **Status:** implemented
 **Apps touched:** `riders/`, `transfers/`, `world/`, `api/`, `frontend/`
 
 ## Context you need

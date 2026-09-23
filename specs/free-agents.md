@@ -1,6 +1,6 @@
 # Free agents
 
-**Status:** proposed
+**Status:** implemented
 **Domain(s):** `transfers/` (new), `riders/`
 **One-liner:** A manager can browse riders with no team and sign one onto their roster for an upfront fee plus the wage; they can also release a rider the other way, back into that same pool.
 

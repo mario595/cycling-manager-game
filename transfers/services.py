@@ -149,9 +149,10 @@ def release_rider(team, rider_id: int, *, at, weeks_opened: int, charge=None) ->
     Locks the rider row (membership of `team` checked under the lock) and
     charges release_cost_for — 0 while the claim-cooldown exemption
     applies (Design decision 2), severance otherwise — via the injected
-    `charge(rider, fee)` callback. `charge` still runs for a $0 fee, so the
-    caller's ledger path is uniform; a raise from charge() rolls the whole
-    transaction back.
+    `charge(rider, fee)` callback. `charge` is still called for a $0 fee,
+    so the release path is uniform whatever the cost; writing a row for a
+    0 fee is the caller's call (api/ skips it). A raise from charge()
+    rolls the whole transaction back.
     """
     with transaction.atomic():
         try:

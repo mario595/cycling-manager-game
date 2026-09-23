@@ -171,13 +171,16 @@ pay several fees in a season, and a test asserts that.
 
 `economy.services.charge_transfer_fee(team, *, amount, at, description)`
 writes a single negative `transfer_fee` row at the moment of a free-agent
-signing or a roster release — `week` null, no `(team, week)` constraint,
-several per season allowed, exactly the shape `charge_trainer_fee` above
-uses. It is not called from `world/` (nothing automatic charges it) and not
-from `transfers/` (which may not import `economy/`): `api/`'s free-agent
-views invoke it through the injected `charge` callback the actions take
-(`transfers/README.md`, *Free agents*), with `description` naming the rider
-and the direction — "Signed X" or "Released X".
+signing or a paid roster release — `week` null, no `(team, week)`
+constraint, several per season allowed, exactly the shape
+`charge_trainer_fee` above uses. It is not called from `world/` (nothing
+automatic charges it) and not from `transfers/` (which may not import
+`economy/`): `api/`'s free-agent views invoke it through the injected
+`charge` callback the actions take (`transfers/README.md`, *Free agents*),
+with `description` naming the rider and the direction — "Signed X" or
+"Released X". A $0 release — a rider still within the claim cooldown — is
+skipped at the call site (`api/` only writes when the fee is positive):
+no money moved, no row.
 
 There is deliberately **one** kind for both directions. A signing fee and a
 release severance are the same shape of transaction — money out, no week

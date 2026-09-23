@@ -92,10 +92,11 @@ DRF routers and serializers that aggregate other apps' data for the SPA.
   Success is 204.
 - `POST /api/transfers/riders/release/` (`ReleaseRiderSerializer`,
   `ReleaseRiderView`) — release one of the caller's riders to the pool,
-  debiting `release_cost_for` the same way (a `TRANSFER_FEE` row,
-  description "Released X"; the charge closure still runs for a $0 fee so
-  the cooldown-exempt release writes its zero row and the ledger path stays
-  uniform). A rider not on the caller's roster is a 409. Success is 204.
+  debiting `release_cost_for` the same way. The view's `charge` closure
+  writes a `TRANSFER_FEE` row (description "Released X") **only when the
+  fee is positive** — a $0 cooldown-exempt release moves no money and
+  leaves the ledger untouched. A rider not on the caller's roster is a
+  409. Success is 204.
 - `GET /api/racing/races/<race_id>/` — one race's own facts
   (`RaceDetailSerializer`, `RaceDetailView`): id, name, status, starts_at,
   distance and the raw `{length, gradient}` course segments. It also carries
