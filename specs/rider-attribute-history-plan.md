@@ -263,7 +263,7 @@ in `AGENTS.md` applies to `teams -> economy`, not to this edge.
 
 ## Work items
 
-### W1 — `riders/models.py`, `riders/migrations/0009_*`: the model
+### W1 — `riders/models.py`, `riders/migrations/0009_*`: the model ✅
 Add `RiderAttributeSnapshot` with its fields, `Meta.ordering`, the
 `one_snapshot_per_rider_per_week` constraint and the `(rider, created_at)`
 index. Generate the migration.
