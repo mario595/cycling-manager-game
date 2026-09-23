@@ -467,7 +467,7 @@ squadValue field").
 
 ## Work items
 
-### W1 — `riders/`: the threshold constant and `reprice_all()`
+### W1 — `riders/`: the threshold constant and `reprice_all()` — DONE
 
 Add `SALARY_REVIEW_THRESHOLD` to `riders/pricing.py` and `reprice_all()` to
 `riders/services.py`. No callers yet.
