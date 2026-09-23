@@ -84,3 +84,8 @@ Password reset, change password, change email, delete account — split into
 #51 from the start. A player who can register and log in can play; losing
 a password today is a dead end (a new account), not a missing feature this
 app forgot.
+
+A user's managerial history — the teams they used to run, and why each
+ended — is not here either, for the same reason as team ownership above:
+it lives in `teams.ManagerialSpell` (`teams/README.md`, *Managerial
+spells*), because `accounts/` imports nothing.

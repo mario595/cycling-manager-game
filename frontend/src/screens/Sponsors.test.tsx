@@ -23,6 +23,7 @@ const manager: Me = {
   authenticated: true,
   display_name: 'Mario',
   team: { id: 1, name: 'Squad Team', code: 'SQD' },
+  lost_team: null,
 }
 
 const offers: SponsorsPayload['offers'] = [
@@ -60,6 +61,7 @@ beforeEach(() => {
     login: vi.fn(),
     logout: vi.fn(),
     claim: vi.fn(),
+    acknowledgeLostTeam: vi.fn(),
   })
   mockUseSponsors.mockReturnValue({
     sponsors: { contract: null, offers }, loading: false, error: false, refresh: vi.fn(),

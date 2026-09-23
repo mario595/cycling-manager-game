@@ -16,11 +16,12 @@ const mockUseAuth = vi.mocked(useAuth)
 const mockUseSeason = vi.mocked(useSeason)
 const mockUseClock = vi.mocked(useClock)
 
-const anonymous: Me = { authenticated: false, display_name: null, team: null }
+const anonymous: Me = { authenticated: false, display_name: null, team: null, lost_team: null }
 const manager: Me = {
   authenticated: true,
   display_name: 'Mario',
   team: { id: 1, name: 'Squad Team', code: 'SQD' },
+  lost_team: null,
 }
 
 /** Renders what the router would render, with Layout as the pathless shell
@@ -53,6 +54,7 @@ function mockAuth(me: Me | null, loading: boolean) {
     login: vi.fn(),
     logout: vi.fn(),
     claim: vi.fn(),
+    acknowledgeLostTeam: vi.fn(),
   })
 }
 

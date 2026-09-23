@@ -74,6 +74,16 @@ state (`state: { from: pathname }`), and `Login.tsx` reads it, so login
 returns the manager where they were headed; someone who visits `/login`
 directly has no `from` and lands on `/`.
 
+**The lost-team message (#62)** rides the same redirect: an ex-manager whose
+team was released has no team either, so the guard above sends them to
+`/claim` exactly like a fresh signup — no separate route or screen was
+added for this. `ClaimTeam.tsx` reads `me.lost_team` and, when set, shows a
+notice above the claim form naming the team and the reason, then calls
+`acknowledgeSpell` once (guarded by a ref, so React 18 StrictMode's
+double-invoke in development cannot fire it twice) so `me.lost_team` is
+`null` on the next fetch. See `teams/README.md`, *Managerial spells*, and
+`api/README.md` for the endpoint.
+
 **Writes need a CSRF token.** DRF's `SessionAuthentication` enforces CSRF
 for authenticated sessions, so any `POST`/`PUT` issued while logged in must
 carry `X-CSRFToken`, or it 403s — a case nothing hit before login existed,

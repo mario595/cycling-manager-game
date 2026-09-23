@@ -18,6 +18,7 @@ const manager: Me = {
   authenticated: true,
   display_name: 'Mario',
   team: { id: 1, name: 'Squad Team', code: 'SQD' },
+  lost_team: null,
 }
 
 const finances: FinancesPayload = {
@@ -63,6 +64,7 @@ beforeEach(() => {
     login: vi.fn(),
     logout: vi.fn(),
     claim: vi.fn(),
+    acknowledgeLostTeam: vi.fn(),
   })
   mockUseFinances.mockReturnValue({ finances, loading: false, error: false, refresh: vi.fn() })
 })

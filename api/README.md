@@ -138,13 +138,29 @@ DRF routers and serializers that aggregate other apps' data for the SPA.
   trainer to fire. `POST`, not `DELETE`: nothing is destroyed, the trainer
   survives in the pool.
 - `GET /api/accounts/me/` (`MeSerializer`, `MeView`) — whether anyone is
-  logged in, their display name, and their team (`id`/`name`/`code`, or
-  `null`). Lives here rather than in `accounts/` because answering "does
-  this user have a team" needs both `accounts` and `teams`, and `accounts/`
-  may import neither — see `accounts/README.md`, *What `accounts/` may
-  import*. `@ensure_csrf_cookie`: this is the request the SPA relies on to
-  guarantee it holds a CSRF token before it ever issues a write (see
-  *Authentication*, below).
+  logged in, their display name, their team (`id`/`name`/`code`, or
+  `null`), and `lost_team` (#62). Lives here rather than in `accounts/`
+  because answering "does this user have a team" needs both `accounts` and
+  `teams`, and `accounts/` may import neither — see `accounts/README.md`,
+  *What `accounts/` may import*. `@ensure_csrf_cookie`: this is the request
+  the SPA relies on to guarantee it holds a CSRF token before it ever
+  issues a write (see *Authentication*, below).
+  `lost_team` is non-null only when the caller currently has no team **and**
+  has an unacknowledged `teams.ManagerialSpell` — the team they most
+  recently lost, with `spell` (its id), `name`, `code`, the human-readable
+  `reason` label, and `ended_at`. A caller who already has a team is never
+  shown one, even if they lost an earlier team at some point: the query only
+  runs when `team is None`, so the common case (a manager with a team) pays
+  no extra cost on every SPA boot. See `teams/README.md`, *Managerial
+  spells*.
+- `POST /api/teams/spells/<int:spell_id>/acknowledge/` (`AcknowledgeSpellView`)
+  — marks the caller's lost-team message as seen, so `me`'s `lost_team`
+  stops reporting it. `204` on success. `404`, not `403`, both when the
+  spell does not exist and when it belongs to someone else — a `403` would
+  confirm the row exists for a spell id that isn't the caller's. Idempotent:
+  a second call (or a lost network response resent) against an
+  already-acknowledged spell also 404s, rather than double-writing or
+  erroring.
 
 ## URL ordering
 

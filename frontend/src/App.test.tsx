@@ -25,11 +25,12 @@ vi.mock('./screens/ClaimTeam', () => ({ ClaimTeam: () => <div data-testid="claim
 
 const mockUseAuth = vi.mocked(useAuth)
 
-const anonymous: Me = { authenticated: false, display_name: null, team: null }
+const anonymous: Me = { authenticated: false, display_name: null, team: null, lost_team: null }
 const manager: Me = {
   authenticated: true,
   display_name: 'Mario',
   team: { id: 1, name: 'Squad Team', code: 'SQD' },
+  lost_team: null,
 }
 
 function mockAuth(me: Me | null, loading: boolean) {
@@ -40,6 +41,7 @@ function mockAuth(me: Me | null, loading: boolean) {
     login: vi.fn(),
     logout: vi.fn(),
     claim: vi.fn(),
+    acknowledgeLostTeam: vi.fn(),
   })
 }
 

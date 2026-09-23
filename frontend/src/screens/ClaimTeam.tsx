@@ -1,17 +1,26 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { Navigate } from 'react-router-dom'
 
 import { Button, Card, PageBody, PageHeading } from '../components/primitives'
-import { color, font } from '../theme'
+import { calendarAccent, color, font } from '../theme'
 import { useAuth } from '../useAuth'
 
 export function ClaimTeam() {
-  const { me, loading, claim } = useAuth()
+  const { me, loading, claim, acknowledgeLostTeam } = useAuth()
   const [name, setName] = useState('')
   const [code, setCode] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const acknowledging = useRef<number | null>(null)
+
+  const lostTeam = me?.lost_team ?? null
+
+  useEffect(() => {
+    if (!lostTeam || acknowledging.current === lostTeam.spell) return
+    acknowledging.current = lostTeam.spell
+    void acknowledgeLostTeam(lostTeam.spell)
+  }, [lostTeam, acknowledgeLostTeam])
 
   if (loading) return null
   if (!me?.authenticated) return <Navigate to="/login" replace />
@@ -37,6 +46,23 @@ export function ClaimTeam() {
         subtitle="Pick a name and a code for the team you're taking over."
         titleSize={29}
       />
+
+      {lostTeam ? (
+        <Card
+          style={{
+            padding: '16px 18px',
+            maxWidth: 380,
+            background: color.accentWash,
+            border: `1px solid ${calendarAccent.border}`,
+          }}
+        >
+          <div style={{ fontSize: 13, color: color.accentInk, lineHeight: 1.5 }}>
+            You no longer manage <strong>{lostTeam.name}</strong> ({lostTeam.code}).
+            {' '}
+            {lostTeam.reason}. You can claim a new team below.
+          </div>
+        </Card>
+      ) : null}
 
       <Card style={{ padding: '20px 22px', maxWidth: 380, display: 'flex', flexDirection: 'column', gap: 14 }}>
         <Field label="Team name">
