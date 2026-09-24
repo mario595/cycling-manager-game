@@ -610,7 +610,7 @@ resolution, assert `status=unsold`, no callback calls, seller keeps rider),
 `open`, rider still with seller, no `Bid` state corrupted — mirrors
 `sign_free_agent`'s existing `InsufficientFunds` rollback test).
 
-### W6 — `economy/`: `pay_transfer_income`
+### W6 — `economy/`: `pay_transfer_income` ✅
 **Test:** `economy/tests/test_services.py::test_pay_transfer_income_writes_positive_transfer_fee_entry`
 (assert `kind=TRANSFER_FEE`, `amount > 0` — contrast with the existing
 `charge_transfer_fee` test's negative-amount assertion, to make the sign

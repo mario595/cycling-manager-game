@@ -13,6 +13,7 @@ from economy.services import (
     entries_for,
     latest_salary_review,
     pay_race_prizes,
+    pay_transfer_income,
     reset_to_starting_balance,
     write_salary_reviews,
 )
@@ -171,6 +172,20 @@ def test_charge_transfer_fee_writes_a_debit(db, team):
     assert entry.description == "Signed Somebody"
     assert entry.week_id is None
     assert balance_for(team) == STARTING_BALANCE - 37_000
+
+
+def test_pay_transfer_income_writes_positive_transfer_fee_entry(db, team):
+    at = datetime(2027, 3, 1, 0, 0, tzinfo=dt_timezone.utc)
+    ensure_opening_balance(team, at=at)
+
+    pay_transfer_income(team, amount=37_000, at=at, description="Sold Somebody at auction")
+
+    entry = LedgerEntry.objects.get(team=team, kind=LedgerEntry.Kind.TRANSFER_FEE)
+    assert entry.amount == 37_000
+    assert entry.occurred_at == at
+    assert entry.description == "Sold Somebody at auction"
+    assert entry.week_id is None
+    assert balance_for(team) == STARTING_BALANCE + 37_000
 
 
 def test_write_salary_reviews_writes_one_per_managed_team(db, managed_team, season):
