@@ -1,6 +1,6 @@
 # Rider detail view
 
-**Status:** proposed
+**Status:** implemented
 **Domain(s):** `riders/`, `racing/`, `competitions/`, `frontend/`, `api/`
 **One-liner:** A page for a single rider — attribute shape, career arc, and race history — reachable from everywhere a rider's name already appears.
 

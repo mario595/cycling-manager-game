@@ -1,6 +1,6 @@
 # Rider detail view — Implementation Plan
 
-**Spec:** `specs/rider-detail-view.md` · **Issue:** #96 · **Status:** proposed
+**Spec:** `specs/rider-detail-view.md` · **Issue:** #96 · **Status:** implemented
 **Apps touched:** `api/`, `frontend/` (no model changes, no migrations)
 
 ## Context you need
