@@ -17,14 +17,13 @@ const SPEEDS = [
   { label: 'x50', value: 50 },
 ]
 
-// 1 tick = 1 second of race time.
-function formatDuration(ticks: number): string {
-  const hours = Math.floor(ticks / 3600)
-  const minutes = Math.floor((ticks % 3600) / 60)
-  const seconds = ticks % 60
-  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`
-  if (minutes > 0) return `${minutes}m ${seconds}s`
-  return `${seconds}s`
+// Takes race seconds. Callers convert from ticks via the header's tickInterval:
+// a tick is not a second (see the plan for #88).
+export function formatDuration(seconds: number): string {
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  const secs = seconds % 60
+  return `${hours}h ${minutes}m ${secs}s`
 }
 
 interface PlaybackControlsProps {
@@ -32,6 +31,7 @@ interface PlaybackControlsProps {
   onTogglePlay: () => void
   tick: number
   maxTicks: number
+  tickInterval: number
   speed: number
   onSpeedChange: (speed: number) => void
   onStep: (dir: -1 | 1) => void
@@ -44,6 +44,7 @@ export default function PlaybackControls({
   onTogglePlay,
   tick,
   maxTicks,
+  tickInterval,
   speed,
   onSpeedChange,
   onStep,
@@ -81,7 +82,7 @@ export default function PlaybackControls({
 
         <div className="ml-auto flex items-center gap-3">
           <div className="flex flex-col items-end text-sm text-slate-500 tabular-nums">
-            <span>{formatDuration(tick)} / {formatDuration(maxTicks)}</span>
+            <span>{formatDuration(tick * tickInterval)} / {formatDuration(maxTicks * tickInterval)}</span>
             <span className="text-xs text-slate-400">tick {tick} / {maxTicks}</span>
           </div>
           <WindCompass wind={wind} />

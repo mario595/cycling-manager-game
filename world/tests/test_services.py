@@ -5,9 +5,12 @@ from datetime import timedelta
 import pytest
 
 import world.services as world_services
+from accounts.models import User
 from competitions.models import RacePoints
+from economy.models import SalaryReviewReport
 from racing.models import Race, RaceResult
-from riders.models import Rider
+from riders.models import Rider, RiderAttributeSnapshot
+from riders.pricing import weekly_salary_for
 from schedule.models import SEASON_WEEKS, Season, SeasonTransition, Week
 from staff.generation import TRAINERS_PER_SEASON_BOUNDARY
 from staff.models import Trainer, TrainingWeekReport
@@ -34,6 +37,25 @@ def make_season_with_weeks(number: int, starts_at) -> Season:
 @pytest.fixture
 def team(db) -> Team:
     return Team.objects.create(name="Team Alpha", code="ALP", primary_colour="#FF0000")
+
+
+@pytest.fixture
+def managed_team(db) -> Team:
+    manager = User.objects.create_user(email="manager@example.com", password="s0meth1ng-good")
+    return Team.objects.create(name="Team Beta", code="BET", manager=manager)
+
+
+def _formula_at(rider: Rider, age: int) -> int:
+    """`weekly_salary_for` priced against a copy of `rider` at another age.
+    `weekly_salary_for` is pure and reads only speciality, age and the five
+    engine attributes, so an unsaved copy answers "what would this rider
+    have earned at this age" without touching the database."""
+    clone = Rider(
+        name=rider.name, speciality=rider.speciality, age=age,
+        climb=rider.climb, sprint=rider.sprint, flat=rider.flat,
+        resistance=rider.resistance, positioning=rider.positioning,
+    )
+    return weekly_salary_for(clone)
 
 
 @pytest.fixture
@@ -350,6 +372,91 @@ def test_three_missed_weeks_apply_three_training_weeks(db, team):
     assert run.riders_trained >= 1
 
 
+def test_a_rider_whose_displayed_value_moves_gets_a_snapshot_for_that_week(db, team):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_one = season.weeks.get(number=1)
+    Trainer.objects.create(
+        name="Coach", team=team,
+        climb=100, sprint=30, flat=30, resistance=30, positioning=30,
+    )
+    trainee = Rider.objects.create(
+        name="Trainee", team=team, age=25, peak_age=27, potential=70,
+        climb=89, sprint=40, flat=40, resistance=40, positioning=40,
+    )
+    set_focus(team, "climb")
+    clock.set(week_one.starts_at + timedelta(hours=1))
+    RiderAttributeSnapshot.objects.filter(rider=trainee).delete()
+
+    tick()
+
+    snapshot = RiderAttributeSnapshot.objects.get(rider=trainee, week=week_one)
+    # climb 89 (display 8) plus a focused week's points crosses display 9.
+    assert snapshot.climb == 9
+
+
+def test_a_rider_whose_displayed_value_does_not_move_gets_no_snapshot_that_week(db, team):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_one = season.weeks.get(number=1)
+    # Well below potential and speciality ceiling, but the movement is far
+    # too small to cross a display threshold in a single week.
+    steady = Rider.objects.create(
+        name="Steady", team=team, age=25, peak_age=27, potential=70,
+        climb=40, sprint=40, flat=40, resistance=40, positioning=40,
+    )
+    clock.set(week_one.starts_at + timedelta(hours=1))
+    RiderAttributeSnapshot.objects.filter(rider=steady).delete()
+
+    tick()
+
+    assert not RiderAttributeSnapshot.objects.filter(rider=steady, week=week_one).exists()
+
+
+def test_a_late_tick_attributes_each_crossed_weeks_change_to_that_week(db, team):
+    # D7: a tick that catches up several missed weeks must attribute each
+    # week's crossing to that week, not bunch them into the week the tick
+    # happened to run. Two riders, each set up to cross a display threshold
+    # in a *different* one of the three missed weeks (one week of ~1.8
+    # stored-point decline is not enough to cross a ten-point boundary more
+    # than once, so this uses two riders rather than one rider crossing
+    # three times).
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_three = season.weeks.get(number=3)
+    # decline_rate 100, three years past peak_age (capped): ~1.8 stored
+    # points/week. Starting one point above a ten-boundary crosses it in
+    # week 1; starting deep in a band and needing ~1.9 points more crosses
+    # in week 2.
+    # sprint/flat/resistance/positioning sit mid-band (45, not a ten-boundary)
+    # so only `climb` ever crosses a display threshold in either rider.
+    week_one_faller = Rider.objects.create(
+        name="Week One Faller", team=team, age=33, peak_age=27,
+        potential=50, decline_rate=100,
+        climb=90, sprint=45, flat=45, resistance=45, positioning=45,
+    )
+    week_two_faller = Rider.objects.create(
+        name="Week Two Faller", team=team, age=33, peak_age=27,
+        potential=50, decline_rate=100,
+        climb=81, sprint=45, flat=45, resistance=45, positioning=45,
+    )
+    clock.set(week_three.starts_at + timedelta(hours=1))
+    RiderAttributeSnapshot.objects.filter(rider__in=[week_one_faller, week_two_faller]).delete()
+
+    tick()
+
+    one_weeks = set(
+        RiderAttributeSnapshot.objects.filter(rider=week_one_faller)
+        .values_list("week__number", flat=True)
+    )
+    two_weeks = set(
+        RiderAttributeSnapshot.objects.filter(rider=week_two_faller)
+        .values_list("week__number", flat=True)
+    )
+    assert one_weeks == {1}
+    assert two_weeks == {2}
+
+
 def test_rider_on_teamless_squad_still_gains_from_racing(db, team):
     # No trainer anywhere: the trainer half of training is off, but the
     # race-based half still applies. The race runs during week 1; entering
@@ -439,6 +546,137 @@ def test_riders_do_not_age_mid_season(db, young_rider):
 
     assert run.riders_aged == 0
     assert young_rider.age == 20
+
+
+def test_tick_reprices_riders_at_season_close(db, team):
+    # A rider stored well below their formula price is brought up to it when
+    # the season closes — a period end makes the stored wage honest again.
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    rider = Rider.objects.create(
+        name="Underpaid", team=team, speciality=Rider.Speciality.CLIMBER,
+        age=24, peak_age=22, decline_rate=1,
+        climb=40, sprint=40, flat=40, resistance=40, positioning=40,
+        weekly_salary=1000,
+    )
+    clock.set(season.ends_at + timedelta(hours=1))
+
+    run = tick()
+    rider.refresh_from_db()
+
+    assert run.seasons_closed == 1
+    assert rider.age == 25
+    assert rider.weekly_salary == weekly_salary_for(rider)
+    assert rider.weekly_salary > 1000
+    assert run.riders_repriced == 1
+
+
+def test_tick_reprices_after_ageing(db, team):
+    # Load-bearing ordering (spec, *Ordering at the boundary*): next season's
+    # wage must be priced against the rider AFTER ageing. Repricing before
+    # ageing would price the 32-year-old. decline_rate=1 pins the attributes,
+    # so the year-on-year movement comes only from the age band dipping below
+    # the prime cutoff — isolating the ordering from ordinary growth.
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    rider = Rider.objects.create(
+        name="Ageing Out", team=team, speciality=Rider.Speciality.CLIMBER,
+        age=32, peak_age=27, decline_rate=1,
+        climb=80, sprint=80, flat=80, resistance=80, positioning=80,
+    )
+    clock.set(season.ends_at + timedelta(hours=1))
+
+    run = tick()
+    rider.refresh_from_db()
+
+    assert run.riders_aged == 1
+    assert rider.age == 33
+    assert _formula_at(rider, 33) != _formula_at(rider, 32)
+    assert rider.weekly_salary == _formula_at(rider, 33)
+    assert run.riders_repriced == 1
+
+
+def test_tick_does_not_reprice_at_a_week_boundary(db, team):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_one = season.weeks.get(number=1)
+    rider = Rider.objects.create(
+        name="Mid Season", team=team, speciality=Rider.Speciality.CLIMBER,
+        age=25, peak_age=22, decline_rate=1,
+        climb=40, sprint=40, flat=40, resistance=40, positioning=40,
+        weekly_salary=2000,
+    )
+    clock.set(week_one.starts_at + timedelta(hours=1))
+
+    run = tick()
+    rider.refresh_from_db()
+
+    assert run.seasons_closed == 0
+    assert run.riders_repriced == 0
+    assert rider.weekly_salary == 2000
+
+
+def test_tick_writes_a_salary_review_per_managed_team(db, team, managed_team):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    rider = Rider.objects.create(
+        name="Reported", team=managed_team, speciality=Rider.Speciality.CLIMBER,
+        age=25, peak_age=22, decline_rate=1,
+        climb=40, sprint=40, flat=40, resistance=40, positioning=40,
+        weekly_salary=1000,
+    )
+    clock.set(season.ends_at + timedelta(hours=1))
+
+    run = tick()
+    rider.refresh_from_db()
+
+    report = SalaryReviewReport.objects.get(team=managed_team)
+    assert run.salary_reviews == 1
+    assert report.season == season
+    assert report.payroll_before == 1000
+    assert report.payroll_after == rider.weekly_salary
+    assert report.changes == [{
+        "rider_id": rider.pk, "rider_name": "Reported",
+        "from": 1000, "to": rider.weekly_salary,
+    }]
+    assert SalaryReviewReport.objects.count() == 1
+    assert not SalaryReviewReport.objects.filter(team=team).exists()
+
+
+def test_tick_reprices_once_per_closed_season(db, managed_team):
+    # A tick catching up two closed seasons applies the boundary twice: two
+    # repricings and one report per season per managed team. The rider leaves
+    # the prime band at the second close (32 -> 33), so each close moves the
+    # stored price — the reports must be keyed to their own season, not one
+    # report clobbering the other.
+    clock: MockClock = get_clock()
+    season_one = make_season_with_weeks(1, now())
+    season_two = make_season_with_weeks(2, season_one.ends_at)
+    rider = Rider.objects.create(
+        name="Twice Priced", team=managed_team, speciality=Rider.Speciality.CLIMBER,
+        age=31, peak_age=27, decline_rate=1,
+        climb=80, sprint=80, flat=80, resistance=80, positioning=80,
+    )
+    clock.set(season_two.ends_at + timedelta(hours=1))
+
+    run = tick()
+    rider.refresh_from_db()
+
+    reports = list(SalaryReviewReport.objects.filter(team=managed_team).order_by("season__starts_at"))
+    assert run.seasons_closed == 2
+    assert run.riders_repriced == 2
+    assert run.salary_reviews == 2
+    assert rider.age == 33
+    assert rider.weekly_salary == _formula_at(rider, 33)
+    assert len(reports) == 2
+    assert [report.season for report in reports] == [season_one, season_two]
+    # First close brought the 32-year-old's stored wage to the formula.
+    assert reports[0].payroll_before == 1200
+    assert reports[0].payroll_after == _formula_at(rider, 32)
+    # Second close moved it on to the 33-year-old's formula, on top of the
+    # first close's stored value — not off the original one.
+    assert reports[1].payroll_before == reports[0].payroll_after
+    assert reports[1].payroll_after == rider.weekly_salary
 
 
 def test_growth_is_applied_before_races_are_simulated(db, young_rider, team, monkeypatch):

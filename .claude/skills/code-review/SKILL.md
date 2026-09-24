@@ -59,11 +59,18 @@ every review costs minutes and proves what is already proven.
 
 Read the evidence instead:
 
-- The **PR body** carries the work items, the tests added, and the suite count
-  before and after. That is your check result.
-- **If the PR body has no test numbers**, or the author is not `/implement-plan`,
-  say so and ask before going further — you have no evidence the suite passed,
-  and inventing it is worse than asking.
+- **CI.** It runs the engine tests, the frontend lint, test and build, and the
+  full Django suite on every pull request. Its verdict on this PR is the check
+  result, and it ran on a clean machine rather than someone's laptop:
+
+  ```bash
+  gh pr checks <n> --repo mario595/cycling-manager
+  ```
+
+  **A failing or pending check is blocking.** Do not review around a red CI run
+  and do not approve one that has not finished.
+- The **PR body** carries the work items and the tests added. Read it for what
+  was built, not for whether it passed — CI answers that.
 
 ### The migration check, done by reading
 
@@ -143,7 +150,7 @@ Every finding gets one of three levels. Be honest about which.
 - new behaviour with no test, or a test that cannot fail;
 - a deleted, skipped or weakened existing test;
 - a model change with no migration in the diff;
-- the PR body reporting a failing or incomplete suite;
+- CI failing, or still running;
 - an `AGENTS.md` architecture rule broken;
 - a security problem: a secret in the repo, a missing permission check, an
   injection, user input trusted where it should not be;
@@ -329,7 +336,7 @@ Body:
 <Approved | Changes requested> — one sentence on why.
 
 ## Evidence
-- Suite (from the PR body): <n before, n after>
+- CI: <passing | failing: which job>
 - Migrations: <present for the model changes | missing for X>
 
 ## Blocking
@@ -396,7 +403,7 @@ level, and whether the ticket moved.
 
 - More than one PR matches the ticket, or none does.
 - The PR is a draft — confirm it is meant to be reviewed.
-- The PR body carries no evidence that the suite passed.
+- CI has not run on this PR at all.
 - The plan itself looks wrong, rather than the code.
 - A finding sits genuinely on the line between blocking and should-fix and the
   answer changes the verdict. Say which way you lean.

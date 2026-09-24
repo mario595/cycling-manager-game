@@ -92,9 +92,9 @@ def main() -> None:
     )
 
     print("Running race...")
-    results = run_race(riders, course, log_path=log_path)
+    results, sample_count, tick_interval = run_race(riders, course, log_path=log_path)
 
-    print(f"Log saved to: {log_path}")
+    print(f"Log saved to: {log_path} ({sample_count} samples every {tick_interval}s)")
     print()
     print("Results:")
     for i, rs in enumerate(results, 1):

@@ -8,12 +8,15 @@ run and how many weeks to apply.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 from django.db.models import F, Value
 from django.db.models.functions import Greatest
 
 from .display import to_display_scale
 from .generation import SPECIALITY_PROFILES
-from .models import ENGINE_ATTRIBUTES, Rider
+from .models import ENGINE_ATTRIBUTES, Rider, RiderAttributeSnapshot
+from .pricing import SALARY_REVIEW_THRESHOLD, weekly_salary_for
 
 #: Fraction of the remaining gap to its ceiling an attribute closes each
 #: week, at maximum growth. Tuned so a young rider well below potential
@@ -80,6 +83,33 @@ RECOVERY_MAX = 20
 #: results without making the rider a non-participant. Multiplier is
 #: linear in freshness between FRESHNESS_FLOOR and FRESHNESS_MAX.
 PENALTY_AT_FLOOR = 0.80
+
+
+def mark_team_change(riders: Iterable[Rider], *, team_now, at) -> None:
+    """Stamp joined_team_at or unattached_since on every rider in
+    `riders` to reflect a team change happening `at` (game time).
+
+    `team_now` is the new team value (a Team, or None for a release) —
+    every rider in the iterable is assumed to be changing to this same
+    value in this same call, the same assumption claim_team's bulk
+    operations already make.
+
+    Does not touch `.team` itself (callers already save it — bulk_create,
+    QuerySet.update(), or an individual .save()); it persists only the
+    timing field(s) it stamps, via its own bulk_update.
+    """
+    riders = list(riders)
+    if not riders:
+        return
+    if team_now is None:
+        for rider in riders:
+            rider.unattached_since = at
+        Rider.objects.bulk_update(riders, ["unattached_since"])
+    else:
+        for rider in riders:
+            rider.joined_team_at = at
+            rider.unattached_since = None
+        Rider.objects.bulk_update(riders, ["joined_team_at", "unattached_since"])
 
 
 def attribute_ceilings(rider: Rider) -> dict[str, float]:
@@ -240,6 +270,43 @@ def advance_ages() -> int:
     return Rider.objects.filter(age__lt=40).update(age=F("age") + 1)
 
 
+def reprice_all() -> list[dict]:
+    """Recompute every rider's weekly_salary from riders.pricing and save.
+
+    Returns one record per rider whose salary moved by at least
+    SALARY_REVIEW_THRESHOLD: {"rider_id", "rider_name", "team_id",
+    "from", "to"} in whole credits. Every rider's salary is written
+    regardless of the threshold; the threshold filters only what is
+    returned (plan D4).
+
+    Pure with respect to time, like advance_ages() and
+    apply_weekly_growth(): this app knows nothing about seasons or the
+    clock. world.services.tick() decides when to call it.
+    """
+    changes = []
+    updated = []
+    for rider in Rider.objects.all().only(
+        "id", "name", "team_id", "speciality", "age",
+        "weekly_salary", *ENGINE_ATTRIBUTES,
+    ):
+        new_salary = weekly_salary_for(rider)
+        if new_salary == rider.weekly_salary:
+            continue
+        if abs(new_salary - rider.weekly_salary) >= SALARY_REVIEW_THRESHOLD:
+            changes.append({
+                "rider_id": rider.pk,
+                "rider_name": rider.name,
+                "team_id": rider.team_id,
+                "from": rider.weekly_salary,
+                "to": new_salary,
+            })
+        rider.weekly_salary = new_salary
+        updated.append(rider)
+
+    Rider.objects.bulk_update(updated, ["weekly_salary"], batch_size=500)
+    return changes
+
+
 def freshness_multiplier(freshness: int) -> float:
     """Attribute scaling for a rider at this freshness.
 
@@ -289,3 +356,43 @@ def apply_weekly_recovery(*, exclude_ids: set[int]) -> int:
             to_update.append(rider)
     Rider.objects.bulk_update(to_update, ["freshness"])
     return len(to_update)
+
+
+def _display_values(rider: Rider) -> dict[str, int]:
+    """This rider's five attributes on the 0-10 scale the player sees."""
+    return {name: to_display_scale(getattr(rider, name)) for name in ENGINE_ATTRIBUTES}
+
+
+def record_initial_snapshots(riders: list[Rider]) -> int:
+    """Baseline snapshot (week=None) for each newly created rider.
+
+    Call immediately after Rider.objects.bulk_create, with the list
+    bulk_create returned — its instances carry the primary keys the
+    unsaved list passed to generate_roster/generate_rider does not.
+    Returns the number of rows written.
+    """
+    rows = [
+        RiderAttributeSnapshot(rider=rider, week=None, **_display_values(rider))
+        for rider in riders
+    ]
+    RiderAttributeSnapshot.objects.bulk_create(rows)
+    return len(rows)
+
+
+def record_week_snapshots(rider_ids: list[int], *, week_id: int) -> int:
+    """One snapshot per rider whose displayed value moved this week.
+
+    `week_id` is a plain int, not a Week: riders/ may not import schedule/
+    (AGENTS.md). ignore_conflicts guards the (rider, week) unique constraint
+    the same way _write_training_reports tolerates a duplicate report,
+    without needing a per-row transaction. Returns the number of rows
+    attempted (bulk_create with ignore_conflicts does not report how many
+    were actually inserted).
+    """
+    riders = Rider.objects.filter(pk__in=rider_ids)
+    rows = [
+        RiderAttributeSnapshot(rider=rider, week_id=week_id, **_display_values(rider))
+        for rider in riders
+    ]
+    RiderAttributeSnapshot.objects.bulk_create(rows, ignore_conflicts=True)
+    return len(rows)

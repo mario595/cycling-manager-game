@@ -583,8 +583,8 @@ class RaceState:
             rs.energy = max(0.0, min(100.0, rs.energy - energy_drain))
             rs.stamina = max(0.0, min(100.0, rs.stamina - stamina_drain))
 
-            if rs.position >= self.course.total_distance:
-                rs.position = self.course.total_distance
+            if rs.position >= self.profile.total_distance:
+                rs.position = self.profile.total_distance
                 rs.finished = True
                 rs.finish_time = self.current_time
 
@@ -647,7 +647,7 @@ class RaceState:
             # 1. Finish sprint — inside the last stretch, everyone kicks; the
             # `sprint` attribute sizes the boost (applied in `tick`), not
             # whether the kick happens at all.
-            if pos >= self.course.total_distance - SPRINT_DISTANCE:
+            if pos >= profile.total_distance - SPRINT_DISTANCE:
                 if rs.energy >= SPRINT_MIN_ENERGY:
                     surge = True
                     sprinting = True
@@ -852,7 +852,14 @@ def run_race(
     team_codes: dict[str, dict[str, str]] | None = None,
     wind: bool = True,
     wind_band: str | None = None,
-) -> list[RiderState]:
+) -> tuple[list[RiderState], int, int]:
+    """Run a race and return the results plus the log's sampling metadata.
+
+    Returns ``(results, sample_count, sample_interval)``. ``sample_count``
+    counts the sample lines the logger wrote (0 when no log was requested);
+    ``sample_interval`` is the race seconds between samples. Together they let
+    a caller record what the log contains without reading it back.
+    """
     from .race_logger import RaceLogger
 
     validate_team_leaders(riders)
@@ -870,7 +877,7 @@ def run_race(
     import sys
     import time as _time
 
-    total_distance = course.total_distance
+    total_distance = state.profile.total_distance
     progress_interval = 500  # ticks between progress lines
     start_wall = _time.monotonic() if verbose else 0.0
 
@@ -905,4 +912,4 @@ def run_race(
             flush=True,
         )
 
-    return state.get_results()
+    return state.get_results(), (logger.sample_count if logger else 0), (logger.sample_interval if logger else 0)

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone as dt_timezone
+
 import pytest
 
 from riders.generation import SPECIALITY_PROFILES
-from riders.models import ENGINE_ATTRIBUTES, Rider
+from riders.models import ENGINE_ATTRIBUTES, Rider, RiderAttributeSnapshot
+from riders.pricing import weekly_salary_for
 from riders.services import (
     FRESHNESS_FLOOR,
     FRESHNESS_MAX,
@@ -17,10 +20,16 @@ from riders.services import (
     apply_weekly_recovery,
     attribute_ceilings,
     freshness_multiplier,
+    mark_team_change,
+    record_initial_snapshots,
+    record_week_snapshots,
     recovery_amount,
+    reprice_all,
     training_deltas,
     weekly_deltas,
 )
+from schedule.models import Season, Week
+from teams.models import Team
 
 
 def make_rider(**overrides) -> Rider:
@@ -301,6 +310,30 @@ def test_debt_does_not_accumulate_once_an_attribute_is_clamped():
     assert remainder == 0.0
 
 
+def test_mark_team_change_sets_joined_or_unattached(db):
+    team = Team.objects.create(name="Team Alpha", code="ALP")
+    at = datetime(2027, 3, 1, 0, 0, tzinfo=dt_timezone.utc)
+    later = datetime(2027, 3, 8, 0, 0, tzinfo=dt_timezone.utc)
+    free_agent = Rider.objects.create(
+        name="Free Agent", team=None, unattached_since=at,
+        climb=1, sprint=1, flat=1, resistance=1, positioning=1,
+    )
+    on_roster = Rider.objects.create(
+        name="On Roster", team=team, joined_team_at=at,
+        climb=1, sprint=1, flat=1, resistance=1, positioning=1,
+    )
+
+    mark_team_change([free_agent], team_now=team, at=later)
+    mark_team_change([on_roster], team_now=None, at=later)
+
+    free_agent.refresh_from_db()
+    on_roster.refresh_from_db()
+    assert free_agent.joined_team_at == later
+    assert free_agent.unattached_since is None
+    assert on_roster.unattached_since == later
+    assert on_roster.joined_team_at == at  # untouched by a release
+
+
 def test_ageing_advances_every_rider_including_free_agents(db):
     rostered = Rider.objects.create(name="Rostered", age=25, climb=1, sprint=1, flat=1, resistance=1, positioning=1)
     free_agent = Rider.objects.create(name="Free Agent", team=None, age=25, climb=1, sprint=1, flat=1, resistance=1, positioning=1)
@@ -321,6 +354,100 @@ def test_ageing_stops_at_the_model_maximum(db):
     rider.refresh_from_db()
 
     assert rider.age == 40
+
+
+def make_repriced_rider(name: str, salary_move: int) -> Rider:
+    """A rider whose stored salary is off the formula's value by
+    `salary_move`, so reprice_all() moves it by exactly that amount."""
+    rider = Rider.objects.create(
+        name=name,
+        speciality=Rider.Speciality.CLIMBER,
+        age=25,
+        climb=70,
+        sprint=40,
+        flat=40,
+        resistance=40,
+        positioning=40,
+    )
+    target = weekly_salary_for(rider)
+    rider.weekly_salary = target - salary_move
+    rider.save(update_fields=["weekly_salary"])
+    return rider
+
+
+def test_reprice_all_updates_every_rider_salary(db):
+    rider = Rider.objects.create(
+        name="Breakout Climber",
+        speciality=Rider.Speciality.CLIMBER,
+        age=25,
+        climb=70,
+        sprint=40,
+        flat=40,
+        resistance=40,
+        positioning=40,
+    )
+    expected = weekly_salary_for(rider)
+    rider.weekly_salary = 1200
+    rider.save(update_fields=["weekly_salary"])
+
+    changes = reprice_all()
+    rider.refresh_from_db()
+
+    assert changes[0]["to"] == expected
+    assert rider.weekly_salary == expected
+
+
+def test_reprice_all_reports_only_changes_over_threshold(db):
+    small = make_repriced_rider("Moved Fifty", salary_move=50)
+    large = make_repriced_rider("Moved Two Hundred", salary_move=200)
+
+    changes = reprice_all()
+
+    # D4: the write is unconditional — the 50-move rider is still stored at
+    # the exact formula value, even though it is not worth reporting.
+    small.refresh_from_db()
+    large.refresh_from_db()
+    assert small.weekly_salary == weekly_salary_for(small)
+    assert large.weekly_salary == weekly_salary_for(large)
+
+    returned = {change["rider_name"] for change in changes}
+    assert returned == {"Moved Two Hundred"}
+
+
+def test_reprice_all_returns_before_and_after(db):
+    rider = make_repriced_rider("Raised Rider", salary_move=200)
+
+    changes = reprice_all()
+
+    assert changes == [{
+        "rider_id": rider.pk,
+        "rider_name": "Raised Rider",
+        "team_id": rider.team_id,
+        "from": rider.weekly_salary,
+        "to": weekly_salary_for(rider),
+    }]
+
+
+def test_reprice_all_includes_free_agents(db):
+    rider = make_repriced_rider("Free Agent", salary_move=200)
+    rider.team = None
+    rider.save(update_fields=["team"])
+
+    changes = reprice_all()
+    rider.refresh_from_db()
+
+    assert changes[0]["team_id"] is None
+    assert rider.weekly_salary == weekly_salary_for(rider)
+
+
+def test_reprice_all_is_stable_when_nothing_changed(db):
+    make_repriced_rider("Stable Rider", salary_move=200)
+
+    first_run = reprice_all()
+    second_run = reprice_all()
+
+    assert len(first_run) == 1
+    assert second_run == []
 
 
 def test_freshness_multiplier_is_one_at_full():
@@ -400,3 +527,54 @@ def test_apply_weekly_recovery_skips_excluded_riders(db):
     assert changed == 1
     assert racer.freshness == 60
     assert rested.freshness > 60
+
+
+def test_record_initial_snapshots_writes_one_baseline_row_per_rider(db):
+    riders = Rider.objects.bulk_create([
+        make_rider(climb=71, sprint=20, flat=20, resistance=20, positioning=20),
+        make_rider(name="Second Rider", climb=20, sprint=20, flat=20, resistance=20, positioning=20),
+    ])
+
+    written = record_initial_snapshots(riders)
+
+    assert written == 2
+    snapshots = RiderAttributeSnapshot.objects.order_by("rider__name")
+    assert [s.week for s in snapshots] == [None, None]
+    # A stored 71 must record as the displayed 7, not the stored 71 itself —
+    # proves the display scale is used, not the raw attribute (D2).
+    first = snapshots.get(rider=riders[0])
+    assert first.climb == 7
+
+
+def _make_week(number=1) -> Week:
+    monday = datetime(2027, 3, 1, 0, 0, tzinfo=dt_timezone.utc) + timedelta(weeks=number - 1)
+    season, _ = Season.objects.get_or_create(number=1, defaults={"starts_at": monday})
+    return Week.objects.create(
+        season=season, number=number, starts_at=monday, ends_at=monday + timedelta(weeks=1),
+    )
+
+
+def test_record_week_snapshots_writes_one_row_per_id_for_the_given_week(db):
+    rider = Rider.objects.create(
+        name="Tracked", climb=71, sprint=20, flat=20, resistance=20, positioning=20,
+    )
+    week = _make_week()
+
+    written = record_week_snapshots([rider.pk], week_id=week.pk)
+
+    assert written == 1
+    snapshot = RiderAttributeSnapshot.objects.get(rider=rider)
+    assert snapshot.week_id == week.pk
+    assert snapshot.climb == 7
+
+
+def test_record_week_snapshots_is_a_no_op_the_second_time_for_the_same_week(db):
+    rider = Rider.objects.create(
+        name="Tracked", climb=71, sprint=20, flat=20, resistance=20, positioning=20,
+    )
+    week = _make_week()
+
+    record_week_snapshots([rider.pk], week_id=week.pk)
+    record_week_snapshots([rider.pk], week_id=week.pk)
+
+    assert RiderAttributeSnapshot.objects.filter(rider=rider, week_id=week.pk).count() == 1

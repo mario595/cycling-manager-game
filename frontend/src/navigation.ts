@@ -38,6 +38,10 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [{ path: '/calendar', name: 'Calendar' }],
   },
   {
+    label: 'MARKET',
+    items: [{ path: '/transfers', name: 'Transfers' }],
+  },
+  {
     label: 'COMPETITION',
     items: [{ path: '/league', name: 'League table' }],
   },

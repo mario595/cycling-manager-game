@@ -27,6 +27,7 @@ from economy.services import (
     pay_merchandise,
     pay_race_prizes,
     pay_sponsorship,
+    write_salary_reviews,
 )
 from racing.models import Race
 from racing.services import riders_who_raced, simulate_race
@@ -35,15 +36,19 @@ from riders.services import (
     advance_ages,
     apply_weekly_growth,
     apply_weekly_recovery,
+    record_week_snapshots,
+    reprice_all,
     training_deltas,
 )
 from schedule.models import SeasonTransition, Week
-from schedule.services import process_transitions, process_week_transitions
+from schedule.services import process_transitions, process_week_transitions, weeks_opened_between
 from staff.models import Trainer, TrainingWeekReport
 from staff.pricing import weekly_salary
 from staff.services import focus_for, top_up_pool
 from teams.models import ManagerialSpell, Team
 from teams.services import release_team
+from transfers.pricing import market_value_for
+from transfers.services import EXPIRY_VALUE_PERCENTILE, EXPIRY_WEEKS
 
 from .clocks import Clock
 from .models import GameClock, TickRun
@@ -151,20 +156,6 @@ def _completed_week(week) -> Week | None:
     return Week.objects.filter(season=week.season, number=week.number - 1).first()
 
 
-def _weeks_inactive(last_seen_at: datetime, boundary: datetime) -> int:
-    """In-season weeks that opened in `[last_seen_at, boundary)`.
-
-    Counting Week rows rather than dividing a timedelta by seven days is
-    what makes "off-season doesn't count" (#63) fall out for free: weeks
-    only exist inside a declared season, so a gap between seasons
-    contributes no rows regardless of how much real or game time it spans.
-
-    `starts_at__gte` (not `__gt`) is deliberate: a manager who logged in at
-    the exact instant a week opened has seen that week.
-    """
-    return Week.objects.filter(starts_at__gte=last_seen_at, starts_at__lt=boundary).count()
-
-
 def _release_inactive(week) -> tuple[int, str]:
     """Release the team of every manager inactive for INACTIVITY_WEEKS
     in-season weeks as of this week boundary (#63).
@@ -185,7 +176,7 @@ def _release_inactive(week) -> tuple[int, str]:
     ).select_related("manager")
 
     for team in managed:
-        if _weeks_inactive(team.manager.last_seen_at, boundary) < INACTIVITY_WEEKS:
+        if weeks_opened_between(team.manager.last_seen_at, boundary) < INACTIVITY_WEEKS:
             continue
         try:
             # release_team returns None for an already-unmanaged team
@@ -198,6 +189,68 @@ def _release_inactive(week) -> tuple[int, str]:
             # training — same shape as _execute's per-race guard.
             error += f"release team {team.pk}:\n{traceback.format_exc()}\n"
     return released, error
+
+
+def _expire_free_agents(week) -> int:
+    """Delete every free agent unattached EXPIRY_WEEKS+ in-season weeks as
+    of this week boundary, and priced at or below the pool's
+    EXPIRY_VALUE_PERCENTILE at that moment. Returns riders deleted.
+
+    Mirrors _release_inactive's shape: counts Week rows via
+    schedule.services.weeks_opened_between — world/ just provides the
+    boundary; schedule/ owns week counting (AGENTS.md's dependency
+    direction) — and is called once per week transition in the same loop.
+    The percentile is computed fresh from the whole pool's value on each
+    pass — value is never stored, so there is nothing to have gone stale. A
+    pool too small for a meaningful bottom EXPIRY_VALUE_PERCENTILE expires
+    nobody (Design decision 5): a bottom quintile of one or two riders is
+    not a signal. A null `unattached_since` (pre-migration riders) is
+    excluded, never treated as "unattached since the beginning of time."
+
+    Deletes the Rider row outright, exactly `reset_riders`'s precedent
+    (Design decision 6): the cascade takes the rider's RaceResult/
+    RaceSquadRider rows with it, which is acceptable because an expired
+    rider never raced for the releasing team, and killing a long-stale,
+    bottom-quintile free agent is the whole point of the mechanic.
+
+    The count returned is `len(doomed)` — the number of *riders* — NOT the
+    first element of delete()'s return, which sums every cascaded row
+    (a free agent with race history would inflate it by one per
+    RaceResult/RaceSquadRider).
+    """
+    pool = list(Rider.objects.filter(team__isnull=True))
+    # Truncation is the small-pool guard (Design decision 5): a floor leaves
+    # a 2-rider pool pointing at a "bottom" quintile of one rider.
+    bottom_count = int(len(pool) * EXPIRY_VALUE_PERCENTILE)
+    if bottom_count == 0:
+        return 0
+    value_by_rider = {rider.pk: market_value_for(rider) for rider in pool}
+    values = sorted(value_by_rider.values())
+    cutoff = values[bottom_count - 1]
+
+    boundary = week.starts_at
+    # weeks_opened_between(since, boundary) is monotone in `since`, so
+    # "opened EXPIRY_WEEKS+ weeks" has a single cutoff: the EXPIRY_WEEKS-th
+    # newest in-season week opening before `boundary`, and a rider qualifies
+    # iff its unattached_since is at or before that. One query for the whole
+    # pool instead of one COUNT per rider.
+    opened = list(
+        Week.objects.filter(starts_at__lt=boundary)
+        .order_by("-starts_at")
+        .values_list("starts_at", flat=True)[:EXPIRY_WEEKS]
+    )
+    if len(opened) < EXPIRY_WEEKS:
+        return 0
+    expiry_cutoff = opened[EXPIRY_WEEKS - 1]
+    doomed = [
+        rider.pk
+        for rider in pool
+        if rider.unattached_since is not None
+        and rider.unattached_since <= expiry_cutoff
+        and value_by_rider[rider.pk] <= cutoff
+    ]
+    Rider.objects.filter(pk__in=doomed).delete()
+    return len(doomed)
 
 
 def _apply_training_week(week) -> int:
@@ -241,6 +294,10 @@ def _apply_training_week(week) -> int:
 
     changes = apply_weekly_growth(weeks=1, extra_deltas=extra)
     _write_training_reports(week, changes, focus_by_team)
+    if changes:
+        record_week_snapshots(
+            sorted({change["rider_id"] for change in changes}), week_id=week.pk,
+        )
     # `raced` is the {rider_id: [...]} of riders who finished a race in the
     # week being settled; those riders skip recovery (Design decision 6).
     apply_weekly_recovery(exclude_ids=set(raced))
@@ -298,8 +355,16 @@ def tick() -> TickRun:
     # evaluated against their new age this same tick.
     closed = [t for t in transitions if t.kind == SeasonTransition.Kind.CLOSED]
     riders_aged = 0
-    for _ in closed:
+    riders_repriced = 0
+    salary_reviews = 0
+    for transition in closed:
         riders_aged = advance_ages()
+        # Repricing AFTER ageing: next season's wage must reflect the rider a
+        # manager will actually have, age included (spec, *Ordering at the
+        # boundary*).
+        changes = reprice_all()
+        riders_repriced += len(changes)
+        salary_reviews += write_salary_reviews(transition.season, changes)
 
     # One offer round per team per crossed season open — ensure_offer_round
     # is idempotent per (team, season) itself (economy/README.md, D8), so a
@@ -317,6 +382,7 @@ def tick() -> TickRun:
     sponsorship_entries = 0
     trainer_salary_entries = 0
     teams_released = 0
+    agents_expired = 0
     inactivity_error = ""
 
     # Built once, outside the loop: a trainer's skill does not move between
@@ -356,6 +422,14 @@ def tick() -> TickRun:
         teams_released += released
         inactivity_error += error
 
+        # After the release-inactive call, so `teams_released` and
+        # `agents_expired` reflect the same, most-settled world state for
+        # this week: a rider pooled by this week's release is never
+        # expired the same pass (their unattached_since postdates the
+        # boundary). Expiry only touches unattached riders, so it cannot
+        # change what this week already charged anyone.
+        agents_expired += _expire_free_agents(week)
+
     reclaimed = _reclaim_unfinished()
     claimed = _claim(limit=max(0, max_races - len(reclaimed)), at=at)
     capped = len(reclaimed) + len(claimed) >= max_races
@@ -367,12 +441,15 @@ def tick() -> TickRun:
         weeks_processed=len(weeks),
         riders_aged=riders_aged,
         riders_trained=riders_trained,
+        riders_repriced=riders_repriced,
+        salary_reviews=salary_reviews,
         wage_entries=wage_entries,
         merchandise_entries=merchandise_entries,
         fanbase_entries=fanbase_entries,
         sponsorship_entries=sponsorship_entries,
         trainer_salary_entries=trainer_salary_entries,
         teams_released=teams_released,
+        agents_expired=agents_expired,
         error=inactivity_error,
     )
     _execute(reclaimed + claimed, run, at=at)

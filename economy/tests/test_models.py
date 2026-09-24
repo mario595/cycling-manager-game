@@ -10,6 +10,7 @@ from economy.models import (
     WEEKLY_WAGE_PER_RIDER,
     FanbaseEntry,
     LedgerEntry,
+    SalaryReviewReport,
     SponsorContract,
     SponsorOffer,
 )
@@ -333,3 +334,15 @@ def test_several_trainer_fees_per_team_allowed(db, team):
         )
 
     assert LedgerEntry.objects.filter(team=team, kind=LedgerEntry.Kind.TRAINER_FEE).count() == 2
+
+
+def test_one_salary_review_per_team_per_season(db, team, season):
+    SalaryReviewReport.objects.create(
+        team=team, season=season, changes=[], payroll_before=14_400, payroll_after=15_600,
+    )
+
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            SalaryReviewReport.objects.create(
+                team=team, season=season, changes=[], payroll_before=14_400, payroll_after=15_600,
+            )

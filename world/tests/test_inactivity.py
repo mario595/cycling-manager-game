@@ -6,9 +6,10 @@ import pytest
 
 from accounts.models import User
 from schedule.models import SEASON_WEEKS, Season, Week
+from schedule.services import weeks_opened_between
 from teams.models import ManagerialSpell, Team
 from world.clocks import MockClock
-from world.services import INACTIVITY_WEEKS, _weeks_inactive, get_clock, now, tick
+from world.services import INACTIVITY_WEEKS, get_clock, now, tick
 
 
 def make_season_with_weeks(number: int, starts_at) -> Season:
@@ -34,7 +35,7 @@ def team(db, manager) -> Team:
     return Team.objects.create(name="Team Alpha", code="ALP", manager=manager)
 
 
-# -- _weeks_inactive ----------------------------------------------------
+# -- schedule.services.weeks_opened_between --------
 
 
 def test_counts_weeks_that_opened_in_the_interval(db):
@@ -43,7 +44,7 @@ def test_counts_weeks_that_opened_in_the_interval(db):
     last_seen = season.weeks.get(number=1).starts_at
     boundary = season.weeks.get(number=6).starts_at
 
-    assert _weeks_inactive(last_seen, boundary) == 5
+    assert weeks_opened_between(last_seen, boundary) == 5
 
 
 def test_off_season_gap_contributes_no_weeks(db):
@@ -60,14 +61,14 @@ def test_off_season_gap_contributes_no_weeks(db):
 
     # season one's weeks 11-12 (2) + season two's week 1 (1) = 3, not the
     # 6 weeks that separate the two timestamps by the calendar.
-    assert _weeks_inactive(last_seen, boundary) == 3
+    assert weeks_opened_between(last_seen, boundary) == 3
 
 
 def test_week_opening_exactly_at_last_seen_is_not_counted(db):
     season = make_season_with_weeks(1, now())
     week_one = season.weeks.get(number=1)
 
-    assert _weeks_inactive(week_one.starts_at, week_one.starts_at) == 0
+    assert weeks_opened_between(week_one.starts_at, week_one.starts_at) == 0
 
 
 # -- _release_inactive / tick() -----------------------------------------

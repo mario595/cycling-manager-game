@@ -67,3 +67,24 @@ def market_value_for(rider) -> int:
     base = VALUE_AT_MIN_STRENGTH + (VALUE_AT_MAX_STRENGTH - VALUE_AT_MIN_STRENGTH) * scaled
     base *= career_horizon(rider.age)
     return max(0, _round_to_nearest_1000(base))
+
+
+#: Fee percentages as fractions of market_value_for (Design decision 3). Signing at 60% lands roughly seven weeks of an
+#: average rider's own wages (value ≈ one season ≈ twelve weeks, so 60% ≈
+#: seven) — a real but survivable hit against STARTING_BALANCE. Severance
+#: at half the signing rate: real cost, but releasing gives up an asset
+#: rather than buying one.
+SIGNING_FEE_RATE = 0.60
+SEVERANCE_FEE_RATE = 0.30
+
+
+def signing_fee_for(rider) -> int:
+    """SIGNING_FEE_RATE of this rider's market value, rounded the same way
+    market_value_for rounds (nearest 1,000)."""
+    return _round_to_nearest_1000(SIGNING_FEE_RATE * market_value_for(rider))
+
+
+def severance_fee_for(rider) -> int:
+    """SEVERANCE_FEE_RATE of this rider's market value, rounded the same
+    way."""
+    return _round_to_nearest_1000(SEVERANCE_FEE_RATE * market_value_for(rider))

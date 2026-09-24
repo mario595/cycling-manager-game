@@ -23,7 +23,7 @@ because `economy` may not import this app — the same inversion this file
 documents for `racing/` below.
 
 There is no `Group` or `Division` model yet — one implicit Group, one
-table, per `specs/race-points-and-standings.md`. See *Future work* below.
+table, per `specs/archive/race-points-and-standings.md`. See *Future work* below.
 
 ## What `competitions/` may import
 
@@ -40,7 +40,7 @@ already one of the two apps allowed to know about everything.
 1st through 10th place; 11th and below score nothing. Points are frozen
 onto a `RacePoints` row the moment a race is scored and are never
 recalculated — if the table is retuned later, races already scored keep
-what they were awarded at the time (`specs/race-points-and-standings.md`,
+what they were awarded at the time (`specs/archive/race-points-and-standings.md`,
 *Rules and edge cases*).
 
 ## The prize table sits beside it

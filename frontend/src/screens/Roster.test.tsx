@@ -1,17 +1,20 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { Me, Rider } from '../api'
+import { releaseRider } from '../api'
 import { useAuth } from '../useAuth'
 import { useRoster } from '../useRoster'
 import { Roster } from './Roster'
 
 vi.mock('../useAuth', () => ({ useAuth: vi.fn() }))
 vi.mock('../useRoster', () => ({ useRoster: vi.fn() }))
+vi.mock('../api', () => ({ releaseRider: vi.fn() }))
 
 const mockUseAuth = vi.mocked(useAuth)
 const mockUseRoster = vi.mocked(useRoster)
+const mockReleaseRider = vi.mocked(releaseRider)
 
 const manager: Me = {
   authenticated: true,
@@ -37,6 +40,7 @@ const riders: Rider[] = [
     freshness: 10,
     weekly_salary: 3200,
     market_value: 40000,
+    release_cost: 12000,
   },
   {
     id: 2,
@@ -54,6 +58,7 @@ const riders: Rider[] = [
     freshness: 10,
     weekly_salary: 900,
     market_value: 95000,
+    release_cost: 3000,
   },
 ]
 
@@ -75,12 +80,26 @@ beforeEach(() => {
     claim: vi.fn(),
     acknowledgeLostTeam: vi.fn(),
   })
-  mockUseRoster.mockReturnValue({ riders, squadValue: 135000, loading: false, error: false })
+  mockUseRoster.mockReturnValue({
+    riders,
+    squadValue: 135000,
+    salaryReview: null,
+    loading: false,
+    error: false,
+    refresh: vi.fn(),
+  })
 })
 
 describe('Roster', () => {
   it('renders nothing while loading', () => {
-    mockUseRoster.mockReturnValue({ riders: null, squadValue: null, loading: true, error: false })
+    mockUseRoster.mockReturnValue({
+      riders: null,
+      squadValue: null,
+      salaryReview: null,
+      loading: true,
+      error: false,
+      refresh: vi.fn(),
+    })
 
     const { container } = renderRoster()
 
@@ -131,5 +150,115 @@ describe('Roster', () => {
     // ($40,000) — the opposite order from sorting by salary.
     expect(withValue[0]).toContain('$95,000')
     expect(withValue[1]).toContain('$40,000')
+  })
+
+  it('shows the release cost when a rider is picked', () => {
+    renderRoster()
+
+    fireEvent.click(screen.getByText('Alba Sanchez'))
+
+    expect(screen.getByText('Release $12,000')).toBeInTheDocument()
+  })
+
+  it('notes when releasing a rider is free', () => {
+    const freeRider: Rider = { ...riders[0], id: 3, name: 'Carla Díaz', release_cost: 0 }
+    mockUseRoster.mockReturnValue({
+      riders: [freeRider, ...riders],
+      squadValue: 135_000,
+      salaryReview: null,
+      loading: false,
+      error: false,
+      refresh: vi.fn(),
+    })
+
+    renderRoster()
+
+    fireEvent.click(screen.getByText('Carla Díaz'))
+
+    expect(screen.getByText(/claim cooldown/)).toBeInTheDocument()
+  })
+
+  it('releases a rider and refetches the roster', async () => {
+    const refresh = vi.fn()
+    const release = mockReleaseRider.mockResolvedValue(undefined)
+    mockUseRoster.mockReturnValue({
+      riders,
+      squadValue: 135_000,
+      salaryReview: null,
+      loading: false,
+      error: false,
+      refresh,
+    })
+
+    renderRoster()
+
+    fireEvent.click(screen.getByText('Alba Sanchez'))
+    fireEvent.click(screen.getByRole('button', { name: 'Release' }))
+
+    await waitFor(() => expect(release).toHaveBeenCalledWith(1))
+    await waitFor(() => expect(refresh).toHaveBeenCalled())
+  })
+
+  it('renders the salary review panel with the wage bill and one row per change', () => {
+    mockUseRoster.mockReturnValue({
+      riders,
+      squadValue: 135000,
+      salaryReview: {
+        season_number: 9,
+        payroll_before: 2300,
+        payroll_after: 2400,
+        // Bruno first in the payload: the panel must sort by absolute
+        // delta descending, so Alba's bigger raise leads.
+        changes: [
+          { rider_id: 2, rider_name: 'Bruno Ruiz', from_value: 900, to_value: 500 },
+          { rider_id: 1, rider_name: 'Alba Sanchez', from_value: 3200, to_value: 3800 },
+        ],
+      },
+      loading: false,
+      error: false,
+      refresh: vi.fn(),
+    })
+
+    renderRoster()
+
+    expect(screen.getByText('Season-end salary review')).toBeInTheDocument()
+    expect(screen.getByText('SEASON 9')).toBeInTheDocument()
+    // The wage bill row: before → after, both $-prefixed.
+    expect(screen.getByText('Weekly wage bill')).toBeInTheDocument()
+    expect(screen.getByText('$2,300')).toBeInTheDocument()
+    expect(screen.getByText('$2,400')).toBeInTheDocument()
+    // A row per change, biggest movement first, each with its delta. The
+    // rider names also appear on the roster cards below, so the panel rows
+    // are proven by the deltas' order rather than by name presence.
+    expect(screen.getAllByText('Alba Sanchez')).toHaveLength(2)  // card + review row
+    expect(screen.getAllByText('Bruno Ruiz')).toHaveLength(2)
+    const deltas = screen.getAllByText(/^[+−]/).map((element) => element.textContent)
+    expect(deltas).toEqual(['+$100', '+$600', '−$400'])
+  })
+
+  it('renders nothing when salary_review is null', () => {
+    renderRoster()
+
+    expect(screen.queryByText('Season-end salary review')).not.toBeInTheDocument()
+  })
+
+  it('renders nothing when the review has no changes', () => {
+    mockUseRoster.mockReturnValue({
+      riders,
+      squadValue: 135000,
+      salaryReview: {
+        season_number: 5,
+        payroll_before: 4000,
+        payroll_after: 4000,
+        changes: [],
+      },
+      loading: false,
+      error: false,
+      refresh: vi.fn(),
+    })
+
+    renderRoster()
+
+    expect(screen.queryByText('Season-end salary review')).not.toBeInTheDocument()
   })
 })

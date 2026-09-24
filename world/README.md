@@ -95,7 +95,16 @@ reads `now()` once, then finds and processes whatever is due, in four steps:
    trainer pool.
 1. **Ageing, growth, training and wages** — for every `CLOSED` transition
    `process_transitions` returned, every rider's age advances by one
-   (`riders.services.advance_ages()`). Then
+   (`riders.services.advance_ages()`). **Immediately after ageing, and only
+   for a `CLOSED` transition**, every rider's salary is repriced:
+   `riders.services.reprice_all()` recomputes each `weekly_salary` from the
+   pricing formula, and `economy.services.write_salary_reviews(transition.
+   season, changes)` writes one `SalaryReviewReport` per managed team
+   (#26; see `economy/README.md`, *Salary review*). Repricing must run
+   **after** ageing — next season's wage has to reflect the rider a manager
+   will actually have, age included, not the rider they had — and it is
+   exactly-once by the same rule ageing is: one `CLOSED` transition ever, so
+   the pass cannot run twice for one season. Then
    `schedule.services.process_week_transitions(at)` records any week
    boundary opened at or before `now()` that hasn't been recorded yet (see
    `schedule/README.md`, *Week transitions*), and each recorded transition
@@ -105,7 +114,12 @@ reads `now()` once, then finds and processes whatever is due, in four steps:
    extra_deltas=...)`, adding that week's training deltas — the trainer's
    focused skill and last week's racing — through the one `growth_debt`
    ledger, writes a per-team `staff.TrainingWeekReport` of the
-   display-scale changes it made, and then settles freshness:
+   display-scale changes it made, records a `riders.RiderAttributeSnapshot`
+   for each rider named in that same return value
+   (`riders.services.record_week_snapshots`, reusing the records
+   `apply_weekly_growth` already returns rather than re-reading the table —
+   see [#95](https://github.com/mario595/cycling-manager/issues/95) and
+   `riders/README.md`, *Attribute history*), and then settles freshness:
    `riders.services.apply_weekly_recovery(exclude_ids=set(raced))` restores
    one week's recovery to every rider who did **not** finish a race in the
    week being settled ([#59](https://github.com/mario595/cycling-manager/issues/59);
@@ -164,7 +178,8 @@ reads `now()` once, then finds and processes whatever is due, in four steps:
    reason=ManagerialSpell.Reason.INACTIVITY, at=week.starts_at)`
    ([#63](https://github.com/mario595/cycling-manager/issues/63); see
    `teams/README.md`, *Releasing a team*). "Ten weeks" is counted by
-   `world.services._weeks_inactive`, which counts `schedule.Week` rows
+   `schedule.services.weeks_opened_between`, which counts `schedule.Week`
+   rows
    whose `starts_at` falls in `[user.last_seen_at, week.starts_at)` —
    querying rather than a stored counter, so a gap between seasons
    contributes no weeks for free (weeks only exist inside a declared
@@ -180,12 +195,21 @@ reads `now()` once, then finds and processes whatever is due, in four steps:
    actually crossed the threshold. A release that raises is caught and
    recorded on `TickRun.error` without stopping the week's remaining work —
    the same per-item guard *Execute* below uses for a broken race — and the
-   count of teams released lands on `TickRun.teams_released`.
-   Ageing runs before growth, so a rider who turned 33 at this same
-   boundary is evaluated against the new age immediately. None of this
-   touches a race row, so it runs outside the claim transaction below, the
-   same as race simulation does and for the same reason: a full-table
-   update must not extend the lock window race claiming holds.
+count of teams released lands on `TickRun.teams_released`.
+    After `_release_inactive`, `world.services._expire_free_agents(week)`
+    prunes the free-agent pool: it deletes every rider whose
+    `unattached_since` has crossed `transfers.services.EXPIRY_WEEKS` (eight)
+    in-season weeks (weeks_opened_between's same Week-row count) and whose
+    value at that moment falls in the pool's bottom quintile
+    (`EXPIRY_VALUE_PERCENTILE`, 0.20). Value is never stored, so the
+    cutoff is computed fresh each pass, and a pool too small for a real
+    bottom quintile expires nobody. A rider with null `unattached_since`
+    (pre-migration free agents) is exempt, never treated as long-lost.
+    Ageing runs before growth, so a rider who turned 33 at this same
+    boundary is evaluated against the new age immediately. None of this
+    touches a race row, so it runs outside the claim transaction below, the
+    same as race simulation does and for the same reason: a full-table
+    update must not extend the lock window race claiming holds.
 2. **Claim** — inside one transaction, holding a row lock on the due race
    rows themselves (not a clock row — there is no longer one to lock in
    production): every `scheduled` race whose `starts_at` is at or before

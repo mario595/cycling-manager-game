@@ -237,7 +237,10 @@ export async function putSquad(raceId: number, riderIds: number[], leaderId: num
  * `market_value` are both exact whole credits, never mapped onto the
  * display scale — the first is what the rider costs to keep, frozen for
  * the season; the second is what they're worth, recomputed on every read
- * (#31). */
+ * (#31). `release_cost` is what releasing them to the free agent pool
+ * charges right now: 0 while the claim cooldown shields them, full
+ * severance after it expires, and null when the payload is not the
+ * caller's own roster (a free agent, say). */
 export interface Rider {
   id: number
   name: string
@@ -254,13 +257,37 @@ export interface Rider {
   freshness: number
   weekly_salary: number
   market_value: number
+  release_cost: number | null
+}
+
+/** One rider's wage movement at a season close, whole credits. The keys map
+ * from the stored "from"/"to" via source= server-side — a SPA could never
+ * read a key named `from` (it is a JavaScript keyword). */
+export interface SalaryChange {
+  rider_id: number
+  rider_name: string
+  from_value: number
+  to_value: number
+}
+
+/** What a season close's re-pricing did to the wage bill: the running total
+ * before and after, plus each rider whose wage moved by at least the report
+ * threshold. `null` on the roster response until the first season has
+ * closed. */
+export interface SalaryReview {
+  season_number: number
+  payroll_before: number
+  payroll_after: number
+  changes: SalaryChange[]
 }
 
 /** The caller's own team's roster: every rider plus the squad's total
- * market value (#31) — a single response so the two can never disagree. */
+ * market value (#31) — a single response so the two can never disagree —
+ * and the latest post-season salary review when one exists. */
 export interface Roster {
   riders: Rider[]
   squad_value: number
+  salary_review: SalaryReview | null
 }
 
 export async function getRiders(): Promise<Roster> {
@@ -269,6 +296,39 @@ export async function getRiders(): Promise<Roster> {
     throw new Error(`riders request failed: ${response.status}`)
   }
   return response.json()
+}
+
+/** A free agent as the transfer market shows it — everything the roster
+ * shows about a rider plus the one figure this screen adds: the `signing_fee`
+ * the team must pay to bring them in. `release_cost` is always null here:
+ * a free agent is on nobody's roster, so there is nothing to release. */
+export interface FreeAgent extends Rider {
+  signing_fee: number
+}
+
+/** The transfer market's whole state in one payload: every free agent plus
+ * the caller's balance, so the SPA can disable a Sign it cannot afford —
+ * the same both-keys shape Staff uses. */
+export interface FreeAgentPool {
+  riders: FreeAgent[]
+  balance: number
+}
+
+export async function getFreeAgents(): Promise<FreeAgentPool> {
+  const response = await fetch('/api/transfers/free-agents/')
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new Error(body?.detail ?? `free agents request failed: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function signFreeAgent(riderId: number): Promise<void> {
+  return writeJson('/api/transfers/free-agents/sign/', 'POST', { rider_id: riderId })
+}
+
+export async function releaseRider(riderId: number): Promise<void> {
+  return writeJson('/api/transfers/riders/release/', 'POST', { rider_id: riderId })
 }
 
 export interface RaceResultTeam {
@@ -437,8 +497,8 @@ export async function setTrainingFocus(attribute: string): Promise<void> {
 
 /** One ledger entry as the Finances screen needs it. `kind` is the machine
  * name (starting_balance/wages/takeover/prize_money/merchandise/
- * sponsorship/trainer_fee/trainer_salary); the screen renders the label.
- * `rider_count` is set on wage entries only — null elsewhere.
+ * sponsorship/trainer_fee/trainer_salary/transfer_fee); the screen renders
+ * the label. `rider_count` is set on wage entries only — null elsewhere.
  * `balance_after` is computed server-side: the running balance just after
  * this entry. */
 export interface LedgerEntry {
@@ -452,6 +512,7 @@ export interface LedgerEntry {
     | 'sponsorship'
     | 'trainer_fee'
     | 'trainer_salary'
+    | 'transfer_fee'
   description: string
   amount: number
   occurred_at: string | null

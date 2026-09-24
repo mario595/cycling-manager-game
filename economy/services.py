@@ -17,6 +17,7 @@ from .models import (
     WEEKLY_FANBASE_DECAY,
     FanbaseEntry,
     LedgerEntry,
+    SalaryReviewReport,
     SponsorContract,
     SponsorOffer,
 )
@@ -538,4 +539,84 @@ def charge_trainer_fee(team, *, amount: int, at, description: str) -> LedgerEntr
         amount=amount,
         occurred_at=at,
         description=description,
+    )
+
+
+def charge_transfer_fee(team, *, amount: int, at, description: str) -> LedgerEntry:
+    """Debit `team` a one-off free-agent transfer amount. Returns the row.
+
+    One kind covers both sides of the market: a signing fee and a severance
+    charge are the same shape of transaction (money out, no week attached),
+    distinguished by `description` ("Signed X" vs "Released X") — there is
+    deliberately no second Kind (Design decision 7).
+    `amount` is negative, `at` is game time, `description` names the rider.
+    The caller — api/'s free-agent views — passes both itself, per the
+    custom-`at` convention used across this module. No (team, week)
+    constraint: a team may sign and release several times a season.
+    """
+    return LedgerEntry.objects.create(
+        team=team,
+        kind=LedgerEntry.Kind.TRANSFER_FEE,
+        amount=amount,
+        occurred_at=at,
+        description=description,
+    )
+
+
+def write_salary_reviews(season, changes: list[dict]) -> int:
+    """One SalaryReviewReport per managed team for a closed season.
+
+    `changes` is riders.services.reprice_all()'s return, already filtered
+    by threshold. Each insert runs inside its own transaction.atomic()
+    with IntegrityError caught — the same per-row shape
+    process_transitions() uses, and for the same reason: an
+    IntegrityError poisons an enclosing transaction (plan D6).
+
+    A managed team with no qualifying changes still gets a report, with an
+    empty `changes` list and payroll_before == payroll_after. Returns how
+    many rows were written.
+
+    `payroll_before` is derived, not captured: `payroll_after` minus the
+    net of the listed changes. That is exact only because sub-threshold
+    changes are excluded from `changes` but included in `payroll_after` —
+    a deliberate imprecision, "what the bill was counting only the
+    movements we are showing you", instead of a second per-team query for
+    a number that differs by at most a rounding step per rider (plan D7).
+    """
+    by_team: dict[int, list[dict]] = {}
+    for change in changes:
+        if change["team_id"] is None:      # free agent: repriced, not reported
+            continue
+        by_team.setdefault(change["team_id"], []).append(change)
+
+    written = 0
+    for team in Team.objects.filter(manager__isnull=False):
+        team_changes = by_team.get(team.pk, [])
+        after = payroll_for(team)
+        before = after - sum(c["to"] - c["from"] for c in team_changes)
+        with transaction.atomic():
+            try:
+                SalaryReviewReport.objects.create(
+                    team=team, season=season,
+                    changes=[
+                        {k: v for k, v in c.items() if k != "team_id"}
+                        for c in team_changes
+                    ],
+                    payroll_before=before, payroll_after=after,
+                )
+                written += 1
+            except IntegrityError:
+                pass            # already written; correct outcome, not an error
+    return written
+
+
+def latest_salary_review(team) -> SalaryReviewReport | None:
+    """This team's most recent salary review, newest season first, or None.
+
+    Mirrors staff.services.latest_report(team) for TrainingWeekReport.
+    """
+    return (
+        SalaryReviewReport.objects.filter(team=team)
+        .order_by("-season__starts_at")
+        .first()
     )

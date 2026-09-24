@@ -133,6 +133,29 @@ class Rider(TimeStampedModel):
         ),
     )
 
+    # --- Team-membership timing (game time, not wall clock) ---
+    joined_team_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Game time this rider's team was last set to a non-null value — "
+            "by generation, a team claim, or a free-agent signing. Null for a "
+            "rider that has never had joined_team_at stamped (pre-migration "
+            "data) or is currently unattached and was never tracked. Used to "
+            "gate the free claim-release cooldown (transfers/README.md)."
+        ),
+    )
+    unattached_since = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Game time this rider's team last became null — by a team claim "
+            "releasing its old roster, or a manager releasing them to the "
+            "free agent pool. Null while on a team. Drives pool expiry "
+            "(transfers/README.md)."
+        ),
+    )
+
     # --- Hidden, between-race traits (never serialized — see class docstring) ---
     potential = models.PositiveSmallIntegerField(
         default=70,
@@ -187,3 +210,47 @@ class Rider(TimeStampedModel):
 
     def __str__(self) -> str:
         return self.name
+
+
+class RiderAttributeSnapshot(TimeStampedModel):
+    """One rider's five displayed (0-10) attributes at a point in time.
+
+    Written at creation (`week=None`, the baseline) and thereafter only in a
+    week where at least one displayed value moved — see riders/services.py,
+    record_initial_snapshots and record_week_snapshots. Values here are the
+    0-10 scale a player sees, never the stored 1-100 value: recording the
+    finer value would leak growth the display scale is designed to hide
+    (riders/README.md, *Display scale*).
+
+    `week` is a string reference so this app needs no import of `schedule/`
+    (AGENTS.md) — the same pattern `staff.TrainingWeekReport.week` uses.
+    """
+
+    rider = models.ForeignKey(
+        Rider, on_delete=models.CASCADE, related_name="attribute_snapshots",
+    )
+    week = models.ForeignKey(
+        "schedule.Week",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="rider_attribute_snapshots",
+        help_text="Null means the baseline snapshot taken at creation.",
+    )
+    climb = models.PositiveSmallIntegerField()
+    sprint = models.PositiveSmallIntegerField()
+    flat = models.PositiveSmallIntegerField()
+    resistance = models.PositiveSmallIntegerField()
+    positioning = models.PositiveSmallIntegerField()
+
+    class Meta:
+        ordering = ["created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["rider", "week"], name="one_snapshot_per_rider_per_week",
+            ),
+        ]
+        indexes = [models.Index(fields=["rider", "created_at"])]
+
+    def __str__(self) -> str:
+        return f"{self.rider} @ {self.week or 'baseline'}"

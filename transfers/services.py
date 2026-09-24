@@ -1,0 +1,180 @@
+"""Free agents: the pool, the cost of releasing one, and the two actions
+that move riders across the state machine.
+
+The pure reads (`free_agents`, `release_cost_for`) back the market screen
+and the Roster's release-cost column; `sign_free_agent` and `release_rider`
+are the locked write paths, charging an injected `charge(rider, fee)`
+callback exactly the way `hire_trainer` does — `transfers/` may not import
+`economy/` (AGENTS.md), and the caller (`api/`) supplies the ledger write.
+
+`transfers/` may import only `riders/`, which is also why the
+claim-cooldown exemption receives its in-season week count from the caller
+instead of counting `schedule/`'s Week rows itself — see `transfers/README.md`,
+*Free agents*.
+"""
+
+from __future__ import annotations
+
+from django.db import transaction
+from django.db.models import QuerySet
+
+from riders.models import Rider
+from riders.services import mark_team_change
+
+from .pricing import severance_fee_for, signing_fee_for
+
+#: In-season weeks a claimed roster keeps its claim-cooldown exemption: a
+#: rider inherited from the most recent claim releases for free while fewer
+#: than this many in-season weeks have opened since it. The caller counts
+#: the weeks (api/), this module only compares (Design decision 2).
+CLAIM_COOLDOWN_WEEKS = 1
+
+#: Roster ceiling enforced at signing time only (Design decision 4): a
+#: team already over the cap can still race, train and release.
+ROSTER_CAP = 30
+
+#: In-season weeks a free agent may sit unattached before becoming
+#: *eligible* for expiry (Design decision 5). The week count itself is
+#: computed by the caller (`world/`, via the same Week-row rule
+#: `schedule.services.weeks_opened_between` uses) — `transfers/` may not
+#: import `schedule/`
+#: (AGENTS.md). Exported here, not local to the caller, because it is a
+#: transfer-balance decision, not a world-mechanics one.
+EXPIRY_WEEKS = 8
+
+#: An eligible free agent must also be priced at or below this percentile
+#: of every free agent's value at that moment — the pool's bottom quintile
+#: (Design decision 5). Value is never stored, so the percentile is
+#: computed fresh on every pass.
+EXPIRY_VALUE_PERCENTILE = 0.20
+
+
+class TransferError(Exception):
+    """Base class for a free-agent action that cannot proceed."""
+
+
+class RiderNotAvailable(TransferError):
+    """That rider is not a free agent — signed by someone else, or never was."""
+
+
+class RosterFull(TransferError):
+    """Signing would put the team over ROSTER_CAP."""
+
+
+class InsufficientFunds(TransferError):
+    """The team cannot afford the fee."""
+
+
+class RiderNotOnRoster(TransferError):
+    """That rider is not on the caller's team."""
+
+
+def free_agents() -> QuerySet[Rider]:
+    """Every rider with no team, ordered by name — the free-agent pool."""
+    return Rider.objects.filter(team__isnull=True).order_by("name")
+
+
+def release_cost_for(team, rider: Rider, *, weeks_opened: int) -> int:
+    """What releasing `rider` from `team` would currently charge, without
+    changing anything — the figure the roster screen shows per rider,
+    including 0. Pure read; safe to call for every rider on a GET.
+
+    A rider inherited from the team's most recent claim is exempt while the
+    claim cooldown holds (Design decision 2); everyone else — including a
+    rider signed in afterward — pays severance_fee_for. `weeks_opened` is
+    the in-season weeks that have opened between `team.managed_since` and
+    the relevant boundary (now on a roster GET, `at` on a release), counted
+    by the caller.
+    """
+    if _claim_cooldown_exempt(team, rider, weeks_opened):
+        return 0
+    return severance_fee_for(rider)
+
+
+def _claim_cooldown_exempt(team, rider: Rider, weeks_opened: int) -> bool:
+    """Whether `rider` is fee-exempt to release *right now*.
+
+    The rider must have joined `team` at the exact instant of its most
+    recent claim (`joined_team_at == managed_since`) — the roster claim_team
+    generated, not a rider signed in afterward, whose `at` is later — and
+    fewer than CLAIM_COOLDOWN_WEEKS in-season weeks must have opened since.
+    A team that was never claimed has no cooldown, so nothing is exempt.
+    """
+    if team.managed_since is None:
+        return False
+    if rider.joined_team_at != team.managed_since:
+        return False
+    return weeks_opened < CLAIM_COOLDOWN_WEEKS
+
+
+def sign_free_agent(team, rider_id: int, *, at, charge=None) -> Rider:
+    """Move a free agent onto `team`, subject to the roster cap and an
+    injected `charge(rider, fee)` callback (transfers/ may not import
+    economy/ — see Design decision 7).
+
+    Locks the rider row WITHOUT skip_locked (the caller asked for this
+    specific rider — the same choice hire_trainer makes, staff/README.md),
+    re-checks the rider is still teamless under the lock, then re-checks
+    the roster cap under the same lock before running charge(). A raise
+    from charge() rolls the whole transaction back, keeping team and
+    ledger in step.
+    """
+    with transaction.atomic():
+        try:
+            rider = Rider.objects.select_for_update().get(pk=rider_id)
+        except Rider.DoesNotExist:
+            raise RiderNotAvailable("That rider is not available.")
+
+        # Re-checked AFTER the lock, not before it — the line that makes
+        # two simultaneous signings of the same free agent safe: the loser
+        # arrives here with team_id already set and is told so, rather
+        # than overwriting the winner's signing.
+        if rider.team_id is not None:
+            raise RiderNotAvailable("That rider has already been signed.")
+
+        # Roster-cap COUNT under the RIDER's lock, not the team's — an
+        # accepted narrowing race (Design decision 8): two concurrent
+        # signings for the same team can both pass the check and land the
+        # team at ROSTER_CAP + 1. Deliberate: the team lock would serialize
+        # every signing through a whole-transaction lock for a one-rider
+        # push that the weekly tick's single sweep makes unlikely to clash.
+        if Rider.objects.filter(team=team).count() >= ROSTER_CAP:
+            raise RosterFull(f"Your team already has {ROSTER_CAP} riders.")
+
+        if charge is not None:
+            charge(rider, signing_fee_for(rider))
+
+        rider.team = team
+        mark_team_change([rider], team_now=team, at=at)
+        rider.save(update_fields=["team", "updated_at"])
+    return rider
+
+
+def release_rider(team, rider_id: int, *, at, weeks_opened: int, charge=None) -> Rider:
+    """Send one of `team`'s riders to the free agent pool.
+
+    Locks the rider row (membership of `team` checked under the lock) and
+    charges release_cost_for — 0 while the claim-cooldown exemption
+    applies (Design decision 2), severance otherwise — via the injected
+    `charge(rider, fee)` callback. `charge` is still called for a $0 fee,
+    so the release path is uniform whatever the cost; writing a row for a
+    0 fee is the caller's call (api/ skips it). A raise from charge()
+    rolls the whole transaction back.
+    """
+    with transaction.atomic():
+        try:
+            rider = Rider.objects.select_for_update().get(pk=rider_id)
+        except Rider.DoesNotExist:
+            raise RiderNotOnRoster("That rider is not on your team.")
+
+        if rider.team_id != team.pk:
+            raise RiderNotOnRoster("That rider is not on your team.")
+
+        fee = release_cost_for(team, rider, weeks_opened=weeks_opened)
+        if charge is not None:
+            charge(rider, fee)
+
+        rider.team = None
+        mark_team_change([rider], team_now=None, at=at)
+        rider.save(update_fields=["team", "updated_at"])
+    return rider
