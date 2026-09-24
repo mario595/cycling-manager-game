@@ -30,6 +30,7 @@ class Command(BaseCommand):
         # world/ (AGENTS.md). This management command is an entry point,
         # like world/'s own — see schedule/README.md.
         from racing.models import Race
+        from racing.services import create_race
         from world.services import now
 
         path = options["path"]
@@ -106,7 +107,7 @@ class Command(BaseCommand):
                     )
                 )
             Week.objects.bulk_create(weeks)
-            races = create_races(season, declaration.races, create_race=Race.objects.create)
+            races = create_races(season, declaration.races, create_race=create_race)
 
         self.stdout.write(f"season {season.number}: {season.starts_at} to {season.ends_at}")
         for week in weeks:
@@ -114,9 +115,11 @@ class Command(BaseCommand):
 
         for race in races:
             distance_km = sum(s["length"] for s in race.course) / 1000
+            marker_count = race.markers.count()
+            suffix = f", {marker_count} marker{'s' if marker_count != 1 else ''}" if marker_count else ""
             self.stdout.write(
                 f"  week {race.week.number} {race.starts_at.strftime('%a %H:%M')} "
-                f"— {race.name} ({distance_km:.1f} km)"
+                f"— {race.name} ({distance_km:.1f} km{suffix})"
             )
         if races:
             self.stdout.write(f"{len(races)} race(s) declared")

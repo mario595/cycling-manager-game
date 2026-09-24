@@ -149,3 +149,26 @@ def test_races_key_is_optional_end_to_end(db, tmp_path):
 
     season = Season.objects.get(number=1)
     assert Week.objects.filter(season=season).count() == 12
+
+
+def test_load_season_creates_race_markers(db, tmp_path):
+    path = write_season_file(
+        tmp_path,
+        races=[
+            race_entry(
+                course=[{"length": 10000.0, "gradient": 0.0}],
+                markers=[
+                    {"kind": "sprint", "name": "First", "distance": 4000},
+                    {"kind": "mountain", "name": "Top", "distance": 9000},
+                ],
+            )
+        ],
+    )
+
+    call_command("load_season", path)
+
+    race = Week.objects.get(season__number=1, number=1).races.get()
+    assert list(race.markers.values_list("kind", "name", "distance")) == [
+        ("sprint", "First", 4000.0),
+        ("mountain", "Top", 9000.0),
+    ]
