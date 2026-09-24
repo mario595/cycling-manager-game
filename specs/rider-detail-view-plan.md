@@ -526,7 +526,7 @@ Test `src/components/AttributeHistoryChart.test.tsx`, which is mostly
 - `currentWeek: null` gives a baseline at 0.
 - The render shows the "no change yet" caption for baseline-only history.
 
-### W6 — `src/screens/RiderProfile.tsx`, `src/App.tsx`, `src/navigation.ts`: the page and route
+### W6 — `src/screens/RiderProfile.tsx`, `src/App.tsx`, `src/navigation.ts`: the page and route — done
 
 Test `src/screens/RiderProfile.test.tsx`, mocking `useRiderProfile`:
 - The full profile renders the name, team, `$` salary and value, the five

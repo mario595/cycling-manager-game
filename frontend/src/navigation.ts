@@ -52,5 +52,13 @@ export const NAV_ITEMS: NavItem[] = NAV_SECTIONS.flatMap((s) => s.items)
 
 /** The screen title shown in the mobile top bar. */
 export function titleForPath(path: string): string {
+  if (path.startsWith('/riders/')) return 'Rider'
   return NAV_ITEMS.find((i) => i.path === path)?.name ?? 'Dashboard'
+}
+
+/** The one way to build a link to a rider's page — every caller (the
+ * Roster panel, a race result row, a free-agent card) goes through this
+ * rather than building the path by hand. */
+export function riderPath(id: number): string {
+  return `/riders/${id}`
 }

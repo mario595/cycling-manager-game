@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { NAV_ITEMS, NAV_SECTIONS } from './navigation'
+import { NAV_ITEMS, NAV_SECTIONS, riderPath, titleForPath } from './navigation'
 
 // The paths App.tsx maps to a real component. Every nav item must point at
 // one of these — a nav item without a screen would open the catch-all.
@@ -21,5 +21,13 @@ describe('navigation', () => {
   it('no item declares a badge', () => {
     const withBadge = NAV_ITEMS.filter((item) => 'badge' in item)
     expect(withBadge).toEqual([])
+  })
+
+  it('riderPath builds a stable link', () => {
+    expect(riderPath(7)).toBe('/riders/7')
+  })
+
+  it('titleForPath returns Rider for a rider page', () => {
+    expect(titleForPath('/riders/7')).toBe('Rider')
   })
 })
