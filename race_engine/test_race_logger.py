@@ -10,6 +10,7 @@ and every sample must iterate `state.rider_states` alike.
 from __future__ import annotations
 
 import json
+import random
 
 import brotli
 import pytest
@@ -159,6 +160,58 @@ def test_finish_off_the_sample_grid_is_still_written(tmp_path):
     assert finish_sample[0] == 3
     assert rider[4] & 4  # finished flag
     assert rider[5] == 1737.17
+
+
+def test_dnf_sets_flag_bit_eight(tmp_path):
+    riders = [
+        Rider(id="r0", name="R0", attributes=ATTRS),
+        Rider(id="r1", name="R1", attributes=ATTRS),
+    ]
+    state = _state(riders, wind=False)
+    state.rider_states[1].dnf = True
+
+    log_path = str(tmp_path / "race.jsonl")
+    logger = RaceLogger(log_path)
+    logger.log(state)
+    logger.close()
+
+    sample = _lines(log_path)[1]
+    packed = [rider[4] for rider in sample[1]]
+    assert packed == [0, 8]
+
+
+def test_dnf_off_the_sample_grid_is_still_written(tmp_path):
+    course = Course(segments=[Segment(length=500000.0, gradient=0.0)])
+    state = RaceState.create_initial_state(
+        [Rider(id="c1", name="C1", attributes=ATTRS)], course, wind=False
+    )
+
+    log_path = str(tmp_path / "race.jsonl")
+    logger = RaceLogger(log_path)
+    logger.log(state)
+    # tick() draws from the global random module for speed jitter; save and
+    # restore it so this test's ticks don't perturb any other, unrelated
+    # test's unseeded use of the same stream.
+    saved_random_state = random.getstate()
+    for _ in range(3):
+        state.tick()
+        logger.log(state)
+    random.setstate(saved_random_state)
+
+    # DNF flips on an odd tick — off the every-2s grid. It changes no
+    # `finished` flag, so tracking (finished, dnf) pairs is what forces a
+    # sample here; tracking `finished` alone would miss it.
+    assert state.current_time == 3
+    state.rider_states[0].dnf = True
+    logger.log(state)
+    logger.close()
+
+    lines = _lines(log_path)
+    assert [sample[0] for sample in lines[1:]] == [0, 2, 3]
+    dnf_sample = lines[-1]
+    rider = dnf_sample[1][0]
+    assert dnf_sample[0] == 3
+    assert rider[4] & 8  # dnf flag
 
 
 def test_wind_band_goes_to_header_and_speed_angle_per_tick(tmp_path):

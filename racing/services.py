@@ -67,11 +67,14 @@ def course_training_attribute(course: list[dict]) -> str:
 def riders_who_raced(week) -> dict[int, list[str]]:
     """{rider_id: [training attribute per race they finished]} for one week.
 
+    The *training* reader — see `riders_who_started` for the fatigue one.
     One query over RaceResult joined to Race, not one query per race. A
     rider who raced twice in a week appears with two entries and is
     trained for both. Non-finishers are excluded — `RaceResult.position`
     is assigned to everyone, so only `finish_time` says a rider actually
-    raced; see racing/README.md.
+    finished; a rider cut by the time limit started but didn't complete
+    the course, so there's nothing to have learned from it. See
+    racing/README.md.
     """
     results = (
         RaceResult.objects.filter(race__week=week, finish_time__isnull=False)
@@ -83,6 +86,19 @@ def riders_who_raced(week) -> dict[int, list[str]]:
             course_training_attribute(result.race.course)
         )
     return raced
+
+
+def riders_who_started(week) -> set[int]:
+    """Every rider with a RaceResult in `week`'s races, finisher or not.
+
+    The *fatigue* reader — see `riders_who_raced` for the training one.
+    Missing a race costs a rider's legs the same as racing it, so weekly
+    recovery excludes every starter, not just finishers (see
+    riders/README.md, Freshness).
+    """
+    return set(
+        RaceResult.objects.filter(race__week=week).values_list("rider_id", flat=True)
+    )
 
 
 def auto_pick_squad(team: Team) -> tuple[list[int], int]:
@@ -294,9 +310,13 @@ def simulate_race(race: Race, *, game_time: datetime) -> list[RaceResult]:
             saved = ContentFile(fh.read(), name=f"race-{race.pk}.jsonl.br")
 
     by_pk = {str(r.pk): r for r in db_riders}
-    finishers = sorted(
+    # Finishers first by time, then non-finishers furthest-travelled first —
+    # the engine now produces real non-finishers (cut by the time limit),
+    # not just abandons, so this must order them rather than leave them in
+    # whatever order they happen to appear (race_engine/README.md, get_results).
+    ordered = sorted(
         states,
-        key=lambda s: (s.finish_time is None, s.finish_time if s.finish_time is not None else 0),
+        key=lambda s: (s.finish_time is None, s.finish_time or 0, -s.position),
     )
 
     with transaction.atomic():
@@ -314,17 +334,14 @@ def simulate_race(race: Race, *, game_time: datetime) -> list[RaceResult]:
                 race=race, rider=by_pk[s.rider.id], position=i,
                 finish_time=float(s.finish_time) if s.finish_time is not None else None,
             )
-            for i, s in enumerate(finishers, start=1)
+            for i, s in enumerate(ordered, start=1)
         ])
-        # Only finishers pay: a rider whose finish_time is None did not
-        # complete the race, the same rule riders_who_raced and
-        # competitions/ already apply. Written here, in the results
-        # transaction, so "raced" and "paid for it" are atomic — see the
-        # plan's Design decision 7.
-        finisher_ids = [
-            by_pk[s.rider.id].pk for s in finishers if s.finish_time is not None
-        ]
-        apply_race_cost(finisher_ids)
+        # Every starter pays, finisher or cut by the time limit — missing a
+        # race takes just as much out of a rider's legs as running it does
+        # (broom-wagon-time-cut spec, In scope 5). Written here, in the
+        # results transaction, so "started" and "paid for it" are atomic —
+        # see the plan's Design decision 7.
+        apply_race_cost([by_pk[s.rider.id].pk for s in states])
         race.status = Race.Status.FINISHED
         race.finished_at = game_time
         race.save(update_fields=["status", "finished_at"])

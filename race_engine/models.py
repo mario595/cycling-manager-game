@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import random
 from dataclasses import dataclass, field
 from enum import Enum
@@ -149,6 +150,7 @@ class RiderState:
     surge_cooldown: int = 0  # ticks before another surge may start
     finished: bool = False
     finish_time: int | None = None  # seconds
+    dnf: bool = False  # cut by the time limit; mutually exclusive with finished
 
 
 @dataclass
@@ -159,6 +161,7 @@ class RaceState:
     profile: CourseProfile | None = None
     wind: WindState | None = None
     wind_rng: random.Random | None = None  # own substream, see WIND_PLAN.md
+    time_limit: int | None = None  # race second the finish closes; set once the winner finishes
 
     @classmethod
     def create_initial_state(
@@ -250,6 +253,7 @@ class RaceState:
             SPRINT_BOOST_MIN,
             SURGE_ENERGY_COST,
             SURGE_SPEED_BOOST,
+            TIME_CUT_MARGIN,
             _lerp,
             add_speed_jitter,
             advance_wind,
@@ -563,6 +567,7 @@ class RaceState:
             deltas[i] = (effective, energy_drain, stamina_drain, pulling)
 
         # Phase 2: apply all deltas consistently.
+        winner_finished_this_tick = False
         for i, rs in enumerate(self.rider_states):
             if rs.finished:
                 continue
@@ -587,6 +592,23 @@ class RaceState:
                 rs.position = self.profile.total_distance
                 rs.finished = True
                 rs.finish_time = self.current_time
+                if self.time_limit is None:
+                    winner_finished_this_tick = True
+
+        # Time cut (broom wagon): once the winner finishes, fix a limit at
+        # ceil(winner_time * (1 + TIME_CUT_MARGIN)). Riders still racing once
+        # race time reaches that limit are cut — DNF, not finished. Set and
+        # reached in the same tick when the winner's time (or the margin) is
+        # 0, which is why this is two `if`s, not an `elif`. `time_limit` is
+        # None only until the first finish, and every finish in this loop
+        # shares `self.current_time`, so the winner's time is simply that —
+        # no need to scan `rider_states` for the minimum `finish_time`.
+        if self.time_limit is None and winner_finished_this_tick:
+            self.time_limit = math.ceil(self.current_time * (1 + TIME_CUT_MARGIN))
+        if self.time_limit is not None and self.current_time >= self.time_limit:
+            for rs in self.rider_states:
+                if not rs.finished:
+                    rs.dnf = True
 
         self.current_time += 1
 
@@ -796,11 +818,16 @@ class RaceState:
         return min(clear_ahead)
 
     def is_finished(self) -> bool:
-        return all(rs.finished for rs in self.rider_states)
+        return all(rs.finished or rs.dnf for rs in self.rider_states)
 
     def get_results(self) -> list[RiderState]:
+        # Finishers first, ordered by time; DNF riders after, furthest
+        # travelled first (`-rs.position`). `rs.finish_time or 0` alongside
+        # the `is None` check fixes the latent bug where a finish at t=0
+        # would otherwise sort as never having finished.
         return sorted(
-            self.rider_states, key=lambda rs: (rs.finish_time or float("inf"))
+            self.rider_states,
+            key=lambda rs: (rs.finish_time is None, rs.finish_time or 0, -rs.position),
         )
 
     def _find_segment(self, position: float) -> Segment | None:

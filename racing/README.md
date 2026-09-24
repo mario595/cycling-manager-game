@@ -168,10 +168,18 @@ can seed a Race without a translation step.
 **`RaceResult.position` is assigned to every rider, including one who never
 finished.** `simulate_race` sorts non-finishers (`finish_time is None`) to
 the back of the field but still numbers them — there is no "did not
-finish" position, only a lower one. Anything that scores or ranks off
-`RaceResult` must filter on `finish_time` first; see `competitions/README.md`
-for the rule this protects (a team whose whole squad abandoned must not be
-credited for wherever those riders were numbered).
+finish" position, only a lower one. Non-finishers are ordered
+furthest-travelled first among themselves (key
+`(finish_time is None, finish_time or 0, -position)`, matching
+`race_engine`'s own `get_results()`), not in whatever order they happen to
+appear. They are now a real, sizeable population, not just an edge case:
+the race engine's time cut (broom wagon) marks a rider DNF once they're too
+far behind the winner to matter, on top of the abandons this already
+covered — see `race_engine/README.md`, *Simulation tick* and *Known
+limitation*. Anything that scores or ranks off `RaceResult` must filter on
+`finish_time` first; see `competitions/README.md` for the rule this
+protects (a team whose whole squad didn't finish must not be credited for
+wherever those riders were numbered).
 
 ## The weekly-training readers
 
@@ -190,7 +198,14 @@ in two functions:
 - **`riders_who_raced(week)`** — `{rider_id: [attribute, ...]}` over every
   `RaceResult` with a `finish_time` in `week`'s races, one query rather than
   one per race. A rider who finished several of the week's races appears once
-  per race and is trained for each.
+  per race and is trained for each. This is the *training* reader — a rider
+  cut by the time limit didn't complete the course, so they earn nothing
+  here.
+- **`riders_who_started(week)`** — `set[int]` of every `RaceResult.rider_id`
+  in `week`'s races, finisher or not. This is the *fatigue* reader `world/`
+  excludes from weekly recovery: missing a race costs a rider's legs the
+  same as racing it (`riders/README.md`, *Freshness*), so it deliberately
+  does **not** filter on `finish_time` the way `riders_who_raced` does.
 
 **Terrain is classified here, not read from the engine's `Terrain`**, for the
 same reason everything else in this app is the seam: only `racing/adapters.py`

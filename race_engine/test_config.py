@@ -12,6 +12,7 @@ time but absent by default.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -19,6 +20,7 @@ from race_engine.config import ConfigError, load_config
 from race_engine.models import Rider, RiderAttributes
 
 ATTRS = {"climb": 50, "sprint": 50, "flat": 50, "resistance": 50, "positioning": 50}
+_CONFIGS_DIR = Path(__file__).parent / "configs"
 
 
 def _rider(rid: str, team: str | None = None, role: str | None = None) -> dict:
@@ -203,3 +205,12 @@ def test_config_rejects_non_bool_wind_enabled(tmp_path):
     cfg = _config([_rider("c1")], wind={"enabled": "yes"})
     with pytest.raises(ConfigError, match="enabled"):
         load_config(_write(tmp_path, cfg))
+
+
+def test_grand_field_config_loads_sixty_four_riders_in_sixteen_teams():
+    # load_config succeeding already validates one leader per team and
+    # unique team codes (RaceSetupError/ConfigError otherwise).
+    result = load_config(str(_CONFIGS_DIR / "grand_field.json"))
+    assert len(result["riders"]) == 64
+    assert len({r.team_id for r in result["riders"]}) == 16
+    assert result["course"].total_distance == 200_000.0
