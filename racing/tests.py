@@ -17,6 +17,7 @@ from racing.services import (
     course_training_attribute,
     previous_squad,
     riders_who_raced,
+    riders_who_started,
     set_squad,
     simulate_race,
     suggested_squad,
@@ -597,6 +598,42 @@ def test_riders_who_raced_groups_by_rider(db, week, team):
     assert abandoned.pk not in raced
 
 
+def test_riders_who_started_includes_non_finishers(db, week, team):
+    finisher = Rider.objects.create(
+        name="Finisher", team=team,
+        climb=60, sprint=60, flat=60, resistance=60, positioning=60,
+    )
+    cut = Rider.objects.create(
+        name="Cut", team=team,
+        climb=60, sprint=60, flat=60, resistance=60, positioning=60,
+    )
+    other_week_rider = Rider.objects.create(
+        name="Other Week", team=team,
+        climb=60, sprint=60, flat=60, resistance=60, positioning=60,
+    )
+    race = Race.objects.create(
+        name="Short Flat", course=[{"length": 50000.0, "gradient": 0.0}],
+        starts_at=week.starts_at + timedelta(days=1), week=week,
+    )
+    RaceResult.objects.create(race=race, rider=finisher, position=1, finish_time=1000.0)
+    RaceResult.objects.create(race=race, rider=cut, position=2, finish_time=None)
+
+    other_season = Season.objects.create(number=2, starts_at=MONDAY + timedelta(weeks=1))
+    other_week = Week.objects.create(
+        season=other_season, number=1, starts_at=MONDAY + timedelta(weeks=1),
+        ends_at=MONDAY + timedelta(weeks=2),
+    )
+    other_race = Race.objects.create(
+        name="Other Week Race", course=[{"length": 50000.0, "gradient": 0.0}],
+        starts_at=other_week.starts_at + timedelta(days=1), week=other_week,
+    )
+    RaceResult.objects.create(race=other_race, rider=other_week_rider, position=1, finish_time=1000.0)
+
+    started = riders_who_started(week)
+
+    assert started == {finisher.pk, cut.pk}
+
+
 def test_to_engine_rider_scales_attributes_by_freshness(rider):
     fresh = to_engine_rider(rider, role="leader", freshness_scale=1.0)
     tired = to_engine_rider(rider, role="leader", freshness_scale=0.80)
@@ -645,16 +682,16 @@ def test_simulate_race_deducts_freshness_from_finishers(running_race, four_rider
         assert rider.freshness == 100 - 25
 
 
-def test_simulate_race_does_not_deduct_from_non_finishers(running_race, four_riders, monkeypatch):
-    # The engine always runs until every rider finishes, so a non-finisher
-    # cannot arise from a real run today. Inject one through the adapter
-    # seam: simulate_race must still refuse to charge a rider whose
-    # finish_time is None — the same rule riders_who_raced applies.
+def test_simulate_race_deducts_freshness_from_non_finishers(running_race, four_riders, monkeypatch):
+    # The engine now produces real non-finishers (cut by the time limit),
+    # not just abandons — inject one through the adapter seam and confirm
+    # simulate_race charges every starter, finisher or not (broom-wagon-
+    # time-cut spec, In scope 5).
     from pathlib import Path
     from types import SimpleNamespace
 
     states = [
-        SimpleNamespace(finish_time=100.0, rider=SimpleNamespace(id=str(r.pk)))
+        SimpleNamespace(finish_time=100.0, position=1000.0, rider=SimpleNamespace(id=str(r.pk)))
         for r in four_riders
     ]
     states[-1].finish_time = None
@@ -667,12 +704,35 @@ def test_simulate_race_does_not_deduct_from_non_finishers(running_race, four_rid
 
     simulate_race(running_race, game_time=timezone.now())
 
-    for i, rider in enumerate(four_riders):
+    for rider in four_riders:
         rider.refresh_from_db()
-        if i == len(four_riders) - 1:
-            assert rider.freshness == 100
-        else:
-            assert rider.freshness == 100 - 25
+        assert rider.freshness == 100 - 25
+
+
+def test_simulate_race_orders_non_finishers_furthest_first(running_race, four_riders, monkeypatch):
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    states = [
+        SimpleNamespace(finish_time=10.0, position=5000.0, rider=SimpleNamespace(id=str(four_riders[0].pk))),
+        SimpleNamespace(finish_time=None, position=3000.0, rider=SimpleNamespace(id=str(four_riders[1].pk))),
+        SimpleNamespace(finish_time=None, position=8000.0, rider=SimpleNamespace(id=str(four_riders[2].pk))),
+        SimpleNamespace(finish_time=None, position=1000.0, rider=SimpleNamespace(id=str(four_riders[3].pk))),
+    ]
+
+    def fake_run_race(riders, course, log_path, *args, **kwargs):
+        Path(log_path).touch()
+        return states, 0, 2
+
+    monkeypatch.setattr("racing.services.run_race_via_adapter", fake_run_race)
+
+    simulate_race(running_race, game_time=timezone.now())
+
+    positions = {
+        r.rider_id: r.position
+        for r in RaceResult.objects.filter(race=running_race)
+    }
+    assert positions[four_riders[2].pk] < positions[four_riders[1].pk] < positions[four_riders[3].pk]
 
 
 def test_auto_pick_prefers_fresher_rider_of_equal_strength(db, team):

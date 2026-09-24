@@ -309,7 +309,7 @@ asserts `load_config` succeeds (which also validates one leader per team
 and unique codes), that there are 64 riders and 16 distinct team ids, and
 that the course is 200 km.
 
-### W4 — racing/services.py: starters pay, DNFs ordered, starters reader
+### W4 — racing/services.py: starters pay, DNFs ordered, starters reader ✅ done
 Make the three changes as specified, with tests in `racing/tests.py`:
 - Replace `test_simulate_race_does_not_deduct_from_non_finishers` with
   `test_simulate_race_deducts_freshness_from_non_finishers`. Same
