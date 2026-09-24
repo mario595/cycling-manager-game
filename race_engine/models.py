@@ -46,9 +46,49 @@ class Segment:
     gradient: float  # percentage, positive = uphill
 
 
+class MarkerKind(str, Enum):
+    """The two kinds of course marker, distinguished by what they award."""
+
+    SPRINT = "sprint"
+    MOUNTAIN = "mountain"
+
+
+@dataclass(frozen=True)
+class Marker:
+    """A named point on a course that a race records riders crossing.
+
+    Placed at a distance from the start, authored as part of the course. A
+    marker knows nothing about points or prizes — the features above it
+    decide what a crossing is worth.
+    """
+
+    kind: MarkerKind
+    distance: float  # meters from the start
+    name: str
+
+
 @dataclass
 class Course:
     segments: list[Segment]
+    markers: list[Marker] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        total = self.total_distance
+        for idx, marker in enumerate(self.markers):
+            if not 0 < marker.distance <= total:
+                raise RaceSetupError(
+                    f"marker {idx} ({marker.name!r}): distance must be in "
+                    f"(0, {total}] meters from the start, got {marker.distance}"
+                )
+            if not marker.name or len(marker.name) > 100:
+                raise RaceSetupError(
+                    f"marker {idx}: name must be 1-100 characters, got {marker.name!r}"
+                )
+            if not isinstance(marker.kind, MarkerKind):
+                raise RaceSetupError(
+                    f"marker {idx} ({marker.name!r}): kind must be a MarkerKind, "
+                    f"got {marker.kind!r}"
+                )
 
     @property
     def total_distance(self) -> float:
@@ -151,6 +191,7 @@ class RiderState:
     finished: bool = False
     finish_time: int | None = None  # seconds
     dnf: bool = False  # cut by the time limit; mutually exclusive with finished
+    marker_times: dict[int, float] = field(default_factory=dict)  # marker index -> race second of the crossing
 
 
 @dataclass
@@ -568,6 +609,7 @@ class RaceState:
 
         # Phase 2: apply all deltas consistently.
         winner_finished_this_tick = False
+        markers = self.course.markers
         for i, rs in enumerate(self.rider_states):
             if rs.finished:
                 continue
@@ -583,6 +625,7 @@ class RaceState:
             if not rs.surging:
                 rs.sprinting = False
 
+            prev = positions[i]
             rs.position += speed  # 1 tick = 1 second
 
             rs.energy = max(0.0, min(100.0, rs.energy - energy_drain))
@@ -594,6 +637,22 @@ class RaceState:
                 rs.finish_time = self.current_time
                 if self.time_limit is None:
                     winner_finished_this_tick = True
+
+            # Marker crossings are interpolated inside the tick: several
+            # riders routinely cross a marker in one second, and recording
+            # the tick alone would order them by the rider list, not by who
+            # got there first. `prev` is the rider's pre-move position (the
+            # Phase 1 snapshot), so the crossing is detected even for a
+            # rider who finished this tick (the finish clamp above already
+            # set `rs.position` to the course length).
+            if markers:
+                for m_idx, marker in enumerate(markers):
+                    if (
+                        m_idx not in rs.marker_times
+                        and prev < marker.distance <= rs.position
+                    ):
+                        frac = (marker.distance - prev) / speed if speed > 0 else 0.0
+                        rs.marker_times[m_idx] = self.current_time + frac
 
         # Time cut (broom wagon): once the winner finishes, fix a limit at
         # ceil(winner_time * (1 + TIME_CUT_MARGIN)). Riders still racing once
