@@ -30,16 +30,21 @@ confirm the listing. The rider stays on their roster, still racing, still
 training, still earning their wage, for as long as the auction runs.
 
 The listing appears on a market screen alongside every other team's live
-auctions: rider, reserve or current bid, time remaining. A manager browsing
-for a specific need — a second Climber, a young rider to build around —
-scans the list the same way they'd scan the free agent pool, but here every
-rider has a price that's moving.
+auctions: rider, reserve or current bid, and a live countdown to the
+deadline (`dd hh mm ss`, ticking down in real time rather than a static
+date). A manager browsing for a specific need — a second Climber, a young
+rider to build around — scans the list the same way they'd scan the free
+agent pool, but here every rider has a price that's moving. Every auction
+the manager's own team is involved in — a rider they're selling, or one
+they've bid on — also surfaces on the Dashboard, so neither is buried
+inside the Transfers screen.
 
 Placing a bid needs the team to have that much in the bank right now — no
 future income counted, no fee added on top, just the number they bid. If
 someone else bids higher, they see they've been outbid and by how much, and
-can bid again. They never see who they're bidding against — just the
-current price to beat and the clock.
+can bid again. Each listing shows its full bid history — every bid placed,
+and which team placed it — so a manager can see exactly who they're bidding
+against and how the price got there.
 
 A bid placed close to the deadline pushes the deadline back a little,
 rather than ending the auction on the spot. This is invisible engineering
@@ -71,10 +76,12 @@ consequence, as if the listing never happened.
    by that same window, so a last-second bid never ends the auction
    unanswered.
 7. The market screen shows every live auction: rider (with the same
-   attributes shown elsewhere), current price, time remaining — but never
-   who placed the current high bid.
+   attributes shown elsewhere), current price, a live countdown to the
+   deadline, and the full bid history — every bid and which team placed
+   it.
 8. A manager who has been outbid on an auction they bid on can see that
-   they've been outbid and what the new price is.
+   they've been outbid and what the new price is. Auctions the manager's
+   team is selling or has bid on also appear on the Dashboard.
 9. The listed rider stays on the seller's roster — racing, training,
    earning their wage as normal — for the full duration of the auction.
 10. At the deadline (subject to extensions), the auction resolves
@@ -100,8 +107,9 @@ consequence, as if the listing never happened.
   nothing today stops a manager overspending generally. Belongs with
   [#27](https://github.com/mario595/cycling-manager/issues/27)'s insolvency
   ladder if it turns out to matter.
-- **Bidder identity, bid history, or any social layer.** Anonymous by
-  design — see *Rules and edge cases*.
+- **Any social layer beyond bid history.** No messaging, no following a
+  manager's activity, no reputation. Bidder identity and full bid history
+  are shown (see *Rules and edge cases*) — that is the extent of it.
 - **Buy-it-now, or any way to end an auction early.** A listing always runs
   its full course (plus any extensions).
 - **Selling to a specific team, or a private/invite-only auction.** Every
@@ -127,13 +135,16 @@ consequence, as if the listing never happened.
   mechanism moves the rider first wins; the loser is a no-op, not an
   error. This should be rare in practice today since #29's release flow and
   this auction are both manager-initiated actions on the same roster.
-- **Bidding is anonymous.** The market shows the current price and time
-  left, never who's bidding. This is a deliberate simplification for an
-  early, thin market: with few human players and no AI bidders yet
-  ([#30](https://github.com/mario595/cycling-manager/issues/30)), visible
-  identities would let a small number of managers coordinate or avoid
-  bidding against each other more easily than the price itself should
-  allow.
+- **Bidding shows full identity, not anonymous.** The market shows every
+  bid and which team placed it, alongside the current price and a live
+  countdown. The original scoping decision was to hide identity, reasoning
+  that a thin, early market with few human players and no AI bidders yet
+  ([#30](https://github.com/mario595/cycling-manager/issues/30)) would be
+  easy to coordinate around if bidders could see each other. That was
+  reversed during implementation review: the coordination risk was judged
+  smaller than the value of a transparent market, and revisiting it once
+  #30 ships (rather than before) is straightforward if it turns out to
+  matter.
 - **Deadline extension is bounded by nothing except itself.** Every
   qualifying late bid pushes the deadline again — an auction with genuine,
   sustained competition can run longer than its nominal duration. This is
@@ -174,9 +185,10 @@ consequence, as if the listing never happened.
   feature distinct from #27's forced sales, where listing is a deliberate
   one-way commitment. A voluntary market test must stay reversible or
   managers won't use it. Decided in scoping.
-- Bidding and the market screen are anonymous — hides identity so a thin,
-  early market with few human players and no AI bidders can't be easily
-  coordinated or avoided between managers. Decided in scoping.
+- Bidding and the market screen show full identity — every bid and which
+  team placed it. Originally scoped anonymous (see *Rules and edge cases*
+  for the reasoning); reversed during implementation review in favour of a
+  transparent market. Revised post-implementation.
 - A bid is checked against the bidder's balance at the moment it's placed,
   with no escrow or hold — simplest rule that's always legible; the
   overspend loophole is accepted for now and left to #27 if it becomes a
@@ -207,8 +219,5 @@ consequence, as if the listing never happened.
 - **Escrowed or held funds while a bid stands.** Would close the overspend
   loophole properly, but is real ledger machinery an MVP doesn't need yet.
   Revisit with [#27](https://github.com/mario595/cycling-manager/issues/27).
-- **Visible bidder identity or bid history.** Would make the market more
-  social, but adds surface area and a coordination risk in a thin,
-  early-game market.
 - **A cap on concurrent listings or bids per team.** Not needed until the
   game has evidence it's a problem.
