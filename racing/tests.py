@@ -10,7 +10,15 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from racing.adapters import to_engine_course, to_engine_rider, to_team_codes
-from racing.models import Race, RaceLog, RaceResult, RaceSquad, RaceSquadRider
+from racing.models import (
+    MarkerCrossing,
+    Race,
+    RaceLog,
+    RaceMarker,
+    RaceResult,
+    RaceSquad,
+    RaceSquadRider,
+)
 from racing.services import (
     SquadError,
     auto_pick_squad,
@@ -818,3 +826,72 @@ def test_tired_riders_finish_worse_than_fresh_ones_on_the_same_seed(db):
 
     assert fresh_min < tired_min
     assert fresh_team_min < tired_min
+
+
+def test_marker_beyond_course_is_rejected(db):
+    race = Race.objects.create(
+        name="Big Hill",
+        course=[{"length": 1000.0, "gradient": 0.0}],
+    )
+
+    with pytest.raises(ValidationError):
+        RaceMarker.objects.create(
+            race=race,
+            kind=RaceMarker.Kind.SPRINT,
+            name="Past the top",
+            distance=1500.0,
+        )
+
+
+def test_marker_with_blank_name_is_rejected(db):
+    race = Race.objects.create(
+        name="Flat Day",
+        course=[{"length": 1000.0, "gradient": 0.0}],
+    )
+
+    with pytest.raises(ValidationError):
+        RaceMarker.objects.create(
+            race=race,
+            kind=RaceMarker.Kind.SPRINT,
+            name="   ",
+            distance=500.0,
+        )
+
+
+def test_markers_order_by_distance(db):
+    race = Race.objects.create(
+        name="Ordered",
+        course=[{"length": 5000.0, "gradient": 0.0}],
+    )
+    RaceMarker.objects.create(
+        race=race, kind=RaceMarker.Kind.SPRINT, name="Later", distance=4000.0
+    )
+    RaceMarker.objects.create(
+        race=race, kind=RaceMarker.Kind.SPRINT, name="First", distance=1000.0
+    )
+    RaceMarker.objects.create(
+        race=race, kind=RaceMarker.Kind.SPRINT, name="Second", distance=2500.0
+    )
+
+    assert [m.name for m in race.markers.all()] == ["First", "Second", "Later"]
+
+
+def test_crossing_position_is_unique_per_marker(db, team):
+    race = Race.objects.create(
+        name="Sprint Day",
+        course=[{"length": 5000.0, "gradient": 0.0}],
+    )
+    marker = RaceMarker.objects.create(
+        race=race, kind=RaceMarker.Kind.SPRINT, name="Line", distance=4000.0
+    )
+    first = Rider.objects.create(
+        name="Alpha", team=team, climb=50, sprint=50, flat=50, resistance=50, positioning=50
+    )
+    second = Rider.objects.create(
+        name="Beta", team=team, climb=50, sprint=50, flat=50, resistance=50, positioning=50
+    )
+    MarkerCrossing.objects.create(marker=marker, rider=first, position=1, crossed_at=100.0)
+
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            MarkerCrossing.objects.create(marker=marker, rider=second, position=1, crossed_at=101.0)

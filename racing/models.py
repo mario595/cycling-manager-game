@@ -232,3 +232,85 @@ class RaceSquadRider(models.Model):
 
     def __str__(self) -> str:
         return f"{self.rider} in {self.squad}"
+
+
+class RaceMarker(models.Model):
+    """A point on a race's course that riders race over (see specs/course-markers).
+
+    Written as a set with its race and never amended, so not a
+    `TimeStampedModel` — the same reasoning `RaceSquadRider` records.
+
+    Marker index `i` in the engine means the same row here: `simulate_race`
+    fetches the markers once, ordered by `("distance", "pk")`, and passes
+    that same list to both the adapter and the crossing writer (D9).
+    """
+
+    class Kind(models.TextChoices):
+        SPRINT = "sprint", "Sprint"
+        MOUNTAIN = "mountain", "Mountain"
+
+    race = models.ForeignKey(Race, on_delete=models.CASCADE, related_name="markers")
+    kind = models.CharField(max_length=10, choices=Kind.choices)
+    name = models.CharField(max_length=100)
+    distance = models.FloatField(
+        help_text="Meters from the start, same unit as Race.course lengths.",
+    )
+
+    class Meta:
+        ordering = ["distance", "pk"]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.kind}) at {self.distance:.0f} m in {self.race}"
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        if not self.name.strip():
+            errors["name"] = "must not be blank."
+        course_length = sum(s["length"] for s in self.race.course)
+        if not (0 < self.distance <= course_length):
+            errors["distance"] = (
+                f"must be within 0 and {course_length:.0f} m of the course."
+            )
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
+
+class MarkerCrossing(models.Model):
+    """One rider crossing one race marker.
+
+    Rows are written as a set by `simulate_race` and never amended — not a
+    `TimeStampedModel`. `crossed_at` is race seconds; for a marker not on the
+    finish line it is interpolated inside the engine tick (D4), and for a
+    finish-line marker it is the rider's `finish_time` (D5).
+    """
+
+    marker = models.ForeignKey(RaceMarker, on_delete=models.CASCADE, related_name="crossings")
+    rider = models.ForeignKey(
+        "riders.Rider",
+        on_delete=models.CASCADE,
+        related_name="marker_crossings",
+        help_text="String reference so racing/models.py needs no import of riders/.",
+    )
+    position = models.PositiveSmallIntegerField(
+        help_text="1 = first across. Contiguous from 1 within the marker.",
+    )
+    crossed_at = models.FloatField(help_text="Race seconds from the race start.")
+
+    class Meta:
+        ordering = ["marker", "position"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["marker", "rider"], name="unique_crossing_per_rider_per_marker"
+            ),
+            models.UniqueConstraint(
+                fields=["marker", "position"], name="unique_position_per_marker"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.position}. {self.rider} over {self.marker.name}"

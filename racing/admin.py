@@ -1,12 +1,26 @@
 from django.contrib import admin
 
-from .models import Race, RaceLog, RaceResult, RaceSquad, RaceSquadRider
+from .models import (
+    MarkerCrossing,
+    Race,
+    RaceLog,
+    RaceMarker,
+    RaceResult,
+    RaceSquad,
+    RaceSquadRider,
+)
+
+
+class RaceMarkerInline(admin.TabularInline):
+    model = RaceMarker
+    extra = 0
 
 
 @admin.register(Race)
 class RaceAdmin(admin.ModelAdmin):
     list_display = ("name", "status", "starts_at", "week", "wind_enabled", "seed", "created_at")
     list_filter = ("status", "week")
+    inlines = [RaceMarkerInline]
 
 
 @admin.register(RaceLog)
@@ -34,3 +48,9 @@ class RaceSquadAdmin(admin.ModelAdmin):
     list_display = ("race", "team", "is_auto_picked")
     list_filter = ("race", "is_auto_picked")
     inlines = [RaceSquadRiderInline]
+
+
+@admin.register(MarkerCrossing)
+class MarkerCrossingAdmin(admin.ModelAdmin):
+    list_display = ("marker", "position", "rider", "crossed_at")
+    list_filter = ("marker__race",)
