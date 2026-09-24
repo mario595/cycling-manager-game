@@ -326,7 +326,7 @@ Make the three changes as specified, with tests in `racing/tests.py`:
   that a `finish_time=None` row in the same week is **absent** from
   `riders_who_raced`. This guards training staying finishers-only.
 
-### W5 — world/services.py: recovery excludes starters
+### W5 — world/services.py: recovery excludes starters ✅ done
 Make the change as specified. Test in `world/tests/test_services.py`:
 `test_tick_does_not_recover_a_rider_who_did_not_finish`. Build it on
 `test_tick_does_not_recover_a_rider_who_raced_that_week`, but instead of
