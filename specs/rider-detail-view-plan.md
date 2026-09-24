@@ -495,7 +495,7 @@ Change `RaceResultsView` as described under *`api/views.py`*. Test in
 
 Existing race-results tests must stay green unchanged.
 
-### W3 — `frontend/src/api.ts`, `src/useRiderProfile.ts`: types, fetcher, hook
+### W3 — `frontend/src/api.ts`, `src/useRiderProfile.ts`: types, fetcher, hook — done
 
 Test `src/useRiderProfile.test.ts` with `renderHook` and a mocked
 `getRiderProfile`:

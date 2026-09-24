@@ -337,6 +337,76 @@ export interface RaceResultTeam {
   code: string
 }
 
+/** One point on the attribute-history chart — already the 0-10 display
+ * scale, never re-mapped. `season`/`week` are both null for the baseline,
+ * the snapshot taken at the rider's creation. */
+export interface AttributeSnapshot {
+  season: number | null
+  week: number | null
+  climb: number
+  sprint: number
+  flat: number
+  resistance: number
+  positioning: number
+}
+
+export interface CurrentWeek {
+  season: number
+  week: number
+}
+
+/** One race-history row. `team` is the team the rider raced for, not their
+ * current team — a released or re-signed rider's past rows never change.
+ * No points field: race points are a team award, not an individual one. */
+export interface RiderRace {
+  race: { id: number; name: string; starts_at: string | null }
+  team: RaceResultTeam | null
+  position: number
+  finish_time: number | null
+  winner_time: number | null
+  finished: boolean
+}
+
+/** Career totals derived from the same race list the page shows. No points
+ * field, for the same reason RiderRace has none. */
+export interface Career {
+  starts: number
+  wins: number
+  podiums: number
+  top_tens: number
+  dnfs: number
+}
+
+/** One rider's full profile: everything Rider already carries, plus their
+ * current team (null for a free agent), where the world is now, the
+ * attribute-history chart's points, the race history and the career
+ * totals. Identical for every viewer — no field is redacted based on who
+ * is looking. */
+export interface RiderProfile extends Rider {
+  team: RaceResultTeam | null
+  current_week: CurrentWeek | null
+  attribute_history: AttributeSnapshot[]
+  races: RiderRace[]
+  career: Career
+}
+
+/** Thrown by getRiderProfile on a 404 — the rider no longer exists (a
+ * long-unclaimed free agent, expired from the pool). The hook exposes this
+ * as a separate `notFound` state, not folded into a generic error, so the
+ * page can explain the absence rather than show a broken-page state. */
+export class RiderNotFound extends Error {}
+
+export async function getRiderProfile(riderId: number): Promise<RiderProfile> {
+  const response = await fetch(`/api/riders/${riderId}/`)
+  if (response.status === 404) {
+    throw new RiderNotFound()
+  }
+  if (!response.ok) {
+    throw new Error(`rider profile request failed: ${response.status}`)
+  }
+  return response.json()
+}
+
 export interface RaceResultEntry {
   position: number
   rider: { id: number; name: string }
