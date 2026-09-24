@@ -542,7 +542,7 @@ Test `src/screens/RiderProfile.test.tsx`, mocking `useRiderProfile`:
 In `src/navigation.test.ts`, test that `riderPath(7)` returns `'/riders/7'`
 and that `titleForPath('/riders/7')` returns `'Rider'`.
 
-### W7 — `Roster.tsx`, `Race.tsx`, `Transfers.tsx`: the links
+### W7 — `Roster.tsx`, `Race.tsx`, `Transfers.tsx`: the links — done
 
 Extend the existing tests:
 - `Roster.test.tsx`: the open panel has a "Full profile" link to

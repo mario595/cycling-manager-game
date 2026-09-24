@@ -120,6 +120,12 @@ describe('Transfers', () => {
     expect(screen.getByText('$3,900/wk')).toBeInTheDocument()
   })
 
+  it('links a free agent\'s name to their profile', () => {
+    renderTransfers()
+
+    expect(screen.getByText('Coach One')).toHaveAttribute('href', '/riders/7')
+  })
+
   it('disables Sign with a reason when the fee exceeds the balance', () => {
     mockUseFreeAgents.mockReturnValue({
       pool: { ...pool, balance: 10_000 },

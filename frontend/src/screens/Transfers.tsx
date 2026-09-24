@@ -1,8 +1,10 @@
 import { useMemo, useState, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 
 import { signFreeAgent, type FreeAgent } from '../api'
 import { Button, Card, Chip, ChipLabel, LabelBar, PageBody, PageHeading, StatTile } from '../components/primitives'
 import { formatMoney } from '../format'
+import { riderPath } from '../navigation'
 import { color, font } from '../theme'
 import { useAuth } from '../useAuth'
 import { useFreeAgents } from '../useFreeAgents'
@@ -223,18 +225,22 @@ function FreeAgentCard({
           {agent.speciality.slice(0, 2).toUpperCase()}
         </div>
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <div
+          <Link
+            to={riderPath(agent.id)}
             style={{
+              display: 'block',
               fontSize: 14.5,
               fontWeight: 600,
               letterSpacing: '-0.2px',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
+              color: color.ink,
+              textDecoration: 'none',
             }}
           >
             {agent.name}
-          </div>
+          </Link>
           <div style={{ fontSize: 11, color: color.mutedStrong, fontFamily: font.mono }}>
             {agent.speciality.toUpperCase()} · {agent.age} yrs
           </div>

@@ -160,6 +160,14 @@ describe('Roster', () => {
     expect(screen.getByText('Release $12,000')).toBeInTheDocument()
   })
 
+  it('links the open panel to the rider\'s full profile', () => {
+    renderRoster()
+
+    fireEvent.click(screen.getByText('Alba Sanchez'))
+
+    expect(screen.getByText('Full profile →')).toHaveAttribute('href', '/riders/1')
+  })
+
   it('notes when releasing a rider is free', () => {
     const freeRider: Rider = { ...riders[0], id: 3, name: 'Carla Díaz', release_cost: 0 }
     mockUseRoster.mockReturnValue({

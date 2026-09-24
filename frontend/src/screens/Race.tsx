@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 
 import type { CalendarRace, RaceDetail, RacePayoutEntry, RaceResultEntry, RaceResults, Squad, SquadRider } from '../api'
 import { CourseProfile } from '../components/CourseProfile'
 import { Button, Card, CardHeader, LabelBar, PageBody, PageHeading, StatTile } from '../components/primitives'
+import { riderPath } from '../navigation'
 import { raceStatusLabel } from '../raceStatus'
 import { formatGap, formatRaceTime } from '../raceTime'
 import { color, font } from '../theme'
@@ -166,7 +167,9 @@ function RiderResultsTable({ results, payout }: { results: RaceResults; payout: 
               {entry.finished ? entry.position : '—'}
             </div>
             <div style={{ flex: 1, fontSize: 14 }}>
-              {entry.rider.name}
+              <Link to={riderPath(entry.rider.id)} style={{ color: color.ink, textDecoration: 'none' }}>
+                {entry.rider.name}
+              </Link>
               {entry.team ? (
                 <span style={{ marginLeft: 8, fontFamily: font.mono, fontSize: 11.5, color: color.muted }}>
                   {entry.team.code}
