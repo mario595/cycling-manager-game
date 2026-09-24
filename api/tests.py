@@ -1889,7 +1889,7 @@ def test_place_bid_rejects_amount_above_balance_with_409(
     assert not auction.bids.exists()
 
 
-def test_auction_market_hides_bidder_identity(
+def test_auction_market_shows_full_bid_history_with_team_identity(
     market_client, market_team, bidder_client, bidder_team,
 ):
     make_ledger_entry(bidder_team, "starting_balance", STARTING_BALANCE, now(), "Starting balance")
@@ -1904,11 +1904,32 @@ def test_auction_market_hides_bidder_identity(
 
     assert response.status_code == 200
     entry = response.data["auctions"][0]
-    # The test that would catch someone adding a bidder/high-bidder field
-    # to the serializer later out of habit (spec, "Bidding is anonymous").
-    assert not any("bidder" in key.lower() for key in entry)
     assert set(entry) == {
-        "id", "rider", "current_price", "min_next_bid", "deadline", "is_own_listing",
+        "id", "rider", "current_price", "min_next_bid", "deadline", "is_own_listing", "bids",
     }
+    assert entry["bids"] == [
+        {"team_name": bidder_team.name, "amount": auction.reserve_price, "placed_at": entry["bids"][0]["placed_at"]},
+    ]
     assert entry["current_price"] == auction.reserve_price
     assert entry["min_next_bid"] == auction.reserve_price + auction.min_increment
+
+
+def test_auction_market_orders_bid_history_newest_first(
+    market_client, market_team, bidder_client, bidder_team,
+):
+    make_ledger_entry(bidder_team, "starting_balance", STARTING_BALANCE, now(), "Starting balance")
+    rider = _market_rider(name="For Sale", team=market_team)
+    market_client.post("/api/transfers/auctions/list/", {"rider_id": rider.pk})
+    auction = Auction.objects.get(rider=rider)
+    bidder_client.post(
+        f"/api/transfers/auctions/{auction.pk}/bid/", {"amount": auction.reserve_price},
+    )
+    second_amount = auction.reserve_price + auction.min_increment
+    bidder_client.post(
+        f"/api/transfers/auctions/{auction.pk}/bid/", {"amount": second_amount},
+    )
+
+    response = market_client.get("/api/transfers/auctions/")
+
+    bids = response.data["auctions"][0]["bids"]
+    assert [b["amount"] for b in bids] == [second_amount, auction.reserve_price]

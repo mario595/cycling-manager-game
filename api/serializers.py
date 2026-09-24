@@ -196,12 +196,22 @@ class ReleaseRiderSerializer(serializers.Serializer):
     rider_id = serializers.IntegerField()
 
 
+class BidSerializer(serializers.Serializer):
+    """One bid in an auction's full history — which team placed it, when,
+    and for how much. Bidding is not anonymous (spec, *Rules and edge
+    cases*): every listing shows its whole history, newest/highest first,
+    not just the current leader."""
+
+    team_name = serializers.CharField()
+    amount = serializers.IntegerField()
+    placed_at = serializers.DateTimeField()
+
+
 class AuctionSerializer(serializers.Serializer):
     """One live auction as the market screen shows it: rider, price, time
-    left — never the bidder (spec, *Rules and edge cases*, "Bidding is
-    anonymous"). `min_next_bid` and `is_own_listing` are computed by the
-    view, not derived here, since neither is a plain attribute of an
-    Auction row."""
+    left, and its full bid history. `min_next_bid`, `is_own_listing` and
+    `bids` are computed by the view, not derived here, since none is a
+    plain attribute of an Auction row."""
 
     id = serializers.IntegerField()
     rider = RiderSerializer()
@@ -209,6 +219,7 @@ class AuctionSerializer(serializers.Serializer):
     min_next_bid = serializers.IntegerField()
     deadline = serializers.DateTimeField()
     is_own_listing = serializers.BooleanField()
+    bids = BidSerializer(many=True)
 
 
 class AuctionMarketSerializer(serializers.Serializer):

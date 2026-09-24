@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError
-from django.db.models import Sum
+from django.db.models import Prefetch, Sum
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -531,15 +531,22 @@ class ReleaseRiderView(APIView):
 
 class AuctionMarketView(APIView):
     """Every open auction, plus the caller's balance. Mirrors
-    FreeAgentsView exactly. `min_next_bid` and `is_own_listing` are
-    computed here, not in the serializer — neither is a plain attribute
-    of an Auction row."""
+    FreeAgentsView exactly. `min_next_bid`, `is_own_listing` and `bids`
+    are computed here, not in the serializer — none is a plain attribute
+    of an Auction row. Bidding is not anonymous (spec, *Rules and edge
+    cases*): every listing carries its full bid history, newest first,
+    each with the bidding team's name."""
 
     def get(self, request):
         team = team_for(request.user)
         if team is None:
             return Response({"detail": "You do not manage a team."}, status=403)
 
+        auctions_qs = (
+            Auction.objects.filter(status=Auction.Status.OPEN)
+            .select_related("rider")
+            .prefetch_related(Prefetch("bids", queryset=Bid.objects.select_related("bidder_team")))
+        )
         auctions = [
             {
                 "id": auction.pk,
@@ -548,10 +555,16 @@ class AuctionMarketView(APIView):
                 "min_next_bid": auction.current_price + auction.min_increment,
                 "deadline": auction.deadline,
                 "is_own_listing": auction.seller_team_id == team.pk,
+                "bids": [
+                    {
+                        "team_name": bid.bidder_team.name,
+                        "amount": bid.amount,
+                        "placed_at": bid.placed_at,
+                    }
+                    for bid in auction.bids.all()
+                ],
             }
-            for auction in Auction.objects.filter(
-                status=Auction.Status.OPEN,
-            ).select_related("rider")
+            for auction in auctions_qs
         ]
         return Response(AuctionMarketSerializer({
             "auctions": auctions,
