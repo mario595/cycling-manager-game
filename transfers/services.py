@@ -304,3 +304,79 @@ def due_auctions(at) -> QuerySet[Auction]:
     world._resolve_expired_auctions iterates. A plain filter, not a lock:
     the lock happens per-row inside resolve_auction."""
     return Auction.objects.filter(status=Auction.Status.OPEN, deadline__lte=at)
+
+
+def resolve_auction(auction, *, at, pay_seller=None, charge_buyer=None) -> Auction:
+    """Resolve one due auction: sold, unsold or cancelled.
+
+    Re-fetches and locks the Auction row (the caller's instance may be
+    stale, from a plain `due_auctions` filter with no lock of its own),
+    then re-checks it is still OPEN and its deadline has actually passed
+    — a concurrent bid can have extended it between the tick's query and
+    this lock, in which case this is a no-op: the auction is due again on
+    a later tick, once its new deadline actually passes.
+
+    Then locks the Rider row and re-checks it is still on the seller's
+    roster: a release or forced sale can have moved it away first, in
+    which case the auction is CANCELLED and no money moves (whichever
+    mechanism moves the rider first wins — spec's *Rules and edge
+    cases*).
+
+    With no bids, the auction goes UNSOLD — no callback calls, rider
+    untouched (spec item 11). With a winning bid (the highest amount,
+    ties broken by earliest), the winner's roster is re-checked against
+    ROSTER_CAP under the same lock (Design decision 7): if they are at or
+    over it by now, the auction goes UNSOLD rather than violating the
+    cap, exactly as if nobody had bid.
+
+    Otherwise charge_buyer(winner, amount) runs before pay_seller(seller,
+    amount) — buyer debited before seller credited, so a charge_buyer
+    raise (the accepted overspend loophole, spec's *Out of scope*) rolls
+    the whole transaction back and leaves the auction OPEN for the next
+    tick to retry, rather than cancelling a sale the seller was owed.
+    `transfers/` may not import `economy/`, so both callbacks are
+    injected by the caller (world/), the same shape sign_free_agent's
+    `charge` callback uses.
+    """
+    with transaction.atomic():
+        auction = Auction.objects.select_for_update().get(pk=auction.pk)
+
+        if auction.status != Auction.Status.OPEN or auction.deadline > at:
+            return auction
+
+        rider = Rider.objects.select_for_update().get(pk=auction.rider_id)
+
+        if rider.team_id != auction.seller_team_id:
+            auction.status = Auction.Status.CANCELLED
+            auction.resolved_at = at
+            auction.save(update_fields=["status", "resolved_at", "updated_at"])
+            return auction
+
+        winning_bid = auction.bids.order_by("-amount", "-placed_at").first()
+        if winning_bid is None:
+            auction.status = Auction.Status.UNSOLD
+            auction.resolved_at = at
+            auction.save(update_fields=["status", "resolved_at", "updated_at"])
+            return auction
+
+        winner = winning_bid.bidder_team
+        if Rider.objects.filter(team=winner).count() >= ROSTER_CAP:
+            auction.status = Auction.Status.UNSOLD
+            auction.resolved_at = at
+            auction.save(update_fields=["status", "resolved_at", "updated_at"])
+            return auction
+
+        amount = winning_bid.amount
+        if charge_buyer is not None:
+            charge_buyer(winner, amount)
+        if pay_seller is not None:
+            pay_seller(auction.seller_team, amount)
+
+        rider.team = winner
+        mark_team_change([rider], team_now=winner, at=at)
+        rider.save(update_fields=["team", "updated_at"])
+
+        auction.status = Auction.Status.SOLD
+        auction.resolved_at = at
+        auction.save(update_fields=["status", "resolved_at", "updated_at"])
+    return auction

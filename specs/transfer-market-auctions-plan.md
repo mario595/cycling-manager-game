@@ -592,7 +592,7 @@ call for the same rider while the first is still open raises
 mechanic the whole anti-snipe promise rests on),
 `test_place_bid_outside_extension_window_does_not_move_deadline`.
 
-### W5 — `transfers/services.py`: `resolve_auction`
+### W5 — `transfers/services.py`: `resolve_auction` ✅
 The load-bearing item — implement in full per *Design decision 3*,
 including the re-check-under-lock, the rider-already-moved cancellation
 path, the no-bids unsold path, and the `ROSTER_CAP` re-check.

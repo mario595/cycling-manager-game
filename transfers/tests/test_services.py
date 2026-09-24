@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone as dt_timezone
+from unittest.mock import Mock, call
 
 import pytest
 
@@ -24,6 +25,7 @@ from transfers.services import (
     place_bid,
     release_cost_for,
     release_rider,
+    resolve_auction,
     sign_free_agent,
 )
 
@@ -300,3 +302,112 @@ def test_place_bid_outside_extension_window_does_not_move_deadline(db, claimed_a
     updated = place_bid(auction.pk, bidder, auction.reserve_price, at=bid_time)
 
     assert updated.deadline == original_deadline
+
+
+def test_resolve_auction_with_no_bids_marks_unsold_and_touches_nothing(db, claimed_at):
+    seller = Team.objects.create(name="Team Alpha", code="ALP")
+    rider = _rider(name="For Sale", team=seller)
+    auction = list_for_auction(seller, rider.pk, at=claimed_at)
+    charge_buyer = Mock()
+    pay_seller = Mock()
+
+    resolved = resolve_auction(
+        auction, at=auction.deadline, charge_buyer=charge_buyer, pay_seller=pay_seller,
+    )
+
+    assert resolved.status == Auction.Status.UNSOLD
+    assert resolved.resolved_at == auction.deadline
+    charge_buyer.assert_not_called()
+    pay_seller.assert_not_called()
+    rider.refresh_from_db()
+    assert rider.team_id == seller.pk
+
+
+def test_resolve_auction_with_winning_bid_moves_rider_and_calls_both_callbacks_in_order(db, claimed_at):
+    seller = Team.objects.create(name="Team Alpha", code="ALP")
+    bidder = Team.objects.create(name="Team Bravo", code="BRA")
+    rider = _rider(name="For Sale", team=seller)
+    auction = list_for_auction(seller, rider.pk, at=claimed_at)
+    place_bid(auction.pk, bidder, auction.reserve_price, at=claimed_at)
+
+    manager = Mock()
+
+    resolved = resolve_auction(
+        auction, at=auction.deadline,
+        charge_buyer=manager.charge_buyer, pay_seller=manager.pay_seller,
+    )
+
+    assert resolved.status == Auction.Status.SOLD
+    assert manager.mock_calls == [
+        call.charge_buyer(bidder, auction.reserve_price),
+        call.pay_seller(seller, auction.reserve_price),
+    ]
+    rider.refresh_from_db()
+    assert rider.team_id == bidder.pk
+
+
+def test_resolve_auction_cancels_when_rider_already_left_roster(db, claimed_at):
+    seller = Team.objects.create(name="Team Alpha", code="ALP")
+    bidder = Team.objects.create(name="Team Bravo", code="BRA")
+    rider = _rider(name="For Sale", team=seller)
+    auction = list_for_auction(seller, rider.pk, at=claimed_at)
+    place_bid(auction.pk, bidder, auction.reserve_price, at=claimed_at)
+    release_rider(seller, rider.pk, at=claimed_at, weeks_opened=1)
+    charge_buyer = Mock()
+    pay_seller = Mock()
+
+    resolved = resolve_auction(
+        auction, at=auction.deadline, charge_buyer=charge_buyer, pay_seller=pay_seller,
+    )
+
+    assert resolved.status == Auction.Status.CANCELLED
+    charge_buyer.assert_not_called()
+    pay_seller.assert_not_called()
+    rider.refresh_from_db()
+    assert rider.team_id is None
+
+
+def test_resolve_auction_marks_unsold_when_winner_at_roster_cap(db, claimed_at):
+    seller = Team.objects.create(name="Team Alpha", code="ALP")
+    bidder = Team.objects.create(name="Team Bravo", code="BRA")
+    rider = _rider(name="For Sale", team=seller)
+    auction = list_for_auction(seller, rider.pk, at=claimed_at)
+    place_bid(auction.pk, bidder, auction.reserve_price, at=claimed_at)
+    for i in range(ROSTER_CAP):
+        _rider(name=f"Roster {i}", team=bidder)
+    charge_buyer = Mock()
+    pay_seller = Mock()
+
+    resolved = resolve_auction(
+        auction, at=auction.deadline, charge_buyer=charge_buyer, pay_seller=pay_seller,
+    )
+
+    assert resolved.status == Auction.Status.UNSOLD
+    charge_buyer.assert_not_called()
+    pay_seller.assert_not_called()
+    rider.refresh_from_db()
+    assert rider.team_id == seller.pk
+
+
+def test_resolve_auction_is_idempotent_under_charge_buyer_failure(db, claimed_at):
+    seller = Team.objects.create(name="Team Alpha", code="ALP")
+    bidder = Team.objects.create(name="Team Bravo", code="BRA")
+    rider = _rider(name="For Sale", team=seller)
+    auction = list_for_auction(seller, rider.pk, at=claimed_at)
+    place_bid(auction.pk, bidder, auction.reserve_price, at=claimed_at)
+
+    def charge_buyer(team, amount):
+        raise InsufficientFunds("Balance changed since the bid was placed.")
+
+    pay_seller = Mock()
+
+    with pytest.raises(InsufficientFunds):
+        resolve_auction(auction, at=auction.deadline, charge_buyer=charge_buyer, pay_seller=pay_seller)
+
+    pay_seller.assert_not_called()
+    auction.refresh_from_db()
+    assert auction.status == Auction.Status.OPEN
+    assert auction.resolved_at is None
+    rider.refresh_from_db()
+    assert rider.team_id == seller.pk
+    assert Bid.objects.filter(auction=auction).count() == 1
