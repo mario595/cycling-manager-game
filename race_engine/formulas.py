@@ -148,6 +148,17 @@ BRIDGE_MAX_DEPTH = 2  # only the front of a group considers bridging
 CHASE_MIN_ENERGY = 25.0  # minimum energy to initiate a bridge/chase
 CHASE_MIN_CLIMB_ADVANTAGE = -10.0  # don't chase on steep if leader is 10+ climb points stronger
 
+# Marker contest reflex — specialists surge for a named point on the course
+# (rule 2, the one effort exempt from the phase gate, so it works in the early
+# race). Windows are sized so the 20-tick effort ends at or just past the
+# marker (~17 m/s x 20 = 340 m for a sprint kick; ~7 m/s x 20 = 140 m
+# climbing). Starting values; calibrated in race_engine/audit.py.
+MARKER_SPRINT_WINDOW = 300.0  # meters before a sprint marker a sprinter kicks
+MARKER_CLIMB_WINDOW = 150.0  # meters before a mountain marker a climber surges
+MARKER_MIN_SPRINT = 75.0  # sprint attribute needed to contest a sprint marker
+MARKER_MIN_CLIMB = 75.0  # climb attribute needed to contest a mountain marker
+MARKER_MIN_ENERGY = 60.0  # reserve needed to spend on a marker (vs 30 for an attack)
+
 # Time cut (broom wagon) — once the winner finishes, the fraction of their
 # time after which the race closes; anyone still on the road is DNF.
 # Calibrated against race_engine/audit.py's six bundled configs (default 5
