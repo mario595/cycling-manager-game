@@ -6,6 +6,7 @@ import { formatMoney } from '../format'
 import { color, font } from '../theme'
 import { useAuctions } from '../useAuctions'
 import { useAuth } from '../useAuth'
+import { useCountdown } from '../useCountdown'
 import { useFreeAgents } from '../useFreeAgents'
 import { useMyBids } from '../useMyBids'
 
@@ -355,15 +356,6 @@ function AuctionsTab({
   )
 }
 
-function formatDeadline(deadline: string): string {
-  return new Date(deadline).toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
 function AuctionCard({
   auction,
   balance,
@@ -379,6 +371,7 @@ function AuctionCard({
   const rider = auction.rider
   const affordable = amount <= balance
   const clearsIncrement = amount >= auction.min_next_bid
+  const countdown = useCountdown(auction.deadline)
 
   return (
     <Card style={{ padding: '15px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -440,7 +433,7 @@ function AuctionCard({
           Current {formatMoney(auction.current_price)}
         </span>
         <span style={{ fontSize: 11, color: color.muted, fontFamily: font.mono }}>
-          Ends {formatDeadline(auction.deadline)}
+          Ends in {countdown}
         </span>
       </div>
 

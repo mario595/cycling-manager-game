@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { placeBid, signFreeAgent, type AuctionMarket, type FreeAgentPool, type Me } from '../api'
 import { useAuctions } from '../useAuctions'
@@ -153,6 +153,10 @@ beforeEach(() => {
   mockPlaceBid.mockResolvedValue(undefined)
 })
 
+afterEach(() => {
+  vi.useRealTimers()
+})
+
 describe('Transfers', () => {
   it('renders the signing fee and weekly salary on the card', () => {
     renderTransfers()
@@ -240,6 +244,23 @@ describe('Transfers', () => {
     expect(screen.getByText('For Sale Rider')).toBeInTheDocument()
     expect(screen.getByText('Current $60,000')).toBeInTheDocument()
     expect(screen.getByText('Minimum next bid $63,000')).toBeInTheDocument()
+  })
+
+  it('counts the deadline down in dd hh mm ss and keeps it live', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2027-03-01T00:00:00Z'))
+
+    renderTransfers()
+    fireEvent.click(screen.getByRole('button', { name: 'Auctions' }))
+
+    // auctionMarket's listing deadline is 2027-03-04T12:00:00Z — exactly
+    // 3 days 12 hours from the mocked "now".
+    expect(screen.getByText('Ends in 03d 12h 00m 00s')).toBeInTheDocument()
+
+    act(() => {
+      vi.advanceTimersByTime(1_000)
+    })
+    expect(screen.getByText('Ends in 03d 11h 59m 59s')).toBeInTheDocument()
   })
 
   it('hides the bid action on the caller\'s own listing', () => {

@@ -7,14 +7,14 @@ all reading the real API. No screen renders invented data.
 
 | Route | Screen | State |
 |-------|--------|-------|
-| `/` | Dashboard | Built — season, standings, next race and squad status from the API, no fixture data |
+| `/` | Dashboard | Built — season, standings, next race and squad status, and a "My auctions" card listing riders the team is selling and auctions it has bid on, from the API, no fixture data |
 | `/roster` | Roster | Built — filter, sort, rider detail panel, each rider's weekly salary, market value and release cost, a squad-value total, the same freshness bar as squad selection, the season-end salary review panel with the wage bill and each moved rider's old→new salary, and a "List for auction" action beside Release, from the API, no fixture data |
 | `/staff` | Staff | Built — hire/fire a trainer, with each trainer's fee and weekly salary, from the API, no fixture data |
 | `/sponsors` | Sponsors | Built — sign one of three sponsor offers, or see the signed contract, from the API, no fixture data |
 | `/finances` | Finances | Built — balance, weekly wage bill and ledger history from the API, no fixture data |
 | `/training` | Training | Built — set the weekly focus, see last week's moves, from the API, no fixture data |
 | `/calendar` | Calendar | Built — twelve weeks from the API, no fixture data |
-| `/transfers` | Transfers | Built — two tabs: the free-agent pool with each rider's signing fee and sign action, and live auctions with current price, minimum next bid, deadline and a bid action (never the bidder — the market is anonymous), plus an outbid notice and the team's balance, from the API, no fixture data |
+| `/transfers` | Transfers | Built — two tabs: the free-agent pool with each rider's signing fee and sign action, and live auctions with current price, minimum next bid, a live `dd hh mm ss` countdown to the deadline and a bid action (never the bidder — the market is anonymous), plus an outbid notice and the team's balance, from the API, no fixture data |
 | `/race/:raceId` | Race | Built — the full race screen: course profile and squad before it runs, course profile and results after, from the API, no fixture data |
 | `/league` | League | Built — season standings table from the API, no fixture data |
 | `/login`, `/register` | Login, Register | Built — real accounts, no fixture data |
