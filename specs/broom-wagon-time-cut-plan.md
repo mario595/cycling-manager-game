@@ -267,7 +267,7 @@ above the call, and the docstring's "excluding riders who raced" line, to say
 
 ## Work items
 
-### W1 — race_engine/formulas.py, race_engine/models.py: the time cut
+### W1 — race_engine/formulas.py, race_engine/models.py: the time cut ✅ done
 Add the constant, the two dataclass fields, the tick block, `is_finished`
 and the `get_results` key, exactly as above. New test file
 `race_engine/test_time_cut.py`. Use `RaceState.create_initial_state(...,

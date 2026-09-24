@@ -148,6 +148,17 @@ BRIDGE_MAX_DEPTH = 2  # only the front of a group considers bridging
 CHASE_MIN_ENERGY = 25.0  # minimum energy to initiate a bridge/chase
 CHASE_MIN_CLIMB_ADVANTAGE = -10.0  # don't chase on steep if leader is 10+ climb points stronger
 
+# Time cut (broom wagon) — once the winner finishes, the fraction of their
+# time after which the race closes; anyone still on the road is DNF.
+# Calibrated against race_engine/audit.py's six bundled configs (default 5
+# seeds): mountain_stage's sprinters — negligible climb, minimal draft
+# credit on sustained gradient — legitimately finish up to 37.6% behind the
+# winner (last_over_winner_ratio 1.3756, seed 2024; every other bundled
+# config's worst straggler stays under 9%). 0.25 (2x the ~10% spread this
+# was first sized against) would have cut them, so the margin is 2x the
+# actual worst clean spread instead.
+TIME_CUT_MARGIN = 0.8
+
 # Wind (Tier A: attrition only — see race_engine/WIND_PLAN.md). Modelled
 # relative to the rider (0=head, 90=from the right, 180=tail, 270=from the
 # left), never as a compass bearing. Enters the physics through the aero
