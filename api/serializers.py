@@ -196,6 +196,49 @@ class ReleaseRiderSerializer(serializers.Serializer):
     rider_id = serializers.IntegerField()
 
 
+class AuctionSerializer(serializers.Serializer):
+    """One live auction as the market screen shows it: rider, price, time
+    left — never the bidder (spec, *Rules and edge cases*, "Bidding is
+    anonymous"). `min_next_bid` and `is_own_listing` are computed by the
+    view, not derived here, since neither is a plain attribute of an
+    Auction row."""
+
+    id = serializers.IntegerField()
+    rider = RiderSerializer()
+    current_price = serializers.IntegerField()
+    min_next_bid = serializers.IntegerField()
+    deadline = serializers.DateTimeField()
+    is_own_listing = serializers.BooleanField()
+
+
+class AuctionMarketSerializer(serializers.Serializer):
+    """Same both-keys-always-present shape FreeAgentPoolSerializer uses."""
+
+    auctions = AuctionSerializer(many=True)
+    balance = serializers.IntegerField()
+
+
+class ListForAuctionSerializer(serializers.Serializer):
+    rider_id = serializers.IntegerField()
+
+
+class PlaceBidSerializer(serializers.Serializer):
+    amount = serializers.IntegerField(min_value=1)
+
+
+class MyBidStatusSerializer(serializers.Serializer):
+    """One row for "auctions I've bid on" — spec item 8, outbid
+    visibility. `is_high_bidder` tells the frontend whether to show
+    "you're winning" vs "outbid"."""
+
+    auction_id = serializers.IntegerField()
+    rider_name = serializers.CharField()
+    my_last_bid = serializers.IntegerField()
+    current_price = serializers.IntegerField()
+    is_high_bidder = serializers.BooleanField()
+    deadline = serializers.DateTimeField()
+
+
 class SquadSerializer(serializers.Serializer):
     race = serializers.IntegerField()
     race_name = serializers.CharField()

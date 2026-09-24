@@ -630,7 +630,7 @@ test that would fail if a future edit accidentally moved the call inside
 near-deadline repeatedly across several ticks, assert it keeps surviving
 until bids stop, then resolves).
 
-### W8 — `api/`: serializers, views, urls
+### W8 — `api/`: serializers, views, urls ✅
 Add every class from *api/serializers.py* / *api/views.py* / *api/urls.py*
 above. `PlaceBidView`'s balance check: `if balance_for(team) <
 serializer.validated_data["amount"]: return Response({"detail": "..."},

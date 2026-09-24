@@ -52,13 +52,20 @@ from staff.services import (
 )
 from teams.models import ManagerialSpell, Team
 from teams.services import NoTeamAvailable, claim_team
+from transfers.models import Auction, Bid
 from transfers.pricing import market_value_for
 from transfers.services import (
+    AuctionAlreadyExists,
+    AuctionNotOpen,
+    BidTooLow,
     InsufficientFunds as TransferInsufficientFunds,
     RiderNotAvailable,
     RiderNotOnRoster,
     RosterFull,
+    SelfBid,
     free_agents,
+    list_for_auction,
+    place_bid,
     release_rider,
     sign_free_agent,
 )
@@ -68,14 +75,18 @@ from accounts.views import LoginView as AccountsLoginView
 
 from .services import touch_last_seen
 from .serializers import (
+    AuctionMarketSerializer,
     CalendarSerializer,
     ClaimTeamSerializer,
     ClockSerializer,
     FinancesSerializer,
     FreeAgentPoolSerializer,
     HireTrainerSerializer,
+    ListForAuctionSerializer,
     MeSerializer,
     MeTeamSerializer,
+    MyBidStatusSerializer,
+    PlaceBidSerializer,
     PositionSerializer,
     RaceDetailSerializer,
     RaceResultsSerializer,
@@ -516,6 +527,113 @@ class ReleaseRiderView(APIView):
             return Response({"detail": str(exc)}, status=409)
 
         return Response(status=204)
+
+
+class AuctionMarketView(APIView):
+    """Every open auction, plus the caller's balance. Mirrors
+    FreeAgentsView exactly. `min_next_bid` and `is_own_listing` are
+    computed here, not in the serializer — neither is a plain attribute
+    of an Auction row."""
+
+    def get(self, request):
+        team = team_for(request.user)
+        if team is None:
+            return Response({"detail": "You do not manage a team."}, status=403)
+
+        auctions = [
+            {
+                "id": auction.pk,
+                "rider": auction.rider,
+                "current_price": auction.current_price,
+                "min_next_bid": auction.current_price + auction.min_increment,
+                "deadline": auction.deadline,
+                "is_own_listing": auction.seller_team_id == team.pk,
+            }
+            for auction in Auction.objects.filter(
+                status=Auction.Status.OPEN,
+            ).select_related("rider")
+        ]
+        return Response(AuctionMarketSerializer({
+            "auctions": auctions,
+            "balance": balance_for(team),
+        }).data)
+
+
+class ListForAuctionView(APIView):
+    """List one of the caller's own riders. 409 for AuctionAlreadyExists /
+    RiderNotOnRoster (request well-formed, world state refuses it — same
+    split as SignFreeAgentView)."""
+
+    def post(self, request):
+        team = team_for(request.user)
+        if team is None:
+            return Response({"detail": "You do not manage a team."}, status=403)
+
+        serializer = ListForAuctionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            list_for_auction(team, serializer.validated_data["rider_id"], at=now())
+        except (RiderNotOnRoster, AuctionAlreadyExists) as exc:
+            return Response({"detail": str(exc)}, status=409)
+
+        return Response(status=204)
+
+
+class PlaceBidView(APIView):
+    """Place a bid on an open auction. Balance checked here (Design
+    decision 8) against economy.services.balance_for BEFORE calling
+    transfers.services.place_bid — no charge happens yet, so there is no
+    injected charge callback on this path, unlike sign_free_agent."""
+
+    def post(self, request, auction_id):
+        team = team_for(request.user)
+        if team is None:
+            return Response({"detail": "You do not manage a team."}, status=403)
+
+        serializer = PlaceBidSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        amount = serializer.validated_data["amount"]
+
+        if balance_for(team) < amount:
+            return Response({"detail": "You cannot afford this bid."}, status=409)
+
+        try:
+            place_bid(auction_id, team, amount, at=now())
+        except (AuctionNotOpen, BidTooLow, SelfBid) as exc:
+            return Response({"detail": str(exc)}, status=409)
+
+        return Response(status=204)
+
+
+class MyBidsView(APIView):
+    """Every auction the caller's team has an active bid on, with
+    is_high_bidder — backs spec item 8's outbid notice. Read-only,
+    polled by the frontend the same way FreeAgentsView is."""
+
+    def get(self, request):
+        team = team_for(request.user)
+        if team is None:
+            return Response({"detail": "You do not manage a team."}, status=403)
+
+        auction_ids = (
+            Bid.objects.filter(bidder_team=team, auction__status=Auction.Status.OPEN)
+            .values_list("auction_id", flat=True).distinct()
+        )
+        rows = []
+        for auction in Auction.objects.filter(pk__in=auction_ids).select_related("rider"):
+            my_last_bid = (
+                auction.bids.filter(bidder_team=team).order_by("-amount", "-placed_at").first()
+            )
+            rows.append({
+                "auction_id": auction.pk,
+                "rider_name": auction.rider.name,
+                "my_last_bid": my_last_bid.amount,
+                "current_price": auction.current_price,
+                "is_high_bidder": my_last_bid.amount == auction.current_price,
+                "deadline": auction.deadline,
+            })
+        return Response(MyBidStatusSerializer(rows, many=True).data)
 
 
 class RaceDetailView(APIView):

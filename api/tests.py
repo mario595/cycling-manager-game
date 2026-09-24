@@ -18,6 +18,7 @@ from riders.models import DISPLAY_MAX, Rider
 from schedule.models import SEASON_WEEKS, Season, Week
 from staff.models import Trainer, TrainingWeekReport
 from staff.pricing import hire_fee, weekly_salary
+from transfers.models import Auction
 from transfers.pricing import market_value_for, severance_fee_for, signing_fee_for
 from teams.models import ManagerialSpell, Team
 from world.services import now
@@ -1839,3 +1840,75 @@ def test_roster_view_reports_release_cost_per_rider(market_client, market_team):
     by_name = {r["name"]: r for r in response.data["riders"]}
     assert by_name["Inherited"]["release_cost"] == 0
     assert by_name["Signed Later"]["release_cost"] == severance_fee_for(signed)
+
+
+@pytest.fixture
+def bidder_manager(db) -> User:
+    return User.objects.create_user(email="bidder-manager@example.com", password="s0meth1ng-good")
+
+
+@pytest.fixture
+def bidder_team(db, bidder_manager) -> Team:
+    return Team.objects.create(name="Bidder Team", code="BID", manager=bidder_manager)
+
+
+@pytest.fixture
+def bidder_client(bidder_manager) -> APIClient:
+    client = APIClient()
+    client.force_authenticate(user=bidder_manager)
+    return client
+
+
+def test_list_for_auction_requires_team(db):
+    manager = User.objects.create_user(email="no-team-auction@example.com", password="s0meth1ng-good")
+    client = APIClient()
+    client.force_authenticate(user=manager)
+
+    response = client.post("/api/transfers/auctions/list/", {"rider_id": 1})
+
+    assert response.status_code == 403
+    assert Auction.objects.count() == 0
+
+
+def test_place_bid_rejects_amount_above_balance_with_409(
+    market_client, market_team, bidder_client, bidder_team,
+):
+    make_ledger_entry(bidder_team, "starting_balance", 1_000, now(), "Starting balance")
+    rider = _market_rider(name="For Sale", team=market_team)
+    list_response = market_client.post(
+        "/api/transfers/auctions/list/", {"rider_id": rider.pk},
+    )
+    assert list_response.status_code == 204
+    auction = Auction.objects.get(rider=rider)
+
+    response = bidder_client.post(
+        f"/api/transfers/auctions/{auction.pk}/bid/", {"amount": auction.reserve_price},
+    )
+
+    assert response.status_code == 409
+    assert not auction.bids.exists()
+
+
+def test_auction_market_hides_bidder_identity(
+    market_client, market_team, bidder_client, bidder_team,
+):
+    make_ledger_entry(bidder_team, "starting_balance", STARTING_BALANCE, now(), "Starting balance")
+    rider = _market_rider(name="For Sale", team=market_team)
+    market_client.post("/api/transfers/auctions/list/", {"rider_id": rider.pk})
+    auction = Auction.objects.get(rider=rider)
+    bidder_client.post(
+        f"/api/transfers/auctions/{auction.pk}/bid/", {"amount": auction.reserve_price},
+    )
+
+    response = market_client.get("/api/transfers/auctions/")
+
+    assert response.status_code == 200
+    entry = response.data["auctions"][0]
+    # The test that would catch someone adding a bidder/high-bidder field
+    # to the serializer later out of habit (spec, "Bidding is anonymous").
+    assert not any("bidder" in key.lower() for key in entry)
+    assert set(entry) == {
+        "id", "rider", "current_price", "min_next_bid", "deadline", "is_own_listing",
+    }
+    assert entry["current_price"] == auction.reserve_price
+    assert entry["min_next_bid"] == auction.reserve_price + auction.min_increment
