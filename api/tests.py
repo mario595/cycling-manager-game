@@ -2067,6 +2067,36 @@ def test_my_bids_excludes_a_resolved_auction(
     assert response.data == []
 
 
+def test_my_bids_query_count_is_constant(
+    market_team, bidder_client, bidder_team, django_assert_max_num_queries,
+):
+    make_ledger_entry(bidder_team, "starting_balance", STARTING_BALANCE, now(), "Starting balance")
+
+    from transfers.services import list_for_auction
+
+    def _list_and_bid(rider_name: str) -> None:
+        rider = _market_rider(name=rider_name, team=market_team)
+        auction = list_for_auction(market_team, rider.pk, at=now())
+        bidder_client.post(
+            f"/api/transfers/auctions/{auction.pk}/bid/", {"amount": auction.reserve_price},
+        )
+
+    _list_and_bid("Rider One")
+
+    with django_assert_max_num_queries(10):
+        response = bidder_client.get("/api/transfers/auctions/mine/")
+    assert response.status_code == 200
+    assert len(response.data) == 1
+
+    for i in range(2, 6):
+        _list_and_bid(f"Rider {i}")
+
+    with django_assert_max_num_queries(10):
+        response = bidder_client.get("/api/transfers/auctions/mine/")
+    assert response.status_code == 200
+    assert len(response.data) == 5
+
+
 # --- rider profile ---
 
 

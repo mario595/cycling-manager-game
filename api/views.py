@@ -646,22 +646,30 @@ class PlaceBidView(APIView):
 class MyBidsView(APIView):
     """Every auction the caller's team has an active bid on, with
     is_high_bidder — backs spec item 8's outbid notice. Read-only,
-    polled by the frontend the same way FreeAgentsView is."""
+    polled by the frontend the same way FreeAgentsView is.
+
+    Two queries regardless of how many auctions the team has bid on: the
+    auction list itself, and one prefetch of the team's own bids across
+    all of them — not one `bids.filter(...).first()` per row, which would
+    cost an extra query per auction on an endpoint the Dashboard and
+    Transfers screens both poll every 30s.
+    """
 
     def get(self, request):
         team = team_for(request.user)
         if team is None:
             return Response({"detail": "You do not manage a team."}, status=403)
 
-        auction_ids = (
-            Bid.objects.filter(bidder_team=team, auction__status=Auction.Status.OPEN)
-            .values_list("auction_id", flat=True).distinct()
+        my_bids = Bid.objects.filter(bidder_team=team).order_by("-amount", "-placed_at")
+        auctions = (
+            Auction.objects.filter(status=Auction.Status.OPEN, bids__bidder_team=team)
+            .distinct()
+            .select_related("rider")
+            .prefetch_related(Prefetch("bids", queryset=my_bids, to_attr="my_bids"))
         )
         rows = []
-        for auction in Auction.objects.filter(pk__in=auction_ids).select_related("rider"):
-            my_last_bid = (
-                auction.bids.filter(bidder_team=team).order_by("-amount", "-placed_at").first()
-            )
+        for auction in auctions:
+            my_last_bid = auction.my_bids[0]
             rows.append({
                 "auction_id": auction.pk,
                 "rider_name": auction.rider.name,
