@@ -141,7 +141,7 @@ def test_sprinter_kicks_for_sprint_marker_in_the_early_race():
         segments=[Segment(length=100000.0, gradient=0.0)],
         markers=[Marker(kind=MarkerKind.SPRINT, distance=marker_distance, name="M")],
     )
-    rider = _specialist("s", climb=50, sprint=90)
+    rider = _specialist("s", climb=50, sprint=97)
     state = RaceState.create_initial_state([rider], course, wind=False)
     rs = state.rider_states[0]
     rs.position = marker_distance - 100.0
@@ -179,7 +179,7 @@ def test_climber_surges_for_mountain_marker_without_sprinting():
         segments=[Segment(length=100000.0, gradient=0.0)],
         markers=[Marker(kind=MarkerKind.MOUNTAIN, distance=marker_distance, name="M")],
     )
-    rider = _specialist("c", climb=88, sprint=40)
+    rider = _specialist("c", climb=94, sprint=40)
     state = RaceState.create_initial_state([rider], course, wind=False)
     rs = state.rider_states[0]
     rs.position = marker_distance - 100.0
@@ -199,7 +199,7 @@ def test_leader_contests_too():
         segments=[Segment(length=100000.0, gradient=0.0)],
         markers=[Marker(kind=MarkerKind.SPRINT, distance=marker_distance, name="M")],
     )
-    rider = _specialist("leader", climb=40, sprint=88, role="leader")
+    rider = _specialist("leader", climb=40, sprint=98, role="leader")
     state = RaceState.create_initial_state([rider], course, wind=False)
     rs = state.rider_states[0]
     rs.position = marker_distance - 100.0
@@ -222,7 +222,7 @@ def test_low_energy_specialist_rolls_through_and_does_not_retry():
         segments=[Segment(length=100000.0, gradient=0.0)],
         markers=[Marker(kind=MarkerKind.SPRINT, distance=marker_distance, name="M")],
     )
-    rider = _specialist("tired", climb=50, sprint=90)
+    rider = _specialist("tired", climb=50, sprint=97)
     state = RaceState.create_initial_state([rider], course, wind=False)
     rs = state.rider_states[0]
     rs.position = marker_distance - 100.0
@@ -246,7 +246,7 @@ def test_marker_is_contested_once():
         segments=[Segment(length=100000.0, gradient=0.0)],
         markers=[Marker(kind=MarkerKind.SPRINT, distance=marker_distance, name="M")],
     )
-    rider = _specialist("s", climb=50, sprint=90)
+    rider = _specialist("s", climb=50, sprint=97)
     state = RaceState.create_initial_state([rider], course, wind=False)
     rs = state.rider_states[0]
     rs.position = marker_distance - 100.0

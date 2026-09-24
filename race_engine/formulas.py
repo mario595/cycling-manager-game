@@ -155,9 +155,9 @@ CHASE_MIN_CLIMB_ADVANTAGE = -10.0  # don't chase on steep if leader is 10+ climb
 # climbing). Starting values; calibrated in race_engine/audit.py.
 MARKER_SPRINT_WINDOW = 300.0  # meters before a sprint marker a sprinter kicks
 MARKER_CLIMB_WINDOW = 150.0  # meters before a mountain marker a climber surges
-MARKER_MIN_SPRINT = 75.0  # sprint attribute needed to contest a sprint marker
-MARKER_MIN_CLIMB = 75.0  # climb attribute needed to contest a mountain marker
-MARKER_MIN_ENERGY = 60.0  # reserve needed to spend on a marker (vs 30 for an attack)
+MARKER_MIN_SPRINT = 95.0  # sprint attribute needed to contest a sprint marker
+MARKER_MIN_CLIMB = 90.0
+MARKER_MIN_ENERGY = 60.0
 
 # Time cut (broom wagon) — once the winner finishes, the fraction of their
 # time after which the race closes; anyone still on the road is DNF.
