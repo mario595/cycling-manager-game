@@ -69,6 +69,15 @@ def test_claim_releases_old_riders_without_deleting(db, user, team, rider):
     assert Rider.objects.filter(pk=rider.pk).exists()
 
 
+def test_claim_gives_every_new_rider_a_baseline_snapshot(db, user, team):
+    claimed = claim_team(user, name="Mountain Goats", code="MGO", at=AT)
+
+    riders = list(claimed.riders.all())
+    assert len(riders) == ROSTER_SIZE
+    for rider in riders:
+        assert rider.attribute_snapshots.filter(week=None).count() == 1
+
+
 def test_claim_generates_a_full_roster(db, user, team, rider):
     claimed = claim_team(user, name="Mountain Goats", code="MGO", at=AT)
 

@@ -5,6 +5,7 @@ from django.db import transaction
 
 from riders.generation import generate_roster
 from riders.models import Rider
+from riders.services import record_initial_snapshots
 from teams.models import Team
 from teams.services import claim_team
 
@@ -159,7 +160,8 @@ class Command(BaseCommand):
                     primary_colour=primary, secondary_colour=secondary,
                 )
                 roster = generate_roster(per_team, team=team)
-                Rider.objects.bulk_create(roster)
+                created = Rider.objects.bulk_create(roster)
+                record_initial_snapshots(created)
                 created_teams += 1
                 created_riders += len(roster)
 
