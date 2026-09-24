@@ -5,6 +5,7 @@ from datetime import timedelta
 import pytest
 
 from riders.models import Rider
+from racing.models import Race, RaceResult
 from schedule.models import SEASON_WEEKS, Season, Week
 from world.clocks import MockClock
 from world.services import get_clock, now, tick
@@ -129,3 +130,32 @@ def test_tick_never_expires_a_rider_with_null_unattached_since(db):
 
     assert Rider.objects.filter(pk=untracked.pk).exists()
     assert run.agents_expired == 4
+
+
+def test_expiry_counts_riders_deleted_not_cascaded_rows(db):
+    """`agents_expired` must count riders, not rows. delete()'s first return
+    value sums every cascaded deletion across models, so a doomed free
+    agent with race history — RaceResult is CASCADE on rider — would
+    inflate the tick's count by one per stored result. len(doomed) keeps
+    the ledger honest no matter how much history the rider carries."""
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    agents = _five_agent_pool()
+    joined_weeks_ago = season.weeks.get(number=1).starts_at
+    for agent in agents:
+        agent.unattached_since = joined_weeks_ago
+        agent.save(update_fields=["unattached_since"])
+
+    raced = agents[1]  # "Weak 0" — in the bottom quintile, will expire
+    race = Race.objects.create(
+        name=f"Race for {raced.name}",
+        course=[{"length": 500.0, "gradient": 0.0}],
+    )
+    RaceResult.objects.create(race=race, rider=raced, position=1, finish_time=100.0)
+    clock.set(season.weeks.get(number=11).starts_at + timedelta(hours=1))
+
+    run = tick()
+
+    assert run.agents_expired == 4
+    assert not Rider.objects.filter(pk=raced.pk).exists()
+    assert not RaceResult.objects.filter(race=race).exists()

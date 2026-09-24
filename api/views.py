@@ -35,7 +35,7 @@ from economy.sponsors import PROFILES_BY_KEY
 from racing.models import SQUAD_SIZE, Race
 from racing.services import SquadError, set_squad, suggested_squad
 from riders.models import ENGINE_ATTRIBUTES, Rider
-from schedule.services import current_position
+from schedule.services import current_position, weeks_opened_between
 from staff.pricing import hire_fee
 from staff.services import (
     InsufficientFunds,
@@ -62,7 +62,7 @@ from transfers.services import (
     release_rider,
     sign_free_agent,
 )
-from world.services import _weeks_inactive, now
+from world.services import now
 
 from accounts.views import LoginView as AccountsLoginView
 
@@ -408,14 +408,15 @@ def _cooldown_weeks_opened(team, boundary) -> int:
     exemption (transfers/README.md, *Free agents*).
 
     `transfers/` may not import `schedule/` (AGENTS.md), so api/ — the only
-    app allowed to know everything — counts for it, reusing the same
-    Week-row rule as world.services._weeks_inactive: only in-season weeks
-    count, so an off-season gap contributes nothing. 0 for a team that was
+    app allowed to know everything — counts for it via
+    schedule.services.weeks_opened_between, the same Week-row rule
+    `world/` uses for inactivity and expiry: only in-season weeks count, so
+    an off-season gap contributes nothing. 0 for a team that was
     never claimed (`managed_since` is null and there is no cooldown to
     run out)."""
     if team.managed_since is None:
         return 0
-    return _weeks_inactive(team.managed_since, boundary)
+    return weeks_opened_between(team.managed_since, boundary)
 
 
 class FreeAgentsView(APIView):
