@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError
-from django.db.models import Sum
+from django.db.models import Prefetch, Sum
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -32,7 +32,7 @@ from economy.services import (
     sign_offer,
 )
 from economy.sponsors import PROFILES_BY_KEY
-from racing.models import SQUAD_SIZE, Race, RaceSquadRider
+from racing.models import SQUAD_SIZE, MarkerCrossing, Race, RaceSquadRider
 from racing.services import SquadError, set_squad, suggested_squad
 from riders.models import ENGINE_ATTRIBUTES, Rider
 from schedule.services import current_position, weeks_opened_between
@@ -553,6 +553,15 @@ class RaceDetailView(APIView):
                 {"position": p, "points": points_for(p), "prize": prize_for(p)}
                 for p in sorted(POINTS_BY_POSITION)
             ],
+            "markers": [
+                {
+                    "id": m.pk,
+                    "kind": m.kind,
+                    "name": m.name,
+                    "distance": m.distance,
+                }
+                for m in race.markers.all()  # model ordering: distance, pk
+            ],
         }
         return Response(RaceDetailSerializer(payload).data)
 
@@ -565,6 +574,25 @@ def _result_row(result, team) -> dict:
         "finish_time": result.finish_time,
         "finished": result.finish_time is not None,
     }
+
+
+def _crossing_payload(crossing, team_by_rider) -> dict:
+    team = team_by_rider.get(crossing.rider_id)
+    return {
+        "position": crossing.position,
+        "rider": {"id": crossing.rider.pk, "name": crossing.rider.name},
+        # The team the rider raced for, not their current one — same rule as
+        # the results rows above.
+        "team": (
+            {"id": team.pk, "name": team.name, "code": team.code}
+            if team is not None else None
+        ),
+    }
+
+
+#: How many crossings per marker the results screen shows — D11. The full
+#: order stays in the database for the features above the markers.
+MARKER_PLACES_SHOWN = 3
 
 
 class RaceResultsView(APIView):
@@ -588,6 +616,28 @@ class RaceResultsView(APIView):
                 .filter(squad__race=race)
                 .select_related("squad__team")
         }
+        markers = (
+            race.markers
+            .prefetch_related(Prefetch(
+                "crossings",
+                queryset=MarkerCrossing.objects
+                    .filter(position__lte=MARKER_PLACES_SHOWN)
+                    .select_related("rider"),
+            ))
+        )
+        markers_payload = [
+            {
+                "id": m.pk,
+                "kind": m.kind,
+                "name": m.name,
+                "distance": m.distance,
+                "crossings": [
+                    _crossing_payload(c, team_by_rider)
+                    for c in m.crossings.all()  # model ordering: marker, position
+                ],
+            }
+            for m in markers.all()  # model ordering: distance, pk
+        ]
         points = race.points.select_related("team").order_by("position")
         scored = {p.team_id: p for p in points}
         starters = (
@@ -626,6 +676,7 @@ class RaceResultsView(APIView):
             "race": {"id": race.pk, "name": race.name, "status": race.status},
             "results": [_result_row(r, team_by_rider.get(r.rider_id)) for r in results],
             "points": points_payload,
+            "markers": markers_payload,
         }
         return Response(RaceResultsSerializer(payload).data)
 

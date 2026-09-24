@@ -255,6 +255,13 @@ class RacePayoutEntrySerializer(serializers.Serializer):
     prize = serializers.IntegerField()
 
 
+class RaceMarkerSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    kind = serializers.CharField()
+    name = serializers.CharField()
+    distance = serializers.FloatField()
+
+
 class RaceDetailSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     name = serializers.CharField()
@@ -263,6 +270,7 @@ class RaceDetailSerializer(serializers.Serializer):
     distance_km = serializers.FloatField()
     course = CourseSegmentSerializer(many=True)
     payout = RacePayoutEntrySerializer(many=True)
+    markers = RaceMarkerSerializer(many=True)
 
 
 class RaceResultTeamSerializer(serializers.Serializer):
@@ -297,10 +305,21 @@ class RaceResultRaceSerializer(serializers.Serializer):
     status = serializers.CharField()
 
 
+class RaceMarkerCrossingSerializer(serializers.Serializer):
+    position = serializers.IntegerField()
+    rider = RaceResultRiderSerializer()
+    team = RaceResultTeamSerializer(allow_null=True)
+
+
+class RaceMarkerResultSerializer(RaceMarkerSerializer):
+    crossings = RaceMarkerCrossingSerializer(many=True)
+
+
 class RaceResultsSerializer(serializers.Serializer):
     race = RaceResultRaceSerializer()
     results = RaceResultEntrySerializer(many=True)
     points = RaceResultPointsEntrySerializer(many=True)
+    markers = RaceMarkerResultSerializer(many=True)
 
 
 class AttributeSnapshotSerializer(serializers.Serializer):
