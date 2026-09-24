@@ -244,9 +244,10 @@ def _apply_training_week(week) -> int:
 
     changes = apply_weekly_growth(weeks=1, extra_deltas=extra)
     _write_training_reports(week, changes, focus_by_team)
-    record_week_snapshots(
-        sorted({change["rider_id"] for change in changes}), week_id=week.pk,
-    )
+    if changes:
+        record_week_snapshots(
+            sorted({change["rider_id"] for change in changes}), week_id=week.pk,
+        )
     # `raced` is the {rider_id: [...]} of riders who finished a race in the
     # week being settled; those riders skip recovery (Design decision 6).
     apply_weekly_recovery(exclude_ids=set(raced))

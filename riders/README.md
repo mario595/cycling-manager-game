@@ -173,7 +173,7 @@ would be fake precision on a 0-10 scale and is deliberately not offered.
 future screen ([#96](https://github.com/mario595/cycling-manager/issues/96))
 can eventually plot a career arc — see
 [#95](https://github.com/mario595/cycling-manager/issues/95) and
-`specs/rider-attribute-history.md`. A row holds all five attributes even when
+`specs/archive/rider-attribute-history.md`. A row holds all five attributes even when
 only one moved: the consumer plots five lines on one graph and needs a value
 for every attribute at every recorded moment, not just the one that changed.
 

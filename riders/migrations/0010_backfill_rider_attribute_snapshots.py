@@ -1,4 +1,4 @@
-# Generated for #95 — see specs/rider-attribute-history-plan.md, W5.
+# Generated for #95 — see specs/archive/rider-attribute-history-plan.md, W5.
 
 from django.db import migrations
 
