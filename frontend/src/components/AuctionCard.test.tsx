@@ -85,4 +85,46 @@ describe('AuctionCard', () => {
 
     expect(screen.queryByText(/BID HISTORY/)).not.toBeInTheDocument()
   })
+
+  it('bumps the pre-filled amount up when a poll raises the minimum', () => {
+    const onBid = vi.fn()
+    const { rerender } = render(
+      <AuctionCard auction={auction} balance={500_000} pending={false} onBid={onBid} />,
+    )
+    const input = screen.getByLabelText('Bid amount for For Sale Rider') as HTMLInputElement
+    expect(input.value).toBe('63000')
+
+    rerender(
+      <AuctionCard
+        auction={{ ...auction, current_price: 66_000, min_next_bid: 69_000 }}
+        balance={500_000}
+        pending={false}
+        onBid={onBid}
+      />,
+    )
+
+    expect(input.value).toBe('69000')
+    fireEvent.click(screen.getByRole('button', { name: 'Bid' }))
+    expect(onBid).toHaveBeenCalledWith(69_000)
+  })
+
+  it('does not clobber a bid the caller manually raised above the minimum', () => {
+    const { rerender } = render(
+      <AuctionCard auction={auction} balance={500_000} pending={false} onBid={vi.fn()} />,
+    )
+    const input = screen.getByLabelText('Bid amount for For Sale Rider') as HTMLInputElement
+    fireEvent.change(input, { target: { value: '100000' } })
+
+    // A poll brings a small rise that the manual bid already clears.
+    rerender(
+      <AuctionCard
+        auction={{ ...auction, current_price: 66_000, min_next_bid: 69_000 }}
+        balance={500_000}
+        pending={false}
+        onBid={vi.fn()}
+      />,
+    )
+
+    expect(input.value).toBe('100000')
+  })
 })

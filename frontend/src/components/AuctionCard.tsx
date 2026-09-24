@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import type { AuctionListing, Bid } from '../api'
 import { formatMoney } from '../format'
@@ -36,6 +36,14 @@ export function AuctionCard({
   const affordable = amount <= balance
   const clearsIncrement = amount >= auction.min_next_bid
   const countdown = useCountdown(auction.deadline)
+
+  // A poll can bring a higher price while this card is open. Bump the
+  // pre-filled amount up to the new minimum so Bid doesn't sit silently
+  // disabled on a stale value — but leave a bid the caller raised above
+  // the minimum themselves alone.
+  useEffect(() => {
+    setAmount((current) => (current < auction.min_next_bid ? auction.min_next_bid : current))
+  }, [auction.min_next_bid])
 
   return (
     <Card style={{ padding: '15px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
