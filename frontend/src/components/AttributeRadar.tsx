@@ -16,7 +16,9 @@ const AXES: Array<{ key: AttrKey; label: string }> = [
 ]
 
 const RINGS = 10
-const SIZE = 260
+// Wide enough that a long axis label ("Positioning") never clips the
+// viewBox — an SVG root clips at its own bounds by default.
+const SIZE = 300
 const CENTER = SIZE / 2
 const RADIUS = 90
 
