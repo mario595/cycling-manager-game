@@ -159,7 +159,7 @@ up front — an empty app is just noise. The table below marks which exist.
 | `staff/` | Staff | **built**, `README.md` | Trainers hireable from a shared pool into one fixed slot per team at a speciality-derived hire fee plus a weekly salary, plus the team's weekly training focus and its rollover report. Physios and scouts still to come. |
 | `world/` | World Simulation | **built**, `README.md` | The game clock and the tick (which charges each team its weekly wages and trainer salary, adjusts fanbase, pays merchandise income and sponsorship, generates each team's sponsor offer round on season open, and releases the team of any manager inactive for ten in-season weeks). AI team decisions still to come. |
 | `api/` | API | **built**, `README.md` | DRF routers aggregating each app's serializers and views. |
-| `frontend/` | Frontend/UI | **built**, `README.md` | The React SPA. Built to `frontend/dist/`, served by Django. Nine real screens (dashboard, roster, staff, sponsors, calendar, results, league table, finances, transfers) plus squad selection, all from the API, no fixture data. Unknown paths redirect to `/`; every route requires a session. |
+| `frontend/` | Frontend/UI | **built**, `README.md` | The React SPA. Built to `frontend/dist/`, served by Django. Ten real screens (dashboard, roster, staff, sponsors, calendar, results, league table, finances, transfers, rider profile) plus squad selection, all from the API, no fixture data. Unknown paths redirect to `/`; every route requires a session. |
 
 ### Dependency direction
 

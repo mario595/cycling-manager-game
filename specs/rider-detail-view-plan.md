@@ -551,7 +551,7 @@ Extend the existing tests:
   `/riders/<id>`.
 - `Transfers.test.tsx`: a free agent's name is a link to `/riders/<id>`.
 
-### W8 — Documentation
+### W8 — Documentation — done
 
 See below.
 

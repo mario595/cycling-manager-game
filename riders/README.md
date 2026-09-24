@@ -204,9 +204,13 @@ happened to run.
 week` is declared as the string `"schedule.Week"`, the same import-free
 pattern `staff.TrainingWeekReport.week` uses.
 
-**Nothing serializes this.** #96 is the consumer, once it exists; there is no
-API field, no admin surface beyond the default read-only list, and no
-frontend today.
+**Served by `GET /api/riders/<id>/`** (#96, `api/README.md`) — the rider
+page's attribute-history chart. The endpoint ships the snapshots in time
+order, baseline first, and **must not** pass them through
+`to_display_scale` a second time: they are already the displayed 0-10
+value this section describes, and re-mapping would floor an 8 to a 0.
+There is no other API field and no admin surface beyond the default
+read-only list.
 
 ## Freshness
 

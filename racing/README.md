@@ -287,7 +287,11 @@ player-facing feature. Two models record the choice:
 `RaceSquad` is also the record of which teams started a race: the results
 API (`api/`) reads it to list non-scoring teams, so a finished race's points
 table is exhaustive rather than derived from which teams recorded a result
-(see `api/README.md`).
+(see `api/README.md`). `RaceSquadRider` is, likewise, the durable record of
+which team a rider raced for on a given day — `Rider.team` only ever holds
+the *current* team, so both the race results endpoint and the rider profile
+endpoint (#96) read squad membership rather than the rider's own `team`
+field to label a past race correctly after a release or a signing.
 
 **Membership is rows, not a JSON list on `RaceSquad`.** `simulate_race` joins
 against every selected rider's attributes in one query to build the engine's

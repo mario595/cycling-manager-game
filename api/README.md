@@ -83,6 +83,38 @@ Since #29 each rider also carries `release_cost`
   `to` — a Python keyword that cannot be a serializer field name, hence
   DRF's `source="from"` mapping.
   This response shape changed with #31: it was previously a bare array.
+- `GET /api/riders/<rider_id>/` (`RiderProfileSerializer`, `RiderProfileView`)
+  — one rider's full profile, readable by **any** authenticated manager
+  regardless of team (like `RaceDetailView`, not `RiderListView` — no
+  `team_for()` gate). `404` for a rider that no longer exists. The identity
+  keys (`id` through `release_cost`) are inherited unchanged from
+  `RiderSerializer` — `release_cost` serializes as `null` here, the same
+  documented behaviour `FreeAgentSerializer` relies on, since no team
+  context is passed. Four keys are added: `team` (`id`/`name`/`code`, or
+  `null` for a free agent — the rider's **current** team, not who they
+  raced for); `current_week` (`{season, week}`, or `null` before any season
+  has ever been declared — `schedule.services.current_position`, with an
+  off-season world reporting its just-finished season's last week);
+  `attribute_history`, the rider's `riders.RiderAttributeSnapshot` rows in
+  time order — the baseline (`week: null`) first, then by
+  `(season, week)`, **never** by `created_at`, which a backfill made
+  meaningless — already display-scale values, **not** re-passed through
+  `to_display_scale` (see `riders/README.md`, *Attribute history*); and
+  `races`, every `FINISHED` race the rider has a result for, newest first
+  by `starts_at`, each carrying the **team raced for** (from
+  `RaceSquadRider`, never `Rider.team` — see below), `position`,
+  `finish_time` (`null` for a DNF), `winner_time` (that race's fastest
+  finisher, so the SPA can show the same total-time/`+gap`/`DNF` cells the
+  results screen does) and `finished`. `career` sums that same `races` list
+  in Python — `starts`, `wins`, `podiums`, `top_tens`, `dnfs` — so the two
+  can never disagree (the `squad_value` precedent). **Neither `races` nor
+  `career` carries a points or prize figure** — both are team awards (one
+  team's best finisher, one team's placed riders summed), never an
+  individual rider's, and showing one here would misrepresent it as
+  personally earned and could not be reconciled against the standings or
+  the League table (`competitions/README.md`). `api/rider_profile.py`
+  builds the payload in a handful of fixed-shape queries regardless of
+  career length — no per-race lookup.
 - `GET /api/transfers/free-agents/` (`FreeAgentPoolSerializer`,
   `FreeAgentsView`) — the whole transfer market in one payload:
   `{riders: [...], balance}`. `riders` is the free-agent pool, every rider
@@ -131,6 +163,13 @@ Since #29 each rider also carries `release_cost`
   team's total winnings, summed from its `prize_money` ledger entries for the
   race, so the results page and the ledger cannot disagree. `IsAuthenticated`,
   the project default.
+
+  Each row's own `team` (in `results`, alongside `rider`) is the team that
+  rider **raced for**, from `RaceSquadRider` — not `rider.team`, which is
+  the rider's *current* team and would mislabel every past race of a rider
+  who has since been released or re-signed. The rider profile endpoint
+  above reads the same squad rows for the same reason, so the two screens
+  always agree about which team ran a given race.
 - `GET /api/competitions/standings/` — the current season's points table
   (`StandingsSerializer`, `StandingsView`, serializing
   `competitions.services.standings`). Same `state` vocabulary as
