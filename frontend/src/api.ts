@@ -331,6 +331,64 @@ export async function releaseRider(riderId: number): Promise<void> {
   return writeJson('/api/transfers/riders/release/', 'POST', { rider_id: riderId })
 }
 
+/** One live auction as the market screen shows it — never the bidder
+ * (spec, "Bidding is anonymous"). `min_next_bid` is the lowest amount the
+ * next bid must clear; `is_own_listing` is true for the caller's own
+ * listing, so the SPA can hide the Bid action on it. */
+export interface AuctionListing {
+  id: number
+  rider: Rider
+  current_price: number
+  min_next_bid: number
+  deadline: string
+  is_own_listing: boolean
+}
+
+/** The auction market's whole state in one payload: every open auction
+ * plus the caller's balance — the same both-keys shape FreeAgentPool
+ * uses. */
+export interface AuctionMarket {
+  auctions: AuctionListing[]
+  balance: number
+}
+
+export async function getAuctions(): Promise<AuctionMarket> {
+  const response = await fetch('/api/transfers/auctions/')
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new Error(body?.detail ?? `auctions request failed: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function listForAuction(riderId: number): Promise<void> {
+  return writeJson('/api/transfers/auctions/list/', 'POST', { rider_id: riderId })
+}
+
+export async function placeBid(auctionId: number, amount: number): Promise<void> {
+  return writeJson(`/api/transfers/auctions/${auctionId}/bid/`, 'POST', { amount })
+}
+
+/** One auction the caller's team has an active bid on — backs the outbid
+ * notice. `is_high_bidder` goes false the moment someone else clears the
+ * caller's last bid. */
+export interface MyBidStatus {
+  auction_id: number
+  rider_name: string
+  my_last_bid: number
+  current_price: number
+  is_high_bidder: boolean
+  deadline: string
+}
+
+export async function getMyBids(): Promise<MyBidStatus[]> {
+  const response = await fetch('/api/transfers/auctions/mine/')
+  if (!response.ok) {
+    throw new Error(`my bids request failed: ${response.status}`)
+  }
+  return response.json()
+}
+
 export interface RaceResultTeam {
   id: number
   name: string

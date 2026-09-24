@@ -3,18 +3,19 @@ import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { Me, Rider } from '../api'
-import { releaseRider } from '../api'
+import { listForAuction, releaseRider } from '../api'
 import { useAuth } from '../useAuth'
 import { useRoster } from '../useRoster'
 import { Roster } from './Roster'
 
 vi.mock('../useAuth', () => ({ useAuth: vi.fn() }))
 vi.mock('../useRoster', () => ({ useRoster: vi.fn() }))
-vi.mock('../api', () => ({ releaseRider: vi.fn() }))
+vi.mock('../api', () => ({ releaseRider: vi.fn(), listForAuction: vi.fn() }))
 
 const mockUseAuth = vi.mocked(useAuth)
 const mockUseRoster = vi.mocked(useRoster)
 const mockReleaseRider = vi.mocked(releaseRider)
+const mockListForAuction = vi.mocked(listForAuction)
 
 const manager: Me = {
   authenticated: true,
@@ -196,6 +197,27 @@ describe('Roster', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Release' }))
 
     await waitFor(() => expect(release).toHaveBeenCalledWith(1))
+    await waitFor(() => expect(refresh).toHaveBeenCalled())
+  })
+
+  it('lists a rider for auction and refetches the roster', async () => {
+    const refresh = vi.fn()
+    const list = mockListForAuction.mockResolvedValue(undefined)
+    mockUseRoster.mockReturnValue({
+      riders,
+      squadValue: 135_000,
+      salaryReview: null,
+      loading: false,
+      error: false,
+      refresh,
+    })
+
+    renderRoster()
+
+    fireEvent.click(screen.getByText('Alba Sanchez'))
+    fireEvent.click(screen.getByRole('button', { name: 'List for auction' }))
+
+    await waitFor(() => expect(list).toHaveBeenCalledWith(1))
     await waitFor(() => expect(refresh).toHaveBeenCalled())
   })
 

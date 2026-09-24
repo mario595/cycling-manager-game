@@ -1,11 +1,13 @@
 import { useMemo, useState, type ReactNode } from 'react'
 
-import { signFreeAgent, type FreeAgent } from '../api'
+import { placeBid, signFreeAgent, type AuctionListing, type FreeAgent } from '../api'
 import { Button, Card, Chip, ChipLabel, LabelBar, PageBody, PageHeading, StatTile } from '../components/primitives'
 import { formatMoney } from '../format'
 import { color, font } from '../theme'
+import { useAuctions } from '../useAuctions'
 import { useAuth } from '../useAuth'
 import { useFreeAgents } from '../useFreeAgents'
+import { useMyBids } from '../useMyBids'
 
 type AttrKey = 'climb' | 'sprint' | 'flat' | 'resistance' | 'positioning'
 
@@ -38,11 +40,18 @@ const SORT_OPTIONS: Array<{ key: SortKey; label: string }> = [
   { key: 'positioning', label: 'Positioning' },
 ]
 
+type MarketTab = 'agents' | 'auctions'
+
 export function Transfers() {
   const { me, loading: authLoading } = useAuth()
   const hasTeam = me?.team != null
 
-  const { pool, loading, error, refresh } = useFreeAgents()
+  const [tab, setTab] = useState<MarketTab>('agents')
+
+  const { pool, loading: agentsLoading, error: agentsError, refresh: refreshAgents } = useFreeAgents()
+  const { market, loading: marketLoading, error: marketError, refresh: refreshMarket } = useAuctions()
+  const { bids: myBids, refresh: refreshMyBids } = useMyBids()
+
   const [actionError, setActionError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const [filter, setFilter] = useState<'All' | string>('All')
@@ -66,7 +75,9 @@ export function Transfers() {
     })
   }, [pool, filter, sort])
 
-  if (authLoading || loading) return null
+  const outbid = myBids.filter((bid) => !bid.is_high_bidder)
+
+  if (authLoading) return null
 
   if (!hasTeam) {
     return (
@@ -80,22 +91,12 @@ export function Transfers() {
     )
   }
 
-  if (error || !pool) {
-    return (
-      <PageBody gap={18} paddingTop={26}>
-        <Card style={{ padding: '18px 20px' }}>
-          <div style={{ fontSize: 13.5, color: color.muted }}>Couldn't load the transfer market.</div>
-        </Card>
-      </PageBody>
-    )
-  }
-
   const handleSign = async (agent: FreeAgent) => {
     setPending(true)
     setActionError(null)
     try {
       await signFreeAgent(agent.id)
-      refresh()
+      refreshAgents()
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Could not sign that rider.')
     } finally {
@@ -103,17 +104,37 @@ export function Transfers() {
     }
   }
 
+  const handleBid = async (auction: AuctionListing, amount: number) => {
+    setPending(true)
+    setActionError(null)
+    try {
+      await placeBid(auction.id, amount)
+      refreshMarket()
+      refreshMyBids()
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Could not place that bid.')
+    } finally {
+      setPending(false)
+    }
+  }
+
+  const balance = tab === 'agents' ? pool?.balance : market?.balance
+
   return (
     <PageBody gap={18} paddingTop={26}>
       <PageHeading
         eyebrow="MARKET · TRANSFERS"
         title="Transfers"
         titleSize={29}
-        subtitle="Free agents sign with a one-off fee. Riders released by claims and teams land here."
+        subtitle="Free agents sign with a one-off fee. Auction a rider from your roster, or bid on someone else's."
         aside={
           <>
-            <StatTile label="BALANCE" value={formatMoney(pool.balance)} minWidth={160} />
-            <StatTile label="FREE AGENTS" value={String(pool.riders.length)} minWidth={104} />
+            <StatTile label="BALANCE" value={formatMoney(balance ?? 0)} minWidth={160} />
+            {tab === 'agents' ? (
+              <StatTile label="FREE AGENTS" value={String(pool?.riders.length ?? 0)} minWidth={104} />
+            ) : (
+              <StatTile label="LIVE AUCTIONS" value={String(market?.auctions.length ?? 0)} minWidth={112} />
+            )}
           </>
         }
       />
@@ -124,6 +145,94 @@ export function Transfers() {
         </Card>
       ) : null}
 
+      {outbid.length > 0 ? (
+        <Card style={{ padding: '12px 16px', borderColor: color.accent }}>
+          <div style={{ fontSize: 13, color: color.ink }}>
+            {outbid.map((bid) => (
+              <div key={bid.auction_id}>
+                You've been outbid on {bid.rider_name} — current price {formatMoney(bid.current_price)}.
+              </div>
+            ))}
+          </div>
+        </Card>
+      ) : null}
+
+      <Card style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '14px 16px' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+          <ChipLabel>MARKET</ChipLabel>
+          <Chip active={tab === 'agents'} onClick={() => setTab('agents')}>
+            Free agents
+          </Chip>
+          <Chip active={tab === 'auctions'} onClick={() => setTab('auctions')}>
+            Auctions
+          </Chip>
+        </div>
+      </Card>
+
+      {tab === 'agents' ? (
+        <FreeAgentsTab
+          loading={agentsLoading}
+          error={agentsError}
+          pool={pool}
+          filter={filter}
+          setFilter={setFilter}
+          sort={sort}
+          setSort={setSort}
+          specialities={specialities}
+          visible={visible}
+          pending={pending}
+          onSign={handleSign}
+        />
+      ) : (
+        <AuctionsTab
+          loading={marketLoading}
+          error={marketError}
+          market={market}
+          pending={pending}
+          onBid={handleBid}
+        />
+      )}
+    </PageBody>
+  )
+}
+
+function FreeAgentsTab({
+  loading,
+  error,
+  pool,
+  filter,
+  setFilter,
+  sort,
+  setSort,
+  specialities,
+  visible,
+  pending,
+  onSign,
+}: {
+  loading: boolean
+  error: boolean
+  pool: { riders: FreeAgent[]; balance: number } | null
+  filter: string
+  setFilter: (f: string) => void
+  sort: SortKey
+  setSort: (s: SortKey) => void
+  specialities: string[]
+  visible: FreeAgent[]
+  pending: boolean
+  onSign: (agent: FreeAgent) => void
+}) {
+  if (loading) return null
+
+  if (error || !pool) {
+    return (
+      <Card style={{ padding: '18px 20px' }}>
+        <div style={{ fontSize: 13.5, color: color.muted }}>Couldn't load the free agent pool.</div>
+      </Card>
+    )
+  }
+
+  return (
+    <>
       <Card style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '14px 16px' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
           <ChipLabel>SPECIALITY</ChipLabel>
@@ -177,7 +286,7 @@ export function Transfers() {
               note={affordable ? undefined : "You cannot afford this rider's signing fee."}
               action={
                 <Button
-                  onClick={() => handleSign(agent)}
+                  onClick={() => onSign(agent)}
                   disabled={!affordable || pending}
                   style={{ opacity: pending || !affordable ? 0.6 : 1 }}
                 >
@@ -188,7 +297,194 @@ export function Transfers() {
           )
         })}
       </div>
-    </PageBody>
+    </>
+  )
+}
+
+function AuctionsTab({
+  loading,
+  error,
+  market,
+  pending,
+  onBid,
+}: {
+  loading: boolean
+  error: boolean
+  market: { auctions: AuctionListing[]; balance: number } | null
+  pending: boolean
+  onBid: (auction: AuctionListing, amount: number) => void
+}) {
+  if (loading) return null
+
+  if (error || !market) {
+    return (
+      <Card style={{ padding: '18px 20px' }}>
+        <div style={{ fontSize: 13.5, color: color.muted }}>Couldn't load the auction market.</div>
+      </Card>
+    )
+  }
+
+  if (market.auctions.length === 0) {
+    return (
+      <Card style={{ padding: '18px 20px' }}>
+        <div style={{ fontSize: 13.5, color: color.muted }}>
+          No live auctions right now — list a rider from your roster to start one.
+        </div>
+      </Card>
+    )
+  }
+
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(288px, 1fr))',
+        gap: 12,
+      }}
+    >
+      {market.auctions.map((auction) => (
+        <AuctionCard
+          key={auction.id}
+          auction={auction}
+          balance={market.balance}
+          pending={pending}
+          onBid={(amount) => onBid(auction, amount)}
+        />
+      ))}
+    </div>
+  )
+}
+
+function formatDeadline(deadline: string): string {
+  return new Date(deadline).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function AuctionCard({
+  auction,
+  balance,
+  pending,
+  onBid,
+}: {
+  auction: AuctionListing
+  balance: number
+  pending: boolean
+  onBid: (amount: number) => void
+}) {
+  const [amount, setAmount] = useState(auction.min_next_bid)
+  const rider = auction.rider
+  const affordable = amount <= balance
+  const clearsIncrement = amount >= auction.min_next_bid
+
+  return (
+    <Card style={{ padding: '15px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 11,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 14,
+            fontWeight: 700,
+            fontFamily: font.mono,
+            background: color.canvas,
+            color: color.ink,
+            flex: '0 0 40px',
+          }}
+        >
+          {rider.speciality.slice(0, 2).toUpperCase()}
+        </div>
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <div
+            style={{
+              fontSize: 14.5,
+              fontWeight: 600,
+              letterSpacing: '-0.2px',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {rider.name}
+          </div>
+          <div style={{ fontSize: 11, color: color.mutedStrong, fontFamily: font.mono }}>
+            {rider.speciality.toUpperCase()} · {rider.age} yrs
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+        {ATTR_KEYS.map(({ key, label }) => (
+          <LabelBar key={key} label={label} value={rider[key]} />
+        ))}
+      </div>
+
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 10,
+          borderTop: `1px solid ${color.dividerStrong}`,
+          paddingTop: 10,
+        }}
+      >
+        <span style={{ fontSize: 12, color: color.mutedStrong, fontFamily: font.mono }}>
+          Current {formatMoney(auction.current_price)}
+        </span>
+        <span style={{ fontSize: 11, color: color.muted, fontFamily: font.mono }}>
+          Ends {formatDeadline(auction.deadline)}
+        </span>
+      </div>
+
+      {auction.is_own_listing ? (
+        <div style={{ fontSize: 12, color: color.muted }}>Your listing.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              type="number"
+              min={auction.min_next_bid}
+              step={1}
+              value={amount}
+              onChange={(e) => setAmount(Number(e.target.value))}
+              aria-label={`Bid amount for ${rider.name}`}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                fontFamily: font.mono,
+                fontSize: 13,
+                padding: '7px 9px',
+                borderRadius: 8,
+                border: `1px solid ${color.border}`,
+                background: color.canvas,
+                color: color.ink,
+              }}
+            />
+            <Button
+              onClick={() => onBid(amount)}
+              disabled={pending || !affordable || !clearsIncrement}
+              style={{ opacity: pending || !affordable || !clearsIncrement ? 0.6 : 1 }}
+            >
+              Bid
+            </Button>
+          </div>
+          <div style={{ fontSize: 11, color: color.muted, fontFamily: font.mono }}>
+            Minimum next bid {formatMoney(auction.min_next_bid)}
+          </div>
+          {!affordable ? (
+            <div style={{ fontSize: 12, color: color.negative }}>You cannot afford that bid.</div>
+          ) : null}
+        </div>
+      )}
+    </Card>
   )
 }
 

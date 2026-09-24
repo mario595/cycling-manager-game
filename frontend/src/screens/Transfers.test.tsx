@@ -2,18 +2,25 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { signFreeAgent, type FreeAgentPool, type Me } from '../api'
+import { placeBid, signFreeAgent, type AuctionMarket, type FreeAgentPool, type Me } from '../api'
+import { useAuctions } from '../useAuctions'
 import { useAuth } from '../useAuth'
 import { useFreeAgents } from '../useFreeAgents'
+import { useMyBids } from '../useMyBids'
 import { Transfers } from './Transfers'
 
 vi.mock('../useAuth', () => ({ useAuth: vi.fn() }))
 vi.mock('../useFreeAgents', () => ({ useFreeAgents: vi.fn() }))
-vi.mock('../api', () => ({ signFreeAgent: vi.fn() }))
+vi.mock('../useAuctions', () => ({ useAuctions: vi.fn() }))
+vi.mock('../useMyBids', () => ({ useMyBids: vi.fn() }))
+vi.mock('../api', () => ({ signFreeAgent: vi.fn(), placeBid: vi.fn() }))
 
 const mockUseAuth = vi.mocked(useAuth)
 const mockUseFreeAgents = vi.mocked(useFreeAgents)
+const mockUseAuctions = vi.mocked(useAuctions)
+const mockUseMyBids = vi.mocked(useMyBids)
 const mockSignFreeAgent = vi.mocked(signFreeAgent)
+const mockPlaceBid = vi.mocked(placeBid)
 
 const manager: Me = {
   authenticated: true,
@@ -85,6 +92,37 @@ const pool: FreeAgentPool = {
   ],
 }
 
+const auctionMarket: AuctionMarket = {
+  balance: 500_000,
+  auctions: [
+    {
+      id: 1,
+      current_price: 60_000,
+      min_next_bid: 63_000,
+      deadline: '2027-03-04T12:00:00Z',
+      is_own_listing: false,
+      rider: {
+        id: 21,
+        name: 'For Sale Rider',
+        speciality: 'climber',
+        nationality: 'FR',
+        age: 26,
+        height_cm: 176,
+        weight_kg: 68,
+        climb: 8,
+        sprint: 4,
+        flat: 5,
+        resistance: 5,
+        positioning: 4,
+        freshness: 10,
+        weekly_salary: 3_500,
+        market_value: 120_000,
+        release_cost: null,
+      },
+    },
+  ],
+}
+
 function visibleNames() {
   return screen.getAllByText(/^(Coach One|Helper Two|Sprinter Three)$/).map((el) => el.textContent)
 }
@@ -109,7 +147,10 @@ beforeEach(() => {
     acknowledgeLostTeam: vi.fn(),
   })
   mockUseFreeAgents.mockReturnValue({ pool, loading: false, error: false, refresh: vi.fn() })
+  mockUseAuctions.mockReturnValue({ market: auctionMarket, loading: false, error: false, refresh: vi.fn() })
+  mockUseMyBids.mockReturnValue({ bids: [], refresh: vi.fn() })
   mockSignFreeAgent.mockResolvedValue(undefined)
+  mockPlaceBid.mockResolvedValue(undefined)
 })
 
 describe('Transfers', () => {
@@ -189,5 +230,81 @@ describe('Transfers', () => {
 
     await waitFor(() => expect(sign).toHaveBeenCalledWith(8))
     await waitFor(() => expect(refresh).toHaveBeenCalled())
+  })
+
+  it('switches to the auctions tab and shows a live listing', () => {
+    renderTransfers()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auctions' }))
+
+    expect(screen.getByText('For Sale Rider')).toBeInTheDocument()
+    expect(screen.getByText('Current $60,000')).toBeInTheDocument()
+    expect(screen.getByText('Minimum next bid $63,000')).toBeInTheDocument()
+  })
+
+  it('hides the bid action on the caller\'s own listing', () => {
+    mockUseAuctions.mockReturnValue({
+      market: { ...auctionMarket, auctions: [{ ...auctionMarket.auctions[0], is_own_listing: true }] },
+      loading: false,
+      error: false,
+      refresh: vi.fn(),
+    })
+
+    renderTransfers()
+    fireEvent.click(screen.getByRole('button', { name: 'Auctions' }))
+
+    expect(screen.getByText('Your listing.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Bid' })).not.toBeInTheDocument()
+  })
+
+  it('places a bid at the pre-filled minimum and refreshes the market', async () => {
+    const refreshMarket = vi.fn()
+    const refreshMyBids = vi.fn()
+    mockUseAuctions.mockReturnValue({ market: auctionMarket, loading: false, error: false, refresh: refreshMarket })
+    mockUseMyBids.mockReturnValue({ bids: [], refresh: refreshMyBids })
+    const bid = mockPlaceBid.mockResolvedValue(undefined)
+
+    renderTransfers()
+    fireEvent.click(screen.getByRole('button', { name: 'Auctions' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Bid' }))
+
+    await waitFor(() => expect(bid).toHaveBeenCalledWith(1, 63_000))
+    await waitFor(() => expect(refreshMarket).toHaveBeenCalled())
+    await waitFor(() => expect(refreshMyBids).toHaveBeenCalled())
+  })
+
+  it('disables Bid when the amount exceeds the balance', () => {
+    mockUseAuctions.mockReturnValue({
+      market: { ...auctionMarket, balance: 1_000 },
+      loading: false,
+      error: false,
+      refresh: vi.fn(),
+    })
+
+    renderTransfers()
+    fireEvent.click(screen.getByRole('button', { name: 'Auctions' }))
+
+    expect(screen.getByRole('button', { name: 'Bid' })).toBeDisabled()
+    expect(screen.getByText('You cannot afford that bid.')).toBeInTheDocument()
+  })
+
+  it('shows an outbid notice from active bids', () => {
+    mockUseMyBids.mockReturnValue({
+      bids: [
+        {
+          auction_id: 1,
+          rider_name: 'For Sale Rider',
+          my_last_bid: 60_000,
+          current_price: 63_000,
+          is_high_bidder: false,
+          deadline: '2027-03-04T12:00:00Z',
+        },
+      ],
+      refresh: vi.fn(),
+    })
+
+    renderTransfers()
+
+    expect(screen.getByText(/You've been outbid on For Sale Rider/)).toBeInTheDocument()
   })
 })

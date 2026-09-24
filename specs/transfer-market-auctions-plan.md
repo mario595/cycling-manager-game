@@ -642,7 +642,7 @@ status=409)` — same 409-not-400 convention `SignFreeAgentView` documents
 `AuctionSerializer` entry — the test that would catch someone adding
 `high_bidder` to the serializer later out of habit).
 
-### W9 — `frontend/`: Market screen (auction tab), Roster "List for auction" action, outbid notice
+### W9 — `frontend/`: Market screen (auction tab), Roster "List for auction" action, outbid notice ✅
 Follow the existing Transfers screen's free-agent tab as the pattern
 (`frontend/README.md` names its location) — add a second tab or section for
 live auctions, reusing the roster's rider-card component. Roster screen
