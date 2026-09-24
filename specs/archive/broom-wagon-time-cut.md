@@ -1,6 +1,6 @@
 # Broom wagon (time-cut DNF)
 
-**Status:** proposed
+**Status:** implemented
 **Domain(s):** `race_engine/`, `racing/`, `riders/`, `frontend/`
 **One-liner:** Once the winner finishes, a rider who is too far behind to have a chance is pulled from the race instead of crawling to a meaningless finish hours later.
 

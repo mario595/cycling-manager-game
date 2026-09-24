@@ -120,10 +120,16 @@ reads `now()` once, then finds and processes whatever is due, in four steps:
    `apply_weekly_growth` already returns rather than re-reading the table —
    see [#95](https://github.com/mario595/cycling-manager/issues/95) and
    `riders/README.md`, *Attribute history*), and then settles freshness:
-   `riders.services.apply_weekly_recovery(exclude_ids=set(raced))` restores
-   one week's recovery to every rider who did **not** finish a race in the
+   `riders.services.apply_weekly_recovery(exclude_ids=started)` — where
+   `started = racing.services.riders_who_started(raced_week)` — restores
+   one week's recovery to every rider who did **not start** a race in the
    week being settled ([#59](https://github.com/mario595/cycling-manager/issues/59);
-   see `riders/README.md`, *Freshness*). Recovery follows the same per-week
+   see `riders/README.md`, *Freshness*). `started` is a superset of `raced`
+   (the training reader, `riders_who_raced`, above): a rider cut by the race
+   engine's time limit (the broom wagon) started but didn't finish, so they
+   are excluded from recovery the same as a finisher, while still earning no
+   training credit — see `racing/README.md`, *The weekly-training readers*.
+   Recovery follows the same per-week
    shape as training — one pass per `CLOSED` transition, never collapsed for
    a late tick — because whether a rider raced differs week to week.
    [#58](https://github.com/mario595/cycling-manager/issues/58)'s single

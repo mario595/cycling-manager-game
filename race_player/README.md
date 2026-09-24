@@ -69,7 +69,14 @@ time display and the playback rate derive from `tickInterval`.
   - `pos` (meters from start)
   - `speed` (m/s)
   - `energy`, `stamina` (0-100)
-  - flags bitmask — `1` pulling, `2` surging, `4` finished. `pulling` is set
+  - flags bitmask — `1` pulling, `2` surging, `4` finished, `8` DNF (cut by
+    the race engine's time limit, the broom wagon — see
+    `race_engine/README.md`, *Simulation tick*). Bit `8` is currently
+    ignored by this player: a DNF rider simply freezes where they were cut,
+    with no separate rendering, the same as any other rider who stops
+    updating; giving it its own treatment (rendering, legend entry) is
+    [#94](https://github.com/mario595/cycling-manager/issues/94)'s to do.
+    `pulling` is set
     only for the rider setting the pace at the front of a pack; there is no
     separate "drafting" flag (shelter degree in a pack is continuous, not a
     meaningful boolean — every non-pulling pack member is assumed to be

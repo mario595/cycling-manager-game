@@ -1,6 +1,6 @@
 # Broom wagon (time-cut DNF) — Implementation Plan
 
-**Spec:** `specs/broom-wagon-time-cut.md` · **Issue:** #102 · **Status:** proposed
+**Spec:** `specs/broom-wagon-time-cut.md` · **Issue:** #102 · **Status:** implemented
 **Apps touched:** `race_engine/`, `racing/`, `world/` (no model changes, no migrations; `frontend/`, `api/` and `race_player/` verified unchanged)
 
 ## Context you need
@@ -334,7 +334,7 @@ running the race, create the week-one `Race` as `FINISHED` with a
 `RaceResult(finish_time=None)` for the rider. Tick into week two and assert
 the rider's freshness is unchanged, while a resting rider recovers.
 
-### W6 — Documentation
+### W6 — Documentation ✅ done
 See *Documentation update*. Commit it on its own.
 
 ## Execution order
