@@ -556,7 +556,7 @@ path("transfers/auctions/mine/", MyBidsView.as_view(), name="my-bids"),
 
 ## Work items
 
-### W1 — `transfers/`: `Auction` and `Bid` models, first migration
+### W1 — `transfers/`: `Auction` and `Bid` models, first migration ✅
 Add `transfers/models.py` with `Auction`/`Bid` as specified in *Data model*.
 Run `makemigrations transfers` for `0001_auction.py`. No service logic yet.
 **Test:** `transfers/tests/test_models.py::test_one_open_auction_per_rider_constraint`
