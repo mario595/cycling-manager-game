@@ -451,7 +451,7 @@ There are no action buttons (D12).
 
 ## Work items
 
-### W1 — `api/rider_profile.py`, `api/serializers.py`, `api/views.py`, `api/urls.py`: the rider profile endpoint
+### W1 — `api/rider_profile.py`, `api/serializers.py`, `api/views.py`, `api/urls.py`: the rider profile endpoint — done
 
 Build D1–D7 and D11 as specified above. Tests go in `api/tests.py`, in a new
 `# --- rider profile ---` block with fixtures for two teams, a season with

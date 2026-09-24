@@ -66,6 +66,7 @@ from world.services import now
 
 from accounts.views import LoginView as AccountsLoginView
 
+from .rider_profile import rider_profile
 from .services import touch_last_seen
 from .serializers import (
     CalendarSerializer,
@@ -80,6 +81,7 @@ from .serializers import (
     RaceDetailSerializer,
     RaceResultsSerializer,
     ReleaseRiderSerializer,
+    RiderProfileSerializer,
     RiderSerializer,
     RosterSerializer,
     SignFreeAgentSerializer,
@@ -401,6 +403,20 @@ class RiderListView(APIView):
             "team": team,
             "weeks_opened": _cooldown_weeks_opened(team, now()),
         }).data)
+
+
+class RiderProfileView(APIView):
+    """One rider's full profile — identity, current team, freshness,
+    salary, market value, attributes, attribute history, race history and
+    career totals. Readable by any authenticated manager, whatever their
+    team, like RaceDetailView — not scoped to the caller's team, and no
+    "this is your rider" branch. See specs/rider-detail-view-plan.md, D1-D2.
+    """
+
+    def get(self, request, rider_id: int):
+        rider = get_object_or_404(Rider.objects.select_related("team"), pk=rider_id)
+        profile = rider_profile(rider, at=now())
+        return Response(RiderProfileSerializer(rider, context={"profile": profile}).data)
 
 
 def _cooldown_weeks_opened(team, boundary) -> int:
