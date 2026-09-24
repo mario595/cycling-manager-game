@@ -304,6 +304,25 @@ def test_place_bid_outside_extension_window_does_not_move_deadline(db, claimed_a
     assert updated.deadline == original_deadline
 
 
+def test_place_bid_after_the_deadline_extends_from_now_not_from_the_stale_deadline(db, claimed_at):
+    # A late tick: the auction's deadline has already passed but nothing
+    # has resolved it yet, so it is still OPEN and a bid can land. Extending
+    # from the stale deadline (deadline + EXTENSION_WINDOW) could still be
+    # in the past if the tick is later than EXTENSION_WINDOW — the exact
+    # snipe the extension exists to prevent. It must extend from `at`.
+    seller = Team.objects.create(name="Team Alpha", code="ALP")
+    bidder = Team.objects.create(name="Team Bravo", code="BRA")
+    rider = _rider(name="For Sale", team=seller)
+    auction = list_for_auction(seller, rider.pk, at=claimed_at)
+    original_deadline = auction.deadline
+    bid_time = original_deadline + EXTENSION_WINDOW * 3
+
+    updated = place_bid(auction.pk, bidder, auction.reserve_price, at=bid_time)
+
+    assert updated.deadline == bid_time + EXTENSION_WINDOW
+    assert updated.deadline > bid_time
+
+
 def test_resolve_auction_with_no_bids_marks_unsold_and_touches_nothing(db, claimed_at):
     seller = Team.objects.create(name="Team Alpha", code="ALP")
     rider = _rider(name="For Sale", team=seller)

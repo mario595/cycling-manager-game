@@ -262,10 +262,14 @@ def place_bid(auction_id: int, team, amount: int, *, at) -> Auction:
     teamlessness. The minimum valid bid is the reserve price itself before
     any bid exists, and current_price + min_increment once one does
     (spec item 4). A bid landing within EXTENSION_WINDOW of the deadline
-    (on either side — a late-arriving bid still counts) pushes the
-    deadline forward by EXTENSION_WINDOW, always relative to its current
-    value, never reset to `at + EXTENSION_WINDOW`, so repeated late bids
-    compound predictably (Design decision 2 / spec item 6).
+    (on either side — a late-arriving bid, one placed after the deadline
+    has technically passed but before a tick has resolved the auction,
+    still counts) pushes the deadline to `max(deadline, at) +
+    EXTENSION_WINDOW` — relative to whichever of the two is later, never
+    just the old deadline, so a late-arriving bid can't compute a new
+    deadline that is already in the past. Never reset to a fixed `at +
+    EXTENSION_WINDOW` either, so repeated on-time late bids still compound
+    predictably (Design decision 2 / spec item 6).
 
     Does NOT touch economy/ — affordability is checked by the caller
     (api/) against balance_for before this is even called (Design
@@ -294,7 +298,16 @@ def place_bid(auction_id: int, team, amount: int, *, at) -> Auction:
 
         auction.current_price = amount
         if auction.deadline - at <= EXTENSION_WINDOW:
-            auction.deadline += EXTENSION_WINDOW
+            # max(deadline, at), not just deadline: a bid that arrives
+            # after the deadline has already passed (the auction is still
+            # OPEN because no tick has resolved it yet) must extend from
+            # `at`, not from the stale deadline — extending from the old
+            # value alone can land the new deadline in the past when a
+            # tick is late by more than EXTENSION_WINDOW, which resolves
+            # the auction to this bid on the very next tick with nobody
+            # else able to respond: exactly the snipe this mechanic exists
+            # to prevent.
+            auction.deadline = max(auction.deadline, at) + EXTENSION_WINDOW
         auction.save(update_fields=["current_price", "deadline", "updated_at"])
     return auction
 
@@ -324,7 +337,9 @@ def resolve_auction(auction, *, at, pay_seller=None, charge_buyer=None) -> Aucti
 
     With no bids, the auction goes UNSOLD — no callback calls, rider
     untouched (spec item 11). With a winning bid (the highest amount,
-    ties broken by earliest), the winner's roster is re-checked against
+    ties broken by latest `placed_at` — can't happen today, since each
+    bid must clear the last by `min_increment`, but the ordering is
+    fixed either way), the winner's roster is re-checked against
     ROSTER_CAP under the same lock (Design decision 7): if they are at or
     over it by now, the auction goes UNSOLD rather than violating the
     cap, exactly as if nobody had bid.
