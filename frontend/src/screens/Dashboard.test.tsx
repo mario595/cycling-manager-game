@@ -221,6 +221,7 @@ describe('Dashboard', () => {
       min_next_bid: 63_000,
       deadline: '2027-03-04T12:00:00Z',
       is_own_listing: true,
+      bids: [],
       rider: {
         id: 21,
         name: 'For Sale Rider',
@@ -281,6 +282,7 @@ describe('Dashboard', () => {
       min_next_bid: 11_000,
       deadline: '2027-03-04T12:00:00Z',
       is_own_listing: false,
+      bids: [],
       rider: {
         id: 22,
         name: 'Someone Elses Rider',
