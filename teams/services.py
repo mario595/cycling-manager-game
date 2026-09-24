@@ -4,7 +4,7 @@ from django.db import transaction
 
 from riders.generation import generate_roster
 from riders.models import Rider
-from riders.services import record_initial_snapshots
+from riders.services import mark_team_change, record_initial_snapshots
 
 from .models import ManagerialSpell, Team
 
@@ -64,9 +64,14 @@ def claim_team(user, *, name: str, code: str, roster_size: int = ROSTER_SIZE, at
         team.full_clean(exclude=["manager"])
         team.save(update_fields=["manager", "managed_since", "name", "code", "updated_at"])
 
+        # Stamp unattached_since while the released roster still identifies its
+        # rows — the update below is what clears .team.
+        released_riders = list(team.riders.all())
+        mark_team_change(released_riders, team_now=None, at=at)
         team.riders.update(team=None)
-        created = Rider.objects.bulk_create(generate_roster(roster_size, team=team))
-        record_initial_snapshots(created)
+        new_roster = Rider.objects.bulk_create(generate_roster(roster_size, team=team))
+        mark_team_change(new_roster, team_now=team, at=at)
+        record_initial_snapshots(new_roster)
 
         # Imported here, not at module scope: teams/ must not import
         # economy/ at import time (AGENTS.md's dependency direction). Same

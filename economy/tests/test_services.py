@@ -8,6 +8,7 @@ from accounts.models import User
 from economy.models import STARTING_BALANCE, LedgerEntry, SalaryReviewReport
 from economy.services import (
     balance_for,
+    charge_transfer_fee,
     ensure_opening_balance,
     entries_for,
     latest_salary_review,
@@ -156,6 +157,20 @@ def test_pay_race_prizes_completes_a_partial_payout(db, team, race):
     assert [row.position for row in rows] == [2, 5]
     assert rows[0].amount == 15_000
     assert rows[1].amount == 8_000
+
+
+def test_charge_transfer_fee_writes_a_debit(db, team):
+    at = datetime(2027, 3, 1, 0, 0, tzinfo=dt_timezone.utc)
+    ensure_opening_balance(team, at=at)
+
+    charge_transfer_fee(team, amount=-37_000, at=at, description="Signed Somebody")
+
+    entry = LedgerEntry.objects.get(team=team, kind=LedgerEntry.Kind.TRANSFER_FEE)
+    assert entry.amount == -37_000
+    assert entry.occurred_at == at
+    assert entry.description == "Signed Somebody"
+    assert entry.week_id is None
+    assert balance_for(team) == STARTING_BALANCE - 37_000
 
 
 def test_write_salary_reviews_writes_one_per_managed_team(db, managed_team, season):

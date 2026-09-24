@@ -12,7 +12,9 @@ each rider's own `weekly_salary`, never a flat per-head rate — and, since
 trainer salary — each charged once per team per crossed week boundary — and
 the weekly **merchandise payout** derived from a team's fanbase, its first
 income since #21. #69 also adds the one-off `trainer_fee` row written when a
-team hires a trainer (see *Trainer salaries run off the same loop*). It also
+team hires a trainer (see *Trainer salaries run off the same loop*), and the
+free-agent market (#29) adds the one-off `transfer_fee` row written on a
+signing or a release (see *Free-agent fees* below). It also
 owns the entries that give a team its starting money, the `takeover` row that
 resets a claimed team's balance, and the `prize_money` rows a finished race
 pays out (#19).
@@ -216,6 +218,27 @@ fee is the mirror image: `charge_trainer_fee(team, amount=..., at=...,
 description=...)` writes a single negative row at the moment of hiring, with
 `week` left null and **no** `(team, week)` constraint — a team may legitimately
 pay several fees in a season, and a test asserts that.
+
+## Free-agent fees
+
+`economy.services.charge_transfer_fee(team, *, amount, at, description)`
+writes a single negative `transfer_fee` row at the moment of a free-agent
+signing or a paid roster release — `week` null, no `(team, week)`
+constraint, several per season allowed, exactly the shape
+`charge_trainer_fee` above uses. It is not called from `world/` (nothing
+automatic charges it) and not from `transfers/` (which may not import
+`economy/`): `api/`'s free-agent views invoke it through the injected
+`charge` callback the actions take (`transfers/README.md`, *Free agents*),
+with `description` naming the rider and the direction — "Signed X" or
+"Released X". A $0 release — a rider still within the claim cooldown — is
+skipped at the call site (`api/` only writes when the fee is positive):
+no money moved, no row.
+
+There is deliberately **one** kind for both directions. A signing fee and a
+release severance are the same shape of transaction — money out, no week
+attached — so they share `TRANSFER_FEE` and are told apart by `description`
+(Design decision 7). The Finances screen renders them under one **Transfer
+fee** label.
 
 ## Fanbase is derived too
 

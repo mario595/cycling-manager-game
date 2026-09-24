@@ -320,6 +320,43 @@ prices; a change to `age_multiplier` moves only this one. See
 `weekly_salary` each week — see `economy/README.md`, *Wages run off week
 transitions*.
 
+## Team membership stamps
+
+`joined_team_at` and `unattached_since` are two nullable game-time stamps on
+`Rider` that frame a rider's place in the transfer market: `joined_team_at`
+is the instant the rider joined the team they are currently on (or the last
+team, once teamless), and `unattached_since` is the instant they were last
+released to the pool. Both are written by
+`riders.services.mark_team_change(riders, team_now, at)` — a single helper,
+used by every team move so the two stamps can never drift out of step with
+`team`:
+
+- `teams.services.claim_team` stamps every rider claimed with
+  `joined_team_at = at` (the claim instant), so a claimed roster is exactly
+  the riders whose stamp equals the team's `managed_since`.
+- `transfers.services.sign_free_agent` and `release_rider` stamp signings
+  and releases the same way — releasing sets `team = None` **and**
+  `unattached_since`, so the pool can age riders.
+- `riders.services.mark_team_change` is deliberately unused by direct
+  `save()` writes; settling a new `at` through it is the rule.
+
+Who reads them, and why:
+
+- `transfers/` — `release_cost_for` tests the **claim-cooldown exemption**
+  by comparing a rider's `joined_team_at` with the team's `managed_since`:
+  a rider who joined at the exact claim instant releases for free while the
+  cooldown holds, a rider signed afterwards pays severance.
+  `free_agents()` is simply `team__isnull=True`.
+- `world/` — `_expire_free_agents` ages `unattached_since` against `Week`
+  rows (the same count schedule.services.weeks_opened_between uses for managers) to find free
+  agents that have sat too long, then deletes them. See
+  `transfers/README.md`, *Free agents*, and `world/README.md`, the tick.
+
+The stamps are game time (same clock as salary/tick), never wall-clock time,
+and are both null for riders generated teamless (generation creates riders
+off the market; see `transfers/README.md` for what happens to pre-migration
+rows whose `unattached_since` is null).
+
 ## Generation
 
 `generation.generate_rider()` builds one unsaved, internally consistent

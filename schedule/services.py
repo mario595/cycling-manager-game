@@ -111,3 +111,22 @@ def process_week_transitions(at: datetime) -> list[WeekTransition]:
             # Another tick got there first. Correct outcome, not an error.
             continue
     return written
+
+
+def weeks_opened_between(start: datetime, end: datetime) -> int:
+    """In-season weeks that opened in `[start, end)`.
+
+    Counting Week rows rather than dividing a timedelta by seven days is
+    what makes "off-season doesn't count" (#63) fall out for free: weeks
+    only exist inside a declared season, so a gap between seasons
+    contributes no rows regardless of how much real or game time it spans.
+
+    `starts_at__gte` (not `__gt`) is deliberate: someone active at the
+    exact instant a week opened has seen that week.
+
+    Public because two apps need it with different intents — `world/`
+    for inactivity and free-agent expiry, `api/` for the claim-cooldown
+    release exemption — and `schedule/` owns week counting (AGENTS.md's
+    dependency direction).
+    """
+    return Week.objects.filter(starts_at__gte=start, starts_at__lt=end).count()

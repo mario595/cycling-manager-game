@@ -60,6 +60,16 @@ DRF routers and serializers that aggregate other apps' data for the SPA.
   `squad_value` is that same function summed over the response's own
   riders in Python, not a separate query, so the two numbers can never
   disagree (`transfers/README.md`, [#31](https://github.com/mario595/cycling-manager/issues/31)).
+Since #29 each rider also carries `release_cost`
+  (`transfers.services.release_cost_for`, exact credits): 0 while the
+  claim cooldown shields a rider inherited from the team's most recent
+  claim, full severance once fewer than `CLAIM_COOLDOWN_WEEKS` in-season
+  weeks no longer hold. It is a `SerializerMethodField` that reads
+  `context["team"]`/`context["weeks_opened"]` and degrades to `null`
+  when a payload is built without a team in scope (free agents), so a
+  future second call site fails a test rather than 500ing in production.
+  The weeks are counted by `_cooldown_weeks_opened` in `api/views.py`
+  (0 for a never-claimed team) — the caller counts, never `transfers/`.
   A third top-level key, `salary_review`, carries the team's most recent
   season-end salary review or `null` when there isn't one (#26).
   `economy.services.latest_salary_review` picks the newest by
@@ -73,6 +83,32 @@ DRF routers and serializers that aggregate other apps' data for the SPA.
   `to` — a Python keyword that cannot be a serializer field name, hence
   DRF's `source="from"` mapping.
   This response shape changed with #31: it was previously a bare array.
+- `GET /api/transfers/free-agents/` (`FreeAgentPoolSerializer`,
+  `FreeAgentsView`) — the whole transfer market in one payload:
+  `{riders: [...], balance}`. `riders` is the free-agent pool, every rider
+  with no team, ordered by name, each carrying `signing_fee`
+  (`transfers.pricing.signing_fee_for`, exact credits) and — inherited
+  from `RiderSerializer` — all the roster fields; a free agent's
+  `release_cost` serializes as `null` (it is on nobody's roster).
+  `balance` (`economy.services.balance_for`) rides alongside so the SPA
+  can disable the Sign it cannot afford, the same both-keys shape
+  `StaffView` uses. A caller with no team gets a 403, like `RiderListView`.
+- `POST /api/transfers/free-agents/sign/` (`SignFreeAgentSerializer`,
+  `SignFreeAgentView`) — sign a free agent for its `signing_fee`. The
+  views pass a `charge` closure into `transfers.services.sign_free_agent`
+  that debits the ledger through `economy.services.charge_transfer_fee`
+  (a `TRANSFER_FEE` row, description "Signed X"); the closure raises
+  `InsufficientFunds` when `balance_for(team) < fee`. A rider already
+  signed, a full roster, or unaffordable fee is a **409** — the request
+  is well-formed but the game's state refuses it; no team is a 403.
+  Success is 204.
+- `POST /api/transfers/riders/release/` (`ReleaseRiderSerializer`,
+  `ReleaseRiderView`) — release one of the caller's riders to the pool,
+  debiting `release_cost_for` the same way. The view's `charge` closure
+  writes a `TRANSFER_FEE` row (description "Released X") **only when the
+  fee is positive** — a $0 cooldown-exempt release moves no money and
+  leaves the ledger untouched. A rider not on the caller's roster is a
+  409. Success is 204.
 - `GET /api/racing/races/<race_id>/` — one race's own facts
   (`RaceDetailSerializer`, `RaceDetailView`): id, name, status, starts_at,
   distance and the raw `{length, gradient}` course segments. It also carries

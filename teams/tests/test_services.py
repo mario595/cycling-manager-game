@@ -207,6 +207,14 @@ def test_claim_team_stamps_managed_since(db, user, team):
     assert claimed.managed_since == AT
 
 
+def test_claim_stamps_joined_and_unattached_timing(db, user, team, rider):
+    claimed = claim_team(user, name="Mountain Goats", code="MGO", at=AT)
+
+    rider.refresh_from_db()
+    assert rider.unattached_since == AT
+    assert all(r.joined_team_at == AT for r in claimed.riders.all())
+
+
 def test_release_team_clears_manager_and_records_spell(db, user, team):
     claim_team(user, name="Mountain Goats", code="MGO", at=AT)
     team.refresh_from_db()

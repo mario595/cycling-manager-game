@@ -18,7 +18,7 @@ from riders.models import DISPLAY_MAX, Rider
 from schedule.models import SEASON_WEEKS, Season, Week
 from staff.models import Trainer, TrainingWeekReport
 from staff.pricing import hire_fee, weekly_salary
-from transfers.pricing import market_value_for
+from transfers.pricing import market_value_for, severance_fee_for, signing_fee_for
 from teams.models import ManagerialSpell, Team
 from world.services import now
 
@@ -1677,3 +1677,165 @@ def test_sign_someone_elses_offer_is_409(sponsors_client, sponsors_team, sponsor
     response = sponsors_client.post("/api/economy/sponsors/sign/", {"offer_id": other_offers[0].pk})
 
     assert response.status_code == 409
+
+
+@pytest.fixture
+def market_manager(db) -> User:
+    return User.objects.create_user(email="market-manager@example.com", password="s0meth1ng-good")
+
+
+@pytest.fixture
+def market_team(db, market_manager) -> Team:
+    # managed_since in the past, so a Week can open after the claim and the
+    # cooldown can genuinely expire; the free-release test leaves it alone.
+    return Team.objects.create(
+        name="Market Team", code="MKT", manager=market_manager,
+        managed_since=datetime(2026, 3, 1, 0, 0, tzinfo=dt_timezone.utc),
+    )
+
+
+@pytest.fixture
+def market_client(market_manager) -> APIClient:
+    client = APIClient()
+    client.force_authenticate(user=market_manager)
+    return client
+
+
+def _market_rider(name, **overrides) -> Rider:
+    """A persisted rider owned by the transfer-market suite; mirrors
+    transfers/tests/test_services.py's _rider."""
+    defaults = dict(
+        name=name,
+        speciality=Rider.Speciality.ROULEUR,
+        age=27,
+        climb=50, sprint=50, flat=50, resistance=50, positioning=50,
+    )
+    defaults.update(overrides)
+    return Rider.objects.create(**defaults)
+
+
+def test_free_agents_requires_a_team(db):
+    manager = User.objects.create_user(email="no-team-mkt@example.com", password="s0meth1ng-good")
+    client = APIClient()
+    client.force_authenticate(user=manager)
+
+    response = client.get("/api/transfers/free-agents/")
+
+    assert response.status_code == 403
+
+
+def test_free_agents_view_lists_teamless_riders(market_client, market_team):
+    _market_rider(name="Rostered", team=market_team)
+    alice = _market_rider(name="Alice Free")
+    bob = _market_rider(name="Bob Free")
+
+    response = market_client.get("/api/transfers/free-agents/")
+
+    assert response.status_code == 200
+    assert [r["name"] for r in response.data["riders"]] == ["Alice Free", "Bob Free"]
+    assert response.data["balance"] == 0
+    alice_payload = response.data["riders"][0]
+    assert alice_payload["signing_fee"] == signing_fee_for(alice)
+    assert alice_payload["market_value"] == market_value_for(alice)
+    # A free agent is on nobody's roster, so there is nothing to release —
+    # the context-less degrade path, not a number.
+    assert alice_payload["release_cost"] is None
+
+
+def test_sign_free_agent_debits_the_fee_and_assigns_the_rider(market_client, market_team):
+    make_ledger_entry(
+        market_team, "starting_balance", STARTING_BALANCE, now(), "Starting balance",
+    )
+    free = _market_rider(name="Free Rider")
+
+    response = market_client.post("/api/transfers/free-agents/sign/", {"rider_id": free.pk})
+
+    assert response.status_code == 204
+    free.refresh_from_db()
+    assert free.team_id == market_team.pk
+    assert free.joined_team_at is not None
+    assert free.unattached_since is None
+    fee_entry = LedgerEntry.objects.get(team=market_team, kind="transfer_fee")
+    assert fee_entry.amount == -signing_fee_for(free)
+    assert "Free Rider" in fee_entry.description
+
+
+def test_sign_free_agent_409s_when_unaffordable(market_client, market_team):
+    make_ledger_entry(market_team, "starting_balance", 100, now(), "Starting balance")
+    strong = _market_rider(
+        name="Pricy Rider",
+        climb=99, sprint=99, flat=99, resistance=99, positioning=99,
+    )
+
+    response = market_client.post("/api/transfers/free-agents/sign/", {"rider_id": strong.pk})
+
+    assert response.status_code == 409
+    strong.refresh_from_db()
+    assert strong.team_id is None
+    assert not LedgerEntry.objects.filter(team=market_team, kind="transfer_fee").exists()
+
+
+def test_release_rider_is_free_within_claim_cooldown(market_client, market_team):
+    # No Week has opened since the claim, so the cooldown holds and the
+    # inherited roster releases for free (Design decision 2).
+    inherited = _market_rider(
+        name="Inherited",
+        team=market_team, joined_team_at=market_team.managed_since,
+    )
+
+    response = market_client.post(
+        "/api/transfers/riders/release/", {"rider_id": inherited.pk},
+    )
+
+    assert response.status_code == 204
+    inherited.refresh_from_db()
+    assert inherited.team_id is None
+    assert inherited.unattached_since is not None
+    assert not LedgerEntry.objects.filter(team=market_team, kind="transfer_fee").exists()
+
+
+def test_release_rider_charges_severance_after_cooldown(market_client, market_team):
+    # One in-season Week opened since the claim, so the cooldown has run
+    # out and the release costs severance (Design decision 2).
+    season = Season.objects.create(number=1, starts_at=now())
+    Week.objects.create(
+        season=season, number=1,
+        starts_at=now() - timedelta(days=1),
+        ends_at=now(),
+    )
+    make_ledger_entry(
+        market_team, "starting_balance", 500_000, now(), "Starting balance",
+    )
+    inherited = _market_rider(
+        name="Inherited",
+        team=market_team, joined_team_at=market_team.managed_since,
+    )
+
+    response = market_client.post(
+        "/api/transfers/riders/release/", {"rider_id": inherited.pk},
+    )
+
+    assert response.status_code == 204
+    inherited.refresh_from_db()
+    assert inherited.team_id is None
+    fee_entry = LedgerEntry.objects.get(team=market_team, kind="transfer_fee")
+    assert fee_entry.amount == -severance_fee_for(inherited)
+    assert "Inherited" in fee_entry.description
+
+
+def test_roster_view_reports_release_cost_per_rider(market_client, market_team):
+    inherited = _market_rider(
+        name="Inherited",
+        team=market_team, joined_team_at=market_team.managed_since,
+    )
+    signed = _market_rider(
+        name="Signed Later",
+        team=market_team,
+        joined_team_at=market_team.managed_since + timedelta(days=2),
+    )
+
+    response = market_client.get("/api/riders/")
+
+    by_name = {r["name"]: r for r in response.data["riders"]}
+    assert by_name["Inherited"]["release_cost"] == 0
+    assert by_name["Signed Later"]["release_cost"] == severance_fee_for(signed)

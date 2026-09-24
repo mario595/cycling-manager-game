@@ -21,6 +21,7 @@ from economy.services import (
     active_contract,
     balance_for,
     charge_trainer_fee,
+    charge_transfer_fee,
     ensure_offer_round,
     entries_for,
     fanbase_entries_for,
@@ -34,9 +35,8 @@ from economy.sponsors import PROFILES_BY_KEY
 from racing.models import SQUAD_SIZE, Race
 from racing.services import SquadError, set_squad, suggested_squad
 from riders.models import ENGINE_ATTRIBUTES, Rider
-from schedule.services import current_position
+from schedule.services import current_position, weeks_opened_between
 from staff.pricing import hire_fee
-from transfers.pricing import market_value_for
 from staff.services import (
     InsufficientFunds,
     NoTrainerHired,
@@ -52,6 +52,16 @@ from staff.services import (
 )
 from teams.models import ManagerialSpell, Team
 from teams.services import NoTeamAvailable, claim_team
+from transfers.pricing import market_value_for
+from transfers.services import (
+    InsufficientFunds as TransferInsufficientFunds,
+    RiderNotAvailable,
+    RiderNotOnRoster,
+    RosterFull,
+    free_agents,
+    release_rider,
+    sign_free_agent,
+)
 from world.services import now
 
 from accounts.views import LoginView as AccountsLoginView
@@ -62,14 +72,17 @@ from .serializers import (
     ClaimTeamSerializer,
     ClockSerializer,
     FinancesSerializer,
+    FreeAgentPoolSerializer,
     HireTrainerSerializer,
     MeSerializer,
     MeTeamSerializer,
     PositionSerializer,
     RaceDetailSerializer,
     RaceResultsSerializer,
+    ReleaseRiderSerializer,
     RiderSerializer,
     RosterSerializer,
+    SignFreeAgentSerializer,
     SquadSerializer,
     SquadWriteSerializer,
     SignOfferSerializer,
@@ -384,7 +397,125 @@ class RiderListView(APIView):
             "riders": riders,
             "squad_value": sum(market_value_for(r) for r in riders),
             "salary_review": latest_salary_review(team),
+        }, context={
+            "team": team,
+            "weeks_opened": _cooldown_weeks_opened(team, now()),
         }).data)
+
+
+def _cooldown_weeks_opened(team, boundary) -> int:
+    """In-season weeks opened since `team` was claimed, for the claim-cooldown
+    exemption (transfers/README.md, *Free agents*).
+
+    `transfers/` may not import `schedule/` (AGENTS.md), so api/ — the only
+    app allowed to know everything — counts for it via
+    schedule.services.weeks_opened_between, the same Week-row rule
+    `world/` uses for inactivity and expiry: only in-season weeks count, so
+    an off-season gap contributes nothing. 0 for a team that was
+    never claimed (`managed_since` is null and there is no cooldown to
+    run out)."""
+    if team.managed_since is None:
+        return 0
+    return weeks_opened_between(team.managed_since, boundary)
+
+
+class FreeAgentsView(APIView):
+    """Every free agent in the pool, plus the caller's balance.
+
+    The pool is the same for every manager, so no team scoping applies to
+    the listing — but a team is still required (403 without one), matching
+    RiderListView's own-team gate, because the balance key in the response
+    is the caller's.
+    """
+
+    def get(self, request):
+        team = team_for(request.user)
+        if team is None:
+            return Response({"detail": "You do not manage a team."}, status=403)
+
+        return Response(FreeAgentPoolSerializer({
+            "riders": list(free_agents()),
+            "balance": balance_for(team),
+        }).data)
+
+
+class SignFreeAgentView(APIView):
+    """Sign one free agent onto the caller's team, debiting the signing fee.
+
+    409, not 400, for RiderNotAvailable, RosterFull and
+    TransferInsufficientFunds: the request itself is well-formed — the
+    world's state refuses it — the same split ClaimTeamView and
+    HireTrainerView document.
+    """
+
+    def post(self, request):
+        team = team_for(request.user)
+        if team is None:
+            return Response({"detail": "You do not manage a team."}, status=403)
+
+        serializer = SignFreeAgentSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        at = now()
+
+        def charge(rider, fee):
+            if fee > 0 and balance_for(team) < fee:
+                raise TransferInsufficientFunds(
+                    "You cannot afford this rider's signing fee."
+                )
+            if fee > 0:
+                charge_transfer_fee(
+                    team, amount=-fee, at=at, description=f"Signed {rider.name}",
+                )
+
+        try:
+            sign_free_agent(
+                team, serializer.validated_data["rider_id"], at=at, charge=charge,
+            )
+        except (RiderNotAvailable, RosterFull, TransferInsufficientFunds) as exc:
+            return Response({"detail": str(exc)}, status=409)
+
+        return Response(status=204)
+
+
+class ReleaseRiderView(APIView):
+    """Send one of the caller's own riders to the free-agent pool.
+
+    Charges severance unless the claim cooldown exempts the rider — see
+    transfers/README.md, *Free agents*. 409, not 400, for
+    RiderNotOnRoster: the request is well-formed, the world's state refuses
+    it. Release never fails on affordability — it is 0 within the cooldown
+    and the game cannot hold a rider hostage, so severance is charged even
+    when the balance is below it (transfers.services.release_rider's job is
+    the roster change; the charge entry simply records what is owed).
+    """
+
+    def post(self, request):
+        team = team_for(request.user)
+        if team is None:
+            return Response({"detail": "You do not manage a team."}, status=403)
+
+        serializer = ReleaseRiderSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        at = now()
+
+        def charge(rider, fee):
+            if fee > 0:
+                charge_transfer_fee(
+                    team, amount=-fee, at=at, description=f"Released {rider.name}",
+                )
+
+        try:
+            release_rider(
+                team,
+                serializer.validated_data["rider_id"],
+                at=at,
+                weeks_opened=_cooldown_weeks_opened(team, at),
+                charge=charge,
+            )
+        except RiderNotOnRoster as exc:
+            return Response({"detail": str(exc)}, status=409)
+
+        return Response(status=204)
 
 
 class RaceDetailView(APIView):

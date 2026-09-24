@@ -70,6 +70,7 @@ class LedgerEntry(TimeStampedModel):
         SPONSORSHIP = "sponsorship", "Sponsorship"
         TRAINER_SALARY = "trainer_salary", "Trainer salary"
         TRAINER_FEE = "trainer_fee", "Trainer hire fee"
+        TRANSFER_FEE = "transfer_fee", "Transfer fee"
 
     team = models.ForeignKey(
         "teams.Team",

@@ -20,12 +20,14 @@ A registered user with no team calls `claim_team(user, name=..., code=..., at=..
    before saving — **`team_code_validator` is a field validator and does not
    run on `.save()`**; without the explicit `full_clean()` a malformed code
    would reach the database.
-3. Releases every rider currently on the team (`team.riders.update(team=None)`)
-   — they become free agents, not deleted. Deleting them would cascade-delete
-   their `racing.RaceResult` and `racing.RaceSquadRider` rows, silently
-   erasing the team's race history.
+3. Releases every rider currently on the team (`mark_team_change` stamps
+    them `unattached_since = at` first, then `team.riders.update(team=None)`)
+    — they become free agents, not deleted. Deleting them would cascade-delete
+    their `racing.RaceResult` and `racing.RaceSquadRider` rows, silently
+    erasing the team's race history.
 4. Generates a fresh roster via `riders.generation.generate_roster()` and
-   assigns it to the team.
+   assigns it to the team, stamping each new rider's `joined_team_at = at`
+   (`riders/README.md`, *Team membership stamps*).
 5. Writes a ledger `takeover` entry that brings the team's balance back to
    `STARTING_BALANCE`, and a fanbase `takeover` row that brings its fanbase
    back to `STARTING_FANBASE` (#21) — `reset_to_starting_balance(team, at=...)`
@@ -43,8 +45,13 @@ A registered user with no team calls `claim_team(user, name=..., code=..., at=..
    fresh offer round on their first visit to the Sponsors screen.
 
 The claim also stamps `Team.managed_since = at` — the moment `release_team`
-(below) reads when the spell it records ends, and clears when the team is
-released.
+ (below) reads when the spell it records ends, and clears when the team is
+ released. It is also the basis of the transfer claim cooldown: a rider
+ whose `joined_team_at` equals the new `managed_since` inherited their
+ roster spot at the claim instant and releases for free while the cooldown
+ holds (`transfers/README.md`, *Free agents*), whereas a rider signed in
+ afterwards pays severance — the `mark_team_change` pairing in steps 3-4 is
+ what lets `transfers/` tell the two apart.
 
 If no unmanaged team exists, `claim_team` raises `NoTeamAvailable`. A second
 claim by an already-managing user is not checked here — `Team.manager` is a

@@ -5,7 +5,8 @@ from rest_framework import serializers
 from riders.display import to_display_scale
 from riders.models import ENGINE_ATTRIBUTES
 from staff.pricing import hire_fee, weekly_salary
-from transfers.pricing import market_value_for
+from transfers.pricing import market_value_for, signing_fee_for
+from transfers.services import release_cost_for
 
 
 class ClockSerializer(serializers.Serializer):
@@ -101,6 +102,7 @@ class RiderSerializer(serializers.Serializer):
     freshness = serializers.SerializerMethodField()
     weekly_salary = serializers.IntegerField()
     market_value = serializers.SerializerMethodField()
+    release_cost = serializers.SerializerMethodField()
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -112,6 +114,20 @@ class RiderSerializer(serializers.Serializer):
 
     def get_market_value(self, instance) -> int:
         return market_value_for(instance)
+
+    def get_release_cost(self, instance) -> int | None:
+        """What releasing this rider would charge right now, via
+        transfers.services.release_cost_for — 0 within the claim cooldown,
+        severance otherwise. Needs the requesting team and the in-season
+        weeks opened since its claim, which share a DRF `context` with this
+        serializer (RiderListView builds it, and DRF propagates `context` to
+        every nested serializer). `None` — not a crash — when a future call
+        site forgets the context."""
+        team = self.context.get("team")
+        weeks_opened = self.context.get("weeks_opened")
+        if team is None or weeks_opened is None:
+            return None
+        return release_cost_for(team, instance, weeks_opened=weeks_opened)
 
 
 class SalaryChangeSerializer(serializers.Serializer):
@@ -146,6 +162,38 @@ class RosterSerializer(serializers.Serializer):
             "payroll_after": report.payroll_after,
             "changes": SalaryChangeSerializer(report.changes, many=True).data,
         }
+
+
+class FreeAgentSerializer(RiderSerializer):
+    """A free agent as the transfer market needs them: everything
+    RiderSerializer already ships (the same visible fields a manager's own
+    roster shows), plus one figure this screen adds — the signing fee.
+    `release_cost` is inherited and ships as `null` — these riders are on
+    nobody's roster, so the free-agent context carries no team for the
+    RosterSerializer to read; the frontend documents and expects exactly
+    that."""
+
+    signing_fee = serializers.SerializerMethodField()
+
+    def get_signing_fee(self, instance) -> int:
+        return signing_fee_for(instance)
+
+
+class FreeAgentPoolSerializer(serializers.Serializer):
+    """The transfer market's whole state, the same both-keys-always-present
+    shape StaffSerializer uses: the pool of free agents plus the caller's
+    balance, so the SPA can disable a Sign it cannot afford."""
+
+    riders = FreeAgentSerializer(many=True)
+    balance = serializers.IntegerField()
+
+
+class SignFreeAgentSerializer(serializers.Serializer):
+    rider_id = serializers.IntegerField()
+
+
+class ReleaseRiderSerializer(serializers.Serializer):
+    rider_id = serializers.IntegerField()
 
 
 class SquadSerializer(serializers.Serializer):

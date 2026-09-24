@@ -8,6 +8,8 @@ run and how many weeks to apply.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 from django.db.models import F, Value
 from django.db.models.functions import Greatest
 
@@ -81,6 +83,33 @@ RECOVERY_MAX = 20
 #: results without making the rider a non-participant. Multiplier is
 #: linear in freshness between FRESHNESS_FLOOR and FRESHNESS_MAX.
 PENALTY_AT_FLOOR = 0.80
+
+
+def mark_team_change(riders: Iterable[Rider], *, team_now, at) -> None:
+    """Stamp joined_team_at or unattached_since on every rider in
+    `riders` to reflect a team change happening `at` (game time).
+
+    `team_now` is the new team value (a Team, or None for a release) —
+    every rider in the iterable is assumed to be changing to this same
+    value in this same call, the same assumption claim_team's bulk
+    operations already make.
+
+    Does not touch `.team` itself (callers already save it — bulk_create,
+    QuerySet.update(), or an individual .save()); it persists only the
+    timing field(s) it stamps, via its own bulk_update.
+    """
+    riders = list(riders)
+    if not riders:
+        return
+    if team_now is None:
+        for rider in riders:
+            rider.unattached_since = at
+        Rider.objects.bulk_update(riders, ["unattached_since"])
+    else:
+        for rider in riders:
+            rider.joined_team_at = at
+            rider.unattached_since = None
+        Rider.objects.bulk_update(riders, ["joined_team_at", "unattached_since"])
 
 
 def attribute_ceilings(rider: Rider) -> dict[str, float]:

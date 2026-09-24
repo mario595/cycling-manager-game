@@ -2,22 +2,76 @@
 
 ## What this app owns
 
-`transfers.pricing.market_value_for(rider)` — a rider's market value, in
-whole credits. That is all: **no models, no migrations, no stored field**.
-Value is a pure function of a rider's visible attributes and age, recomputed
-on every read, never persisted. This is deliberate, not an early-stage gap:
-the spec ([#31](https://github.com/mario595/cycling-manager/issues/31))
-requires value to move the instant a rider's attributes move, and a stored
-column would be a cache that drifts from the arithmetic it summarizes.
+Two pricing functions (`transfers/pricing.py`) and the free-agent market
+(`transfers/services.py`):
 
-`transfers/migrations/` exists as an empty package only so Django treats
-the app as migration-capable once a later ticket gives it its first model.
+- **Market value** — `pricing.market_value_for(rider)`, a rider's worth in
+  whole credits. **No models, no migrations, no stored field.** Value is a
+  pure function of a rider's visible attributes and age, recomputed on every
+  read, never persisted. This is deliberate, not an early-stage gap: the
+  spec ([#31](https://github.com/mario595/cycling-manager/issues/31))
+  requires value to move the instant a rider's attributes move, and a stored
+  column would be a cache that drifts from the arithmetic it summarizes.
+- **Fees** — `pricing.signing_fee_for` / `pricing.severance_fee_for`, the
+  two one-off prices that attach to a free-agent transfer (see *Free
+  agents* below).
+- **The free agent market** — `services.free_agents()`, the pool,
+  `services.release_cost_for()` and the two locked write paths
+  `sign_free_agent` / `release_rider`. This is the first built slice of the
+  transfer market; auctions
+  ([#28](https://github.com/mario595/cycling-manager/issues/28)), buying and
+  selling riders, contracts and AI trading
+  ([#30](https://github.com/mario595/cycling-manager/issues/30)) still to
+  come.
 
-This app is the future home of the transfer market itself — auctions
-([#28](https://github.com/mario595/cycling-manager/issues/28)), free
-agents ([#29](https://github.com/mario595/cycling-manager/issues/29)) and
-AI trading ([#30](https://github.com/mario595/cycling-manager/issues/30)) —
-but none of that is built yet. Today it holds one pricing function.
+`transfers/` still owns no `models.py` — the schema free agents need lives
+on `Rider` itself (nullable `team`, plus the `joined_team_at` /
+`unattached_since` stamps `riders/`'s `mark_team_change` writes).
+
+## Free agents
+
+The first built slice of the transfer market (#29). A **free agent** is any
+`Rider` with no team; the pool is `Rider.objects.filter(team__isnull=True)`.
+Two actions move riders in and out of it, both row-locked write paths in
+`transfers/services.py` that charge an **injected** `charge(rider, fee)`
+callback the way `hire_trainer` does — `transfers/` may not import
+`economy/` (AGENTS.md), so the caller (`api/`) supplies the ledger write
+(`economy.services.charge_transfer_fee`, a `TRANSFER_FEE` ledger entry whose
+description records the rider and the direction).
+
+- **Signing** (`sign_free_agent`) — a free agent comes in for
+  `signing_fee_for(rider)` (60% of market value). The rider row is locked
+  WITHOUT `skip_locked` (the caller wants this specific rider), teamlessness
+  is re-checked under the lock, then `ROSTER_CAP` (30) is re-checked under
+  the same lock, then `charge()` runs. The whole thing is one transaction:
+  a `charge()` raise rolls back the team move, keeping roster and ledger in
+  step.
+- **Releasing** (`release_rider`) — a roster rider goes out, charging
+  `release_cost_for(team, rider, weeks_opened=...)`: full severance (30% of
+  market value) for everyone **except** the claim-cooldown exemption.
+- **Claim-cooldown exemption** — a rider who joined at the exact instant of
+  the team's most recent claim (`joined_team_at == managed_since`, i.e. the
+  roster `claim_team` generated, not someone signed in afterward) releases
+  for **$0** while fewer than `CLAIM_COOLDOWN_WEEKS` (1) in-season weeks
+  have opened since. `weeks_opened` is counted by the caller, never inside
+  `transfers/` — counting `schedule/`'s `Week` rows would break the
+  `transfers -> riders` only rule, so the caller passes the number both for
+  the roster GET (`api/`) and for a release action (the same `now()`-to-
+  boundary Week-row count `world/` uses). A team with no `managed_since` has
+  no cooldown, so nothing is exempt.
+- **Expiry** — every weekly tick, `world.services._expire_free_agents`
+  deletes free agents that have been unattached for at least
+  `EXPIRY_WEEKS` (8) in-season weeks **and** are priced at or below the
+  bottom `EXPIRY_VALUE_PERCENTILE` (0.20) of the pool's values at that
+  moment. Value is never stored, so the cutoff is recomputed fresh each
+  pass; a pool too small to have a meaningful bottom quintile simply expires
+  nobody. This is a permanent deletion (the same precedent as
+  `reset_riders`), never a re-release to the pool.
+
+The pool, balances and costs reach the player through `api/`: the market
+screen (`frontend/`) signs riders; the Roster shows each rider's current
+`release_cost` — 0 when the cooldown shields them, severance after — on the
+rider's detail panel.
 
 ## Value vs salary
 
@@ -103,5 +157,7 @@ Market value was built to serve four consumers, none wired up yet:
 - **Season-boundary salary renegotiation.** [#26](https://github.com/mario595/cycling-manager/issues/26)
   needs a value to renegotiate a rider's salary against.
 
-Nothing here reads `market_value_for` back yet — it is purely informational,
-shown on the Roster screen (`api/README.md`, `frontend/README.md`).
+Nothing outside `transfers/` reads `market_value_for` back yet — the Roster
+screen shows it (`api/README.md`, `frontend/README.md`), and inside this app
+the free-agent signing and severance fees are the only arithmetic that
+builds on it.

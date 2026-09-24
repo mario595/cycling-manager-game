@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 
-import type { Rider, SalaryReview } from '../api'
-import { Bar, Card, CardHeader, Chip, ChipLabel, LabelBar, PageBody, PageHeading, StatTile } from '../components/primitives'
+import { releaseRider, type Rider, type SalaryReview } from '../api'
+import { Bar, Button, Card, CardHeader, Chip, ChipLabel, LabelBar, PageBody, PageHeading, StatTile } from '../components/primitives'
 import { formatMoney } from '../format'
 import { barColor, color, font } from '../theme'
 import { useAuth } from '../useAuth'
@@ -52,10 +52,12 @@ export function Roster() {
   const { me, loading: authLoading } = useAuth()
   const hasTeam = me?.team != null
 
-  const { riders, squadValue, salaryReview, loading, error } = useRoster()
+const { riders, squadValue, salaryReview, loading, error, refresh } = useRoster()
   const [filter, setFilter] = useState<'All' | string>('All')
   const [sort, setSort] = useState<SortKey>('name')
   const [picked, setPicked] = useState<number | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [pending, setPending] = useState(false)
 
   const specialities = useMemo(() => {
     if (!riders) return []
@@ -98,6 +100,20 @@ export function Roster() {
 
   const selected = picked !== null ? (riders.find((r) => r.id === picked) ?? null) : null
 
+  const handleRelease = async (rider: Rider) => {
+    setPending(true)
+    setActionError(null)
+    try {
+      await releaseRider(rider.id)
+      setPicked(null)
+      refresh()
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Could not release that rider.')
+    } finally {
+      setPending(false)
+    }
+  }
+
   return (
     <PageBody gap={18} paddingTop={26}>
       <PageHeading
@@ -112,6 +128,12 @@ export function Roster() {
           </>
         }
       />
+
+{actionError ? (
+        <Card style={{ padding: '12px 16px', borderColor: '#D9534F' }}>
+          <div style={{ fontSize: 13, color: '#D9534F' }}>{actionError}</div>
+        </Card>
+      ) : null}
 
       {salaryReview && salaryReview.changes.length > 0 ? (
         <SalaryReviewCard review={salaryReview} />
@@ -166,7 +188,14 @@ export function Roster() {
           ))}
         </div>
 
-        {selected ? <RiderPanel rider={selected} onClose={() => setPicked(null)} /> : null}
+        {selected ? (
+          <RiderPanel
+            rider={selected}
+            pending={pending}
+            onClose={() => setPicked(null)}
+            onRelease={() => handleRelease(selected)}
+          />
+        ) : null}
       </div>
     </PageBody>
   )
@@ -277,7 +306,17 @@ function RiderCard({
   )
 }
 
-function RiderPanel({ rider, onClose }: { rider: Rider; onClose: () => void }) {
+function RiderPanel({
+  rider,
+  pending,
+  onClose,
+  onRelease,
+}: {
+  rider: Rider
+  pending: boolean
+  onClose: () => void
+  onRelease: () => void
+}) {
   const facts: Array<[string, string]> = [
     ['Age', `${rider.age} yrs`],
     ['Height', `${rider.height_cm} cm`],
@@ -413,6 +452,40 @@ function RiderPanel({ rider, onClose }: { rider: Rider; onClose: () => void }) {
             <span style={{ fontSize: 14, fontWeight: 600, fontFamily: font.mono }}>{v}</span>
           </div>
         ))}
+      </div>
+
+      {/* Releasing sends the rider to the free agent pool. The cost is
+          severance unless the claim cooldown still shields them — the
+          server has the final say; this is the figure it will charge. */}
+      <div
+        style={{
+          borderTop: `1px solid ${color.divider}`,
+          paddingTop: 14,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 10,
+          }}
+        >
+          <span style={{ fontSize: 12, color: color.mutedStrong, fontFamily: font.mono }}>
+            Release {formatMoney(rider.release_cost ?? 0)}
+          </span>
+          <Button onClick={onRelease} disabled={pending} style={{ opacity: pending ? 0.6 : 1 }}>
+            Release
+          </Button>
+        </div>
+        {rider.release_cost === 0 ? (
+          <div style={{ fontSize: 11.5, color: color.muted }}>
+            Free while the claim cooldown shields them.
+          </div>
+        ) : null}
       </div>
     </div>
   )
