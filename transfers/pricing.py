@@ -88,3 +88,31 @@ def severance_fee_for(rider) -> int:
     """SEVERANCE_FEE_RATE of this rider's market value, rounded the same
     way."""
     return _round_to_nearest_1000(SEVERANCE_FEE_RATE * market_value_for(rider))
+
+
+#: Reserve price as a fraction of market_value_for — the auction's
+#: starting bid. Below SIGNING_FEE_RATE (0.60): a seller choosing to
+#: auction accepts a lower guaranteed floor than a buyer would pay to sign
+#: the same rider as a free agent outright, in exchange for the chance of
+#: a higher price through competition (Design decision 5).
+RESERVE_RATE = 0.50
+
+#: Minimum bid increment as a fraction of the FROZEN reserve price, not
+#: the live current price — an increment that tracked the rising current
+#: price would punish exactly the contested, late-bidding auctions the
+#: deadline extension is meant to protect (Design decision 6).
+MIN_INCREMENT_RATE = 0.05
+
+
+def reserve_price_for(rider) -> int:
+    """RESERVE_RATE of this rider's market value, rounded the same way
+    market_value_for rounds (nearest 1,000)."""
+    return _round_to_nearest_1000(RESERVE_RATE * market_value_for(rider))
+
+
+def min_increment_for(reserve_price: int) -> int:
+    """MIN_INCREMENT_RATE of a frozen reserve_price, rounded to the
+    nearest 1,000. Takes the already-computed reserve, not a rider, so it
+    stays correct even though reserve_price is frozen on the Auction row
+    and never re-derived (Design decision 5)."""
+    return max(1000, _round_to_nearest_1000(MIN_INCREMENT_RATE * reserve_price))

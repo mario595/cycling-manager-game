@@ -564,7 +564,7 @@ Run `makemigrations transfers` for `0001_auction.py`. No service logic yet.
 transaction, assert `IntegrityError`; a second `Auction` for the same rider
 with the first `status=sold` must succeed.
 
-### W2 — `transfers/pricing.py`: `RESERVE_RATE`, `MIN_INCREMENT_RATE`, `reserve_price_for`, `min_increment_for`
+### W2 — `transfers/pricing.py`: `RESERVE_RATE`, `MIN_INCREMENT_RATE`, `reserve_price_for`, `min_increment_for` ✅
 **Test:** `transfers/tests/test_pricing.py::test_reserve_price_is_half_signing_fee_rate`
 (reserve_price_for(rider) == round-to-1000(0.50 * market_value_for(rider)));
 `test_min_increment_is_fraction_of_reserve` (uses the passed-in
