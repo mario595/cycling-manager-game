@@ -23,7 +23,7 @@ from django.db.models import QuerySet
 from riders.models import Rider
 from riders.services import mark_team_change
 
-from .models import Auction
+from .models import Auction, Bid
 from .pricing import (
     min_increment_for,
     reserve_price_for,
@@ -60,6 +60,12 @@ EXPIRY_VALUE_PERCENTILE = 0.20
 #: is listed.
 AUCTION_DURATION = timedelta(days=3)
 
+#: How close to the deadline a bid must land to extend it, and by how
+#: much the deadline moves when it does. Symmetric by design — see spec,
+#: *Rules and edge cases*, "Deadline extension is bounded by nothing
+#: except itself."
+EXTENSION_WINDOW = timedelta(hours=1)
+
 
 class TransferError(Exception):
     """Base class for a free-agent action that cannot proceed."""
@@ -83,6 +89,18 @@ class RiderNotOnRoster(TransferError):
 
 class AuctionAlreadyExists(TransferError):
     """That rider already has an open auction."""
+
+
+class AuctionNotOpen(TransferError):
+    """That auction is not open for bidding — already resolved, or gone."""
+
+
+class BidTooLow(TransferError):
+    """The bid does not clear the current price plus the minimum increment."""
+
+
+class SelfBid(TransferError):
+    """A team cannot bid on its own listing."""
 
 
 def free_agents() -> QuerySet[Rider]:
@@ -234,3 +252,55 @@ def list_for_auction(team, rider_id: int, *, at) -> Auction:
         except IntegrityError:
             raise AuctionAlreadyExists("That rider already has an open auction.")
     return auction
+
+
+def place_bid(auction_id: int, team, amount: int, *, at) -> Auction:
+    """Record a Bid against an OPEN auction.
+
+    Locks the Auction row and re-checks its status and current price under
+    the lock — the same check-after-lock shape sign_free_agent uses for
+    teamlessness. The minimum valid bid is the reserve price itself before
+    any bid exists, and current_price + min_increment once one does
+    (spec item 4). A bid landing within EXTENSION_WINDOW of the deadline
+    (on either side — a late-arriving bid still counts) pushes the
+    deadline forward by EXTENSION_WINDOW, always relative to its current
+    value, never reset to `at + EXTENSION_WINDOW`, so repeated late bids
+    compound predictably (Design decision 2 / spec item 6).
+
+    Does NOT touch economy/ — affordability is checked by the caller
+    (api/) against balance_for before this is even called (Design
+    decision 8); this only validates the bid is structurally valid (open,
+    not self, clears the increment) and records it.
+    """
+    with transaction.atomic():
+        try:
+            auction = Auction.objects.select_for_update().get(pk=auction_id)
+        except Auction.DoesNotExist:
+            raise AuctionNotOpen("That auction does not exist.")
+
+        if auction.status != Auction.Status.OPEN:
+            raise AuctionNotOpen("That auction is no longer open.")
+
+        if team.pk == auction.seller_team_id:
+            raise SelfBid("You cannot bid on your own listing.")
+
+        minimum = auction.current_price
+        if auction.bids.exists():
+            minimum += auction.min_increment
+        if amount < minimum:
+            raise BidTooLow(f"Bid must be at least {minimum}.")
+
+        Bid.objects.create(auction=auction, bidder_team=team, amount=amount, placed_at=at)
+
+        auction.current_price = amount
+        if auction.deadline - at <= EXTENSION_WINDOW:
+            auction.deadline += EXTENSION_WINDOW
+        auction.save(update_fields=["current_price", "deadline", "updated_at"])
+    return auction
+
+
+def due_auctions(at) -> QuerySet[Auction]:
+    """OPEN auctions whose deadline is at or before `at` — what
+    world._resolve_expired_auctions iterates. A plain filter, not a lock:
+    the lock happens per-row inside resolve_auction."""
+    return Auction.objects.filter(status=Auction.Status.OPEN, deadline__lte=at)

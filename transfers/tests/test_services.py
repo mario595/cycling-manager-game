@@ -6,17 +6,22 @@ import pytest
 
 from riders.models import Rider
 from teams.models import Team
-from transfers.models import Auction
+from transfers.models import Auction, Bid
 from transfers.pricing import min_increment_for, reserve_price_for, severance_fee_for
 from transfers.services import (
     AuctionAlreadyExists,
+    AuctionNotOpen,
+    BidTooLow,
+    EXTENSION_WINDOW,
     InsufficientFunds,
     ROSTER_CAP,
     RiderNotAvailable,
     RiderNotOnRoster,
     RosterFull,
+    SelfBid,
     free_agents,
     list_for_auction,
+    place_bid,
     release_cost_for,
     release_rider,
     sign_free_agent,
@@ -225,3 +230,73 @@ def test_list_for_auction_rejects_second_concurrent_listing(db, claimed_at):
         list_for_auction(team, rider.pk, at=claimed_at)
 
     assert Auction.objects.filter(rider=rider, status=Auction.Status.OPEN).count() == 1
+
+
+def test_place_bid_records_bid_and_updates_current_price(db, claimed_at):
+    seller = Team.objects.create(name="Team Alpha", code="ALP")
+    bidder = Team.objects.create(name="Team Bravo", code="BRA")
+    rider = _rider(name="For Sale", team=seller)
+    auction = list_for_auction(seller, rider.pk, at=claimed_at)
+    bid_amount = auction.reserve_price
+
+    updated = place_bid(auction.pk, bidder, bid_amount, at=claimed_at)
+
+    assert updated.current_price == bid_amount
+    assert Bid.objects.filter(auction=auction, bidder_team=bidder, amount=bid_amount).count() == 1
+
+
+def test_place_bid_below_reserve_plus_increment_raises_bid_too_low(db, claimed_at):
+    seller = Team.objects.create(name="Team Alpha", code="ALP")
+    bidder = Team.objects.create(name="Team Bravo", code="BRA")
+    rider = _rider(name="For Sale", team=seller)
+    auction = list_for_auction(seller, rider.pk, at=claimed_at)
+
+    with pytest.raises(BidTooLow):
+        place_bid(auction.pk, bidder, auction.reserve_price - 1, at=claimed_at)
+
+
+def test_place_bid_rejects_self_bid(db, claimed_at):
+    seller = Team.objects.create(name="Team Alpha", code="ALP")
+    rider = _rider(name="For Sale", team=seller)
+    auction = list_for_auction(seller, rider.pk, at=claimed_at)
+
+    with pytest.raises(SelfBid):
+        place_bid(auction.pk, seller, auction.reserve_price, at=claimed_at)
+
+
+def test_place_bid_on_closed_auction_raises_auction_not_open(db, claimed_at):
+    seller = Team.objects.create(name="Team Alpha", code="ALP")
+    bidder = Team.objects.create(name="Team Bravo", code="BRA")
+    rider = _rider(name="For Sale", team=seller)
+    auction = list_for_auction(seller, rider.pk, at=claimed_at)
+    auction.status = Auction.Status.SOLD
+    auction.save(update_fields=["status"])
+
+    with pytest.raises(AuctionNotOpen):
+        place_bid(auction.pk, bidder, auction.reserve_price, at=claimed_at)
+
+
+def test_place_bid_within_extension_window_pushes_deadline_forward_by_the_window(db, claimed_at):
+    seller = Team.objects.create(name="Team Alpha", code="ALP")
+    bidder = Team.objects.create(name="Team Bravo", code="BRA")
+    rider = _rider(name="For Sale", team=seller)
+    auction = list_for_auction(seller, rider.pk, at=claimed_at)
+    original_deadline = auction.deadline
+    bid_time = original_deadline - EXTENSION_WINDOW / 2
+
+    updated = place_bid(auction.pk, bidder, auction.reserve_price, at=bid_time)
+
+    assert updated.deadline == original_deadline + EXTENSION_WINDOW
+
+
+def test_place_bid_outside_extension_window_does_not_move_deadline(db, claimed_at):
+    seller = Team.objects.create(name="Team Alpha", code="ALP")
+    bidder = Team.objects.create(name="Team Bravo", code="BRA")
+    rider = _rider(name="For Sale", team=seller)
+    auction = list_for_auction(seller, rider.pk, at=claimed_at)
+    original_deadline = auction.deadline
+    bid_time = original_deadline - EXTENSION_WINDOW - timedelta(hours=1)
+
+    updated = place_bid(auction.pk, bidder, auction.reserve_price, at=bid_time)
+
+    assert updated.deadline == original_deadline

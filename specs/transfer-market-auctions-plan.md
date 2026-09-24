@@ -583,7 +583,7 @@ meaning), `test_list_for_auction_rejects_second_concurrent_listing` (second
 call for the same rider while the first is still open raises
 `AuctionAlreadyExists`).
 
-### W4 — `transfers/services.py`: `place_bid`, `due_auctions`
+### W4 — `transfers/services.py`: `place_bid`, `due_auctions` ✅
 **Test:** `test_place_bid_records_bid_and_updates_current_price`,
 `test_place_bid_below_reserve_plus_increment_raises_bid_too_low`,
 `test_place_bid_rejects_self_bid`, `test_place_bid_on_closed_auction_raises_auction_not_open`,
