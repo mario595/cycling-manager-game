@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { RaceDetail, RaceResults, Squad } from '../api'
+import type { RaceDetail, RaceMarker, RaceResults, Squad } from '../api'
 import { useRaceDetail } from '../useRaceDetail'
 import { useRaceResults } from '../useRaceResults'
 import { useSquad } from '../useSquad'
@@ -32,6 +32,7 @@ const upcomingRace: RaceDetail = {
     { position: 3, points: 12, prize: 12_000 },
     { position: 10, points: 1, prize: 1_000 },
   ],
+  markers: [],
 }
 
 const finishedResults: RaceResults = {
@@ -67,6 +68,29 @@ const finishedResults: RaceResults = {
     // level — the winnings live with the riders who earned them.
     { team: { id: 1, name: 'Results Team', code: 'RES' }, position: 1, points: 20, prize: 35_000 },
     { team: { id: 2, name: 'Zero Team', code: 'ZRO' }, position: null, points: 0, prize: 0 },
+  ],
+  markers: [],
+}
+
+const markers: RaceMarker[] = [
+  { id: 1, kind: 'sprint', name: 'Line One', distance: 40000 },
+  { id: 2, kind: 'mountain', name: 'Summit', distance: 80000 },
+]
+
+const finishedResultsWithMarkers: RaceResults = {
+  ...finishedResults,
+  markers: [
+    {
+      id: 1,
+      kind: 'sprint',
+      name: 'Line One',
+      distance: 40000,
+      crossings: [
+        { position: 1, rider: { id: 1, name: 'Winner Rider' }, team: { id: 1, name: 'Results Team', code: 'RES' } },
+        { position: 2, rider: { id: 2, name: 'Second Rider' }, team: { id: 1, name: 'Results Team', code: 'RES' } },
+        { position: 3, rider: { id: 3, name: 'DNF Rider' }, team: { id: 2, name: 'Zero Team', code: 'ZRO' } },
+      ],
+    },
   ],
 }
 
@@ -238,5 +262,61 @@ describe('Race', () => {
     renderRace()
 
     expect(screen.getByText('This race did not run.')).toBeInTheDocument()
+  })
+
+  it('lists its markers for an upcoming race', () => {
+    mockUseRaceDetail.mockReturnValue({
+      race: { ...upcomingRace, markers },
+      loading: false,
+      error: false,
+    })
+    mockUseRaceResults.mockReturnValue({ results: null, loading: false, error: false })
+    mockUseSquad.mockReturnValue({
+      squad,
+      loading: false,
+      error: false,
+      save: vi.fn(),
+      saving: false,
+      saveError: null,
+    })
+
+    renderRace()
+
+    expect(screen.getByText('Sprint · Line One · km 40.0')).toBeInTheDocument()
+    expect(screen.getByText('Mountain · Summit · km 80.0')).toBeInTheDocument()
+    expect(screen.queryByText('Sprints and summits')).toBeNull()
+  })
+
+  it('shows the first three over each marker for a finished race', () => {
+    mockUseRaceDetail.mockReturnValue({
+      race: { ...upcomingRace, status: 'finished', markers },
+      loading: false,
+      error: false,
+    })
+    mockUseRaceResults.mockReturnValue({ results: finishedResultsWithMarkers, loading: false, error: false })
+
+    renderRace()
+
+    expect(screen.getByText('Sprints and summits')).toBeInTheDocument()
+    expect(screen.getByText('Sprint · Line One')).toBeInTheDocument()
+    expect(screen.getByText('km 40.0')).toBeInTheDocument()
+    // Each crossing rider name appears once in the results table and again
+    // in the marker card — a released rider's crossing still names them.
+    expect(screen.getAllByText('Winner Rider')).toHaveLength(2)
+    expect(screen.getAllByText('Second Rider')).toHaveLength(2)
+    expect(screen.getAllByText('DNF Rider')).toHaveLength(2)
+  })
+
+  it('shows no marker card for a finished race without markers', () => {
+    mockUseRaceDetail.mockReturnValue({
+      race: { ...upcomingRace, status: 'finished', markers: [] },
+      loading: false,
+      error: false,
+    })
+    mockUseRaceResults.mockReturnValue({ results: finishedResults, loading: false, error: false })
+
+    renderRace()
+
+    expect(screen.queryByText('Sprints and summits')).toBeNull()
   })
 })

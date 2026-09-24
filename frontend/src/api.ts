@@ -422,10 +422,28 @@ export interface RaceResultPointsEntry {
   prize: number
 }
 
+export interface RaceMarker {
+  id: number
+  kind: 'sprint' | 'mountain'
+  name: string
+  distance: number
+}
+
+export interface RaceMarkerCrossing {
+  position: number
+  rider: { id: number; name: string }
+  team: RaceResultTeam | null
+}
+
+export interface RaceMarkerResult extends RaceMarker {
+  crossings: RaceMarkerCrossing[]
+}
+
 export interface RaceResults {
   race: { id: number; name: string; status: string }
   results: RaceResultEntry[]
   points: RaceResultPointsEntry[]
+  markers: RaceMarkerResult[]
 }
 
 export async function getRaceResults(raceId: number): Promise<RaceResults> {
@@ -455,6 +473,7 @@ export interface RaceDetail {
   distance_km: number
   course: CourseSegment[]
   payout: RacePayoutEntry[]
+  markers: RaceMarker[]
 }
 
 export async function getRaceDetail(raceId: number): Promise<RaceDetail> {

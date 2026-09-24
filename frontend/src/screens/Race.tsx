@@ -96,9 +96,10 @@ function raceBody(
     if (!state.results) return null
     return (
       <>
-        <CourseProfile course={race.course} />
+        <CourseProfile course={race.course} markers={race.markers} />
         <RiderResultsTable results={state.results} payout={race.payout} />
         <TeamPointsTable results={state.results} />
+        {state.results.markers.length > 0 ? <MarkerResultsCard results={state.results} /> : null}
       </>
     )
   }
@@ -110,7 +111,7 @@ function raceBody(
   }
   return (
     <>
-      <CourseProfile course={race.course} />
+      <CourseProfile course={race.course} markers={race.markers} />
       <PayoutTable payout={race.payout} />
       {state.squad ? (
         <SquadPanel
@@ -210,6 +211,51 @@ function TeamPointsTable({ results }: { results: RaceResults }) {
               </span>
             </div>
             <div style={{ fontFamily: font.mono, fontSize: 14, fontWeight: 600 }}>{entry.points}</div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
+function MarkerResultsCard({ results }: { results: RaceResults }) {
+  return (
+    <Card>
+      <CardHeader title="Sprints and summits" />
+      <div>
+        {results.markers.map((marker) => (
+          <div
+            key={marker.id}
+            style={{
+              padding: '14px 20px',
+              borderBottom: `1px solid ${color.divider}`,
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>
+                {marker.kind === 'sprint' ? 'Sprint' : 'Mountain'} · {marker.name}
+              </div>
+              <div style={{ fontFamily: font.mono, fontSize: 11.5, color: color.mutedStrong, whiteSpace: 'nowrap' }}>
+                km {(marker.distance / 1000).toFixed(1)}
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginTop: 10 }}>
+              {marker.crossings.map((crossing) => (
+                <div key={crossing.rider.id} style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 13.5 }}>
+                  <span style={{ width: 24, fontFamily: font.mono, fontSize: 12.5, color: color.mutedStrong }}>
+                    {crossing.position}
+                  </span>
+                  <Link to={riderPath(crossing.rider.id)} style={{ color: color.ink, textDecoration: 'none' }}>
+                    {crossing.rider.name}
+                  </Link>
+                  {crossing.team ? (
+                    <span style={{ fontFamily: font.mono, fontSize: 11, color: color.muted }}>
+                      {crossing.team.code}
+                    </span>
+                  ) : null}
+                </div>
+              ))}
+            </div>
           </div>
         ))}
       </div>
