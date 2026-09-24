@@ -15,13 +15,21 @@ instead of counting `schedule/`'s Week rows itself — see `transfers/README.md`
 
 from __future__ import annotations
 
-from django.db import transaction
+from datetime import timedelta
+
+from django.db import IntegrityError, transaction
 from django.db.models import QuerySet
 
 from riders.models import Rider
 from riders.services import mark_team_change
 
-from .pricing import severance_fee_for, signing_fee_for
+from .models import Auction
+from .pricing import (
+    min_increment_for,
+    reserve_price_for,
+    severance_fee_for,
+    signing_fee_for,
+)
 
 #: In-season weeks a claimed roster keeps its claim-cooldown exemption: a
 #: rider inherited from the most recent claim releases for free while fewer
@@ -48,6 +56,10 @@ EXPIRY_WEEKS = 8
 #: computed fresh on every pass.
 EXPIRY_VALUE_PERCENTILE = 0.20
 
+#: How long a new listing runs before it can resolve, from the moment it
+#: is listed.
+AUCTION_DURATION = timedelta(days=3)
+
 
 class TransferError(Exception):
     """Base class for a free-agent action that cannot proceed."""
@@ -67,6 +79,10 @@ class InsufficientFunds(TransferError):
 
 class RiderNotOnRoster(TransferError):
     """That rider is not on the caller's team."""
+
+
+class AuctionAlreadyExists(TransferError):
+    """That rider already has an open auction."""
 
 
 def free_agents() -> QuerySet[Rider]:
@@ -178,3 +194,43 @@ def release_rider(team, rider_id: int, *, at, weeks_opened: int, charge=None) ->
         mark_team_change([rider], team_now=None, at=at)
         rider.save(update_fields=["team", "updated_at"])
     return rider
+
+
+def list_for_auction(team, rider_id: int, *, at) -> Auction:
+    """Create an OPEN auction for one of `team`'s own riders.
+
+    Locks the rider row and re-checks team ownership under the lock
+    (mirrors release_rider's ownership check), computes and freezes
+    reserve_price and min_increment from the rider's CURRENT
+    market_value_for — never recomputed after this point (Design decision
+    5). The one_open_auction_per_rider partial unique constraint is the
+    final guard against a race with a second concurrent listing of the
+    same rider: the create runs in its own nested transaction so an
+    IntegrityError there does not poison the row lock's transaction.
+    """
+    with transaction.atomic():
+        try:
+            rider = Rider.objects.select_for_update().get(pk=rider_id)
+        except Rider.DoesNotExist:
+            raise RiderNotOnRoster("That rider is not on your team.")
+
+        if rider.team_id != team.pk:
+            raise RiderNotOnRoster("That rider is not on your team.")
+
+        reserve = reserve_price_for(rider)
+        increment = min_increment_for(reserve)
+
+        try:
+            with transaction.atomic():
+                auction = Auction.objects.create(
+                    rider=rider,
+                    seller_team=team,
+                    reserve_price=reserve,
+                    current_price=reserve,
+                    min_increment=increment,
+                    deadline=at + AUCTION_DURATION,
+                    listed_at=at,
+                )
+        except IntegrityError:
+            raise AuctionAlreadyExists("That rider already has an open auction.")
+    return auction

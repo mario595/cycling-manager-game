@@ -572,7 +572,7 @@ with the first `status=sold` must succeed.
 whose attributes are then mutated in-memory without saving, and assert
 `min_increment_for` still matches the original reserve).
 
-### W3 — `transfers/services.py`: `list_for_auction`, exceptions
+### W3 — `transfers/services.py`: `list_for_auction`, exceptions ✅
 Add `AuctionNotOpen`, `BidTooLow`, `SelfBid`, `AuctionAlreadyExists`, and
 `list_for_auction(team, rider_id, *, at)` per *Design decisions*. Does not
 touch `place_bid` or `resolve_auction` yet.

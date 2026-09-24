@@ -6,14 +6,17 @@ import pytest
 
 from riders.models import Rider
 from teams.models import Team
-from transfers.pricing import severance_fee_for
+from transfers.models import Auction
+from transfers.pricing import min_increment_for, reserve_price_for, severance_fee_for
 from transfers.services import (
+    AuctionAlreadyExists,
     InsufficientFunds,
     ROSTER_CAP,
     RiderNotAvailable,
     RiderNotOnRoster,
     RosterFull,
     free_agents,
+    list_for_auction,
     release_cost_for,
     release_rider,
     sign_free_agent,
@@ -176,3 +179,49 @@ def test_release_rider_refuses_a_rider_not_on_the_team(db, claimed_at):
 
     with pytest.raises(RiderNotOnRoster):
         release_rider(team_b, rider.pk, at=claimed_at, weeks_opened=0)
+
+
+def test_list_for_auction_freezes_reserve_and_increment(db, claimed_at):
+    team = Team.objects.create(name="Team Alpha", code="ALP")
+    rider = _rider(name="For Sale", team=team)
+    expected_reserve = reserve_price_for(rider)
+    expected_increment = min_increment_for(expected_reserve)
+
+    auction = list_for_auction(team, rider.pk, at=claimed_at)
+
+    assert auction.rider_id == rider.pk
+    assert auction.seller_team_id == team.pk
+    assert auction.status == Auction.Status.OPEN
+    assert auction.reserve_price == expected_reserve
+    assert auction.current_price == expected_reserve
+    assert auction.min_increment == expected_increment
+    assert auction.listed_at == claimed_at
+    assert auction.deadline > claimed_at
+
+    # Mutating the rider afterwards must not move the frozen figures.
+    rider.climb = 99
+    rider.save(update_fields=["climb"])
+    auction.refresh_from_db()
+    assert auction.reserve_price == expected_reserve
+
+
+def test_list_for_auction_rejects_rider_not_on_team(db, claimed_at):
+    team_a = Team.objects.create(name="Team Alpha", code="ALP")
+    team_b = Team.objects.create(name="Team Bravo", code="BRA")
+    rider = _rider(name="Not Yours", team=team_a)
+
+    with pytest.raises(RiderNotOnRoster):
+        list_for_auction(team_b, rider.pk, at=claimed_at)
+
+    assert Auction.objects.filter(rider=rider).count() == 0
+
+
+def test_list_for_auction_rejects_second_concurrent_listing(db, claimed_at):
+    team = Team.objects.create(name="Team Alpha", code="ALP")
+    rider = _rider(name="For Sale", team=team)
+    list_for_auction(team, rider.pk, at=claimed_at)
+
+    with pytest.raises(AuctionAlreadyExists):
+        list_for_auction(team, rider.pk, at=claimed_at)
+
+    assert Auction.objects.filter(rider=rider, status=Auction.Status.OPEN).count() == 1
