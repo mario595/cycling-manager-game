@@ -9,7 +9,7 @@ from accounts.models import User
 from competitions.models import RacePoints
 from economy.models import SalaryReviewReport
 from racing.models import Race, RaceResult
-from riders.models import Rider
+from riders.models import Rider, RiderAttributeSnapshot
 from riders.pricing import weekly_salary_for
 from schedule.models import SEASON_WEEKS, Season, SeasonTransition, Week
 from staff.generation import TRAINERS_PER_SEASON_BOUNDARY
@@ -370,6 +370,91 @@ def test_three_missed_weeks_apply_three_training_weeks(db, team):
     assert reports.count() == 3
     assert {report.attribute for report in reports} == {"climb"}
     assert run.riders_trained >= 1
+
+
+def test_a_rider_whose_displayed_value_moves_gets_a_snapshot_for_that_week(db, team):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_one = season.weeks.get(number=1)
+    Trainer.objects.create(
+        name="Coach", team=team,
+        climb=100, sprint=30, flat=30, resistance=30, positioning=30,
+    )
+    trainee = Rider.objects.create(
+        name="Trainee", team=team, age=25, peak_age=27, potential=70,
+        climb=89, sprint=40, flat=40, resistance=40, positioning=40,
+    )
+    set_focus(team, "climb")
+    clock.set(week_one.starts_at + timedelta(hours=1))
+    RiderAttributeSnapshot.objects.filter(rider=trainee).delete()
+
+    tick()
+
+    snapshot = RiderAttributeSnapshot.objects.get(rider=trainee, week=week_one)
+    # climb 89 (display 8) plus a focused week's points crosses display 9.
+    assert snapshot.climb == 9
+
+
+def test_a_rider_whose_displayed_value_does_not_move_gets_no_snapshot_that_week(db, team):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_one = season.weeks.get(number=1)
+    # Well below potential and speciality ceiling, but the movement is far
+    # too small to cross a display threshold in a single week.
+    steady = Rider.objects.create(
+        name="Steady", team=team, age=25, peak_age=27, potential=70,
+        climb=40, sprint=40, flat=40, resistance=40, positioning=40,
+    )
+    clock.set(week_one.starts_at + timedelta(hours=1))
+    RiderAttributeSnapshot.objects.filter(rider=steady).delete()
+
+    tick()
+
+    assert not RiderAttributeSnapshot.objects.filter(rider=steady, week=week_one).exists()
+
+
+def test_a_late_tick_attributes_each_crossed_weeks_change_to_that_week(db, team):
+    # D7: a tick that catches up several missed weeks must attribute each
+    # week's crossing to that week, not bunch them into the week the tick
+    # happened to run. Two riders, each set up to cross a display threshold
+    # in a *different* one of the three missed weeks (one week of ~1.8
+    # stored-point decline is not enough to cross a ten-point boundary more
+    # than once, so this uses two riders rather than one rider crossing
+    # three times).
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_three = season.weeks.get(number=3)
+    # decline_rate 100, three years past peak_age (capped): ~1.8 stored
+    # points/week. Starting one point above a ten-boundary crosses it in
+    # week 1; starting deep in a band and needing ~1.9 points more crosses
+    # in week 2.
+    # sprint/flat/resistance/positioning sit mid-band (45, not a ten-boundary)
+    # so only `climb` ever crosses a display threshold in either rider.
+    week_one_faller = Rider.objects.create(
+        name="Week One Faller", team=team, age=33, peak_age=27,
+        potential=50, decline_rate=100,
+        climb=90, sprint=45, flat=45, resistance=45, positioning=45,
+    )
+    week_two_faller = Rider.objects.create(
+        name="Week Two Faller", team=team, age=33, peak_age=27,
+        potential=50, decline_rate=100,
+        climb=81, sprint=45, flat=45, resistance=45, positioning=45,
+    )
+    clock.set(week_three.starts_at + timedelta(hours=1))
+    RiderAttributeSnapshot.objects.filter(rider__in=[week_one_faller, week_two_faller]).delete()
+
+    tick()
+
+    one_weeks = set(
+        RiderAttributeSnapshot.objects.filter(rider=week_one_faller)
+        .values_list("week__number", flat=True)
+    )
+    two_weeks = set(
+        RiderAttributeSnapshot.objects.filter(rider=week_two_faller)
+        .values_list("week__number", flat=True)
+    )
+    assert one_weeks == {1}
+    assert two_weeks == {2}
 
 
 def test_rider_on_teamless_squad_still_gains_from_racing(db, team):

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone as dt_timezone
+
 import pytest
 
 from riders.generation import SPECIALITY_PROFILES
-from riders.models import ENGINE_ATTRIBUTES, Rider
+from riders.models import ENGINE_ATTRIBUTES, Rider, RiderAttributeSnapshot
 from riders.pricing import weekly_salary_for
 from riders.services import (
     FRESHNESS_FLOOR,
@@ -18,11 +20,14 @@ from riders.services import (
     apply_weekly_recovery,
     attribute_ceilings,
     freshness_multiplier,
+    record_initial_snapshots,
+    record_week_snapshots,
     recovery_amount,
     reprice_all,
     training_deltas,
     weekly_deltas,
 )
+from schedule.models import Season, Week
 
 
 def make_rider(**overrides) -> Rider:
@@ -496,3 +501,54 @@ def test_apply_weekly_recovery_skips_excluded_riders(db):
     assert changed == 1
     assert racer.freshness == 60
     assert rested.freshness > 60
+
+
+def test_record_initial_snapshots_writes_one_baseline_row_per_rider(db):
+    riders = Rider.objects.bulk_create([
+        make_rider(climb=71, sprint=20, flat=20, resistance=20, positioning=20),
+        make_rider(name="Second Rider", climb=20, sprint=20, flat=20, resistance=20, positioning=20),
+    ])
+
+    written = record_initial_snapshots(riders)
+
+    assert written == 2
+    snapshots = RiderAttributeSnapshot.objects.order_by("rider__name")
+    assert [s.week for s in snapshots] == [None, None]
+    # A stored 71 must record as the displayed 7, not the stored 71 itself —
+    # proves the display scale is used, not the raw attribute (D2).
+    first = snapshots.get(rider=riders[0])
+    assert first.climb == 7
+
+
+def _make_week(number=1) -> Week:
+    monday = datetime(2027, 3, 1, 0, 0, tzinfo=dt_timezone.utc) + timedelta(weeks=number - 1)
+    season, _ = Season.objects.get_or_create(number=1, defaults={"starts_at": monday})
+    return Week.objects.create(
+        season=season, number=number, starts_at=monday, ends_at=monday + timedelta(weeks=1),
+    )
+
+
+def test_record_week_snapshots_writes_one_row_per_id_for_the_given_week(db):
+    rider = Rider.objects.create(
+        name="Tracked", climb=71, sprint=20, flat=20, resistance=20, positioning=20,
+    )
+    week = _make_week()
+
+    written = record_week_snapshots([rider.pk], week_id=week.pk)
+
+    assert written == 1
+    snapshot = RiderAttributeSnapshot.objects.get(rider=rider)
+    assert snapshot.week_id == week.pk
+    assert snapshot.climb == 7
+
+
+def test_record_week_snapshots_is_a_no_op_the_second_time_for_the_same_week(db):
+    rider = Rider.objects.create(
+        name="Tracked", climb=71, sprint=20, flat=20, resistance=20, positioning=20,
+    )
+    week = _make_week()
+
+    record_week_snapshots([rider.pk], week_id=week.pk)
+    record_week_snapshots([rider.pk], week_id=week.pk)
+
+    assert RiderAttributeSnapshot.objects.filter(rider=rider, week_id=week.pk).count() == 1
