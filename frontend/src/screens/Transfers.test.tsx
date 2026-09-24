@@ -101,6 +101,10 @@ const auctionMarket: AuctionMarket = {
       min_next_bid: 63_000,
       deadline: '2027-03-04T12:00:00Z',
       is_own_listing: false,
+      bids: [
+        { team_name: 'Rival Racing', amount: 60_000, placed_at: '2027-03-01T10:00:00Z' },
+        { team_name: 'Squad Team', amount: 55_000, placed_at: '2027-03-01T09:00:00Z' },
+      ],
       rider: {
         id: 21,
         name: 'For Sale Rider',
@@ -307,6 +311,16 @@ describe('Transfers', () => {
 
     expect(screen.getByRole('button', { name: 'Bid' })).toBeDisabled()
     expect(screen.getByText('You cannot afford that bid.')).toBeInTheDocument()
+  })
+
+  it('shows the full bid history with each bidder\'s team, newest first', () => {
+    renderTransfers()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auctions' }))
+
+    expect(screen.getByText('BID HISTORY')).toBeInTheDocument()
+    const names = screen.getAllByText(/Rival Racing|Squad Team/).map((el) => el.textContent)
+    expect(names).toEqual(['Rival Racing', 'Squad Team'])
   })
 
   it('shows an outbid notice from active bids', () => {

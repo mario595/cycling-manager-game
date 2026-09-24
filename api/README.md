@@ -113,9 +113,12 @@ Since #29 each rider also carries `release_cost`
   `AuctionMarketView`) — every open auction plus the caller's balance,
   the same both-keys shape `FreeAgentsView` uses. Each entry carries the
   rider (same visible fields the roster shows), `current_price`,
-  `min_next_bid` and `deadline`, `is_own_listing`, and **never** the
-  bidder — the market is anonymous (#28; see `transfers/README.md`,
-  *Auctions*). A caller with no team gets a 403.
+  `min_next_bid`, `deadline`, `is_own_listing` and `bids` — the auction's
+  full history, newest first, each row a `{team_name, amount, placed_at}`
+  (#28; see `transfers/README.md`, *Auctions*). Bidding is not anonymous:
+  every bid names the team that placed it. `bids` is prefetched with its
+  `bidder_team` to keep the market a fixed number of queries regardless of
+  how many bids or auctions are open. A caller with no team gets a 403.
 - `POST /api/transfers/auctions/list/` (`ListForAuctionSerializer`,
   `ListForAuctionView`) — list one of the caller's own riders for
   auction. `RiderNotOnRoster` or `AuctionAlreadyExists` (the rider already

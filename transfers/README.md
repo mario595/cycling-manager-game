@@ -135,6 +135,14 @@ buys the rider.
   plain `balance_for` read the caller (`api/`) makes before calling this at
   all, the same shape `sign_free_agent`'s `charge` callback checks, just
   without a callback since nothing is charged yet.
+- **Bidding is not anonymous.** Every `Bid` row already carries
+  `bidder_team`, and `api/`'s `AuctionMarketView` serializes each
+  auction's full history — every bid, newest first, with the bidding
+  team's name — not just the current leader. The original scoping
+  decision was to keep it anonymous (a coordination-risk concern in a
+  thin, early market with few human players); revisited before this
+  ticket shipped, in favour of transparency. See the archived spec's
+  *Rules and edge cases* for both sides of that call.
 - **Resolution** (`resolve_auction`) — the one entry point `world/` calls,
   once per tick, on every auction `due_auctions(at)` returns (`OPEN` and
   past its deadline). Locks the `Auction` and `Rider` rows together and:

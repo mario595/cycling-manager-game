@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
 
-import { placeBid, signFreeAgent, type AuctionListing, type FreeAgent } from '../api'
+import { placeBid, signFreeAgent, type AuctionListing, type Bid, type FreeAgent } from '../api'
 import { Button, Card, Chip, ChipLabel, LabelBar, PageBody, PageHeading, StatTile } from '../components/primitives'
 import { formatMoney } from '../format'
 import { color, font } from '../theme'
@@ -477,7 +477,38 @@ function AuctionCard({
           ) : null}
         </div>
       )}
+
+      {auction.bids.length > 0 ? <BidHistory bids={auction.bids} /> : null}
     </Card>
+  )
+}
+
+function BidHistory({ bids }: { bids: Bid[] }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 5,
+        borderTop: `1px solid ${color.dividerStrong}`,
+        paddingTop: 9,
+      }}
+    >
+      <div style={{ fontSize: 10.5, letterSpacing: '0.8px', color: color.mutedStrong, fontFamily: font.mono }}>
+        BID HISTORY
+      </div>
+      {bids.map((bid, i) => (
+        <div
+          key={`${bid.team_name}-${bid.placed_at}-${i}`}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}
+        >
+          <span style={{ fontSize: 12.5, color: color.ink }}>{bid.team_name}</span>
+          <span style={{ fontSize: 12, fontFamily: font.mono, color: color.mutedStrong }}>
+            {formatMoney(bid.amount)}
+          </span>
+        </div>
+      ))}
+    </div>
   )
 }
 

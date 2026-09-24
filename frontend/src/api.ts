@@ -331,10 +331,18 @@ export async function releaseRider(riderId: number): Promise<void> {
   return writeJson('/api/transfers/riders/release/', 'POST', { rider_id: riderId })
 }
 
-/** One live auction as the market screen shows it — never the bidder
- * (spec, "Bidding is anonymous"). `min_next_bid` is the lowest amount the
- * next bid must clear; `is_own_listing` is true for the caller's own
- * listing, so the SPA can hide the Bid action on it. */
+/** One bid in an auction's full history — bidding is not anonymous, so
+ * every bid carries the team that placed it. */
+export interface Bid {
+  team_name: string
+  amount: number
+  placed_at: string
+}
+
+/** One live auction as the market screen shows it, including its full
+ * bid history. `min_next_bid` is the lowest amount the next bid must
+ * clear; `is_own_listing` is true for the caller's own listing, so the
+ * SPA can hide the Bid action on it. */
 export interface AuctionListing {
   id: number
   rider: Rider
@@ -342,6 +350,7 @@ export interface AuctionListing {
   min_next_bid: number
   deadline: string
   is_own_listing: boolean
+  bids: Bid[]
 }
 
 /** The auction market's whole state in one payload: every open auction
