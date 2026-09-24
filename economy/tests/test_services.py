@@ -158,6 +158,7 @@ def test_pay_race_prizes_completes_a_partial_payout(db, team, race):
     assert rows[0].amount == 15_000
     assert rows[1].amount == 8_000
 
+
 def test_charge_transfer_fee_writes_a_debit(db, team):
     at = datetime(2027, 3, 1, 0, 0, tzinfo=dt_timezone.utc)
     ensure_opening_balance(team, at=at)

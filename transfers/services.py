@@ -36,7 +36,8 @@ ROSTER_CAP = 30
 #: In-season weeks a free agent may sit unattached before becoming
 #: *eligible* for expiry (Design decision 5). The week count itself is
 #: computed by the caller (`world/`, via the same Week-row rule
-#: `_weeks_inactive` uses) — `transfers/` may not import `schedule/`
+#: `schedule.services.weeks_opened_between` uses) — `transfers/` may not
+#: import `schedule/`
 #: (AGENTS.md). Exported here, not local to the caller, because it is a
 #: transfer-balance decision, not a world-mechanics one.
 EXPIRY_WEEKS = 8
@@ -131,6 +132,12 @@ def sign_free_agent(team, rider_id: int, *, at, charge=None) -> Rider:
         if rider.team_id is not None:
             raise RiderNotAvailable("That rider has already been signed.")
 
+        # Roster-cap COUNT under the RIDER's lock, not the team's — an
+        # accepted narrowing race (Design decision 8): two concurrent
+        # signings for the same team can both pass the check and land the
+        # team at ROSTER_CAP + 1. Deliberate: the team lock would serialize
+        # every signing through a whole-transaction lock for a one-rider
+        # push that the weekly tick's single sweep makes unlikely to clash.
         if Rider.objects.filter(team=team).count() >= ROSTER_CAP:
             raise RosterFull(f"Your team already has {ROSTER_CAP} riders.")
 

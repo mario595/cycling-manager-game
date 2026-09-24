@@ -167,9 +167,11 @@ class RosterSerializer(serializers.Serializer):
 class FreeAgentSerializer(RiderSerializer):
     """A free agent as the transfer market needs them: everything
     RiderSerializer already ships (the same visible fields a manager's own
-    roster shows), plus one figure this screen adds — the signing fee. No
-    `release_cost`: these riders are on nobody's roster, so there is nothing
-    to release."""
+    roster shows), plus one figure this screen adds — the signing fee.
+    `release_cost` is inherited and ships as `null` — these riders are on
+    nobody's roster, so the free-agent context carries no team for the
+    RosterSerializer to read; the frontend documents and expects exactly
+    that."""
 
     signing_fee = serializers.SerializerMethodField()
 

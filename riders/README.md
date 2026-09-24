@@ -307,7 +307,7 @@ Who reads them, and why:
   cooldown holds, a rider signed afterwards pays severance.
   `free_agents()` is simply `team__isnull=True`.
 - `world/` — `_expire_free_agents` ages `unattached_since` against `Week`
-  rows (the same count `_weeks_inactive` uses for managers) to find free
+  rows (the same count schedule.services.weeks_opened_between uses for managers) to find free
   agents that have sat too long, then deletes them. See
   `transfers/README.md`, *Free agents*, and `world/README.md`, the tick.
 

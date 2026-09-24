@@ -173,7 +173,8 @@ reads `now()` once, then finds and processes whatever is due, in four steps:
    reason=ManagerialSpell.Reason.INACTIVITY, at=week.starts_at)`
    ([#63](https://github.com/mario595/cycling-manager/issues/63); see
    `teams/README.md`, *Releasing a team*). "Ten weeks" is counted by
-   `world.services._weeks_inactive`, which counts `schedule.Week` rows
+   `schedule.services.weeks_opened_between`, which counts `schedule.Week`
+   rows
    whose `starts_at` falls in `[user.last_seen_at, week.starts_at)` —
    querying rather than a stored counter, so a gap between seasons
    contributes no weeks for free (weeks only exist inside a declared
@@ -193,7 +194,7 @@ count of teams released lands on `TickRun.teams_released`.
     After `_release_inactive`, `world.services._expire_free_agents(week)`
     prunes the free-agent pool: it deletes every rider whose
     `unattached_since` has crossed `transfers.services.EXPIRY_WEEKS` (eight)
-    in-season weeks (`_weeks_inactive`'s same Week-row count) and whose
+    in-season weeks (weeks_opened_between's same Week-row count) and whose
     value at that moment falls in the pool's bottom quintile
     (`EXPIRY_VALUE_PERCENTILE`, 0.20). Value is never stored, so the
     cutoff is computed fresh each pass, and a pool too small for a real
