@@ -616,7 +616,7 @@ resolution, assert `status=unsold`, no callback calls, seller keeps rider),
 `charge_transfer_fee` test's negative-amount assertion, to make the sign
 contract explicit in the test suite itself).
 
-### W7 — `world/`: `_resolve_expired_auctions`, wired into `tick()`, `TickRun` counters
+### W7 — `world/`: `_resolve_expired_auctions`, wired into `tick()`, `TickRun` counters ✅
 Add the two `TickRun` fields and their migration. Wire
 `_resolve_expired_auctions` per *world/services.py* above — **unconditionally,
 after the week loop, not inside it.**
