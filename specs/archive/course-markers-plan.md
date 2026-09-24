@@ -1,6 +1,6 @@
 # Course markers — Implementation Plan
 
-**Spec:** `specs/course-markers.md` · **Issue:** #70 · **Status:** proposed
+**Spec:** `specs/course-markers.md` · **Issue:** #70 · **Status:** implemented
 **Apps touched:** `race_engine/`, `racing/`, `schedule/`, `api/`, `frontend/`
 
 ## Context you need

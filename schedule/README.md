@@ -121,6 +121,9 @@ prompt for declaring a season — see `specs/archive/season.md`'s *Out of scope*
       "course": [
         { "length": 40000, "gradient": 0.0 },
         { "length": 12000, "gradient": 5.0 }
+      ],
+      "markers": [
+        { "kind": "sprint", "name": "First Sprint", "distance": 40000 }
       ]
     },
     {
@@ -143,6 +146,7 @@ prompt for declaring a season — see `specs/archive/season.md`'s *Out of scope*
 | `time` | yes | `HH:MM`, 24-hour. Non-zero minutes are accepted with a warning — see *Placing a race*. |
 | `name` | yes | Non-empty, at most 150 characters (`Race.name`'s limit). |
 | `course` | yes | A non-empty list of `{length, gradient}` segments — the engine's own shape. |
+| `markers` | no | A list of `{kind, name, distance}` named points on the course — same shape the engine's config parser accepts, validated here the same way the course is (*Why the course is validated twice*, below). `kind` is `sprint` \| `mountain`, `name` non-empty (≤ 100 chars), `distance` strictly inside the course length, so each error names `races[i].markers[j]` for the admin. |
 | `wind` | no | `{"enabled": bool, "band": "calm"\|"light"\|"moderate"\|"strong"}`. Absent means the model's defaults: wind on, band rolled from the seed. |
 | `seed` | no | Stored on `Race.seed` for reproducibility. |
 
@@ -209,6 +213,15 @@ Fifteen duplicated lines is the deliberate cost of keeping both rules
 intact. **Do not** "fix" this duplication by adding either import — that is
 this repo's actual mistake waiting to happen here, not a code smell.
 
+Markers are validated the **same way, for the same reason**. `RaceMarker`
+carries its own `clean()` check (`racing/README.md`, *Markers and
+crossings*), the engine range-checks them on construction, and the loader
+duplicates both — `kind` ∈ {sprint, mountain}, non-empty `name` ≤ 100 chars,
+`0 < distance <= course length` — so an admin's typo is named
+`races[i].markers[j].kind` at load time rather than surfacing as a
+`RaceSetupError` from inside a simulation. Three copies of a ten-line rule is
+still less than the one import that would violate the dependency direction.
+
 ## Replacing a season with races
 
 `--replace` on a not-yet-started season deletes it. `Race.week` is
@@ -241,14 +254,17 @@ with no result); the SPA shows it as "Not run". See `frontend/README.md`.
 `AGENTS.md` (`world/` may import everything; nothing may import `world/`;
 `racing -> schedule`, one way, not the reverse).
 
-The documented exceptions, both **inside `load_season.py`'s `handle()`**,
+The documented exceptions, all **inside `load_season.py`'s `handle()`**,
 never at module scope and never in `schedule/loaders.py` or
 `schedule/services.py`:
 
 - `world.services.now()`, to check whether a season has already started.
-- `racing.models.Race`, whose `.objects.create` is passed into
-  `schedule.loaders.create_races()` as an injected callable — `loaders.py`
-  itself never imports `racing/` at all. That injection is not ceremony:
+- `racing.models.Race`, and `racing.services.create_race`, which replaces
+  `Race.objects.create` as the callable injected into
+  `schedule.loaders.create_races()` — a race with markers needs its
+  `RaceMarker` rows created in the same transaction as the `Race` itself
+  (`racing/README.md`, *Markers and crossings*). `loaders.py` itself never
+  imports `racing/` at all. That injection is not ceremony:
   it is what keeps `schedule/loaders.py`'s tests running with no database
   and no import of `racing/`.
 

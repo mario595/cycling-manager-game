@@ -144,6 +144,8 @@ Since #29 each rider also carries `release_cost`
 - `GET /api/racing/races/<race_id>/` — one race's own facts
   (`RaceDetailSerializer`, `RaceDetailView`): id, name, status, starts_at,
   distance and the raw `{length, gradient}` course segments. It also carries
+  `markers`, the race's `RaceMarker` rows in course order
+  (`{kind, name, distance}`). It also carries
   `payout` — the race's `{position, points, prize}` list for 1st through 10th,
   from `competitions/scoring.py`'s two tables — so the SPA can show the prize
   list before the race has run. Readable by any
@@ -170,6 +172,15 @@ Since #29 each rider also carries `release_cost`
   who has since been released or re-signed. The rider profile endpoint
   above reads the same squad rows for the same reason, so the two screens
   always agree about which team ran a given race.
+
+  The payload also carries `markers`, one entry per `RaceMarker` in course
+  order, each with `crossings` — the first `MARKER_PLACES_SHOWN` (**3**)
+  riders across that marker, `{position, rider, team, crossed_at}`. `team`
+  here is again the team raced for (the same `team_by_rider` map the
+  results rows use), so a rider released since still shows the team they
+  crossed with. The full crossing order stays in the database for #16/#17;
+  a 64-rider field over ten markers is 640 rows this screen never draws.
+  `markers` is `[]` for a race with none.
 - `GET /api/competitions/standings/` — the current season's points table
   (`StandingsSerializer`, `StandingsView`, serializing
   `competitions.services.standings`). Same `state` vocabulary as

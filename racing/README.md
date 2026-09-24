@@ -160,6 +160,8 @@ once an hour so a race scheduled for a given hour starts near that hour. See
 | `RaceResult` | One rider's finishing position. Small, queryable, stays in the DB. |
 | `RaceSquad` | One team's entry into one race — see *Squads*, below. |
 | `RaceSquadRider` | One rider's membership in a squad, and whether they lead it. |
+| `RaceMarker` | One named point on a race's course — see *Markers and crossings*, below. |
+| `MarkerCrossing` | One rider's recorded crossing of one marker. |
 
 `Race.course` is stored in the same `{length, gradient}` shape the engine's
 config parser already accepts, so an existing `race_engine/configs/*.json`
@@ -180,6 +182,59 @@ limitation*. Anything that scores or ranks off `RaceResult` must filter on
 `finish_time` first; see `competitions/README.md` for the rule this
 protects (a team whose whole squad didn't finish must not be credited for
 wherever those riders were numbered).
+
+## Markers and crossings
+
+Course markers are named points a race declares (`RaceMarker`), and the
+riders who crossed each one (`MarkerCrossing`) — see
+`specs/course-markers-plan.md`. Design decisions that shaped the schema:
+
+- **D1 — `RaceMarker` is a row, not JSON on `Race`.** Crossings need
+  something to point at, and a future issue adds a weight/category column to
+  the marker — a migration on a model, not a reshaped JSON blob. `Race.course`
+  stays a bare `{length, gradient}` segment list: four existing readers (the
+  training attribute, the API, the frontend, the engine adapter) depend on
+  that shape, and changing it to carry markers would break all of them.
+- **D2 — `MarkerCrossing` is a row, not a log event.** The log is the race
+  player's input and nothing else reads it; the queries #16/#17/#18 need
+  database rows, the same reason `RaceResult` is a table and not a log line.
+  The engine's log format does not change in this ticket — no header key, no
+  version bump. Markers are deliberately **not** in the JSONL (see
+  `race_engine/README.md`, *JSONL output format*).
+- **D5 — a marker exactly at the finish line takes its order from the
+  results.** In a same-second sprint, `RaceResult`'s order (integer
+  `finish_time`, then the engine's rider order) is final; an interpolated
+  crossing time could disagree with it. `simulate_race` therefore builds a
+  finish-line marker's crossings from the same `ordered` list it writes
+  `RaceResult` from — finishers only, `crossed_at = finish_time`.
+- **D9 — one ordering of markers, threaded through.** Marker index `i` in the
+  engine must mean the same `RaceMarker` here. `simulate_race` fetches
+  `list(race.markers.order_by("distance", "pk"))` **once** and passes that
+  same list to `to_engine_course` and to the crossing writer. `to_engine_course`
+  takes it as a *required* second argument on purpose — a query of its own
+  would be a second, potentially different ordering the day someone changes
+  one of them.
+
+`RaceMarker` validates exactly the way `Race` does: `kind` ∈ {sprint,
+mountain}, non-empty `name` of at most 100 chars, `0 < distance <= course
+length`, checked in `clean()` from `save()` (`racing/README.md` mirrors the
+loader's checks), and `Meta.ordering` of `("distance", "pk")` — the same
+order `simulate_race` relies on. Two markers may share a distance; names may
+repeat. Crossings carry the marker, the rider, a `position` (1 for the first
+rider across) and the interpolated `crossed_at` (race seconds — `finish_time`
+for a finish-line marker, per D5).
+
+**Races with markers are born through `racing.services.create_race`, not
+`Race.objects.create`.** `create_race` opens one transaction, creates the
+`Race` then one `RaceMarker` per entry (`markers=[{"kind", "name",
+"distance"}, ...]`), each `create()` so `save()` → `clean()` runs. `load_season`
+injects it in place of the plain `Race.objects.create` it wired before
+(`schedule/README.md`, *What `schedule/` may import*) — `schedule/` still
+imports nothing from `racing/`, it just receives a callable that happens to be
+`create_race`. A race created without markers gets an empty `markers` list and
+behaves exactly as before; the crossing writer records nothing, and the
+engine's contest rule and crossing detection are both guarded off when a
+course has no markers (D7 in the plan).
 
 ## The weekly-training readers
 

@@ -1,6 +1,6 @@
 # Course markers
 
-**Status:** proposed
+**Status:** implemented
 **Domain(s):** `race_engine`, `racing`, `schedule`, `frontend`
 **One-liner:** A course can declare named points — intermediate sprints and mountain summits — and a race records the order riders cross each one.
 
