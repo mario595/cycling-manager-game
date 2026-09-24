@@ -57,7 +57,7 @@ A season boundary is no longer inert: `world.services.tick()` reads the
 `CLOSED` transitions `process_transitions()` returns and, for each one,
 calls `riders.services.advance_ages()` — every rider in the game, rostered
 or free agent, one year older. Promotion/relegation, contract renewal and
-salary reviews (out of scope here, see `specs/season.md`) remain
+salary reviews (out of scope here, see `specs/archive/season.md`) remain
 unattached; season close is not fully empty any more, but it is still far
 from full.
 
@@ -104,7 +104,7 @@ about and ignored, not rejected — the file is hand-edited by one admin, and
 this is the one place a forward-compatibility allowance is worth it.
 
 There is deliberately no admin UI, no API endpoint, and no interactive
-prompt for declaring a season — see `specs/season.md`'s *Out of scope*.
+prompt for declaring a season — see `specs/archive/season.md`'s *Out of scope*.
 
 ### The `races` list
 
@@ -227,7 +227,7 @@ unstarted season's future can be due yet.
 
 ## A status the spec does not name
 
-`specs/race-calendar.md` describes three player-visible states: not yet
+`specs/archive/race-calendar.md` describes three player-visible states: not yet
 happened, happening today, finished. `Race.status` has a fourth,
 `failed` — set by `world.services._execute` when a simulation raises. The
 calendar's API returns it verbatim rather than inventing a fifth word or

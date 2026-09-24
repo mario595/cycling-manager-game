@@ -260,7 +260,7 @@ server would refuse.
 as a feature — and follows the same rule, composing `PageHeading`, `Card`,
 `CardHeader` and `Button` the way `Staff.tsx` does. Its shapes mirror the
 API's `TrainingState` payload exactly: the last-rollover changes panel and
-the focus picker are the two things `specs/weekly-training-focus.md` asks
+the focus picker are the two things `specs/archive/weekly-training-focus.md` asks
 for, with nothing invented around them.
 
 `Finances.tsx` likewise has **no mockup** — `design/` predates the economy

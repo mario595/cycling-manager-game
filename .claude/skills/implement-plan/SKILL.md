@@ -241,7 +241,10 @@ you can see, and which you would pick.
 - Never write a `TODO` and move on. If you cannot do it, stop and ask.
 - Never leave commented-out code, or dead code you added.
 - Never add a dependency without asking.
-- Never edit `specs/<slug>.md`, or change a decision in the plan.
+- Never edit `specs/<slug>.md`, or change a decision in the plan — beyond
+  setting `Status: implemented` when the work is done.
+- **Never delete a spec or a plan.** They stay in `specs/` as the record of
+  why; the README carries what the code does now.
 - Never merge the pull request, and never merge your branch into master. (Merging master *into* your branch is required — see **Bringing master in**.)
 - Never end a work item with the suite red.
 
@@ -285,7 +288,17 @@ are the ones that get broken:
 
 1. Run the full suite one last time. It must be green.
 2. Do the plan's **Documentation update** section. It is not optional.
-3. Commit that documentation change.
+3. **Archive the spec and the plan.** Set `Status:` to `implemented` in both,
+   then move them into `specs/archive/`:
+
+   ```bash
+   git mv specs/<slug>.md specs/<slug>-plan.md specs/archive/
+   ```
+
+   Commit them with the documentation change, and fix any `specs/<slug>.md`
+   reference you just broke — a `README.md` pointing at the old path is a dead
+   link. Do **not** delete them: they are the record of why the feature is the
+   way it is. `README.md` is current and maintained; `specs/archive/` is frozen.
 4. **Bring master in again** — see below. You merged it before you started;
    master has probably moved since. Do this *before* the user tries it, so what
    they verify is what will actually merge.
