@@ -485,7 +485,7 @@ weeks and a finished race whose squads and results are written directly:
   five races stay under the same bound (fix the bound at whatever W1
   produces, e.g. 10). **This test is the guard against the N+1.**
 
-### W2 — `api/views.py`: race results name the team raced for
+### W2 — `api/views.py`: race results name the team raced for — done
 
 Change `RaceResultsView` as described under *`api/views.py`*. Test in
 `api/tests.py`:

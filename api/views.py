@@ -32,7 +32,7 @@ from economy.services import (
     sign_offer,
 )
 from economy.sponsors import PROFILES_BY_KEY
-from racing.models import SQUAD_SIZE, Race
+from racing.models import SQUAD_SIZE, Race, RaceSquadRider
 from racing.services import SquadError, set_squad, suggested_squad
 from riders.models import ENGINE_ATTRIBUTES, Rider
 from schedule.services import current_position, weeks_opened_between
@@ -557,6 +557,16 @@ class RaceDetailView(APIView):
         return Response(RaceDetailSerializer(payload).data)
 
 
+def _result_row(result, team) -> dict:
+    return {
+        "position": result.position,
+        "rider": {"id": result.rider.pk, "name": result.rider.name},
+        "team": {"id": team.pk, "name": team.name, "code": team.code} if team is not None else None,
+        "finish_time": result.finish_time,
+        "finished": result.finish_time is not None,
+    }
+
+
 class RaceResultsView(APIView):
     """A finished race's order, plus each team's points from it.
 
@@ -571,7 +581,13 @@ class RaceResultsView(APIView):
         if race.status != Race.Status.FINISHED:
             raise Http404("race has not finished")
 
-        results = race.results.select_related("rider__team").order_by("position")
+        results = race.results.select_related("rider").order_by("position")
+        team_by_rider = {
+            m.rider_id: m.squad.team
+            for m in RaceSquadRider.objects
+                .filter(squad__race=race)
+                .select_related("squad__team")
+        }
         points = race.points.select_related("team").order_by("position")
         scored = {p.team_id: p for p in points}
         starters = (
@@ -608,18 +624,7 @@ class RaceResultsView(APIView):
 
         payload = {
             "race": {"id": race.pk, "name": race.name, "status": race.status},
-            "results": [
-                {
-                    "position": r.position,
-                    "rider": {"id": r.rider.pk, "name": r.rider.name},
-                    "team": {
-                        "id": r.rider.team.pk, "name": r.rider.team.name, "code": r.rider.team.code,
-                    } if r.rider.team_id else None,
-                    "finish_time": r.finish_time,
-                    "finished": r.finish_time is not None,
-                }
-                for r in results
-            ],
+            "results": [_result_row(r, team_by_rider.get(r.rider_id)) for r in results],
             "points": points_payload,
         }
         return Response(RaceResultsSerializer(payload).data)

@@ -806,6 +806,38 @@ def test_race_results_requires_login(finished_race_with_points):
     assert response.status_code == 403
 
 
+def test_race_results_team_is_team_raced_for_after_release(db):
+    """Load-bearing: the team on a result row is the one the rider raced
+    for, from RaceSquadRider — never rider.team. After the race, releasing
+    the rider must not blank the row's team (see specs/rider-detail-view-plan.md, D4)."""
+    team = Team.objects.create(name="Release Team", code="REL")
+    rider = Rider.objects.create(
+        name="Released Rider", team=team,
+        climb=50, sprint=50, flat=50, resistance=50, positioning=50,
+    )
+    race = Race.objects.create(
+        name="Team Raced For Race",
+        course=[{"length": 40000.0, "gradient": 0.0}],
+        status=Race.Status.FINISHED,
+    )
+    squad = RaceSquad.objects.create(race=race, team=team)
+    RaceSquadRider.objects.create(squad=squad, rider=rider, is_leader=True)
+    RaceResult.objects.create(race=race, rider=rider, position=1, finish_time=3600.0)
+
+    rider.team = None
+    rider.save()
+
+    client = APIClient()
+    user = User.objects.create_user(email="release-viewer@example.com", password="s0meth1ng-good")
+    client.force_authenticate(user=user)
+
+    response = client.get(f"/api/racing/races/{race.pk}/results/")
+
+    assert response.status_code == 200
+    row = response.data["results"][0]
+    assert row["team"]["id"] == team.pk
+
+
 def test_race_detail_returns_course_and_distance(db):
     race = Race.objects.create(
         name="Route Detail Race",
