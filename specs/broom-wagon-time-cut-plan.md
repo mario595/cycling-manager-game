@@ -301,7 +301,7 @@ following the style of `test_flags_pack_into_a_bitfield` and
 - `test_dnf_off_the_sample_grid_is_still_written`: a state whose DNF flips
   on an off-grid tick still produces a sample for that tick.
 
-### W3 — race_engine/audit.py, race_engine/configs/grand_field.json: large-field coverage
+### W3 — race_engine/audit.py, race_engine/configs/grand_field.json: large-field coverage ✅ done
 Add the summary field and print line, and generate the config. Test in
 `race_engine/test_config.py`:
 `test_grand_field_config_loads_sixty_four_riders_in_sixteen_teams`. It
