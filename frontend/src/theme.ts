@@ -89,6 +89,25 @@ export const calendarAccent = {
   headerWash: '#FDF8F2',
 } as const
 
+/**
+ * One colour per engine attribute, for the rider page's radar and
+ * attribute-history chart — never `positive`/`negative`, which mean good
+ * and bad elsewhere; an attribute has no such meaning. Five hues from a
+ * validated categorical palette, in the same climb/sprint/flat/resistance/
+ * positioning order the radar's axes and the chart's legend use, each
+ * paired with a printed value or a legend label (never colour alone).
+ */
+export const attributeColor: Record<
+  'climb' | 'sprint' | 'flat' | 'resistance' | 'positioning',
+  string
+> = {
+  climb: '#2A78D6',
+  sprint: '#EB6834',
+  flat: '#1BAF7A',
+  resistance: '#EDA100',
+  positioning: '#E87BA4',
+} as const
+
 /** Below this width the sidebar collapses into a drawer. */
 export const MOBILE_BREAKPOINT = 900
 

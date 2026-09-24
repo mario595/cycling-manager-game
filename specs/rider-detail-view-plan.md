@@ -504,7 +504,7 @@ Test `src/useRiderProfile.test.ts` with `renderHook` and a mocked
 - Changing `riderId` resets `profile` to `null` while the next fetch is in
   flight.
 
-### W4 — `src/theme.ts`, `src/components/AttributeRadar.tsx`: the radar
+### W4 — `src/theme.ts`, `src/components/AttributeRadar.tsx`: the radar — done
 
 Test `src/components/AttributeRadar.test.tsx`:
 - `radarVertices([10,10,10,10,10], 100)`: the first vertex is `[0,-100]`
