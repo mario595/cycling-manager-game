@@ -3,7 +3,7 @@
 Once the winner finishes, `RaceState.tick()` fixes a time limit —
 `ceil(winner_time * (1 + TIME_CUT_MARGIN))` — and cuts anyone still racing
 once time reaches it: DNF, not finished. See `race_engine/README.md`,
-*Simulation tick*, and `specs/broom-wagon-time-cut-plan.md`.
+*Simulation tick*, and `specs/archive/broom-wagon-time-cut-plan.md`.
 """
 
 from __future__ import annotations
@@ -11,10 +11,26 @@ from __future__ import annotations
 import math
 import random
 
+import pytest
+
 from race_engine.formulas import TIME_CUT_MARGIN
 from race_engine.models import Course, RaceState, Rider, RiderAttributes, Segment
 
 ATTRS = RiderAttributes(climb=50, sprint=50, flat=50, resistance=50, positioning=60)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_global_random():
+    # Every test in this file seeds the global random module (via
+    # _make_state) and then keeps drawing from it across its own tick()
+    # loop, so the save/restore has to wrap the whole test, not just
+    # _make_state — otherwise restoring early would desync the seed from
+    # the ticks that follow. This keeps that seeding from leaking into any
+    # other, unrelated test's unseeded use of the same stream (matches
+    # test_race_logger.py's pattern).
+    saved_random_state = random.getstate()
+    yield
+    random.setstate(saved_random_state)
 
 
 def _make_state(positions: list[float], distance: float = 10_000.0) -> RaceState:
@@ -75,7 +91,12 @@ def test_rider_crossing_on_the_limit_tick_is_a_finisher(monkeypatch):
     a_time = reference.rider_states[0].finish_time
     b_time = reference.rider_states[1].finish_time
 
-    # Pin the margin so the limit lands exactly on B's finish tick.
+    # Pin the margin so the limit lands exactly on B's finish tick:
+    # ceil(a_time * (1 + margin)) == ceil(a_time * (b_time / a_time)) ==
+    # b_time, since margin is built from that same division. This is only
+    # exact because the float round-trip happens to be lossless under this
+    # seed — if a future seed change breaks this test, that division is
+    # where to look first, not the engine.
     margin = (b_time / a_time) - 1
     monkeypatch.setattr("race_engine.formulas.TIME_CUT_MARGIN", margin)
 

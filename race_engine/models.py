@@ -567,6 +567,7 @@ class RaceState:
             deltas[i] = (effective, energy_drain, stamina_drain, pulling)
 
         # Phase 2: apply all deltas consistently.
+        winner_finished_this_tick = False
         for i, rs in enumerate(self.rider_states):
             if rs.finished:
                 continue
@@ -591,16 +592,19 @@ class RaceState:
                 rs.position = self.profile.total_distance
                 rs.finished = True
                 rs.finish_time = self.current_time
+                if self.time_limit is None:
+                    winner_finished_this_tick = True
 
         # Time cut (broom wagon): once the winner finishes, fix a limit at
         # ceil(winner_time * (1 + TIME_CUT_MARGIN)). Riders still racing once
         # race time reaches that limit are cut — DNF, not finished. Set and
         # reached in the same tick when the winner's time (or the margin) is
-        # 0, which is why this is two `if`s, not an `elif`.
-        if self.time_limit is None:
-            finish_times = [rs.finish_time for rs in self.rider_states if rs.finished]
-            if finish_times:
-                self.time_limit = math.ceil(min(finish_times) * (1 + TIME_CUT_MARGIN))
+        # 0, which is why this is two `if`s, not an `elif`. `time_limit` is
+        # None only until the first finish, and every finish in this loop
+        # shares `self.current_time`, so the winner's time is simply that —
+        # no need to scan `rider_states` for the minimum `finish_time`.
+        if self.time_limit is None and winner_finished_this_tick:
+            self.time_limit = math.ceil(self.current_time * (1 + TIME_CUT_MARGIN))
         if self.time_limit is not None and self.current_time >= self.time_limit:
             for rs in self.rider_states:
                 if not rs.finished:

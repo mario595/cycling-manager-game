@@ -258,15 +258,32 @@ default whenever `--configs` is omitted. Pass `--configs a,b` to exclude it
 for a fast iteration loop; `--jobs` parallelises the full run when you do
 want it included.
 
-**`--jobs` above 1 is not bit-for-bit reproducible run to run**, even
-against unmodified code — confirmed by running the same config/seed set at
-`--jobs 1` and `--jobs 4` and seeing different winners on some seeds. Each
-`_run_one` call explicitly reseeds Python's `random` module, so this is not
-an engine determinism bug, but something about `ProcessPoolExecutor` worker
-reuse or scheduling perturbs the result; `--jobs 1` is fully reproducible
-(verified by repeated identical runs) and is the only trustworthy way to
-diff a `--baseline` for a zero-delta check — a `--jobs 4` diff can show
-spurious deltas that have nothing to do with the code change under test.
+**Runs are not bit-for-bit reproducible across a change in execution
+order**, even at `--jobs 1` and against unmodified code — confirmed by
+running the same config/seed set at `--jobs 1` and `--jobs 4` and seeing
+different winners on some seeds, and separately by running the same six
+configs at `--jobs 1` in two different `--configs` orderings and seeing
+small but nonzero deltas even though every config individually is
+unchanged. Each `_run_one` call explicitly reseeds Python's `random`
+module, so this is not that. It's a real engine determinism bug, not a
+quirk of the audit harness: `compute_base_speed`'s `_POWER_BALANCE_CACHE`
+(and `_RESISTANCE_COEFF_CACHE`) are plain module-level dicts, alive for the
+whole process — and `_POWER_BALANCE_CACHE`'s key rounds `aero_mult` to
+2 dp while solving with the **unrounded** `k_aero * aero_mult`, so a cache
+bucket's stored value depends on whichever call happened to hit it first.
+Two calls that round to the same bucket but carry different raw
+`aero_mult` can therefore get the wrong one's answer, and which one "wins"
+depends on what ran earlier in the same process — worker scheduling at
+`--jobs > 1`, or simply config order at `--jobs 1`. The only trustworthy
+way to diff a `--baseline` for a zero-delta check is `--jobs 1` **with the
+exact same set of configs in the exact same order** as the baseline run
+(e.g. no `--configs` flag, or the same explicit list) — a different job
+count, a different `--configs` order, or an extra config sharing the
+process (`grand_field` included) can all show deltas that have nothing to
+do with the code change under test. The same caching also means a
+long-lived game server process is not perfectly reproducible from a stored
+seed either. Not fixed here — out of scope for the time-cut work — but
+tracked for a fix.
 
 ```
 python -m race_engine.audit [--configs a,b] [--seeds 1,7,42] [--jobs 4]
@@ -373,33 +390,37 @@ they go, and `apply_stamina_cruise_modifier`'s progressive-cracking curve
 compounds — stamina keeps falling, cruise keeps degrading, with nothing to
 break the loop; taken to its limit (stamina at exactly 0) the rider's speed
 is exactly 0 forever, so an isolated rider can in principle never finish at
-all (`race_engine/test_time_cut.py::test_rider_outside_time_limit_is_dnf_and_race_ends_at_the_limit`
-builds exactly this case). The time cut (see *Simulation tick*, step 7)
+all. `race_engine/test_time_cut.py::test_rider_outside_time_limit_is_dnf_and_race_ends_at_the_limit`
+doesn't reproduce that stamina-zero mechanism directly — it's a simpler,
+deliberately deterministic case (two identical riders starting 6 km apart
+on a 10 km course, so the trailing rider can't close the gap within the
+time limit) — but it proves the cut
+applies regardless of *why* a rider is still on the road when the limit
+passes, stamina-zero included. The time cut (see *Simulation tick*, step 7)
 doesn't fix the underlying mechanism — it bounds the damage: once the
 winner finishes, `time_limit = ceil(winner_time * (1 + TIME_CUT_MARGIN))`,
 so no race can run more than `TIME_CUT_MARGIN` past the winner's time no
 matter how badly a straggler spirals, up to and including the literal
 never-finishes case above.
 
-`TIME_CUT_MARGIN = 0.8` (see `formulas.py`), calibrated against the six
+`TIME_CUT_MARGIN = 0.5` (see `formulas.py`), calibrated against the six
 bundled configs rather than the ~10% "clean race" spread originally assumed:
 `mountain_stage`'s two sprinters (negligible climb, minimal draft credit on
 sustained gradient) legitimately finish up to 37.6% behind the winner
 (`last_over_winner_ratio` 1.3756, seed 2024) — every other bundled config's
-worst straggler stays under 9%. [#102](https://github.com/mario595/cycling-manager/issues/102)'s
-own spike reproduction (32 riders, doubled 16-rider roster, 200 km, before
-this change) recorded a winner at tick 21,915 and a last finisher dragged to
-tick 40,955 — ratio 1.868, nearly double. At `TIME_CUT_MARGIN = 0.8` that
-run's last finisher would be cut at tick 39,447 instead — a modest ~4% tick
-saving in that one observed case, because the margin sits just under the
-observed ratio; the real guarantee is the unconditional cap, not a large cut
-to every spiral. Re-running the same construction across 13 seeds (the
-default 5 plus 8 more) never reproduced anything past ratio 1.44, and
-`grand_field` (64 riders, the in-game field size, 5 default seeds) topped
-out at 1.376 with **zero** time-cut DNFs — the issue's exact spike reads as
-an unlucky outlier rather than the typical case, but the cap holds
-regardless of how bad a future outlier gets. The underlying mechanism is
-unchanged; going from 11 to 16 riders (and now to 32/64) gave every
+worst straggler stays under 9%. A larger, issue-#102-shaped field (32
+riders, doubled 16-rider roster, 200 km — the same construction as the
+issue's own reproduction, below) never went past ratio 1.44 across 13 seeds
+(the default 5 plus 8 more), and `grand_field` (64 riders, the in-game
+field size, 5 default seeds) topped out at 1.376 with **zero** time-cut
+DNFs. 0.5 clears all of that with room to spare, while still cutting a
+genuine spiral meaningfully rather than just technically:
+[#102](https://github.com/mario595/cycling-manager/issues/102)'s own spike
+reproduction recorded a winner at tick 21,915 and a last finisher dragged
+to tick 40,955 — ratio 1.868, nearly double. At `TIME_CUT_MARGIN = 0.5`
+that run's last finisher would be cut at tick 32,873 instead — a ~20% tick
+saving, not just a token one at the margin's edge. The underlying mechanism
+is unchanged; going from 11 to 16 riders (and now to 32/64) gave every
 straggler more company to fall back on (rotation-averaged shelter, see
 below, is credited relative to pack size), so isolation is rare in
 practice — the regression audit's baseline went from 55 DNFs/20
