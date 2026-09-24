@@ -12,9 +12,9 @@ import world.services as world_services
 from competitions.scoring import points_for, prize_for
 from competitions.services import score_race
 from economy.models import STARTING_BALANCE, LedgerEntry, SalaryReviewReport
-from racing.models import Race, RaceResult, RaceSquad
+from racing.models import Race, RaceResult, RaceSquad, RaceSquadRider
 from riders.display import to_display_scale
-from riders.models import DISPLAY_MAX, Rider
+from riders.models import DISPLAY_MAX, Rider, RiderAttributeSnapshot
 from schedule.models import SEASON_WEEKS, Season, Week
 from staff.models import Trainer, TrainingWeekReport
 from staff.pricing import hire_fee, weekly_salary
@@ -804,6 +804,38 @@ def test_race_results_requires_login(finished_race_with_points):
     response = client.get(f"/api/racing/races/{finished_race_with_points.pk}/results/")
 
     assert response.status_code == 403
+
+
+def test_race_results_team_is_team_raced_for_after_release(db):
+    """Load-bearing: the team on a result row is the one the rider raced
+    for, from RaceSquadRider — never rider.team. After the race, releasing
+    the rider must not blank the row's team (see specs/rider-detail-view-plan.md, D4)."""
+    team = Team.objects.create(name="Release Team", code="REL")
+    rider = Rider.objects.create(
+        name="Released Rider", team=team,
+        climb=50, sprint=50, flat=50, resistance=50, positioning=50,
+    )
+    race = Race.objects.create(
+        name="Team Raced For Race",
+        course=[{"length": 40000.0, "gradient": 0.0}],
+        status=Race.Status.FINISHED,
+    )
+    squad = RaceSquad.objects.create(race=race, team=team)
+    RaceSquadRider.objects.create(squad=squad, rider=rider, is_leader=True)
+    RaceResult.objects.create(race=race, rider=rider, position=1, finish_time=3600.0)
+
+    rider.team = None
+    rider.save()
+
+    client = APIClient()
+    user = User.objects.create_user(email="release-viewer@example.com", password="s0meth1ng-good")
+    client.force_authenticate(user=user)
+
+    response = client.get(f"/api/racing/races/{race.pk}/results/")
+
+    assert response.status_code == 200
+    row = response.data["results"][0]
+    assert row["team"]["id"] == team.pk
 
 
 def test_race_detail_returns_course_and_distance(db):
@@ -1839,3 +1871,262 @@ def test_roster_view_reports_release_cost_per_rider(market_client, market_team):
     by_name = {r["name"]: r for r in response.data["riders"]}
     assert by_name["Inherited"]["release_cost"] == 0
     assert by_name["Signed Later"]["release_cost"] == severance_fee_for(signed)
+
+
+# --- rider profile ---
+
+
+@pytest.fixture
+def profile_teams(db) -> tuple[Team, Team]:
+    return (
+        Team.objects.create(name="Profile Team A", code="PFA"),
+        Team.objects.create(name="Profile Team B", code="PFB"),
+    )
+
+
+@pytest.fixture
+def profile_rider(db, profile_teams) -> Rider:
+    team_a, _ = profile_teams
+    return Rider.objects.create(
+        name="Profile Rider", team=team_a,
+        speciality=Rider.Speciality.CLIMBER, age=24,
+        height_cm=170, weight_kg=60,
+        climb=84, sprint=30, flat=40, resistance=60, positioning=52,
+    )
+
+
+@pytest.fixture
+def profile_owner(db, profile_teams) -> User:
+    team_a, _ = profile_teams
+    manager = User.objects.create_user(email="profile-owner@example.com", password="s0meth1ng-good")
+    team_a.manager = manager
+    team_a.save()
+    return manager
+
+
+@pytest.fixture
+def profile_owner_client(profile_owner) -> APIClient:
+    client = APIClient()
+    client.force_authenticate(user=profile_owner)
+    return client
+
+
+@pytest.fixture
+def profile_client(db) -> APIClient:
+    viewer = User.objects.create_user(email="profile-viewer@example.com", password="s0meth1ng-good")
+    client = APIClient()
+    client.force_authenticate(user=viewer)
+    return client
+
+
+def _finished_race(name: str, *, starts_at=None) -> Race:
+    return Race.objects.create(
+        name=name, course=[{"length": 40000.0, "gradient": 0.0}],
+        status=Race.Status.FINISHED, starts_at=starts_at,
+    )
+
+
+def _enter_squad(race: Race, team: Team, rider: Rider) -> RaceSquad:
+    squad = RaceSquad.objects.create(race=race, team=team)
+    RaceSquadRider.objects.create(squad=squad, rider=rider, is_leader=True)
+    return squad
+
+
+def test_rider_profile_requires_authentication(profile_rider):
+    client = APIClient()
+
+    response = client.get(f"/api/riders/{profile_rider.pk}/")
+
+    assert response.status_code == 403
+
+
+def test_rider_profile_readable_by_any_manager_and_by_teamless_user(profile_rider, profile_teams):
+    _, team_b = profile_teams
+    rival_manager = User.objects.create_user(email="rival@example.com", password="s0meth1ng-good")
+    team_b.manager = rival_manager
+    team_b.save()
+    rival_client = APIClient()
+    rival_client.force_authenticate(user=rival_manager)
+
+    response = rival_client.get(f"/api/riders/{profile_rider.pk}/")
+    assert response.status_code == 200
+
+    teamless = User.objects.create_user(email="teamless@example.com", password="s0meth1ng-good")
+    teamless_client = APIClient()
+    teamless_client.force_authenticate(user=teamless)
+
+    response = teamless_client.get(f"/api/riders/{profile_rider.pk}/")
+    assert response.status_code == 200
+
+
+def test_rider_profile_unknown_rider_is_404(profile_client):
+    response = profile_client.get("/api/riders/999999/")
+
+    assert response.status_code == 404
+
+
+def test_rider_profile_has_no_hidden_traits(profile_client, profile_rider):
+    # Load-bearing: the exact key set, not just the absence of known hidden
+    # names — a new hidden trait added later must fail this test.
+    response = profile_client.get(f"/api/riders/{profile_rider.pk}/")
+
+    assert response.status_code == 200
+    assert set(response.data.keys()) == {
+        "id", "name", "speciality", "nationality", "age", "height_cm", "weight_kg",
+        "climb", "sprint", "flat", "resistance", "positioning",
+        "freshness", "weekly_salary", "market_value", "release_cost",
+        "team", "current_week", "attribute_history", "races", "career",
+    }
+
+
+def test_rider_profile_identity_matches_roster_payload(profile_rider, profile_owner_client):
+    roster = profile_owner_client.get("/api/riders/").data["riders"]
+    roster_rider = next(r for r in roster if r["id"] == profile_rider.pk)
+
+    response = profile_owner_client.get(f"/api/riders/{profile_rider.pk}/")
+
+    for key, value in roster_rider.items():
+        if key == "release_cost":
+            continue
+        assert response.data[key] == value, key
+
+
+def test_rider_profile_attribute_history_orders_baseline_first_then_by_week(profile_client, profile_rider):
+    monday = datetime(2027, 3, 1, 0, 0, tzinfo=dt_timezone.utc)
+    season = Season.objects.create(number=1, starts_at=monday)
+    week1 = Week.objects.create(
+        season=season, number=1, starts_at=monday, ends_at=monday + timedelta(weeks=1),
+    )
+    week2 = Week.objects.create(
+        season=season, number=2,
+        starts_at=monday + timedelta(weeks=1), ends_at=monday + timedelta(weeks=2),
+    )
+
+    # Written out of created_at order, to prove ordering does not follow it.
+    RiderAttributeSnapshot.objects.create(
+        rider=profile_rider, week=week2, climb=9, sprint=3, flat=4, resistance=6, positioning=5,
+    )
+    RiderAttributeSnapshot.objects.create(
+        rider=profile_rider, week=week1, climb=8, sprint=3, flat=4, resistance=6, positioning=5,
+    )
+    RiderAttributeSnapshot.objects.create(
+        rider=profile_rider, week=None, climb=7, sprint=3, flat=4, resistance=6, positioning=5,
+    )
+
+    response = profile_client.get(f"/api/riders/{profile_rider.pk}/")
+
+    history = response.data["attribute_history"]
+    assert [(h["season"], h["week"]) for h in history] == [(None, None), (1, 1), (1, 2)]
+    assert [h["climb"] for h in history] == [7, 8, 9]
+
+
+def test_rider_profile_attribute_history_values_are_not_rescaled(profile_client, profile_rider):
+    RiderAttributeSnapshot.objects.create(
+        rider=profile_rider, week=None, climb=8, sprint=3, flat=4, resistance=6, positioning=5,
+    )
+
+    response = profile_client.get(f"/api/riders/{profile_rider.pk}/")
+
+    assert response.data["attribute_history"][0]["climb"] == 8
+
+
+def test_rider_profile_race_team_is_team_raced_for_not_current_team(profile_client, profile_rider, profile_teams):
+    team_a, team_b = profile_teams
+    race = _finished_race("History Race")
+    _enter_squad(race, team_a, profile_rider)
+    RaceResult.objects.create(race=race, rider=profile_rider, position=2, finish_time=3600.0)
+
+    profile_rider.team = team_b
+    profile_rider.save()
+
+    response = profile_client.get(f"/api/riders/{profile_rider.pk}/")
+
+    assert response.data["races"][0]["team"]["id"] == team_a.pk
+    assert response.data["team"]["id"] == team_b.pk
+
+
+def test_rider_profile_dnf_row_and_career_counts(profile_client, profile_rider, profile_teams):
+    team_a, _ = profile_teams
+    race = _finished_race("DNF Race")
+    _enter_squad(race, team_a, profile_rider)
+    RaceResult.objects.create(race=race, rider=profile_rider, position=3, finish_time=None)
+
+    response = profile_client.get(f"/api/riders/{profile_rider.pk}/")
+
+    row = response.data["races"][0]
+    assert row["finished"] is False
+    assert row["finish_time"] is None
+    assert row["position"] == 3
+    assert response.data["career"] == {"starts": 1, "wins": 0, "podiums": 0, "top_tens": 0, "dnfs": 1}
+
+
+def test_rider_profile_has_no_points_field(profile_client, profile_rider, profile_teams):
+    team_a, _ = profile_teams
+    race = _finished_race("Points Race")
+    _enter_squad(race, team_a, profile_rider)
+    RaceResult.objects.create(race=race, rider=profile_rider, position=1, finish_time=3600.0)
+
+    response = profile_client.get(f"/api/riders/{profile_rider.pk}/")
+
+    assert "points" not in response.data["races"][0]
+    assert "points" not in response.data["career"]
+
+
+def test_rider_profile_winner_time_and_order_newest_first(profile_client, profile_rider, profile_teams):
+    team_a, _ = profile_teams
+    early = _finished_race("Earlier Race", starts_at=datetime(2027, 3, 1, 12, 0, tzinfo=dt_timezone.utc))
+    late = _finished_race("Later Race", starts_at=datetime(2027, 3, 8, 12, 0, tzinfo=dt_timezone.utc))
+    early_squad = _enter_squad(early, team_a, profile_rider)
+    _enter_squad(late, team_a, profile_rider)
+
+    mate = Rider.objects.create(
+        name="Teammate", team=team_a,
+        climb=50, sprint=50, flat=50, resistance=50, positioning=50,
+    )
+    RaceSquadRider.objects.create(squad=early_squad, rider=mate)
+    RaceResult.objects.create(race=early, rider=mate, position=1, finish_time=3600.0)
+    RaceResult.objects.create(race=early, rider=profile_rider, position=2, finish_time=3700.0)
+    RaceResult.objects.create(race=late, rider=profile_rider, position=1, finish_time=3500.0)
+
+    response = profile_client.get(f"/api/riders/{profile_rider.pk}/")
+
+    races = response.data["races"]
+    assert [r["race"]["id"] for r in races] == [late.pk, early.pk]
+    early_row = next(r for r in races if r["race"]["id"] == early.pk)
+    assert early_row["finish_time"] == 3700.0
+    assert early_row["winner_time"] == 3600.0
+
+
+def test_rider_profile_current_week_in_off_and_no_season(profile_client, profile_rider):
+    response = profile_client.get(f"/api/riders/{profile_rider.pk}/")
+    assert response.data["current_week"] is None  # no_season
+
+    monday = datetime(2020, 1, 6, 0, 0, tzinfo=dt_timezone.utc)
+    Season.objects.create(number=1, starts_at=monday)
+
+    response = profile_client.get(f"/api/riders/{profile_rider.pk}/")
+    assert response.data["current_week"] == {"season": 1, "week": SEASON_WEEKS}
+
+
+def test_rider_profile_query_count_is_constant(
+    profile_client, profile_rider, profile_teams, django_assert_max_num_queries,
+):
+    team_a, _ = profile_teams
+
+    def add_race(position: int) -> None:
+        race = _finished_race(f"Race {position}")
+        _enter_squad(race, team_a, profile_rider)
+        RaceResult.objects.create(race=race, rider=profile_rider, position=position, finish_time=3600.0 + position)
+
+    add_race(1)
+
+    with django_assert_max_num_queries(10):
+        response = profile_client.get(f"/api/riders/{profile_rider.pk}/")
+    assert response.status_code == 200
+
+    for position in range(2, 6):
+        add_race(position)
+
+    with django_assert_max_num_queries(10):
+        response = profile_client.get(f"/api/riders/{profile_rider.pk}/")
+    assert response.status_code == 200

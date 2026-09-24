@@ -303,6 +303,86 @@ class RaceResultsSerializer(serializers.Serializer):
     points = RaceResultPointsEntrySerializer(many=True)
 
 
+class AttributeSnapshotSerializer(serializers.Serializer):
+    """One point on the attribute-history chart — already display-scale
+    (0-10) values, never re-mapped through to_display_scale (riders/README.md,
+    *Attribute history*). `season`/`week` are both null for the baseline."""
+
+    season = serializers.IntegerField(allow_null=True)
+    week = serializers.IntegerField(allow_null=True)
+    climb = serializers.IntegerField()
+    sprint = serializers.IntegerField()
+    flat = serializers.IntegerField()
+    resistance = serializers.IntegerField()
+    positioning = serializers.IntegerField()
+
+
+class CurrentWeekSerializer(serializers.Serializer):
+    season = serializers.IntegerField()
+    week = serializers.IntegerField()
+
+
+class RiderProfileRaceInfoSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    starts_at = serializers.DateTimeField(allow_null=True)
+
+
+class RiderRaceSerializer(serializers.Serializer):
+    """One race-history row: the team is the one the rider raced for
+    (D4), never their current team. No points field — race points are a
+    team award, not an individual one (D5)."""
+
+    race = RiderProfileRaceInfoSerializer()
+    team = RaceResultTeamSerializer(allow_null=True)
+    position = serializers.IntegerField()
+    finish_time = serializers.FloatField(allow_null=True)
+    winner_time = serializers.FloatField(allow_null=True)
+    finished = serializers.BooleanField()
+
+
+class CareerSerializer(serializers.Serializer):
+    """Totals derived in Python from the same race list the page shows
+    (D6). No points field (D5)."""
+
+    starts = serializers.IntegerField()
+    wins = serializers.IntegerField()
+    podiums = serializers.IntegerField()
+    top_tens = serializers.IntegerField()
+    dnfs = serializers.IntegerField()
+
+
+class RiderProfileSerializer(RiderSerializer):
+    """One rider's full profile: every RiderSerializer key unchanged (D3),
+    plus the current team, where the world is now, the attribute-history
+    chart's points, the race history and the career totals — all read from
+    `self.context["profile"]`, the dict api.rider_profile.rider_profile
+    builds, so RiderSerializer's own instance handling stays untouched."""
+
+    team = serializers.SerializerMethodField()
+    current_week = serializers.SerializerMethodField()
+    attribute_history = serializers.SerializerMethodField()
+    races = serializers.SerializerMethodField()
+    career = serializers.SerializerMethodField()
+
+    def get_team(self, instance) -> dict | None:
+        team = self.context["profile"]["team"]
+        return RaceResultTeamSerializer(team).data if team is not None else None
+
+    def get_current_week(self, instance) -> dict | None:
+        current_week = self.context["profile"]["current_week"]
+        return CurrentWeekSerializer(current_week).data if current_week is not None else None
+
+    def get_attribute_history(self, instance) -> list[dict]:
+        return AttributeSnapshotSerializer(self.context["profile"]["attribute_history"], many=True).data
+
+    def get_races(self, instance) -> list[dict]:
+        return RiderRaceSerializer(self.context["profile"]["races"], many=True).data
+
+    def get_career(self, instance) -> dict:
+        return CareerSerializer(self.context["profile"]["career"]).data
+
+
 class StandingsTeamSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     name = serializers.CharField()

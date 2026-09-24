@@ -16,6 +16,7 @@ all reading the real API. No screen renders invented data.
 | `/calendar` | Calendar | Built — twelve weeks from the API, no fixture data |
 | `/transfers` | Transfers | Built — the free-agent pool with each rider's signing fee, sign actions, and the team's balance, from the API, no fixture data |
 | `/race/:raceId` | Race | Built — the full race screen: course profile and squad before it runs, course profile and results after, from the API, no fixture data |
+| `/riders/:riderId` | RiderProfile | Built — one rider's full profile: identity, freshness, salary and value, the five-axis radar and the attribute-history chart, a career strip and race history, from the API, no fixture data |
 | `/league` | League | Built — season standings table from the API, no fixture data |
 | `/login`, `/register` | Login, Register | Built — real accounts, no fixture data |
 | `/claim` | ClaimTeam | Built — real claim, no fixture data |
@@ -25,7 +26,11 @@ all reading the real API. No screen renders invented data.
 an explicit `<Route>` in `App.tsx` rather than through `SCREENS` — that map
 generates one route per nav item by path, which has nowhere to put a
 `:raceId`. It is reached by clicking a race on the calendar or the next-race
-card on the dashboard. `/login` and
+card on the dashboard. `/riders/:riderId` is the same shape, reached from the
+Roster panel's "Full profile" link, a race result row, or a free-agent card
+— never a nav item, so it never appears in the sidebar either.
+`navigation.ts`'s `riderPath(id)` is the **one** way any of those callers
+builds the link; nothing constructs `/riders/${id}` by hand. `/login` and
 `/register` are explicit routes for the same reason: neither is a nav item,
 so neither belongs in the sidebar.
 
@@ -166,6 +171,10 @@ npm --prefix frontend run build && .venv/bin/python manage.py runserver
   hover rules, which inline styles cannot express.
 - **Colours come from `src/theme.ts`**, never as literals in components. The
   design repeats its hex codes inline; they are named once there instead.
+  `attributeColor` names one colour per engine attribute (climb, sprint,
+  flat, resistance, positioning), used by the rider page's radar and
+  attribute-history chart — deliberately not `positive`/`negative`, which
+  mean good and bad elsewhere and would misapply to an attribute.
 - **Money goes through `src/format.ts`'s `formatMoney`**, which thousands-
   separates and prefixes `$` (the sign before the `$`), per `AGENTS.md`,
   *Displaying game money*. It is shared by `Finances.tsx` and `Staff.tsx`
@@ -296,3 +305,21 @@ money*) — including both ends of the range, since the range is money too.
 `useSponsors.ts` polls the same way `useStaff.ts` does, and exposes
 `refresh()` so signing updates the screen immediately rather than waiting
 for the next poll.
+
+`RiderProfile.tsx` has **no mockup either** — `design/` predates it, like
+Staff, Training, Finances and Sponsors — and, like `CourseProfile.tsx`,
+draws its two charts as **hand-written SVG with no charting library**.
+`AttributeRadar.tsx` plots the five engine attributes as a ten-ring radar,
+whole-number rings and a printed value at each vertex, matching the
+roster's 0-10 display scale exactly — it never interpolates, smooths or
+animates between values, since the input is already the coarse display
+number. `AttributeHistoryChart.tsx` plots the same five attributes as a
+**step chart**, never a sloped line — a displayed value only changes at a
+recorded snapshot, so a slope between two snapshots would invent an
+intermediate value the player was never shown. Both read `attributeColor`
+for their five series (*Conventions*, above). The history chart's
+right-hand end is always the rider's **current** attributes, not the last
+recorded snapshot — `historySeries` appends that final point itself, so a
+late or missing snapshot can never make the radar and the history chart
+disagree about a rider's present shape (`specs/rider-detail-view-plan.md`,
+D7-D8).
