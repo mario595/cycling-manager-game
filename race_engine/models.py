@@ -583,8 +583,8 @@ class RaceState:
             rs.energy = max(0.0, min(100.0, rs.energy - energy_drain))
             rs.stamina = max(0.0, min(100.0, rs.stamina - stamina_drain))
 
-            if rs.position >= self.course.total_distance:
-                rs.position = self.course.total_distance
+            if rs.position >= self.profile.total_distance:
+                rs.position = self.profile.total_distance
                 rs.finished = True
                 rs.finish_time = self.current_time
 
@@ -647,7 +647,7 @@ class RaceState:
             # 1. Finish sprint — inside the last stretch, everyone kicks; the
             # `sprint` attribute sizes the boost (applied in `tick`), not
             # whether the kick happens at all.
-            if pos >= self.course.total_distance - SPRINT_DISTANCE:
+            if pos >= profile.total_distance - SPRINT_DISTANCE:
                 if rs.energy >= SPRINT_MIN_ENERGY:
                     surge = True
                     sprinting = True
@@ -877,7 +877,7 @@ def run_race(
     import sys
     import time as _time
 
-    total_distance = course.total_distance
+    total_distance = state.profile.total_distance
     progress_interval = 500  # ticks between progress lines
     start_wall = _time.monotonic() if verbose else 0.0
 
