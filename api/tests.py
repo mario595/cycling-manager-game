@@ -1921,6 +1921,24 @@ def test_place_bid_rejects_amount_above_balance_with_409(
     assert not auction.bids.exists()
 
 
+def test_auction_market_min_next_bid_is_the_reserve_itself_before_any_bid(
+    market_client, market_team,
+):
+    # place_bid accepts the reserve itself as the opening bid (spec items
+    # 3-4); min_next_bid must match that exactly, not the reserve plus an
+    # increment nobody has to clear yet.
+    rider = _market_rider(name="For Sale", team=market_team)
+    market_client.post("/api/transfers/auctions/list/", {"rider_id": rider.pk})
+    auction = Auction.objects.get(rider=rider)
+
+    response = market_client.get("/api/transfers/auctions/")
+
+    entry = response.data["auctions"][0]
+    assert entry["bids"] == []
+    assert entry["current_price"] == auction.reserve_price
+    assert entry["min_next_bid"] == auction.reserve_price
+
+
 def test_auction_market_shows_full_bid_history_with_team_identity(
     market_client, market_team, bidder_client, bidder_team,
 ):
@@ -1965,6 +1983,88 @@ def test_auction_market_orders_bid_history_newest_first(
 
     bids = response.data["auctions"][0]["bids"]
     assert [b["amount"] for b in bids] == [second_amount, auction.reserve_price]
+
+
+def test_my_bids_shows_winning_status_when_high_bidder(
+    market_client, market_team, bidder_client, bidder_team,
+):
+    make_ledger_entry(bidder_team, "starting_balance", STARTING_BALANCE, now(), "Starting balance")
+    rider = _market_rider(name="For Sale", team=market_team)
+    market_client.post("/api/transfers/auctions/list/", {"rider_id": rider.pk})
+    auction = Auction.objects.get(rider=rider)
+    bidder_client.post(
+        f"/api/transfers/auctions/{auction.pk}/bid/", {"amount": auction.reserve_price},
+    )
+
+    response = bidder_client.get("/api/transfers/auctions/mine/")
+
+    assert response.status_code == 200
+    assert len(response.data) == 1
+    row = response.data[0]
+    assert row["auction_id"] == auction.pk
+    assert row["rider_name"] == "For Sale"
+    assert row["my_last_bid"] == auction.reserve_price
+    assert row["current_price"] == auction.reserve_price
+    assert row["is_high_bidder"] is True
+
+    # The seller never placed a bid — not their auction to track.
+    assert market_client.get("/api/transfers/auctions/mine/").data == []
+
+
+def test_my_bids_shows_outbid_status_when_someone_else_leads(
+    market_client, market_team, bidder_client, bidder_team,
+):
+    third_manager = User.objects.create_user(email="third-bidder@example.com", password="s0meth1ng-good")
+    third_team = Team.objects.create(name="Third Team", code="THR", manager=third_manager)
+    third_client = APIClient()
+    third_client.force_authenticate(user=third_manager)
+    make_ledger_entry(bidder_team, "starting_balance", STARTING_BALANCE, now(), "Starting balance")
+    make_ledger_entry(third_team, "starting_balance", STARTING_BALANCE, now(), "Starting balance")
+    rider = _market_rider(name="For Sale", team=market_team)
+    market_client.post("/api/transfers/auctions/list/", {"rider_id": rider.pk})
+    auction = Auction.objects.get(rider=rider)
+    bidder_client.post(
+        f"/api/transfers/auctions/{auction.pk}/bid/", {"amount": auction.reserve_price},
+    )
+    higher = auction.reserve_price + auction.min_increment
+    third_client.post(
+        f"/api/transfers/auctions/{auction.pk}/bid/", {"amount": higher},
+    )
+
+    response = bidder_client.get("/api/transfers/auctions/mine/")
+
+    assert len(response.data) == 1
+    row = response.data[0]
+    assert row["my_last_bid"] == auction.reserve_price
+    assert row["current_price"] == higher
+    assert row["is_high_bidder"] is False
+
+    # The new high bidder sees themself winning.
+    winner_row = third_client.get("/api/transfers/auctions/mine/").data[0]
+    assert winner_row["is_high_bidder"] is True
+
+
+def test_my_bids_excludes_a_resolved_auction(
+    market_client, market_team, bidder_client, bidder_team,
+):
+    from transfers.services import resolve_auction
+
+    make_ledger_entry(bidder_team, "starting_balance", STARTING_BALANCE, now(), "Starting balance")
+    rider = _market_rider(name="For Sale", team=market_team)
+    market_client.post("/api/transfers/auctions/list/", {"rider_id": rider.pk})
+    auction = Auction.objects.get(rider=rider)
+    bidder_client.post(
+        f"/api/transfers/auctions/{auction.pk}/bid/", {"amount": auction.reserve_price},
+    )
+
+    resolve_auction(
+        auction, at=auction.deadline,
+        charge_buyer=lambda *a, **kw: None, pay_seller=lambda *a, **kw: None,
+    )
+
+    response = bidder_client.get("/api/transfers/auctions/mine/")
+
+    assert response.data == []
 
 
 # --- rider profile ---

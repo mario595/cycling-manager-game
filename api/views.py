@@ -563,12 +563,22 @@ class AuctionMarketView(APIView):
             .select_related("rider")
             .prefetch_related(Prefetch("bids", queryset=Bid.objects.select_related("bidder_team")))
         )
-        auctions = [
-            {
+        auctions = []
+        for auction in auctions_qs:
+            bids = list(auction.bids.all())
+            # place_bid accepts the reserve itself as the opening bid
+            # (spec items 3-4) — the increment only applies once a bid
+            # already exists to clear, matching transfers.services.
+            # place_bid's own minimum exactly.
+            min_next_bid = (
+                auction.current_price if not bids
+                else auction.current_price + auction.min_increment
+            )
+            auctions.append({
                 "id": auction.pk,
                 "rider": auction.rider,
                 "current_price": auction.current_price,
-                "min_next_bid": auction.current_price + auction.min_increment,
+                "min_next_bid": min_next_bid,
                 "deadline": auction.deadline,
                 "is_own_listing": auction.seller_team_id == team.pk,
                 "bids": [
@@ -577,11 +587,9 @@ class AuctionMarketView(APIView):
                         "amount": bid.amount,
                         "placed_at": bid.placed_at,
                     }
-                    for bid in auction.bids.all()
+                    for bid in bids
                 ],
-            }
-            for auction in auctions_qs
-        ]
+            })
         return Response(AuctionMarketSerializer({
             "auctions": auctions,
             "balance": balance_for(team),

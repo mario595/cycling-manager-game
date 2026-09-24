@@ -211,7 +211,10 @@ class AuctionSerializer(serializers.Serializer):
     """One live auction as the market screen shows it: rider, price, time
     left, and its full bid history. `min_next_bid`, `is_own_listing` and
     `bids` are computed by the view, not derived here, since none is a
-    plain attribute of an Auction row."""
+    plain attribute of an Auction row. `min_next_bid` is `current_price`
+    itself while `bids` is empty — the reserve is a valid opening bid
+    (transfers.services.place_bid) — and `current_price + min_increment`
+    once a bid exists."""
 
     id = serializers.IntegerField()
     rider = RiderSerializer()
