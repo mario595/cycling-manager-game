@@ -293,7 +293,7 @@ one 10 km flat segment.
   different positions. `get_results()` returns the winner, then the rider
   further along, then the other.
 
-### W2 — race_engine/race_logger.py: DNF flag and forced sample
+### W2 — race_engine/race_logger.py: DNF flag and forced sample ✅ done
 Make the change as specified. Tests go in `race_engine/test_race_logger.py`,
 following the style of `test_flags_pack_into_a_bitfield` and
 `test_finish_off_the_sample_grid_is_still_written`:
