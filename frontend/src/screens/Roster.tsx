@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 import { listForAuction, releaseRider, type Rider, type SalaryReview } from '../api'
 import { Bar, Button, Card, CardHeader, Chip, ChipLabel, LabelBar, PageBody, PageHeading, StatTile } from '../components/primitives'
 import { formatMoney } from '../format'
+import { riderPath } from '../navigation'
 import { barColor, color, font } from '../theme'
 import { useAuth } from '../useAuth'
 import { useRoster } from '../useRoster'
@@ -363,6 +365,12 @@ function RiderPanel({
           <div style={{ fontSize: 11, color: color.mutedStrong, fontFamily: font.mono }}>
             {rider.speciality} · {rider.age} yrs
           </div>
+          <Link
+            to={riderPath(rider.id)}
+            style={{ fontSize: 11.5, color: color.accentInk, fontWeight: 600, textDecoration: 'none' }}
+          >
+            Full profile →
+          </Link>
         </div>
         <button
           type="button"

@@ -204,9 +204,13 @@ happened to run.
 week` is declared as the string `"schedule.Week"`, the same import-free
 pattern `staff.TrainingWeekReport.week` uses.
 
-**Nothing serializes this.** #96 is the consumer, once it exists; there is no
-API field, no admin surface beyond the default read-only list, and no
-frontend today.
+**Served by `GET /api/riders/<id>/`** (#96, `api/README.md`) — the rider
+page's attribute-history chart. The endpoint ships the snapshots in time
+order, baseline first, and **must not** pass them through
+`to_display_scale` a second time: they are already the displayed 0-10
+value this section describes, and re-mapping would floor an 8 to a 0.
+There is no other API field and no admin surface beyond the default
+read-only list.
 
 ## Freshness
 
@@ -219,11 +223,15 @@ attributes; the recovery rate is a *rate of change*, so it has no display
 scale and is never serialized ([#59](https://github.com/mario595/cycling-manager/issues/59)).
 
 **Cost and recovery are fixed constants in `services.py`, not field-tuned.**
-`RACE_FRESHNESS_COST` (25 stored points) is deducted from every finisher when
-their race is simulated (`racing.services.simulate_race`); a week's recovery
-is the rider's `recovery_rate` mapped linearly onto
-`[RECOVERY_MIN, RECOVERY_MAX]` = [8, 20], applied once per week by the tick
-to every rider who did **not** race that week. Because the recovery rate is
+`RACE_FRESHNESS_COST` (25 stored points) is deducted from every **starter**
+when their race is simulated (`racing.services.simulate_race`) — a rider
+cut by the race engine's time limit (the broom wagon; see
+`race_engine/README.md`, *Simulation tick*) pays the same cost as a
+finisher, because missing a race that way still costs a rider's legs the
+same as racing it. A week's recovery is the rider's `recovery_rate` mapped
+linearly onto `[RECOVERY_MIN, RECOVERY_MAX]` = [8, 20], applied once per
+week by the tick to every rider who did **not start** a race that week.
+Because the recovery rate is
 hidden, a rider's max race-and-recover cadence varies from rider to rider:
 the fastest-recovering roster at 20/week can race ~1.3 times per week without
 net loss, the slowest at 8/week only once — a race almost always costs more
@@ -247,10 +255,15 @@ arithmetic and the weekly recovery pass; the *penalty* is applied in exactly
 one place — `racing.adapters.to_engine_rider` scales a rider's five engine
 attributes by their freshness as they cross into the engine — and the *cost*
 in exactly one place — `racing.services.simulate_race`, which deducts it from
-the finishers' stored freshness inside the same transaction that records
-results. The weekly pass lives where the week lives: `world/services.py`
-calls `apply_weekly_recovery` alongside `apply_weekly_growth`, excluding
-riders who finished a race in the week being settled. This keeps the
+every starter's stored freshness (`racing.services.riders_who_started`'s
+population — finisher or cut by the time limit) inside the same transaction
+that records results. The weekly pass lives where the week lives:
+`world/services.py` calls `apply_weekly_recovery` alongside
+`apply_weekly_growth`, excluding riders who **started** a race in the week
+being settled — the same starters set, not just finishers
+(`racing.services.riders_who_raced` stays the *training* reader and is
+unaffected: a cut rider didn't complete the course, so there's nothing to
+have learned from it). This keeps the
 dependency direction in `AGENTS.md` intact — `riders/` may not import
 `racing/` or `world/`, so the consumption and the recovery both live where
 the caller lives.

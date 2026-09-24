@@ -175,6 +175,20 @@ describe('Race', () => {
     expect(screen.queryByText('$12,000')).toBeNull()
   })
 
+  it('links each result row rider name to their profile', () => {
+    mockUseRaceDetail.mockReturnValue({
+      race: { ...upcomingRace, status: 'finished' },
+      loading: false,
+      error: false,
+    })
+    mockUseRaceResults.mockReturnValue({ results: finishedResults, loading: false, error: false })
+
+    renderRace()
+
+    expect(screen.getByText('Winner Rider')).toHaveAttribute('href', '/riders/1')
+    expect(screen.getByText('DNF Rider')).toHaveAttribute('href', '/riders/3')
+  })
+
   it('shows each placed rider own prize, not a team lump sum', () => {
     mockUseRaceDetail.mockReturnValue({
       race: { ...upcomingRace, status: 'finished' },

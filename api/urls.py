@@ -22,6 +22,7 @@ from .views import (
     RaceResultsView,
     ReleaseRiderView,
     RiderListView,
+    RiderProfileView,
     SignFreeAgentView,
     SignOfferView,
     SponsorsView,
@@ -49,6 +50,7 @@ urlpatterns = [
     path("racing/races/<int:race_id>/", RaceDetailView.as_view(), name="race-detail"),
     path("competitions/standings/", StandingsView.as_view(), name="standings"),
     path("riders/", RiderListView.as_view(), name="riders"),
+    path("riders/<int:rider_id>/", RiderProfileView.as_view(), name="rider-profile"),
     path("teams/claim/", ClaimTeamView.as_view(), name="claim-team"),
     path(
         "teams/spells/<int:spell_id>/acknowledge/",

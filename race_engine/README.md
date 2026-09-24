@@ -91,6 +91,13 @@ choice is expressible and will lose.
 - `surging` (bool), `surge_ticks` (int), `surge_cooldown` (int) — surge bookkeeping
   (see Surge reflexes).
 - `finished` (bool), `finish_time` (seconds or None).
+- `dnf` (bool, default `False`) — cut by the time limit (see *Simulation
+  tick*, below). Mutually exclusive with `finished`; a DNF rider's
+  `finish_time` stays `None`, the same as an abandon.
+
+`RaceState` carries one race-level field for this: `time_limit` (seconds,
+or `None` until the first rider finishes) — the tick at which the finish
+closes, fixed once from the winner's actual time and never recomputed.
 
 ## Race configuration (input)
 
@@ -222,6 +229,10 @@ any real team).
 - `classics_hilly.json` — long shallow climbs + short steep finale.
 - `summit_finish.json` — flat/downhill approach to a summit climb.
 - `mountain_stage.json` — sustained climbs with descents between.
+- `grand_field.json` — not one of the six above: 64 riders (the shared
+  roster x4, new team ids per copy) on `lombardia.json`'s course with every
+  segment doubled to 200 km — the in-game field size the time-cut work was
+  calibrated against (see *Realism status* and *Regression audit*).
 
 `_roster.json` is a reference copy of the shared roster (not loaded by the
 engine; the roster is embedded in each config).
@@ -232,10 +243,47 @@ The way engine changes are validated: runs every bundled config across a
 fixed seed set (`1, 7, 42, 123, 2024` by default) and reports, per run, the
 winner and archetype, winner time/avg km/h, 1st-2nd and 1st-last gaps, riders
 within 5s/30s/60s of the winner, riders finishing at stamina 0, the first
-tick+position any rider falls more than 100 m off the front, and per-rider
-surge-tick counts. Expected winning archetype per course lives in
-`EXPECTED_ARCHETYPE`, a dict literal inside the script — test data, not
-engine knowledge, so configs stay free of it.
+tick+position any rider falls more than 100 m off the front, per-rider
+surge-tick counts, and a `time-cut DNFs` count/line (printed only when
+non-zero — see *Simulation tick*, step 7, above). Expected winning archetype
+per course lives in `EXPECTED_ARCHETYPE`, a dict literal inside the script —
+test data, not engine knowledge, so configs stay free of it. `grand_field`
+(see *Bundled configs*) gets no entry there — it exists to cover the tail at
+in-game field size, not to assert a winner.
+
+`grand_field` is the slowest bundled config by a wide margin (64 riders,
+roughly 64² pack-cohesion work per tick × 2× the ticks of a 16-rider
+config) and, being one of the configs `_discover_configs()` finds, runs by
+default whenever `--configs` is omitted. Pass `--configs a,b` to exclude it
+for a fast iteration loop; `--jobs` parallelises the full run when you do
+want it included.
+
+**Runs are not bit-for-bit reproducible across a change in execution
+order**, even at `--jobs 1` and against unmodified code — confirmed by
+running the same config/seed set at `--jobs 1` and `--jobs 4` and seeing
+different winners on some seeds, and separately by running the same six
+configs at `--jobs 1` in two different `--configs` orderings and seeing
+small but nonzero deltas even though every config individually is
+unchanged. Each `_run_one` call explicitly reseeds Python's `random`
+module, so this is not that. It's a real engine determinism bug, not a
+quirk of the audit harness: `compute_base_speed`'s `_POWER_BALANCE_CACHE`
+(and `_RESISTANCE_COEFF_CACHE`) are plain module-level dicts, alive for the
+whole process — and `_POWER_BALANCE_CACHE`'s key rounds `aero_mult` to
+2 dp while solving with the **unrounded** `k_aero * aero_mult`, so a cache
+bucket's stored value depends on whichever call happened to hit it first.
+Two calls that round to the same bucket but carry different raw
+`aero_mult` can therefore get the wrong one's answer, and which one "wins"
+depends on what ran earlier in the same process — worker scheduling at
+`--jobs > 1`, or simply config order at `--jobs 1`. The only trustworthy
+way to diff a `--baseline` for a zero-delta check is `--jobs 1` **with the
+exact same set of configs in the exact same order** as the baseline run
+(e.g. no `--configs` flag, or the same explicit list) — a different job
+count, a different `--configs` order, or an extra config sharing the
+process (`grand_field` included) can all show deltas that have nothing to
+do with the code change under test. The same caching also means a
+long-lived game server process is not perfectly reproducible from a stored
+seed either. Not fixed here — out of scope for the time-cut work — but
+tracked for a fix.
 
 ```
 python -m race_engine.audit [--configs a,b] [--seeds 1,7,42] [--jobs 4]
@@ -331,23 +379,57 @@ tactics (A1–A4) active:
 | `classics_hilly` | Puncheur / climber | GC Climber, 5/5 seeds |
 | `summit_finish` | Pure climber | GC Climber, 5/5 seeds |
 | `mountain_stage` | GC climber | GC Climber, 5/5 seeds |
+| `grand_field` (64 riders, 200 km) | — (no `EXPECTED_ARCHETYPE` entry) | GC Climber, 5/5 seeds; zero time-cut DNFs |
 
-**Known limitation — dropped riders decay without limit — no longer observed
-in practice at 16 riders.** A rider who cracks and falls off the back of
-every pack has no way back to equilibrium in principle: isolated, their
-`sustainable` reference is their own cruise, so `compute_stamina_drain`'s
-intensity is pinned at ~1.0 regardless of how slow they go, and
-`apply_stamina_cruise_modifier`'s progressive-cracking curve compounds —
-stamina keeps falling, cruise keeps degrading, with nothing to break the
-loop. The underlying mechanism is unchanged, but going from 11 to 16 riders
-gave every straggler more company to fall back on (rotation-averaged
-shelter, see below, is credited relative to pack size), so nobody isolates
-completely — the regression audit's baseline went from 55 DNFs/20
+**Known limitation — dropped riders decay without limit — now bounded by the
+time cut, not fixed at the mechanism level.** A rider who cracks and falls
+off the back of every pack has no way back to equilibrium in principle:
+isolated, their `sustainable` reference is their own cruise, so
+`compute_stamina_drain`'s intensity is pinned at ~1.0 regardless of how slow
+they go, and `apply_stamina_cruise_modifier`'s progressive-cracking curve
+compounds — stamina keeps falling, cruise keeps degrading, with nothing to
+break the loop; taken to its limit (stamina at exactly 0) the rider's speed
+is exactly 0 forever, so an isolated rider can in principle never finish at
+all. `race_engine/test_time_cut.py::test_rider_outside_time_limit_is_dnf_and_race_ends_at_the_limit`
+doesn't reproduce that stamina-zero mechanism directly — it's a simpler,
+deliberately deterministic case (two identical riders starting 6 km apart
+on a 10 km course, so the trailing rider can't close the gap within the
+time limit) — but it proves the cut
+applies regardless of *why* a rider is still on the road when the limit
+passes, stamina-zero included. The time cut (see *Simulation tick*, step 7)
+doesn't fix the underlying mechanism — it bounds the damage: once the
+winner finishes, `time_limit = ceil(winner_time * (1 + TIME_CUT_MARGIN))`,
+so no race can run more than `TIME_CUT_MARGIN` past the winner's time no
+matter how badly a straggler spirals, up to and including the literal
+never-finishes case above.
+
+`TIME_CUT_MARGIN = 0.5` (see `formulas.py`), calibrated against the six
+bundled configs rather than the ~10% "clean race" spread originally assumed:
+`mountain_stage`'s two sprinters (negligible climb, minimal draft credit on
+sustained gradient) legitimately finish up to 37.6% behind the winner
+(`last_over_winner_ratio` 1.3756, seed 2024) — every other bundled config's
+worst straggler stays under 9%. A larger, issue-#102-shaped field (32
+riders, doubled 16-rider roster, 200 km — the same construction as the
+issue's own reproduction, below) never went past ratio 1.44 across 13 seeds
+(the default 5 plus 8 more), and `grand_field` (64 riders, the in-game
+field size, 5 default seeds) topped out at 1.376 with **zero** time-cut
+DNFs. 0.5 clears all of that with room to spare, while still cutting a
+genuine spiral meaningfully rather than just technically:
+[#102](https://github.com/mario595/cycling-manager/issues/102)'s own spike
+reproduction recorded a winner at tick 21,915 and a last finisher dragged
+to tick 40,955 — ratio 1.868, nearly double. At `TIME_CUT_MARGIN = 0.5`
+that run's last finisher would be cut at tick 32,873 instead — a ~20% tick
+saving, not just a token one at the margin's edge. The underlying mechanism
+is unchanged; going from 11 to 16 riders (and now to 32/64) gave every
+straggler more company to fall back on (rotation-averaged shelter, see
+below, is credited relative to pack size), so isolation is rare in
+practice — the regression audit's baseline went from 55 DNFs/20
 tick-cap-hit runs (of 30) at 11 riders to **zero** at 16. Not fixed at the
-mechanism level; candidate approaches (a recovery term for riding below
-one's own cruise, a stamina floor, an "autobus", a time-cut/broom-wagon DNF
-rule) remain in Future work below in case a future roster or course change
-brings the tail back.
+mechanism level — only bounded, by the time cut above. Candidate
+mechanism-level approaches (a recovery term for riding below one's own
+cruise, a stamina floor, or the autobus) remain in *Future work* below, in
+case a future roster or course change brings a tail bad enough that the
+time cut alone starts cutting a meaningful share of races.
 
 Update this section (and re-run the audit) when engine behavior changes.
 
@@ -387,6 +469,16 @@ The tick runs in phases so all riders see a consistent snapshot.
 6. **Apply deltas**: write speed/flags, move each rider by their speed
    (1 tick = 1 s), subtract drains (m meters clamped to `[0, 100]`), mark
    finishers, advance `current_time`.
+7. **Time limit / cut** (broom wagon): once the first rider finishes,
+   `time_limit` is fixed at `ceil(winner_time * (1 + TIME_CUT_MARGIN))` and
+   never recomputed. Once `current_time >= time_limit`, every rider not yet
+   `finished` is marked `dnf`. This runs after step 6's finish check and
+   before `current_time` is incremented, so the rule is exactly "finisher
+   iff `finish_time <= time_limit`" — a rider crossing the line on the
+   limit tick is a finisher, not a DNF. `is_finished()` is
+   `all(rs.finished or rs.dnf for rs in rider_states)`, so the cut marks
+   every remaining rider in one tick and no caller ever ticks a race with a
+   DNF rider still in it.
 
 ## Terrain speed (`compute_base_speed`)
 
@@ -886,7 +978,11 @@ after the cooldown elapses).
   applies them together, so ordering is consistent.
 - Per-tick jitter uses `random`; the race is therefore non-deterministic across
   runs unless a seed is applied externally.
-- Results are ordered by `finish_time` ascending (`get_results`).
+- `get_results()` orders finishers by `finish_time` ascending, then DNF
+  riders (cut by the time limit) furthest-travelled first — key
+  `(finish_time is None, finish_time or 0, -position)`. The `or 0` also
+  fixes a latent bug where a finish at `t=0` would otherwise sort as never
+  having finished.
 
 ## JSONL output format
 
@@ -947,12 +1043,17 @@ stream gets it here rather than counting lines of a binary file.
 | `1` | `speed` | effective speed this tick, m/s, rounded to 2 dp |
 | `2` | `energy` | anaerobic reserve 0–100, rounded to 1 dp |
 | `3` | `stamina` | aerobic endurance 0–100, rounded to 1 dp |
-| `4` | flags | bitmask — `1` pulling, `2` surging, `4` finished |
+| `4` | flags | bitmask — `1` pulling, `2` surging, `4` finished, `8` DNF (cut by the time limit) |
 | `5` | `finish_time` | race seconds at the finish, or `null` |
 
 `pos`/`speed`/`energy`/`stamina` are rounded to what a screen can draw;
 `finish_time` is deliberately **not** snapped to the sample grid — snapping it
-would manufacture ties in a bunch sprint that contradict the recorded order.
+would manufacture ties in a bunch sprint that contradict the recorded order. A
+DNF rider's `finish_time` stays `null`, same as an abandon. `RaceLogger`
+forces a sample on any tick where a rider's `finished` *or* `dnf` flag
+changes (not `finished` alone), so the cut tick is never off the sample
+grid — the DNF is always in the record, even though nothing renders it yet
+(see *Future work*, below).
 - `wind`, when present, is `[speed, angle]` — km/h rounded to 1 dp and degrees
   `[0, 360)` rounded to 1 dp, rider-relative (`0` = headwind, `90` = from the
   rider's right, `180` = tailwind, `270` = from the left — see Wind above). The
@@ -974,43 +1075,22 @@ Backlog items — not planned, not scheduled, just recorded so a future
 decision to implement (or not) is informed rather than a re-discovery. Size
 is a rough shirt-size estimate (small/medium/large), not a scoped plan.
 
-### Broom wagon (time-cut DNF)
-
-**Problem it solves:** the "Known limitation" above (dropped riders decay
-without limit) currently manifests as absurd finish times in the tail of the
-field — a cracked rider can take hours longer than the winner instead of
-abandoning, which is what would actually happen. A broom wagon rule doesn't
-fix the underlying death-spiral (see below), it just stops the engine from
-reporting a nonsense result: once a rider falls more than some threshold gap
-behind the leader (real racing uses a time cut, e.g. a % of the winner's
-time, or an absolute distance/time gap), they're marked DNF instead of
-crawling to an eventual, meaningless finish.
-
-**Size: small.** A single check in `RaceState.tick()` (or the results
-step) — no new mechanic, just a threshold and a `finished`-like DNF state on
-`RiderState`. The audit harness already has a `--tick-cap` escape hatch
-(`race_engine/audit.py`) that approximates this for regression-testing
-purposes; a real broom wagon would need a home in the engine itself, plus a
-decision on where DNF riders show up in `get_results()` and the JSONL output
-(a new `dnf: bool` field, most likely).
-
-**Caveat:** a broom wagon alone treats the symptom, not the cause. It should
-probably ship together with (or after) the autobus below — otherwise a
-courageous but genuinely mid-pack rider who has a bad patch gets the same
-DNF treatment as one who's catastrophically cracked, since nothing lets a
-dropped rider recover before the cutoff.
-
 ### Autobus (dropped riders group up)
 
 **Problem it solves:** the same death-spiral, addressed at the mechanism
-rather than papered over. Real dropped riders don't time-trial alone to
-exhaustion — they find each other and ride a shared, survivable tempo
-(literally called the "autobus" or "grupetto" in pro cycling). The engine's
-existing pack-cohesion machinery (`PACK_COHESION_DISTANCE` BFS, shared
-tempo, gap-decayed shelter) already does almost everything needed; the gap
-is that a rider whose credited cruise can't hold the *main* pack's tempo is
-simply dropped, with no fallback second-tier grouping among similarly-paced
-stragglers.
+rather than papered over. The time cut (see *Realism status*, above, and
+*Simulation tick*) now stops a spiralling rider from reporting a nonsense
+result or running the race on forever, but it treats the symptom, not the
+cause — a courageous but genuinely mid-pack rider having a bad patch gets
+the same DNF treatment as one who's catastrophically cracked, since nothing
+lets a dropped rider recover before the cutoff. Real dropped riders don't
+time-trial alone to exhaustion — they find each other and ride a shared,
+survivable tempo (literally called the "autobus" or "grupetto" in pro
+cycling). The engine's existing pack-cohesion machinery
+(`PACK_COHESION_DISTANCE` BFS, shared tempo, gap-decayed shelter) already
+does almost everything needed; the gap is that a rider whose credited
+cruise can't hold the *main* pack's tempo is simply dropped, with no
+fallback second-tier grouping among similarly-paced stragglers.
 
 **Size: medium.** Plausible shape: once one or more riders are dropped from
 the main pack, run the same cohesion/tempo logic over just the dropped
@@ -1020,11 +1100,11 @@ riders as a second, slower peloton (its own `pace_setter_speed`, its own
 dropped at different times/positions re-cohering into the bus without a
 teleport, whether a strong rider can bridge back to the main pack from the
 bus, and whether the bus itself can further shed its weakest riders (to the
-broom wagon, if that's implemented) rather than being a floor everyone
-sinks to. Should be audited the same way as the Finding-1 work (baseline
-before, `race_engine/audit.py` after, watch for regressions on the six
-bundled configs) since it touches the same pack-cohesion code path every
-other course result depends on.
+time cut, which already exists) rather than being a floor everyone sinks
+to. Should be audited the same way as the Finding-1 work (baseline before,
+`race_engine/audit.py` after, watch for regressions on the six bundled
+configs) since it touches the same pack-cohesion code path every other
+course result depends on.
 
 ### Shelter-quality retune (small, deferred)
 

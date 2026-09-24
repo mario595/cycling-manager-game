@@ -1,0 +1,943 @@
+{
+  "race": {
+    "name": "Grand field (64 riders, 200 km)",
+    "course": [
+      {
+        "length": 80000.0,
+        "gradient": 0.0
+      },
+      {
+        "length": 24000.0,
+        "gradient": 5.0
+      },
+      {
+        "length": 12000.0,
+        "gradient": -5.0
+      },
+      {
+        "length": 30000.0,
+        "gradient": 2.0
+      },
+      {
+        "length": 18000.0,
+        "gradient": 7.0
+      },
+      {
+        "length": 10000.0,
+        "gradient": -7.0
+      },
+      {
+        "length": 6000.0,
+        "gradient": 6.0
+      },
+      {
+        "length": 8000.0,
+        "gradient": -3.0
+      },
+      {
+        "length": 12000.0,
+        "gradient": 0.0
+      }
+    ],
+    "teams": {
+      "t1": {
+        "code": "ALP",
+        "name": "Alpine Racing 1"
+      },
+      "t2": {
+        "code": "SPR",
+        "name": "Sprint Collective 1"
+      },
+      "t3": {
+        "code": "CLA",
+        "name": "Classics Crew 1"
+      },
+      "t4": {
+        "code": "MIX",
+        "name": "Mixed Nationale 1"
+      },
+      "t5": {
+        "code": "ALB",
+        "name": "Alpine Racing 2"
+      },
+      "t6": {
+        "code": "SPB",
+        "name": "Sprint Collective 2"
+      },
+      "t7": {
+        "code": "CLB",
+        "name": "Classics Crew 2"
+      },
+      "t8": {
+        "code": "MXB",
+        "name": "Mixed Nationale 2"
+      },
+      "t9": {
+        "code": "ALC",
+        "name": "Alpine Racing 3"
+      },
+      "t10": {
+        "code": "SPC",
+        "name": "Sprint Collective 3"
+      },
+      "t11": {
+        "code": "CLC",
+        "name": "Classics Crew 3"
+      },
+      "t12": {
+        "code": "MXC",
+        "name": "Mixed Nationale 3"
+      },
+      "t13": {
+        "code": "ALD",
+        "name": "Alpine Racing 4"
+      },
+      "t14": {
+        "code": "SPD",
+        "name": "Sprint Collective 4"
+      },
+      "t15": {
+        "code": "CLD",
+        "name": "Classics Crew 4"
+      },
+      "t16": {
+        "code": "MXD",
+        "name": "Mixed Nationale 4"
+      }
+    },
+    "riders": [
+      {
+        "id": "gc1_0",
+        "name": "GC Climber 1 1",
+        "team": "t1",
+        "role": "leader",
+        "attributes": {
+          "climb": 94,
+          "sprint": 30,
+          "flat": 40,
+          "resistance": 80,
+          "positioning": 52
+        }
+      },
+      {
+        "id": "gc2_0",
+        "name": "GC Climber 2 1",
+        "team": "t1",
+        "role": "support",
+        "attributes": {
+          "climb": 91,
+          "sprint": 28,
+          "flat": 38,
+          "resistance": 78,
+          "positioning": 50
+        }
+      },
+      {
+        "id": "gc3_0",
+        "name": "Superdom 1",
+        "team": "t3",
+        "role": "support",
+        "attributes": {
+          "climb": 84,
+          "sprint": 25,
+          "flat": 45,
+          "resistance": 84,
+          "positioning": 56
+        }
+      },
+      {
+        "id": "gc4_0",
+        "name": "GC Climber 4 1",
+        "team": "t4",
+        "role": "leader",
+        "attributes": {
+          "climb": 89,
+          "sprint": 29,
+          "flat": 39,
+          "resistance": 76,
+          "positioning": 51
+        }
+      },
+      {
+        "id": "pu1_0",
+        "name": "Puncheur 1 1",
+        "team": "t2",
+        "role": "leader",
+        "attributes": {
+          "climb": 76,
+          "sprint": 85,
+          "flat": 60,
+          "resistance": 68,
+          "positioning": 72
+        }
+      },
+      {
+        "id": "pu2_0",
+        "name": "Puncheur 2 1",
+        "team": "t3",
+        "role": "leader",
+        "attributes": {
+          "climb": 73,
+          "sprint": 82,
+          "flat": 58,
+          "resistance": 66,
+          "positioning": 70
+        }
+      },
+      {
+        "id": "pu3_0",
+        "name": "Puncheur 3 1",
+        "team": "t3",
+        "role": "support",
+        "attributes": {
+          "climb": 74,
+          "sprint": 83,
+          "flat": 59,
+          "resistance": 67,
+          "positioning": 71
+        }
+      },
+      {
+        "id": "ru1_0",
+        "name": "Rouleur 1 1",
+        "team": "t1",
+        "role": "support",
+        "attributes": {
+          "climb": 60,
+          "sprint": 60,
+          "flat": 80,
+          "resistance": 86,
+          "positioning": 62
+        }
+      },
+      {
+        "id": "ru2_0",
+        "name": "Rouleur 2 1",
+        "team": "t3",
+        "role": "support",
+        "attributes": {
+          "climb": 57,
+          "sprint": 55,
+          "flat": 77,
+          "resistance": 84,
+          "positioning": 58
+        }
+      },
+      {
+        "id": "ru3_0",
+        "name": "Rouleur 3 1",
+        "team": "t4",
+        "role": "support",
+        "attributes": {
+          "climb": 58,
+          "sprint": 57,
+          "flat": 78,
+          "resistance": 85,
+          "positioning": 60
+        }
+      },
+      {
+        "id": "sp1_0",
+        "name": "Sprinter 1 1",
+        "team": "t2",
+        "role": "support",
+        "attributes": {
+          "climb": 30,
+          "sprint": 97,
+          "flat": 82,
+          "resistance": 62,
+          "positioning": 88
+        }
+      },
+      {
+        "id": "sp2_0",
+        "name": "Sprinter 2 1",
+        "team": "t4",
+        "role": "support",
+        "attributes": {
+          "climb": 26,
+          "sprint": 93,
+          "flat": 79,
+          "resistance": 58,
+          "positioning": 85
+        }
+      },
+      {
+        "id": "do1_0",
+        "name": "Domestique 1 1",
+        "team": "t1",
+        "role": "support",
+        "attributes": {
+          "climb": 55,
+          "sprint": 48,
+          "flat": 70,
+          "resistance": 76,
+          "positioning": 82
+        }
+      },
+      {
+        "id": "do2_0",
+        "name": "Domestique 2 1",
+        "team": "t2",
+        "role": "support",
+        "attributes": {
+          "climb": 52,
+          "sprint": 45,
+          "flat": 68,
+          "resistance": 74,
+          "positioning": 80
+        }
+      },
+      {
+        "id": "do3_0",
+        "name": "Domestique 3 1",
+        "team": "t2",
+        "role": "support",
+        "attributes": {
+          "climb": 53,
+          "sprint": 46,
+          "flat": 69,
+          "resistance": 75,
+          "positioning": 81
+        }
+      },
+      {
+        "id": "do4_0",
+        "name": "Domestique 4 1",
+        "team": "t4",
+        "role": "support",
+        "attributes": {
+          "climb": 54,
+          "sprint": 47,
+          "flat": 69,
+          "resistance": 75,
+          "positioning": 81
+        }
+      },
+      {
+        "id": "gc1_1",
+        "name": "GC Climber 1 2",
+        "team": "t5",
+        "role": "leader",
+        "attributes": {
+          "climb": 94,
+          "sprint": 30,
+          "flat": 40,
+          "resistance": 80,
+          "positioning": 52
+        }
+      },
+      {
+        "id": "gc2_1",
+        "name": "GC Climber 2 2",
+        "team": "t5",
+        "role": "support",
+        "attributes": {
+          "climb": 91,
+          "sprint": 28,
+          "flat": 38,
+          "resistance": 78,
+          "positioning": 50
+        }
+      },
+      {
+        "id": "gc3_1",
+        "name": "Superdom 2",
+        "team": "t7",
+        "role": "support",
+        "attributes": {
+          "climb": 84,
+          "sprint": 25,
+          "flat": 45,
+          "resistance": 84,
+          "positioning": 56
+        }
+      },
+      {
+        "id": "gc4_1",
+        "name": "GC Climber 4 2",
+        "team": "t8",
+        "role": "leader",
+        "attributes": {
+          "climb": 89,
+          "sprint": 29,
+          "flat": 39,
+          "resistance": 76,
+          "positioning": 51
+        }
+      },
+      {
+        "id": "pu1_1",
+        "name": "Puncheur 1 2",
+        "team": "t6",
+        "role": "leader",
+        "attributes": {
+          "climb": 76,
+          "sprint": 85,
+          "flat": 60,
+          "resistance": 68,
+          "positioning": 72
+        }
+      },
+      {
+        "id": "pu2_1",
+        "name": "Puncheur 2 2",
+        "team": "t7",
+        "role": "leader",
+        "attributes": {
+          "climb": 73,
+          "sprint": 82,
+          "flat": 58,
+          "resistance": 66,
+          "positioning": 70
+        }
+      },
+      {
+        "id": "pu3_1",
+        "name": "Puncheur 3 2",
+        "team": "t7",
+        "role": "support",
+        "attributes": {
+          "climb": 74,
+          "sprint": 83,
+          "flat": 59,
+          "resistance": 67,
+          "positioning": 71
+        }
+      },
+      {
+        "id": "ru1_1",
+        "name": "Rouleur 1 2",
+        "team": "t5",
+        "role": "support",
+        "attributes": {
+          "climb": 60,
+          "sprint": 60,
+          "flat": 80,
+          "resistance": 86,
+          "positioning": 62
+        }
+      },
+      {
+        "id": "ru2_1",
+        "name": "Rouleur 2 2",
+        "team": "t7",
+        "role": "support",
+        "attributes": {
+          "climb": 57,
+          "sprint": 55,
+          "flat": 77,
+          "resistance": 84,
+          "positioning": 58
+        }
+      },
+      {
+        "id": "ru3_1",
+        "name": "Rouleur 3 2",
+        "team": "t8",
+        "role": "support",
+        "attributes": {
+          "climb": 58,
+          "sprint": 57,
+          "flat": 78,
+          "resistance": 85,
+          "positioning": 60
+        }
+      },
+      {
+        "id": "sp1_1",
+        "name": "Sprinter 1 2",
+        "team": "t6",
+        "role": "support",
+        "attributes": {
+          "climb": 30,
+          "sprint": 97,
+          "flat": 82,
+          "resistance": 62,
+          "positioning": 88
+        }
+      },
+      {
+        "id": "sp2_1",
+        "name": "Sprinter 2 2",
+        "team": "t8",
+        "role": "support",
+        "attributes": {
+          "climb": 26,
+          "sprint": 93,
+          "flat": 79,
+          "resistance": 58,
+          "positioning": 85
+        }
+      },
+      {
+        "id": "do1_1",
+        "name": "Domestique 1 2",
+        "team": "t5",
+        "role": "support",
+        "attributes": {
+          "climb": 55,
+          "sprint": 48,
+          "flat": 70,
+          "resistance": 76,
+          "positioning": 82
+        }
+      },
+      {
+        "id": "do2_1",
+        "name": "Domestique 2 2",
+        "team": "t6",
+        "role": "support",
+        "attributes": {
+          "climb": 52,
+          "sprint": 45,
+          "flat": 68,
+          "resistance": 74,
+          "positioning": 80
+        }
+      },
+      {
+        "id": "do3_1",
+        "name": "Domestique 3 2",
+        "team": "t6",
+        "role": "support",
+        "attributes": {
+          "climb": 53,
+          "sprint": 46,
+          "flat": 69,
+          "resistance": 75,
+          "positioning": 81
+        }
+      },
+      {
+        "id": "do4_1",
+        "name": "Domestique 4 2",
+        "team": "t8",
+        "role": "support",
+        "attributes": {
+          "climb": 54,
+          "sprint": 47,
+          "flat": 69,
+          "resistance": 75,
+          "positioning": 81
+        }
+      },
+      {
+        "id": "gc1_2",
+        "name": "GC Climber 1 3",
+        "team": "t9",
+        "role": "leader",
+        "attributes": {
+          "climb": 94,
+          "sprint": 30,
+          "flat": 40,
+          "resistance": 80,
+          "positioning": 52
+        }
+      },
+      {
+        "id": "gc2_2",
+        "name": "GC Climber 2 3",
+        "team": "t9",
+        "role": "support",
+        "attributes": {
+          "climb": 91,
+          "sprint": 28,
+          "flat": 38,
+          "resistance": 78,
+          "positioning": 50
+        }
+      },
+      {
+        "id": "gc3_2",
+        "name": "Superdom 3",
+        "team": "t11",
+        "role": "support",
+        "attributes": {
+          "climb": 84,
+          "sprint": 25,
+          "flat": 45,
+          "resistance": 84,
+          "positioning": 56
+        }
+      },
+      {
+        "id": "gc4_2",
+        "name": "GC Climber 4 3",
+        "team": "t12",
+        "role": "leader",
+        "attributes": {
+          "climb": 89,
+          "sprint": 29,
+          "flat": 39,
+          "resistance": 76,
+          "positioning": 51
+        }
+      },
+      {
+        "id": "pu1_2",
+        "name": "Puncheur 1 3",
+        "team": "t10",
+        "role": "leader",
+        "attributes": {
+          "climb": 76,
+          "sprint": 85,
+          "flat": 60,
+          "resistance": 68,
+          "positioning": 72
+        }
+      },
+      {
+        "id": "pu2_2",
+        "name": "Puncheur 2 3",
+        "team": "t11",
+        "role": "leader",
+        "attributes": {
+          "climb": 73,
+          "sprint": 82,
+          "flat": 58,
+          "resistance": 66,
+          "positioning": 70
+        }
+      },
+      {
+        "id": "pu3_2",
+        "name": "Puncheur 3 3",
+        "team": "t11",
+        "role": "support",
+        "attributes": {
+          "climb": 74,
+          "sprint": 83,
+          "flat": 59,
+          "resistance": 67,
+          "positioning": 71
+        }
+      },
+      {
+        "id": "ru1_2",
+        "name": "Rouleur 1 3",
+        "team": "t9",
+        "role": "support",
+        "attributes": {
+          "climb": 60,
+          "sprint": 60,
+          "flat": 80,
+          "resistance": 86,
+          "positioning": 62
+        }
+      },
+      {
+        "id": "ru2_2",
+        "name": "Rouleur 2 3",
+        "team": "t11",
+        "role": "support",
+        "attributes": {
+          "climb": 57,
+          "sprint": 55,
+          "flat": 77,
+          "resistance": 84,
+          "positioning": 58
+        }
+      },
+      {
+        "id": "ru3_2",
+        "name": "Rouleur 3 3",
+        "team": "t12",
+        "role": "support",
+        "attributes": {
+          "climb": 58,
+          "sprint": 57,
+          "flat": 78,
+          "resistance": 85,
+          "positioning": 60
+        }
+      },
+      {
+        "id": "sp1_2",
+        "name": "Sprinter 1 3",
+        "team": "t10",
+        "role": "support",
+        "attributes": {
+          "climb": 30,
+          "sprint": 97,
+          "flat": 82,
+          "resistance": 62,
+          "positioning": 88
+        }
+      },
+      {
+        "id": "sp2_2",
+        "name": "Sprinter 2 3",
+        "team": "t12",
+        "role": "support",
+        "attributes": {
+          "climb": 26,
+          "sprint": 93,
+          "flat": 79,
+          "resistance": 58,
+          "positioning": 85
+        }
+      },
+      {
+        "id": "do1_2",
+        "name": "Domestique 1 3",
+        "team": "t9",
+        "role": "support",
+        "attributes": {
+          "climb": 55,
+          "sprint": 48,
+          "flat": 70,
+          "resistance": 76,
+          "positioning": 82
+        }
+      },
+      {
+        "id": "do2_2",
+        "name": "Domestique 2 3",
+        "team": "t10",
+        "role": "support",
+        "attributes": {
+          "climb": 52,
+          "sprint": 45,
+          "flat": 68,
+          "resistance": 74,
+          "positioning": 80
+        }
+      },
+      {
+        "id": "do3_2",
+        "name": "Domestique 3 3",
+        "team": "t10",
+        "role": "support",
+        "attributes": {
+          "climb": 53,
+          "sprint": 46,
+          "flat": 69,
+          "resistance": 75,
+          "positioning": 81
+        }
+      },
+      {
+        "id": "do4_2",
+        "name": "Domestique 4 3",
+        "team": "t12",
+        "role": "support",
+        "attributes": {
+          "climb": 54,
+          "sprint": 47,
+          "flat": 69,
+          "resistance": 75,
+          "positioning": 81
+        }
+      },
+      {
+        "id": "gc1_3",
+        "name": "GC Climber 1 4",
+        "team": "t13",
+        "role": "leader",
+        "attributes": {
+          "climb": 94,
+          "sprint": 30,
+          "flat": 40,
+          "resistance": 80,
+          "positioning": 52
+        }
+      },
+      {
+        "id": "gc2_3",
+        "name": "GC Climber 2 4",
+        "team": "t13",
+        "role": "support",
+        "attributes": {
+          "climb": 91,
+          "sprint": 28,
+          "flat": 38,
+          "resistance": 78,
+          "positioning": 50
+        }
+      },
+      {
+        "id": "gc3_3",
+        "name": "Superdom 4",
+        "team": "t15",
+        "role": "support",
+        "attributes": {
+          "climb": 84,
+          "sprint": 25,
+          "flat": 45,
+          "resistance": 84,
+          "positioning": 56
+        }
+      },
+      {
+        "id": "gc4_3",
+        "name": "GC Climber 4 4",
+        "team": "t16",
+        "role": "leader",
+        "attributes": {
+          "climb": 89,
+          "sprint": 29,
+          "flat": 39,
+          "resistance": 76,
+          "positioning": 51
+        }
+      },
+      {
+        "id": "pu1_3",
+        "name": "Puncheur 1 4",
+        "team": "t14",
+        "role": "leader",
+        "attributes": {
+          "climb": 76,
+          "sprint": 85,
+          "flat": 60,
+          "resistance": 68,
+          "positioning": 72
+        }
+      },
+      {
+        "id": "pu2_3",
+        "name": "Puncheur 2 4",
+        "team": "t15",
+        "role": "leader",
+        "attributes": {
+          "climb": 73,
+          "sprint": 82,
+          "flat": 58,
+          "resistance": 66,
+          "positioning": 70
+        }
+      },
+      {
+        "id": "pu3_3",
+        "name": "Puncheur 3 4",
+        "team": "t15",
+        "role": "support",
+        "attributes": {
+          "climb": 74,
+          "sprint": 83,
+          "flat": 59,
+          "resistance": 67,
+          "positioning": 71
+        }
+      },
+      {
+        "id": "ru1_3",
+        "name": "Rouleur 1 4",
+        "team": "t13",
+        "role": "support",
+        "attributes": {
+          "climb": 60,
+          "sprint": 60,
+          "flat": 80,
+          "resistance": 86,
+          "positioning": 62
+        }
+      },
+      {
+        "id": "ru2_3",
+        "name": "Rouleur 2 4",
+        "team": "t15",
+        "role": "support",
+        "attributes": {
+          "climb": 57,
+          "sprint": 55,
+          "flat": 77,
+          "resistance": 84,
+          "positioning": 58
+        }
+      },
+      {
+        "id": "ru3_3",
+        "name": "Rouleur 3 4",
+        "team": "t16",
+        "role": "support",
+        "attributes": {
+          "climb": 58,
+          "sprint": 57,
+          "flat": 78,
+          "resistance": 85,
+          "positioning": 60
+        }
+      },
+      {
+        "id": "sp1_3",
+        "name": "Sprinter 1 4",
+        "team": "t14",
+        "role": "support",
+        "attributes": {
+          "climb": 30,
+          "sprint": 97,
+          "flat": 82,
+          "resistance": 62,
+          "positioning": 88
+        }
+      },
+      {
+        "id": "sp2_3",
+        "name": "Sprinter 2 4",
+        "team": "t16",
+        "role": "support",
+        "attributes": {
+          "climb": 26,
+          "sprint": 93,
+          "flat": 79,
+          "resistance": 58,
+          "positioning": 85
+        }
+      },
+      {
+        "id": "do1_3",
+        "name": "Domestique 1 4",
+        "team": "t13",
+        "role": "support",
+        "attributes": {
+          "climb": 55,
+          "sprint": 48,
+          "flat": 70,
+          "resistance": 76,
+          "positioning": 82
+        }
+      },
+      {
+        "id": "do2_3",
+        "name": "Domestique 2 4",
+        "team": "t14",
+        "role": "support",
+        "attributes": {
+          "climb": 52,
+          "sprint": 45,
+          "flat": 68,
+          "resistance": 74,
+          "positioning": 80
+        }
+      },
+      {
+        "id": "do3_3",
+        "name": "Domestique 3 4",
+        "team": "t14",
+        "role": "support",
+        "attributes": {
+          "climb": 53,
+          "sprint": 46,
+          "flat": 69,
+          "resistance": 75,
+          "positioning": 81
+        }
+      },
+      {
+        "id": "do4_3",
+        "name": "Domestique 4 4",
+        "team": "t16",
+        "role": "support",
+        "attributes": {
+          "climb": 54,
+          "sprint": 47,
+          "flat": 69,
+          "resistance": 75,
+          "positioning": 81
+        }
+      }
+    ]
+  }
+}

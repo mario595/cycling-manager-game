@@ -32,7 +32,7 @@ from economy.services import (
     write_salary_reviews,
 )
 from racing.models import Race
-from racing.services import riders_who_raced, simulate_race
+from racing.services import riders_who_raced, riders_who_started, simulate_race
 from riders.models import Rider
 from riders.services import (
     advance_ages,
@@ -271,12 +271,15 @@ def _apply_training_week(week) -> int:
     #58's one-growth-week-per-season-week cadence); the *race* half reads
     the week that just completed, since this week's races have not run
     yet. Freshness recovery follows the same shape: it runs once per
-    week, excluding riders who raced in the week being settled — see the
-    plan's Design decision 6. Returns how many riders had a *displayed*
-    value change, for TickRun.riders_trained.
+    week, excluding riders who started a race in the week being settled
+    — see the plan's Design decision 6, and the broom-wagon-time-cut
+    spec's In scope 5 (a rider cut by the time limit costs a race's worth
+    of fatigue same as a finisher). Returns how many riders had a
+    *displayed* value change, for TickRun.riders_trained.
     """
     raced_week = _completed_week(week)
     raced = riders_who_raced(raced_week) if raced_week is not None else {}
+    started = riders_who_started(raced_week) if raced_week is not None else set()
     extra: dict[int, dict[str, float]] = {}
     focus_by_team: dict[int, str] = {}
 
@@ -306,9 +309,10 @@ def _apply_training_week(week) -> int:
         record_week_snapshots(
             sorted({change["rider_id"] for change in changes}), week_id=week.pk,
         )
-    # `raced` is the {rider_id: [...]} of riders who finished a race in the
-    # week being settled; those riders skip recovery (Design decision 6).
-    apply_weekly_recovery(exclude_ids=set(raced))
+    # `started` is every rider with a RaceResult in the week being settled,
+    # finisher or cut by the time limit; those riders skip recovery
+    # (Design decision 6).
+    apply_weekly_recovery(exclude_ids=started)
     return len(changes)
 
 

@@ -24,10 +24,11 @@ class RaceLogger:
     identity, which is load-bearing (see the plan for #88).
 
     A sample is written on the first tick, every ``sample_interval`` ticks
-    after that, and on any tick where a rider's ``finished`` flag changed —
-    so a finish is never invisible, only its exact instant is quantised. The
-    first tick is always written because ``state`` is not available until then
-    and a t=0 sample is what the player shows before playback starts.
+    after that, and on any tick where a rider's ``finished`` or ``dnf`` flag
+    changed — so a finish or a time-cut DNF is never invisible, only its
+    exact instant is quantised. The first tick is always written because
+    ``state`` is not available until then and a t=0 sample is what the
+    player shows before playback starts.
 
     The file is written brotli-compressed (a `.jsonl.br` file), fed through an
     incremental ``Compressor`` so a race-sized payload is never held twice in
@@ -46,25 +47,26 @@ class RaceLogger:
         self._team_codes = team_codes or {}
         self._sample_interval = sample_interval
         self._ticks_seen = 0
-        self._last_finished: tuple[bool, ...] | None = None
+        self._last_status: tuple[tuple[bool, bool], ...] | None = None
         self._header_written = False
         self._samples_written = 0
 
     def log(self, state: RaceState) -> None:
         """Write a sample if this tick is due, is the first tick, or a tick in
-        which any rider's finished flag changed. Otherwise do nothing."""
+        which any rider's finished or dnf flag changed. Otherwise do
+        nothing."""
         if not self._header_written:
             self._write_header(state)
 
-        finished = tuple(rs.finished for rs in state.rider_states)
+        status = tuple((rs.finished, rs.dnf) for rs in state.rider_states)
         due = self._ticks_seen % self._sample_interval == 0
-        changed = finished != self._last_finished
+        changed = status != self._last_status
         self._ticks_seen += 1
 
-        if not (due or changed or self._last_finished is None):
+        if not (due or changed or self._last_status is None):
             return
 
-        self._last_finished = finished
+        self._last_status = status
         self._write_sample(state)
 
     @property
@@ -122,7 +124,10 @@ class RaceLogger:
                 round(rs.speed, 2),
                 round(rs.energy, 1),
                 round(rs.stamina, 1),
-                (1 if rs.pulling else 0) | (2 if rs.surging else 0) | (4 if rs.finished else 0),
+                (1 if rs.pulling else 0)
+                | (2 if rs.surging else 0)
+                | (4 if rs.finished else 0)
+                | (8 if rs.dnf else 0),
                 rs.finish_time,
             ]
             for rs in state.rider_states

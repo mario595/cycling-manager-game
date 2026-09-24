@@ -248,6 +248,7 @@ def _summarize(results: list[RunResult]) -> dict[str, Any]:
             ),
             "any_stamina_zero": any(r.stamina_zero_count > 0 for r in runs),
             "any_hit_tick_cap": any(r.hit_tick_cap for r in runs),
+            "total_dnf": sum(len(r.dnf_riders) for r in runs),
         }
     return summary
 
@@ -267,6 +268,8 @@ def _print_report(results: list[RunResult], baseline: dict[str, Any] | None) -> 
             print("  WARNING: at least one run had a rider finish at stamina 0")
         if s["any_hit_tick_cap"]:
             print("  WARNING: at least one run hit the tick cap (possible Finding 2 regression)")
+        if s["total_dnf"] > 0:
+            print(f"  time-cut DNFs: {s['total_dnf']}")
 
         if baseline and config in baseline:
             b = baseline[config]
