@@ -513,7 +513,7 @@ Test `src/components/AttributeRadar.test.tsx`:
 - Rendering prints each of the five integer values and all five axis
   labels.
 
-### W5 — `src/components/AttributeHistoryChart.tsx`: the history chart
+### W5 — `src/components/AttributeHistoryChart.tsx`: the history chart — done
 
 Test `src/components/AttributeHistoryChart.test.tsx`, which is mostly
 `historySeries`:
