@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 
 import type { AuctionListing, Bid } from '../api'
+import { formatCountdown } from '../countdown'
 import { formatMoney } from '../format'
 import { color, font } from '../theme'
-import { useCountdown } from '../useCountdown'
 import { Button, Card, LabelBar } from './primitives'
 
 type AttrKey = 'climb' | 'sprint' | 'flat' | 'resistance' | 'positioning'
@@ -19,23 +19,32 @@ const ATTR_KEYS: { key: AttrKey; label: string }[] = [
 /** One live auction: rider, price, a live countdown, a bid action (hidden
  * on the caller's own listing) and its collapsible bid history. Shared by
  * the Transfers screen's Auctions tab and the Dashboard's "My auctions"
- * card, so an auction reads identically wherever it appears. */
+ * card, so an auction reads identically wherever it appears.
+ *
+ * `gameNow` drives the countdown and comes from the caller's own
+ * `useClock()` call, not from inside this component: `deadline` is a
+ * game-time value, and under `MockClock` — the mode a developer runs to
+ * exercise auctions by hand — the browser's wall clock can read days
+ * away from it. One `useClock()` per screen also means one poll for
+ * however many cards it renders, not one per card. */
 export function AuctionCard({
   auction,
   balance,
   pending,
+  gameNow,
   onBid,
 }: {
   auction: AuctionListing
   balance: number
   pending: boolean
+  gameNow: Date | null
   onBid: (amount: number) => void
 }) {
   const [amount, setAmount] = useState(auction.min_next_bid)
   const rider = auction.rider
   const affordable = amount <= balance
   const clearsIncrement = amount >= auction.min_next_bid
-  const countdown = useCountdown(auction.deadline)
+  const countdown = gameNow ? formatCountdown(auction.deadline, gameNow.getTime()) : '—'
 
   // A poll can bring a higher price while this card is open. Bump the
   // pre-filled amount up to the new minimum so Bid doesn't sit silently

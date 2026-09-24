@@ -6,6 +6,7 @@ import { placeBid, type AuctionMarket, type Calendar, type Me, type MyBidStatus,
 import { useAuctions } from '../useAuctions'
 import { useAuth } from '../useAuth'
 import { useCalendar } from '../useCalendar'
+import { useClock } from '../useClock'
 import { useMyBids } from '../useMyBids'
 import { useNextRaceSquad } from '../useNextRaceSquad'
 import { useSeason } from '../useSeason'
@@ -23,6 +24,7 @@ vi.mock('../api', async (importOriginal) => ({
 }))
 vi.mock('../useAuctions', () => ({ useAuctions: vi.fn() }))
 vi.mock('../useMyBids', () => ({ useMyBids: vi.fn() }))
+vi.mock('../useClock', () => ({ useClock: vi.fn() }))
 
 const mockUseAuth = vi.mocked(useAuth)
 const mockUseSeason = vi.mocked(useSeason)
@@ -31,6 +33,7 @@ const mockUseStandings = vi.mocked(useStandings)
 const mockUseNextRaceSquad = vi.mocked(useNextRaceSquad)
 const mockUseAuctions = vi.mocked(useAuctions)
 const mockUseMyBids = vi.mocked(useMyBids)
+const mockUseClock = vi.mocked(useClock)
 const mockPlaceBid = vi.mocked(placeBid)
 
 const manager: Me = {
@@ -103,6 +106,7 @@ beforeEach(() => {
     refresh: vi.fn(),
   })
   mockUseMyBids.mockReturnValue({ bids: [], refresh: vi.fn() })
+  mockUseClock.mockReturnValue({ now: new Date('2027-03-01T00:00:00Z'), loading: false, error: false })
   mockPlaceBid.mockResolvedValue(undefined)
 })
 

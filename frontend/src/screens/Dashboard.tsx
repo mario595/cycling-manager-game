@@ -10,6 +10,7 @@ import { color, font } from '../theme'
 import { useAuctions } from '../useAuctions'
 import { useAuth } from '../useAuth'
 import { useCalendar } from '../useCalendar'
+import { useClock } from '../useClock'
 import { useMyBids } from '../useMyBids'
 import { useNextRaceSquad } from '../useNextRaceSquad'
 import { useSeason } from '../useSeason'
@@ -124,6 +125,7 @@ function NextRaceCard() {
 function MyAuctionsSection() {
   const { market, loading, refresh: refreshMarket } = useAuctions()
   const { bids, refresh: refreshMyBids } = useMyBids()
+  const { now: gameNow } = useClock()
   const [pending, setPending] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
 
@@ -166,6 +168,7 @@ function MyAuctionsSection() {
           auctions={selling}
           balance={market?.balance ?? 0}
           pending={pending}
+          gameNow={gameNow}
           onBid={handleBid}
         />
       ) : null}
@@ -175,6 +178,7 @@ function MyAuctionsSection() {
           auctions={bidding}
           balance={market?.balance ?? 0}
           pending={pending}
+          gameNow={gameNow}
           onBid={handleBid}
         />
       ) : null}
@@ -187,12 +191,14 @@ function AuctionGroup({
   auctions,
   balance,
   pending,
+  gameNow,
   onBid,
 }: {
   title: string
   auctions: AuctionListing[]
   balance: number
   pending: boolean
+  gameNow: Date | null
   onBid: (auction: AuctionListing, amount: number) => void
 }) {
   return (
@@ -213,6 +219,7 @@ function AuctionGroup({
             auction={auction}
             balance={balance}
             pending={pending}
+            gameNow={gameNow}
             onBid={(amount) => onBid(auction, amount)}
           />
         ))}

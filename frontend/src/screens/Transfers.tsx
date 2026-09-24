@@ -9,6 +9,7 @@ import { riderPath } from '../navigation'
 import { color, font } from '../theme'
 import { useAuctions } from '../useAuctions'
 import { useAuth } from '../useAuth'
+import { useClock } from '../useClock'
 import { useFreeAgents } from '../useFreeAgents'
 import { useMyBids } from '../useMyBids'
 
@@ -54,6 +55,7 @@ export function Transfers() {
   const { pool, loading: agentsLoading, error: agentsError, refresh: refreshAgents } = useFreeAgents()
   const { market, loading: marketLoading, error: marketError, refresh: refreshMarket } = useAuctions()
   const { bids: myBids, refresh: refreshMyBids } = useMyBids()
+  const { now: gameNow } = useClock()
 
   const [actionError, setActionError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
@@ -192,6 +194,7 @@ export function Transfers() {
           error={marketError}
           market={market}
           pending={pending}
+          gameNow={gameNow}
           onBid={handleBid}
         />
       )}
@@ -309,12 +312,14 @@ function AuctionsTab({
   error,
   market,
   pending,
+  gameNow,
   onBid,
 }: {
   loading: boolean
   error: boolean
   market: { auctions: AuctionListing[]; balance: number } | null
   pending: boolean
+  gameNow: Date | null
   onBid: (auction: AuctionListing, amount: number) => void
 }) {
   if (loading) return null
@@ -351,6 +356,7 @@ function AuctionsTab({
           auction={auction}
           balance={market.balance}
           pending={pending}
+          gameNow={gameNow}
           onBid={(amount) => onBid(auction, amount)}
         />
       ))}

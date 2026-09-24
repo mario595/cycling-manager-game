@@ -1,10 +1,11 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { placeBid, signFreeAgent, type AuctionMarket, type FreeAgentPool, type Me } from '../api'
 import { useAuctions } from '../useAuctions'
 import { useAuth } from '../useAuth'
+import { useClock } from '../useClock'
 import { useFreeAgents } from '../useFreeAgents'
 import { useMyBids } from '../useMyBids'
 import { Transfers } from './Transfers'
@@ -13,12 +14,14 @@ vi.mock('../useAuth', () => ({ useAuth: vi.fn() }))
 vi.mock('../useFreeAgents', () => ({ useFreeAgents: vi.fn() }))
 vi.mock('../useAuctions', () => ({ useAuctions: vi.fn() }))
 vi.mock('../useMyBids', () => ({ useMyBids: vi.fn() }))
+vi.mock('../useClock', () => ({ useClock: vi.fn() }))
 vi.mock('../api', () => ({ signFreeAgent: vi.fn(), placeBid: vi.fn() }))
 
 const mockUseAuth = vi.mocked(useAuth)
 const mockUseFreeAgents = vi.mocked(useFreeAgents)
 const mockUseAuctions = vi.mocked(useAuctions)
 const mockUseMyBids = vi.mocked(useMyBids)
+const mockUseClock = vi.mocked(useClock)
 const mockSignFreeAgent = vi.mocked(signFreeAgent)
 const mockPlaceBid = vi.mocked(placeBid)
 
@@ -153,6 +156,7 @@ beforeEach(() => {
   mockUseFreeAgents.mockReturnValue({ pool, loading: false, error: false, refresh: vi.fn() })
   mockUseAuctions.mockReturnValue({ market: auctionMarket, loading: false, error: false, refresh: vi.fn() })
   mockUseMyBids.mockReturnValue({ bids: [], refresh: vi.fn() })
+  mockUseClock.mockReturnValue({ now: new Date('2027-03-01T00:00:00Z'), loading: false, error: false })
   mockSignFreeAgent.mockResolvedValue(undefined)
   mockPlaceBid.mockResolvedValue(undefined)
 })
@@ -256,21 +260,15 @@ describe('Transfers', () => {
     expect(screen.getByText('Minimum next bid $63,000')).toBeInTheDocument()
   })
 
-  it('counts the deadline down in dd hh mm ss and keeps it live', () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date('2027-03-01T00:00:00Z'))
-
+  it('counts the deadline down against the game clock in dd hh mm ss', () => {
+    // useClock is mocked to 2027-03-01T00:00:00Z (see beforeEach). The
+    // listing's deadline is 2027-03-04T12:00:00Z — exactly 3 days 12 hours
+    // later. The live tick itself is useClock's own responsibility, tested
+    // there — this only proves Transfers wires its game-time value through.
     renderTransfers()
     fireEvent.click(screen.getByRole('button', { name: 'Auctions' }))
 
-    // auctionMarket's listing deadline is 2027-03-04T12:00:00Z — exactly
-    // 3 days 12 hours from the mocked "now".
     expect(screen.getByText('Ends in 03d 12h 00m 00s')).toBeInTheDocument()
-
-    act(() => {
-      vi.advanceTimersByTime(1_000)
-    })
-    expect(screen.getByText('Ends in 03d 11h 59m 59s')).toBeInTheDocument()
   })
 
   it('hides the bid action on the caller\'s own listing', () => {

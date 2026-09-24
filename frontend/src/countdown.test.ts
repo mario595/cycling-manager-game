@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatCountdown } from './useCountdown'
+import { formatCountdown } from './countdown'
 
 describe('formatCountdown', () => {
   it('formats days, hours, minutes and seconds, zero-padded', () => {
