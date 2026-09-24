@@ -313,14 +313,22 @@ describe('Transfers', () => {
     expect(screen.getByText('You cannot afford that bid.')).toBeInTheDocument()
   })
 
-  it('shows the full bid history with each bidder\'s team, newest first', () => {
+  it('keeps the bid history collapsed until expanded', () => {
     renderTransfers()
 
     fireEvent.click(screen.getByRole('button', { name: 'Auctions' }))
 
-    expect(screen.getByText('BID HISTORY')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /BID HISTORY \(2\)/ })).toBeInTheDocument()
+    expect(screen.queryByText('Rival Racing')).not.toBeInTheDocument()
+    expect(screen.queryByText('Squad Team')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /BID HISTORY/ }))
+
     const names = screen.getAllByText(/Rival Racing|Squad Team/).map((el) => el.textContent)
     expect(names).toEqual(['Rival Racing', 'Squad Team'])
+
+    fireEvent.click(screen.getByRole('button', { name: /BID HISTORY/ }))
+    expect(screen.queryByText('Rival Racing')).not.toBeInTheDocument()
   })
 
   it('shows an outbid notice from active bids', () => {

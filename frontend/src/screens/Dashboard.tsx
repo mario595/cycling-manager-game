@@ -1,15 +1,15 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 
-import type { AuctionListing, MyBidStatus } from '../api'
+import { placeBid, type AuctionListing } from '../api'
+import { AuctionCard } from '../components/AuctionCard'
 import { Card, CardHeader, PageBody, PageHeading } from '../components/primitives'
-import { formatMoney } from '../format'
 import { nextRace } from '../nextRace'
 import { seasonLabel } from '../seasonLabel'
 import { color, font } from '../theme'
 import { useAuctions } from '../useAuctions'
 import { useAuth } from '../useAuth'
 import { useCalendar } from '../useCalendar'
-import { useCountdown } from '../useCountdown'
 import { useMyBids } from '../useMyBids'
 import { useNextRaceSquad } from '../useNextRaceSquad'
 import { useSeason } from '../useSeason'
@@ -118,121 +118,105 @@ function NextRaceCard() {
 
 /** Every auction the manager is involved in — selling (their own open
  * listings) or bidding (from useMyBids, spec item 8's outbid tracking) —
- * so neither is buried inside the Transfers screen's tabs. Renders
- * nothing while loading, or once loaded if there is nothing to show. */
+ * as the same AuctionCard the Transfers screen uses, so an auction reads
+ * and acts identically wherever it appears. Renders nothing while
+ * loading, or once loaded if there is nothing to show. */
 function MyAuctionsSection() {
-  const { market, loading } = useAuctions()
-  const { bids } = useMyBids()
+  const { market, loading, refresh: refreshMarket } = useAuctions()
+  const { bids, refresh: refreshMyBids } = useMyBids()
+  const [pending, setPending] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   if (loading) return null
 
-  const selling = market?.auctions.filter((a) => a.is_own_listing) ?? []
-  if (selling.length === 0 && bids.length === 0) return null
+  const auctions = market?.auctions ?? []
+  const selling = auctions.filter((a) => a.is_own_listing)
+  const biddingIds = new Set(bids.map((b) => b.auction_id))
+  const bidding = auctions.filter((a) => biddingIds.has(a.id))
+
+  if (selling.length === 0 && bidding.length === 0) return null
+
+  const handleBid = async (auction: AuctionListing, amount: number) => {
+    setPending(true)
+    setActionError(null)
+    try {
+      await placeBid(auction.id, amount)
+      refreshMarket()
+      refreshMyBids()
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Could not place that bid.')
+    } finally {
+      setPending(false)
+    }
+  }
 
   return (
-    <Card>
-      <CardHeader title="My auctions" />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ fontSize: 15, fontWeight: 600, letterSpacing: '-0.2px' }}>My auctions</div>
+
+      {actionError ? (
+        <Card style={{ padding: '12px 16px', borderColor: '#D9534F' }}>
+          <div style={{ fontSize: 13, color: '#D9534F' }}>{actionError}</div>
+        </Card>
+      ) : null}
+
       {selling.length > 0 ? (
-        <>
-          <SectionLabel>SELLING</SectionLabel>
-          {selling.map((auction) => (
-            <SellingRow key={auction.id} auction={auction} />
-          ))}
-        </>
+        <AuctionGroup
+          title="Selling"
+          auctions={selling}
+          balance={market?.balance ?? 0}
+          pending={pending}
+          onBid={handleBid}
+        />
       ) : null}
-      {bids.length > 0 ? (
-        <>
-          <SectionLabel>BIDDING</SectionLabel>
-          {bids.map((bid) => (
-            <BiddingRow key={bid.auction_id} bid={bid} />
-          ))}
-        </>
+      {bidding.length > 0 ? (
+        <AuctionGroup
+          title="Bidding"
+          auctions={bidding}
+          balance={market?.balance ?? 0}
+          pending={pending}
+          onBid={handleBid}
+        />
       ) : null}
-    </Card>
-  )
-}
-
-function SectionLabel({ children }: { children: string }) {
-  return (
-    <div
-      style={{
-        padding: '10px 20px 2px',
-        fontSize: 10.5,
-        letterSpacing: '0.8px',
-        color: color.mutedStrong,
-        fontFamily: font.mono,
-        borderTop: `1px solid ${color.dividerStrong}`,
-      }}
-    >
-      {children}
     </div>
   )
 }
 
-function AuctionRowLayout({ name, right, countdown }: { name: string; right: string; countdown: string }) {
+function AuctionGroup({
+  title,
+  auctions,
+  balance,
+  pending,
+  onBid,
+}: {
+  title: string
+  auctions: AuctionListing[]
+  balance: number
+  pending: boolean
+  onBid: (auction: AuctionListing, amount: number) => void
+}) {
   return (
-    <Link
-      to="/transfers"
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        padding: '11px 20px',
-        textDecoration: 'none',
-        color: color.ink,
-      }}
-    >
-      <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, letterSpacing: '-0.2px' }}>
-        {name}
-      </div>
-      <div style={{ fontSize: 13, fontFamily: font.mono, whiteSpace: 'nowrap' }}>{right}</div>
-      <div style={{ fontSize: 11, color: color.muted, fontFamily: font.mono, whiteSpace: 'nowrap' }}>
-        {countdown}
-      </div>
-    </Link>
-  )
-}
-
-function SellingRow({ auction }: { auction: AuctionListing }) {
-  const countdown = useCountdown(auction.deadline)
-  return (
-    <AuctionRowLayout name={auction.rider.name} right={formatMoney(auction.current_price)} countdown={countdown} />
-  )
-}
-
-function BiddingRow({ bid }: { bid: MyBidStatus }) {
-  const countdown = useCountdown(bid.deadline)
-  const status = bid.is_high_bidder ? 'Winning' : 'Outbid'
-  return (
-    <Link
-      to="/transfers"
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        padding: '11px 20px',
-        textDecoration: 'none',
-        color: color.ink,
-      }}
-    >
-      <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, letterSpacing: '-0.2px' }}>
-        {bid.rider_name}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ fontSize: 10.5, letterSpacing: '0.8px', color: color.mutedStrong, fontFamily: font.mono }}>
+        {title.toUpperCase()}
       </div>
       <div
         style={{
-          fontSize: 11.5,
-          fontWeight: 600,
-          color: bid.is_high_bidder ? color.positive : color.negative,
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(288px, 1fr))',
+          gap: 12,
         }}
       >
-        {status}
+        {auctions.map((auction) => (
+          <AuctionCard
+            key={auction.id}
+            auction={auction}
+            balance={balance}
+            pending={pending}
+            onBid={(amount) => onBid(auction, amount)}
+          />
+        ))}
       </div>
-      <div style={{ fontSize: 13, fontFamily: font.mono, whiteSpace: 'nowrap' }}>
-        {formatMoney(bid.current_price)}
-      </div>
-      <div style={{ fontSize: 11, color: color.muted, fontFamily: font.mono, whiteSpace: 'nowrap' }}>
-        {countdown}
-      </div>
-    </Link>
+    </div>
   )
 }

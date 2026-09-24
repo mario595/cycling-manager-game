@@ -1,12 +1,12 @@
 import { useMemo, useState, type ReactNode } from 'react'
 
-import { placeBid, signFreeAgent, type AuctionListing, type Bid, type FreeAgent } from '../api'
+import { placeBid, signFreeAgent, type AuctionListing, type FreeAgent } from '../api'
+import { AuctionCard } from '../components/AuctionCard'
 import { Button, Card, Chip, ChipLabel, LabelBar, PageBody, PageHeading, StatTile } from '../components/primitives'
 import { formatMoney } from '../format'
 import { color, font } from '../theme'
 import { useAuctions } from '../useAuctions'
 import { useAuth } from '../useAuth'
-import { useCountdown } from '../useCountdown'
 import { useFreeAgents } from '../useFreeAgents'
 import { useMyBids } from '../useMyBids'
 
@@ -351,162 +351,6 @@ function AuctionsTab({
           pending={pending}
           onBid={(amount) => onBid(auction, amount)}
         />
-      ))}
-    </div>
-  )
-}
-
-function AuctionCard({
-  auction,
-  balance,
-  pending,
-  onBid,
-}: {
-  auction: AuctionListing
-  balance: number
-  pending: boolean
-  onBid: (amount: number) => void
-}) {
-  const [amount, setAmount] = useState(auction.min_next_bid)
-  const rider = auction.rider
-  const affordable = amount <= balance
-  const clearsIncrement = amount >= auction.min_next_bid
-  const countdown = useCountdown(auction.deadline)
-
-  return (
-    <Card style={{ padding: '15px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: 11,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 14,
-            fontWeight: 700,
-            fontFamily: font.mono,
-            background: color.canvas,
-            color: color.ink,
-            flex: '0 0 40px',
-          }}
-        >
-          {rider.speciality.slice(0, 2).toUpperCase()}
-        </div>
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <div
-            style={{
-              fontSize: 14.5,
-              fontWeight: 600,
-              letterSpacing: '-0.2px',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {rider.name}
-          </div>
-          <div style={{ fontSize: 11, color: color.mutedStrong, fontFamily: font.mono }}>
-            {rider.speciality.toUpperCase()} · {rider.age} yrs
-          </div>
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-        {ATTR_KEYS.map(({ key, label }) => (
-          <LabelBar key={key} label={label} value={rider[key]} />
-        ))}
-      </div>
-
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 10,
-          borderTop: `1px solid ${color.dividerStrong}`,
-          paddingTop: 10,
-        }}
-      >
-        <span style={{ fontSize: 12, color: color.mutedStrong, fontFamily: font.mono }}>
-          Current {formatMoney(auction.current_price)}
-        </span>
-        <span style={{ fontSize: 11, color: color.muted, fontFamily: font.mono }}>
-          Ends in {countdown}
-        </span>
-      </div>
-
-      {auction.is_own_listing ? (
-        <div style={{ fontSize: 12, color: color.muted }}>Your listing.</div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <input
-              type="number"
-              min={auction.min_next_bid}
-              step={1}
-              value={amount}
-              onChange={(e) => setAmount(Number(e.target.value))}
-              aria-label={`Bid amount for ${rider.name}`}
-              style={{
-                flex: 1,
-                minWidth: 0,
-                fontFamily: font.mono,
-                fontSize: 13,
-                padding: '7px 9px',
-                borderRadius: 8,
-                border: `1px solid ${color.border}`,
-                background: color.canvas,
-                color: color.ink,
-              }}
-            />
-            <Button
-              onClick={() => onBid(amount)}
-              disabled={pending || !affordable || !clearsIncrement}
-              style={{ opacity: pending || !affordable || !clearsIncrement ? 0.6 : 1 }}
-            >
-              Bid
-            </Button>
-          </div>
-          <div style={{ fontSize: 11, color: color.muted, fontFamily: font.mono }}>
-            Minimum next bid {formatMoney(auction.min_next_bid)}
-          </div>
-          {!affordable ? (
-            <div style={{ fontSize: 12, color: color.negative }}>You cannot afford that bid.</div>
-          ) : null}
-        </div>
-      )}
-
-      {auction.bids.length > 0 ? <BidHistory bids={auction.bids} /> : null}
-    </Card>
-  )
-}
-
-function BidHistory({ bids }: { bids: Bid[] }) {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 5,
-        borderTop: `1px solid ${color.dividerStrong}`,
-        paddingTop: 9,
-      }}
-    >
-      <div style={{ fontSize: 10.5, letterSpacing: '0.8px', color: color.mutedStrong, fontFamily: font.mono }}>
-        BID HISTORY
-      </div>
-      {bids.map((bid, i) => (
-        <div
-          key={`${bid.team_name}-${bid.placed_at}-${i}`}
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}
-        >
-          <span style={{ fontSize: 12.5, color: color.ink }}>{bid.team_name}</span>
-          <span style={{ fontSize: 12, fontFamily: font.mono, color: color.mutedStrong }}>
-            {formatMoney(bid.amount)}
-          </span>
-        </div>
       ))}
     </div>
   )
