@@ -109,6 +109,31 @@ Since #29 each rider also carries `release_cost`
   fee is positive** — a $0 cooldown-exempt release moves no money and
   leaves the ledger untouched. A rider not on the caller's roster is a
   409. Success is 204.
+- `GET /api/transfers/auctions/` (`AuctionMarketSerializer`,
+  `AuctionMarketView`) — every open auction plus the caller's balance,
+  the same both-keys shape `FreeAgentsView` uses. Each entry carries the
+  rider (same visible fields the roster shows), `current_price`,
+  `min_next_bid` and `deadline`, `is_own_listing`, and **never** the
+  bidder — the market is anonymous (#28; see `transfers/README.md`,
+  *Auctions*). A caller with no team gets a 403.
+- `POST /api/transfers/auctions/list/` (`ListForAuctionSerializer`,
+  `ListForAuctionView`) — list one of the caller's own riders for
+  auction. `RiderNotOnRoster` or `AuctionAlreadyExists` (the rider already
+  has an open listing) is a 409 — the request is well-formed, the world's
+  state refuses it, the same split every other transfer-market view
+  documents. Success is 204.
+- `POST /api/transfers/auctions/<auction_id>/bid/` (`PlaceBidSerializer`,
+  `PlaceBidView`) — place a bid on an open auction. The view checks
+  `balance_for(team) >= amount` itself, **before** calling
+  `transfers.services.place_bid` — no money moves until an auction
+  resolves, so unlike signing a free agent there is no injected `charge`
+  callback on this path. An unaffordable bid, a self-bid, a bid that
+  doesn't clear the minimum, or a closed auction are all 409. Success is
+  204.
+- `GET /api/transfers/auctions/mine/` (`MyBidStatusSerializer`,
+  `MyBidsView`) — every open auction the caller's team has an active bid
+  on, with `is_high_bidder` — backs the outbid notice (spec item 8).
+  Read-only, polled the same way `FreeAgentsView` is.
 - `GET /api/racing/races/<race_id>/` — one race's own facts
   (`RaceDetailSerializer`, `RaceDetailView`): id, name, status, starts_at,
   distance and the raw `{length, gradient}` course segments. It also carries
