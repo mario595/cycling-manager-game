@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
-import { releaseRider, type Rider, type SalaryReview } from '../api'
+import { listForAuction, releaseRider, type Rider, type SalaryReview } from '../api'
 import { Bar, Button, Card, CardHeader, Chip, ChipLabel, LabelBar, PageBody, PageHeading, StatTile } from '../components/primitives'
 import { formatMoney } from '../format'
 import { riderPath } from '../navigation'
@@ -116,6 +116,20 @@ const { riders, squadValue, salaryReview, loading, error, refresh } = useRoster(
     }
   }
 
+  const handleListForAuction = async (rider: Rider) => {
+    setPending(true)
+    setActionError(null)
+    try {
+      await listForAuction(rider.id)
+      setPicked(null)
+      refresh()
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Could not list that rider for auction.')
+    } finally {
+      setPending(false)
+    }
+  }
+
   return (
     <PageBody gap={18} paddingTop={26}>
       <PageHeading
@@ -196,6 +210,7 @@ const { riders, squadValue, salaryReview, loading, error, refresh } = useRoster(
             pending={pending}
             onClose={() => setPicked(null)}
             onRelease={() => handleRelease(selected)}
+            onListForAuction={() => handleListForAuction(selected)}
           />
         ) : null}
       </div>
@@ -313,11 +328,13 @@ function RiderPanel({
   pending,
   onClose,
   onRelease,
+  onListForAuction,
 }: {
   rider: Rider
   pending: boolean
   onClose: () => void
   onRelease: () => void
+  onListForAuction: () => void
 }) {
   const facts: Array<[string, string]> = [
     ['Age', `${rider.age} yrs`],
@@ -464,7 +481,10 @@ function RiderPanel({
 
       {/* Releasing sends the rider to the free agent pool. The cost is
           severance unless the claim cooldown still shields them — the
-          server has the final say; this is the figure it will charge. */}
+          server has the final say; this is the figure it will charge.
+          Listing for auction keeps the rider on the roster — racing,
+          training, earning their wage — until another manager wins it or
+          the auction closes unsold. */}
       <div
         style={{
           borderTop: `1px solid ${color.divider}`,
@@ -494,6 +514,21 @@ function RiderPanel({
             Free while the claim cooldown shields them.
           </div>
         ) : null}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 10,
+          }}
+        >
+          <span style={{ fontSize: 12, color: color.mutedStrong, fontFamily: font.mono }}>
+            Auction this rider
+          </span>
+          <Button onClick={onListForAuction} disabled={pending} style={{ opacity: pending ? 0.6 : 1 }}>
+            List for auction
+          </Button>
+        </div>
       </div>
     </div>
   )

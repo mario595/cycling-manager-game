@@ -17,16 +17,21 @@ Two pricing functions (`transfers/pricing.py`) and the free-agent market
   agents* below).
 - **The free agent market** — `services.free_agents()`, the pool,
   `services.release_cost_for()` and the two locked write paths
-  `sign_free_agent` / `release_rider`. This is the first built slice of the
-  transfer market; auctions
-  ([#28](https://github.com/mario595/cycling-manager/issues/28)), buying and
-  selling riders, contracts and AI trading
+  `sign_free_agent` / `release_rider`.
+- **Rider auctions** ([#28](https://github.com/mario595/cycling-manager/issues/28))
+  — `models.Auction` / `models.Bid`, `services.list_for_auction`,
+  `services.place_bid` and `services.resolve_auction`. See *Auctions*
+  below. Buying and selling riders outright, contracts and AI trading
   ([#30](https://github.com/mario595/cycling-manager/issues/30)) still to
   come.
 
-`transfers/` still owns no `models.py` — the schema free agents need lives
-on `Rider` itself (nullable `team`, plus the `joined_team_at` /
-`unattached_since` stamps `riders/`'s `mark_team_change` writes).
+`transfers/` owns one `models.py` — `Auction` and `Bid`, added for
+auctions (#28), the first thing in this app that needs to persist across
+ticks. Free agents still need no models of their own: the schema they need
+lives on `Rider` itself (nullable `team`, plus the `joined_team_at` /
+`unattached_since` stamps `riders/`'s `mark_team_change` writes), and the
+pool is a pure derived query (`team__isnull=True`) with nothing to
+remember.
 
 ## Free agents
 
@@ -72,6 +77,99 @@ The pool, balances and costs reach the player through `api/`: the market
 screen (`frontend/`) signs riders; the Roster shows each rider's current
 `release_cost` — 0 when the cooldown shields them, severance after — on the
 rider's detail panel.
+
+## Auctions
+
+The second built slice of the transfer market (#28) — the first thing in
+this app that persists across ticks, hence `transfers/`'s first
+`models.py` and migration. A manager lists any rider on their own roster;
+other managers bid over a few real days; the highest bid at the deadline
+buys the rider.
+
+- **`Auction`** — `rider`, `seller_team`, `status` (`open` / `sold` /
+  `unsold` / `cancelled`), `reserve_price`, `current_price`,
+  `min_increment`, `deadline`, `listed_at`, `resolved_at`.
+  **`reserve_price` and `min_increment` are frozen at listing time and
+  never recomputed** from `market_value_for` — a manager reasoning about a
+  displayed price must never be reasoning about a number that could move
+  under them mid-auction, the way free agents' fees deliberately do
+  recompute on every read. `current_price` starts at `reserve_price` and
+  moves to the highest bid as they arrive. `one_open_auction_per_rider` (a
+  partial unique constraint on `status="open"`) is the DB-level guard that
+  a rider can only be listed once at a time — the same
+  `condition=models.Q(...)` pattern `economy/`'s ledger constraints use.
+  There is no FK to a winning team: the winner is derivable as the highest
+  `Bid` on a `SOLD` auction, the same "don't cache what you can derive"
+  reasoning `economy/README.md` gives for never storing a balance.
+- **`Bid`** — `auction`, `bidder_team`, `amount`, `placed_at`. Never
+  mutated or deleted after creation, the same append-only discipline
+  `LedgerEntry`/`FanbaseEntry` use.
+- **Pricing** (`pricing.py`) — `reserve_price_for(rider)` is
+  `RESERVE_RATE` (50%) of `market_value_for(rider)`, rounded the same way
+  every other price here rounds (nearest 1,000). 50% sits below
+  `SIGNING_FEE_RATE` (60%): a seller choosing to auction accepts a lower
+  guaranteed floor than a buyer would pay to sign the same rider outright,
+  in exchange for the chance of a higher price through competition.
+  `min_increment_for(reserve_price)` is `MIN_INCREMENT_RATE` (5%) of the
+  **frozen** reserve, not the live current price — an increment that
+  tracked the rising price would make late bidding in a hot auction
+  require ever-larger jumps, punishing exactly the contested auctions the
+  deadline extension exists to protect.
+- **Listing** (`list_for_auction`) — locks the rider row, re-checks team
+  ownership under the lock (mirrors `release_rider`'s ownership check),
+  freezes the reserve and increment, and relies on
+  `one_open_auction_per_rider` as the final guard against a race with a
+  second concurrent listing (`IntegrityError` → `AuctionAlreadyExists`).
+  `AUCTION_DURATION` (3 days) sets the deadline from the listing moment.
+- **Bidding** (`place_bid`) — locks the `Auction` row, re-checks status and
+  price under the lock, and requires the bid clear `current_price` (before
+  any bid) or `current_price + min_increment` (once one exists). A team
+  cannot bid on its own listing (`SelfBid`) — the one place in the game
+  that can see both sides of a transaction and must refuse it itself,
+  since nothing else stops a team transacting with itself. **Anti-snipe:**
+  a bid landing within `EXTENSION_WINDOW` (1 hour) of the deadline pushes
+  it forward by that same window — always `deadline += EXTENSION_WINDOW`,
+  never reset to `at + EXTENSION_WINDOW`, so repeated late bids compound
+  predictably rather than each resetting to a fixed offset. Bidding never
+  touches `economy/` — no money moves until resolution; affordability is a
+  plain `balance_for` read the caller (`api/`) makes before calling this at
+  all, the same shape `sign_free_agent`'s `charge` callback checks, just
+  without a callback since nothing is charged yet.
+- **Bidding is not anonymous.** Every `Bid` row already carries
+  `bidder_team`, and `api/`'s `AuctionMarketView` serializes each
+  auction's full history — every bid, newest first, with the bidding
+  team's name — not just the current leader. The original scoping
+  decision was to keep it anonymous (a coordination-risk concern in a
+  thin, early market with few human players); revisited before this
+  ticket shipped, in favour of transparency. See the archived spec's
+  *Rules and edge cases* for both sides of that call.
+- **Resolution** (`resolve_auction`) — the one entry point `world/` calls,
+  once per tick, on every auction `due_auctions(at)` returns (`OPEN` and
+  past its deadline). Locks the `Auction` and `Rider` rows together and:
+  re-checks the auction is still due (a bid can have extended it between
+  the tick's query and this lock — then this is a no-op, left for a later
+  tick); cancels with no money moved if the rider has already left the
+  seller's roster some other way (a release, say — whichever mechanism
+  moves the rider first wins, spec's *Rules and edge cases*); goes
+  `UNSOLD` with no callback calls if there is no bid; re-checks `ROSTER_CAP`
+  against the winning bidder's **current** roster and goes `UNSOLD` rather
+  than violate it if they have since filled up; otherwise runs
+  `charge_buyer` then `pay_seller` (buyer debited before seller credited,
+  so a `charge_buyer` raise — the accepted overspend loophole, since a bid
+  checks the balance only at bid time, never escrowed — rolls the whole
+  transaction back and leaves the auction `OPEN` for the next tick to
+  retry rather than silently losing a sale the seller was owed), moves the
+  rider, and marks the auction `SOLD`. `transfers/` may not import
+  `economy/`, so both callbacks are injected exactly the way
+  `sign_free_agent`'s `charge` is — `world/README.md` has the wiring.
+- **Why resolution is not a week-boundary step.** Every other per-week
+  economic step in the tick (`world/README.md`, *How a tick works*) is
+  keyed to a crossed `Week`. An auction's deadline is deliberately
+  wall-clock real time instead — it decouples the market from the race
+  calendar and stays fair to managers in different timezones — so
+  resolution is its own unconditional step in `tick()`, run every tick
+  regardless of what else is due, never folded into the week-transition
+  loop. See `world/README.md`.
 
 ## Value vs salary
 
@@ -144,20 +242,18 @@ follows.
 
 ## Future work / possible improvements
 
-Market value was built to serve four consumers, none wired up yet:
+Market value was built to serve four consumers; auctions (#28) is the
+second to land, after free agents:
 
-- **Reserve price for auctions.** [#28](https://github.com/mario595/cycling-manager/issues/28)
-  is the natural place for value — or a percentage of it — to become a
-  floor an auction bid must clear, protecting a seller in a thin market
-  from a strong rider selling for next to nothing.
 - **AI bidding logic.** [#30](https://github.com/mario595/cycling-manager/issues/30)
-  needs some number to decide what to bid and when to stop; this is it.
+  needs some number to decide what to bid and when to stop; market value
+  is it.
 - **Forced sales under insolvency.** [#27](https://github.com/mario595/cycling-manager/issues/27)
   needs a price when there is no auction to discover one.
 - **Season-boundary salary renegotiation.** [#26](https://github.com/mario595/cycling-manager/issues/26)
   needs a value to renegotiate a rider's salary against.
 
-Nothing outside `transfers/` reads `market_value_for` back yet — the Roster
-screen shows it (`api/README.md`, `frontend/README.md`), and inside this app
-the free-agent signing and severance fees are the only arithmetic that
-builds on it.
+The Roster screen shows `market_value_for` directly (`api/README.md`,
+`frontend/README.md`); inside this app the free-agent signing/severance
+fees and the auction reserve/increment are the arithmetic that builds on
+it.

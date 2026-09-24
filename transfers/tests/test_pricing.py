@@ -6,7 +6,14 @@ import statistics
 from riders.generation import generate_rider
 from riders.models import Rider
 from riders.pricing import weekly_salary_for
-from transfers.pricing import career_horizon, market_value_for, severance_fee_for, signing_fee_for
+from transfers.pricing import (
+    career_horizon,
+    market_value_for,
+    min_increment_for,
+    reserve_price_for,
+    severance_fee_for,
+    signing_fee_for,
+)
 
 
 def _rider(**attrs) -> Rider:
@@ -157,6 +164,31 @@ def test_average_value_is_about_one_season_of_wages():
 
     target = mean_salary * _WEEKS_PER_SEASON
     assert abs(mean_value - target) / target <= 0.15
+
+
+def test_reserve_price_is_half_signing_fee_rate():
+    rider = _rider(climb=70, sprint=65, flat=60, resistance=55, positioning=50)
+
+    reserve = reserve_price_for(rider)
+
+    assert reserve == 1000 * round(0.50 * market_value_for(rider) / 1000)
+    assert reserve > 0
+
+
+def test_min_increment_is_fraction_of_reserve():
+    rider = _rider(climb=70, sprint=65, flat=60, resistance=55, positioning=50)
+    reserve = reserve_price_for(rider)
+
+    increment = min_increment_for(reserve)
+
+    assert increment == 1000 * round(0.05 * reserve / 1000)
+
+    # Mutating the rider in-memory afterwards must not move an increment
+    # already derived from a frozen reserve_price (Design decision 5) —
+    # min_increment_for takes the number, not the rider.
+    rider.climb = 99
+    rider.sprint = 99
+    assert min_increment_for(reserve) == increment
 
 
 def test_generated_roster_value_spans_wider_than_salary():

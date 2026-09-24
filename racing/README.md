@@ -281,6 +281,29 @@ calls `ensure_squads(race)` first, then builds the engine's rider list from
 selected by any team's squad simply does not appear in the log, the replay,
 or the results.
 
+**A squad member whose rider has since left that team is dropped before
+racing, not raced anyway.** A rider can be sold at auction ([#28](https://github.com/mario595/cycling-manager/issues/28))
+or released to the free agent pool ([#29](https://github.com/mario595/cycling-manager/issues/29))
+while still sitting in a team's saved squad for a race that has not run
+yet — both let a listed/released rider keep racing until the move
+actually happens, so a manager leaving them in a squad is the normal
+case, not a mistake. `simulate_race`'s squad query filters on
+`rider__team_id == squad__team_id` (an `F()` comparison, not two separate
+reads) for exactly this reason: `to_engine_rider` and, downstream,
+`competitions.services.score_race` / `prizes_by_team` all key off the
+rider's **current** `team_id`, never the squad's — so racing a
+team-mismatched rider anyway would credit the result to whoever they
+belong to *now*, not the team that actually fielded them. The team that
+picked them simply races a rider short; nothing else about the race is
+affected. `_effective_leader_ids` handles the one wrinkle this creates:
+if the dropped rider was the squad's picked leader, the engine still
+requires exactly one leader per team present
+(`race_engine.models.validate_team_leaders`), so the lowest-pk remaining
+squad member is promoted **for this race's engine call only** — the
+squad's own stored `is_leader` is never rewritten, since this is a
+simulation-time workaround for an engine constraint, not a correction to
+what the manager actually picked.
+
 **Finishers pay the freshness cost.** Inside the same transaction that records
 `RaceResult` rows, every rider who finished has `RACE_FRESHNESS_COST` (25,
 `riders/`) deducted from their stored `freshness`, floored at

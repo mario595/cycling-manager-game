@@ -4,6 +4,7 @@ from django.urls import include, path
 
 from .views import (
     AcknowledgeSpellView,
+    AuctionMarketView,
     CalendarView,
     ClaimTeamView,
     ClockView,
@@ -11,8 +12,11 @@ from .views import (
     FireTrainerView,
     FreeAgentsView,
     HireTrainerView,
+    ListForAuctionView,
     LoginView,
     MeView,
+    MyBidsView,
+    PlaceBidView,
     PositionView,
     RaceDetailView,
     RaceResultsView,
@@ -67,4 +71,12 @@ urlpatterns = [
         name="sign-free-agent",
     ),
     path("transfers/riders/release/", ReleaseRiderView.as_view(), name="release-rider"),
+    path("transfers/auctions/", AuctionMarketView.as_view(), name="auction-market"),
+    path("transfers/auctions/list/", ListForAuctionView.as_view(), name="list-for-auction"),
+    path(
+        "transfers/auctions/<int:auction_id>/bid/",
+        PlaceBidView.as_view(),
+        name="place-bid",
+    ),
+    path("transfers/auctions/mine/", MyBidsView.as_view(), name="my-bids"),
 ]

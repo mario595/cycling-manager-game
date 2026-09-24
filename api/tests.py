@@ -18,6 +18,7 @@ from riders.models import DISPLAY_MAX, Rider, RiderAttributeSnapshot
 from schedule.models import SEASON_WEEKS, Season, Week
 from staff.models import Trainer, TrainingWeekReport
 from staff.pricing import hire_fee, weekly_salary
+from transfers.models import Auction
 from transfers.pricing import market_value_for, severance_fee_for, signing_fee_for
 from teams.models import ManagerialSpell, Team
 from world.services import now
@@ -1871,6 +1872,229 @@ def test_roster_view_reports_release_cost_per_rider(market_client, market_team):
     by_name = {r["name"]: r for r in response.data["riders"]}
     assert by_name["Inherited"]["release_cost"] == 0
     assert by_name["Signed Later"]["release_cost"] == severance_fee_for(signed)
+
+
+@pytest.fixture
+def bidder_manager(db) -> User:
+    return User.objects.create_user(email="bidder-manager@example.com", password="s0meth1ng-good")
+
+
+@pytest.fixture
+def bidder_team(db, bidder_manager) -> Team:
+    return Team.objects.create(name="Bidder Team", code="BID", manager=bidder_manager)
+
+
+@pytest.fixture
+def bidder_client(bidder_manager) -> APIClient:
+    client = APIClient()
+    client.force_authenticate(user=bidder_manager)
+    return client
+
+
+def test_list_for_auction_requires_team(db):
+    manager = User.objects.create_user(email="no-team-auction@example.com", password="s0meth1ng-good")
+    client = APIClient()
+    client.force_authenticate(user=manager)
+
+    response = client.post("/api/transfers/auctions/list/", {"rider_id": 1})
+
+    assert response.status_code == 403
+    assert Auction.objects.count() == 0
+
+
+def test_place_bid_rejects_amount_above_balance_with_409(
+    market_client, market_team, bidder_client, bidder_team,
+):
+    make_ledger_entry(bidder_team, "starting_balance", 1_000, now(), "Starting balance")
+    rider = _market_rider(name="For Sale", team=market_team)
+    list_response = market_client.post(
+        "/api/transfers/auctions/list/", {"rider_id": rider.pk},
+    )
+    assert list_response.status_code == 204
+    auction = Auction.objects.get(rider=rider)
+
+    response = bidder_client.post(
+        f"/api/transfers/auctions/{auction.pk}/bid/", {"amount": auction.reserve_price},
+    )
+
+    assert response.status_code == 409
+    assert not auction.bids.exists()
+
+
+def test_auction_market_min_next_bid_is_the_reserve_itself_before_any_bid(
+    market_client, market_team,
+):
+    # place_bid accepts the reserve itself as the opening bid (spec items
+    # 3-4); min_next_bid must match that exactly, not the reserve plus an
+    # increment nobody has to clear yet.
+    rider = _market_rider(name="For Sale", team=market_team)
+    market_client.post("/api/transfers/auctions/list/", {"rider_id": rider.pk})
+    auction = Auction.objects.get(rider=rider)
+
+    response = market_client.get("/api/transfers/auctions/")
+
+    entry = response.data["auctions"][0]
+    assert entry["bids"] == []
+    assert entry["current_price"] == auction.reserve_price
+    assert entry["min_next_bid"] == auction.reserve_price
+
+
+def test_auction_market_shows_full_bid_history_with_team_identity(
+    market_client, market_team, bidder_client, bidder_team,
+):
+    make_ledger_entry(bidder_team, "starting_balance", STARTING_BALANCE, now(), "Starting balance")
+    rider = _market_rider(name="For Sale", team=market_team)
+    market_client.post("/api/transfers/auctions/list/", {"rider_id": rider.pk})
+    auction = Auction.objects.get(rider=rider)
+    bidder_client.post(
+        f"/api/transfers/auctions/{auction.pk}/bid/", {"amount": auction.reserve_price},
+    )
+
+    response = market_client.get("/api/transfers/auctions/")
+
+    assert response.status_code == 200
+    entry = response.data["auctions"][0]
+    assert set(entry) == {
+        "id", "rider", "current_price", "min_next_bid", "deadline", "is_own_listing", "bids",
+    }
+    assert entry["bids"] == [
+        {"team_name": bidder_team.name, "amount": auction.reserve_price, "placed_at": entry["bids"][0]["placed_at"]},
+    ]
+    assert entry["current_price"] == auction.reserve_price
+    assert entry["min_next_bid"] == auction.reserve_price + auction.min_increment
+
+
+def test_auction_market_orders_bid_history_newest_first(
+    market_client, market_team, bidder_client, bidder_team,
+):
+    make_ledger_entry(bidder_team, "starting_balance", STARTING_BALANCE, now(), "Starting balance")
+    rider = _market_rider(name="For Sale", team=market_team)
+    market_client.post("/api/transfers/auctions/list/", {"rider_id": rider.pk})
+    auction = Auction.objects.get(rider=rider)
+    bidder_client.post(
+        f"/api/transfers/auctions/{auction.pk}/bid/", {"amount": auction.reserve_price},
+    )
+    second_amount = auction.reserve_price + auction.min_increment
+    bidder_client.post(
+        f"/api/transfers/auctions/{auction.pk}/bid/", {"amount": second_amount},
+    )
+
+    response = market_client.get("/api/transfers/auctions/")
+
+    bids = response.data["auctions"][0]["bids"]
+    assert [b["amount"] for b in bids] == [second_amount, auction.reserve_price]
+
+
+def test_my_bids_shows_winning_status_when_high_bidder(
+    market_client, market_team, bidder_client, bidder_team,
+):
+    make_ledger_entry(bidder_team, "starting_balance", STARTING_BALANCE, now(), "Starting balance")
+    rider = _market_rider(name="For Sale", team=market_team)
+    market_client.post("/api/transfers/auctions/list/", {"rider_id": rider.pk})
+    auction = Auction.objects.get(rider=rider)
+    bidder_client.post(
+        f"/api/transfers/auctions/{auction.pk}/bid/", {"amount": auction.reserve_price},
+    )
+
+    response = bidder_client.get("/api/transfers/auctions/mine/")
+
+    assert response.status_code == 200
+    assert len(response.data) == 1
+    row = response.data[0]
+    assert row["auction_id"] == auction.pk
+    assert row["rider_name"] == "For Sale"
+    assert row["my_last_bid"] == auction.reserve_price
+    assert row["current_price"] == auction.reserve_price
+    assert row["is_high_bidder"] is True
+
+    # The seller never placed a bid — not their auction to track.
+    assert market_client.get("/api/transfers/auctions/mine/").data == []
+
+
+def test_my_bids_shows_outbid_status_when_someone_else_leads(
+    market_client, market_team, bidder_client, bidder_team,
+):
+    third_manager = User.objects.create_user(email="third-bidder@example.com", password="s0meth1ng-good")
+    third_team = Team.objects.create(name="Third Team", code="THR", manager=third_manager)
+    third_client = APIClient()
+    third_client.force_authenticate(user=third_manager)
+    make_ledger_entry(bidder_team, "starting_balance", STARTING_BALANCE, now(), "Starting balance")
+    make_ledger_entry(third_team, "starting_balance", STARTING_BALANCE, now(), "Starting balance")
+    rider = _market_rider(name="For Sale", team=market_team)
+    market_client.post("/api/transfers/auctions/list/", {"rider_id": rider.pk})
+    auction = Auction.objects.get(rider=rider)
+    bidder_client.post(
+        f"/api/transfers/auctions/{auction.pk}/bid/", {"amount": auction.reserve_price},
+    )
+    higher = auction.reserve_price + auction.min_increment
+    third_client.post(
+        f"/api/transfers/auctions/{auction.pk}/bid/", {"amount": higher},
+    )
+
+    response = bidder_client.get("/api/transfers/auctions/mine/")
+
+    assert len(response.data) == 1
+    row = response.data[0]
+    assert row["my_last_bid"] == auction.reserve_price
+    assert row["current_price"] == higher
+    assert row["is_high_bidder"] is False
+
+    # The new high bidder sees themself winning.
+    winner_row = third_client.get("/api/transfers/auctions/mine/").data[0]
+    assert winner_row["is_high_bidder"] is True
+
+
+def test_my_bids_excludes_a_resolved_auction(
+    market_client, market_team, bidder_client, bidder_team,
+):
+    from transfers.services import resolve_auction
+
+    make_ledger_entry(bidder_team, "starting_balance", STARTING_BALANCE, now(), "Starting balance")
+    rider = _market_rider(name="For Sale", team=market_team)
+    market_client.post("/api/transfers/auctions/list/", {"rider_id": rider.pk})
+    auction = Auction.objects.get(rider=rider)
+    bidder_client.post(
+        f"/api/transfers/auctions/{auction.pk}/bid/", {"amount": auction.reserve_price},
+    )
+
+    resolve_auction(
+        auction, at=auction.deadline,
+        charge_buyer=lambda *a, **kw: None, pay_seller=lambda *a, **kw: None,
+    )
+
+    response = bidder_client.get("/api/transfers/auctions/mine/")
+
+    assert response.data == []
+
+
+def test_my_bids_query_count_is_constant(
+    market_team, bidder_client, bidder_team, django_assert_max_num_queries,
+):
+    make_ledger_entry(bidder_team, "starting_balance", STARTING_BALANCE, now(), "Starting balance")
+
+    from transfers.services import list_for_auction
+
+    def _list_and_bid(rider_name: str) -> None:
+        rider = _market_rider(name=rider_name, team=market_team)
+        auction = list_for_auction(market_team, rider.pk, at=now())
+        bidder_client.post(
+            f"/api/transfers/auctions/{auction.pk}/bid/", {"amount": auction.reserve_price},
+        )
+
+    _list_and_bid("Rider One")
+
+    with django_assert_max_num_queries(10):
+        response = bidder_client.get("/api/transfers/auctions/mine/")
+    assert response.status_code == 200
+    assert len(response.data) == 1
+
+    for i in range(2, 6):
+        _list_and_bid(f"Rider {i}")
+
+    with django_assert_max_num_queries(10):
+        response = bidder_client.get("/api/transfers/auctions/mine/")
+    assert response.status_code == 200
+    assert len(response.data) == 5
 
 
 # --- rider profile ---

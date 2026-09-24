@@ -563,6 +563,26 @@ def charge_transfer_fee(team, *, amount: int, at, description: str) -> LedgerEnt
     )
 
 
+def pay_transfer_income(team, *, amount: int, at, description: str) -> LedgerEntry:
+    """Credit `team` income from a transfer-market sale. Returns the row.
+
+    Same Kind as charge_transfer_fee (TRANSFER_FEE) — a sale is still
+    "money moved for a transfer reason," told apart by description and
+    sign, not a fourth Kind (Design decision 4). `amount` is POSITIVE
+    here, the mirror image of charge_transfer_fee's negative-only
+    contract — a separate function so that contract is never silently
+    violated by a caller passing a positive amount into
+    charge_transfer_fee instead.
+    """
+    return LedgerEntry.objects.create(
+        team=team,
+        kind=LedgerEntry.Kind.TRANSFER_FEE,
+        amount=amount,
+        occurred_at=at,
+        description=description,
+    )
+
+
 def write_salary_reviews(season, changes: list[dict]) -> int:
     """One SalaryReviewReport per managed team for a closed season.
 

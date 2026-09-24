@@ -73,7 +73,7 @@ a millisecond apart would almost never compare equal.
 ## How a tick works
 
 `manage.py tick` — the only entry point cron, or a developer, ever calls —
-reads `now()` once, then finds and processes whatever is due, in four steps:
+reads `now()` once, then finds and processes whatever is due, in five steps:
 
 0. **Transitions** — `schedule.services.process_transitions(at)` records any
    season boundary crossed at or before `now()` that hasn't been recorded
@@ -220,7 +220,24 @@ count of teams released lands on `TickRun.teams_released`.
    rows themselves (not a clock row — there is no longer one to lock in
    production): every `scheduled` race whose `starts_at` is at or before
    `now()` is flipped to `running`, up to `catch_up_max_races` at a time.
-3. **Execute** — outside any transaction: simulate each claimed race,
+3. **Auctions** (#28) — `world.services._resolve_expired_auctions(at)`
+   resolves every auction `transfers.services.due_auctions(at)` returns.
+   **This is the one step in the whole tick that is not keyed to a week
+   boundary.** Every other per-week economic step above runs inside
+   `for transition in weeks:` and is skipped entirely on a tick that
+   crosses no week; auction resolution runs unconditionally, once per
+   tick, every time, because an auction's deadline is wall-clock real time
+   by design (`transfers/README.md`, *Auctions* — it decouples the market
+   from the race calendar and stays fair across timezones). A hard week
+   with zero transitions must still resolve a due auction. It supplies
+   `resolve_auction`'s two callbacks, since `transfers/` may not import
+   `economy/`: `charge_transfer_fee` (negative) debits the winner,
+   `pay_transfer_income` (positive) credits the seller — the same injected
+   shape `sign_free_agent`'s `charge` uses. Placed after race claiming and
+   before `TickRun` is created, so a won auction's roster change cannot
+   interfere with a squad already locked in for this tick's races.
+   `TickRun.auctions_sold` / `auctions_unsold` count the outcomes.
+4. **Execute** — outside any transaction: simulate each claimed race,
    record its result, then score it (`competitions.services.score_race`),
    then pay its prize money (`economy.services.pay_race_prizes`).
 
