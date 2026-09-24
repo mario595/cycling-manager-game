@@ -64,22 +64,30 @@ requests an ad-hoc `to_engine_rider` override that bypasses it).
 
 ### What they are
 
-A log is a JSONL file, one entry per tick, each entry holding the full state of
-every rider. The race player consumes it whole; nothing else reads it. See
-`race_player/README.md` for the consumer's expectations.
+A log is a brotli-compressed JSONL file: one header line holding everything
+constant for the race, then a sampled tick-by-tick payload. The race player
+consumes it whole; nothing else reads it. See `race_player/README.md` for the
+consumer's expectations and the header/sample layout.
 
 ### Where they live
 
 Logs are **never** stored in the database. They are megabytes per race and grow
-with distance x rider count — an 18 km test race with a small field already
-produces ~5.5 MB. Free-tier Postgres is 0.5–1 GB total; a handful of races
-would fill it.
+with distance x rider count — the old uncompressed format ran an 18 km test race
+to ~5.5 MB and `mountain_stage.jsonl` to 75.7 MB; the header + sampled, brotli-
+compressed `.jsonl.br` format takes the same mountain stage to ~0.75 MB.
 
 Instead:
 
 - The file is written through **Django's storage API** (`FileField` /
-  `default_storage`), never with a raw `open()`.
-- `RaceLog` holds only the pointer plus metadata (tick count, size).
+  `default_storage`), never with a raw `open()`. The engine writes its stream to
+  a temp file (it may not learn about Django); `simulate_race` hands the finished
+  `.jsonl.br` bytes to storage and the `sample_count`/`tick_interval` pair comes
+  back from the engine rather than by counting lines of a binary stream.
+- `RaceLog` holds only the pointer plus metadata: `sample_count` (written
+  samples, not race seconds), `tick_interval` (the race seconds between samples,
+  mirrored from the header so admin can read a log without opening it) and
+  `size_bytes` (the **compressed** size). `tick_interval` is the second clock
+  anyway — stored once here so admin does not decompress a file just to learn it.
 - Development writes to the local filesystem under `MEDIA_ROOT`.
 
 Because nothing touches file paths directly, moving logs to object storage is a
@@ -88,34 +96,28 @@ hurt, **Cloudflare R2** is the frugal target: 10 GB free and, unusually, zero
 egress fees — and egress is what actually costs money when players watch
 replays.
 
-### Planned: slim and compress the log format — NOT YET DONE
+### The slimmed, compressed format (#88)
 
-Tracked as [#88](https://github.com/mario595/cycling-manager/issues/88).
+Tracked as [#88](https://github.com/mario595/cycling-manager/issues/88). One
+header line, then sampled positional arrays, brotli-compressed. The full spec is
+in `race_engine/README.md`; the short version:
 
-The current format is knowingly wasteful. Deferred deliberately; do it before
-storage becomes a real problem, not after.
-
-The redundancy is large and easy to remove:
-
-- `segments` and `teams` are written identically on **every** line. They are
-  static for the whole race and belong in a header on line 1 only.
-- Per-tick rider entries repeat `name`, `team` and `role`, none of which
-  change. Only the id is needed after the header.
-- Ticks are 1 second. The player almost certainly cannot show the difference
-  between 1 s and 2 s sampling.
-
-Measured on `race_player/public/mountain_stage.jsonl` — 75.7 MB, 18,961 lines,
-16 riders — the repetition alone is ~26.6 MB (35%): 5.8 MB of `segments`,
-3.8 MB of `teams`, 17.0 MB of per-rider `name`/`team`/`role`.
-
-**gzip alone takes the file to 3.6% of its size** (~2.7 MB), because the
-repetition is so regular. It is the highest-leverage change and needs no format
-change at all. That single change makes every storage question easier, so it
-comes first.
-
-Worth pairing with [#70](https://github.com/mario595/cycling-manager/issues/70) (course markers), which adds a new kind of log
-record and already requires touching the format — doing both at once changes the
-format and `race_player/` once rather than twice.
+- **Header (line 1):** `v`, `tick_interval`, `course_length`, `segments`,
+  `teams`, `riders` (identity only: id, name, team, role) and `wind_band` when
+  wind is enabled. `v` lets a future format change be detected rather than
+  mis-parsed.
+- **Samples (every later line):** `[time, riders, wind?]`, one positional array
+  per rider in header order — the array index *is* the rider identity. Values
+  are rounded to screen precision; `finish_time` is deliberately **not** snapped
+  to the sample grid, or a bunch sprint would manufacture ties that contradict
+  `RaceResult.finish_time`.
+- **Sampling:** the first tick, every `tick_interval` ticks, and any tick where
+  a `finished` flag changes — a finish is never invisible, only its exact
+  instant is quantised. Default interval is 2 s.
+- **Compression:** written brotli (quality 5) by the engine through an
+  incremental compressor; the stored file keeps the `.jsonl.br` extension. A
+  future HTTP endpoint must serve it with `Content-Encoding: br` — the player
+  fetches the file by name and relies on the browser to decode it.
 
 ### Rejected: regenerating logs from a seed
 
@@ -274,7 +276,7 @@ what recovers the ground, once per week in `world/`.
 ## Squads
 
 Before a race, a manager picks which four of their team's riders start and
-which one leads — see `specs/squad-selection.md` (now folded in here) for the
+which one leads — see `specs/archive/squad-selection.md` (now folded in here) for the
 player-facing feature. Two models record the choice:
 
 - **`RaceSquad(race, team)`** — one row per team per race, plus

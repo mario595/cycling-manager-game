@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('economy', '0008_alter_ledgerentry_kind'),
+        ('economy', '0009_salaryreviewreport'),
     ]
 
     operations = [

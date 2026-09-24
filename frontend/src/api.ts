@@ -260,11 +260,34 @@ export interface Rider {
   release_cost: number | null
 }
 
+/** One rider's wage movement at a season close, whole credits. The keys map
+ * from the stored "from"/"to" via source= server-side — a SPA could never
+ * read a key named `from` (it is a JavaScript keyword). */
+export interface SalaryChange {
+  rider_id: number
+  rider_name: string
+  from_value: number
+  to_value: number
+}
+
+/** What a season close's re-pricing did to the wage bill: the running total
+ * before and after, plus each rider whose wage moved by at least the report
+ * threshold. `null` on the roster response until the first season has
+ * closed. */
+export interface SalaryReview {
+  season_number: number
+  payroll_before: number
+  payroll_after: number
+  changes: SalaryChange[]
+}
+
 /** The caller's own team's roster: every rider plus the squad's total
- * market value (#31) — a single response so the two can never disagree. */
+ * market value (#31) — a single response so the two can never disagree —
+ * and the latest post-season salary review when one exists. */
 export interface Roster {
   riders: Rider[]
   squad_value: number
+  salary_review: SalaryReview | null
 }
 
 export async function getRiders(): Promise<Roster> {

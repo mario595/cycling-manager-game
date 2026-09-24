@@ -13,8 +13,9 @@ def main(argv: list[str]) -> int:
     """Entry point.
 
     `python -m race_engine config.json [--seed N]` runs a race from a config
-    file, writing the JSONL log to `race_player/public/<name>.jsonl`.
-    `--seed N` makes the run reproducible.
+    file, writing the brotli-compressed JSONL log to
+    `race_player/public/<name>.jsonl.br`. `--seed N` makes the run
+    reproducible.
     """
     if not argv:
         print("usage: python -m race_engine <config.json> [--seed N]")
@@ -40,7 +41,7 @@ def main(argv: list[str]) -> int:
             print("error: --seed requires an integer", file=sys.stderr)
             return 2
 
-    log_path = str(_PUBLIC_DIR / (Path(arg).stem + ".jsonl"))
+    log_path = str(_PUBLIC_DIR / (Path(arg).stem + ".jsonl.br"))
     _PUBLIC_DIR.mkdir(parents=True, exist_ok=True)
 
     try:
@@ -49,7 +50,7 @@ def main(argv: list[str]) -> int:
         print(f"error: {exc}")
         return 1
 
-    results = run_race(
+    results, sample_count, tick_interval = run_race(
         cfg["riders"],
         cfg["course"],
         log_path=log_path,
@@ -59,7 +60,10 @@ def main(argv: list[str]) -> int:
         wind=cfg["wind_enabled"],
         wind_band=cfg["wind_band"],
     )
-    print(f"Log saved to: {log_path}")
+    print(
+        f"Log saved to: {log_path} "
+        f"({sample_count} samples every {tick_interval}s)"
+    )
     print()
     print("Results:")
     for i, rs in enumerate(results, 1):

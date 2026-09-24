@@ -102,9 +102,13 @@ def run_race_via_adapter(
     team_codes: dict[str, dict[str, str]],
     wind: bool,
     wind_band: str | None,
-) -> list[RiderState]:
+) -> tuple[list[RiderState], int, int]:
     """Call the engine's `run_race`. Exists so `racing/services.py` can run a
     race without importing `race_engine` — see this file's module docstring.
+
+    Returns the engine's ``(states, sample_count, sample_interval)`` untouched:
+    the adapter is still the only import of the engine, and the caller records
+    the log metadata straight from it.
     """
     from race_engine.models import run_race
 

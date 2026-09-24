@@ -3,6 +3,9 @@ django>=5.0
 djangorestframework>=3.15
 whitenoise>=6.6
 
+# Race logs are stored brotli-compressed — see racing/README.md.
+brotli>=1.1
+
 # PostgreSQL driver. Needed everywhere: dev runs Postgres too, via
 # docker-compose.yml.
 psycopg2-binary>=2.9

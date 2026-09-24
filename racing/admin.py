@@ -11,7 +11,7 @@ class RaceAdmin(admin.ModelAdmin):
 
 @admin.register(RaceLog)
 class RaceLogAdmin(admin.ModelAdmin):
-    list_display = ("race", "tick_count", "size_bytes")
+    list_display = ("race", "sample_count", "tick_interval", "size_bytes")
 
 
 @admin.register(RaceResult)

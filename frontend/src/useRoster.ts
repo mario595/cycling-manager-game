@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 
-import { getRiders, type Rider } from './api'
+import { getRiders, type Rider, type SalaryReview } from './api'
 
 interface RosterState {
   riders: Rider[] | null
   squadValue: number | null
+  salaryReview: SalaryReview | null
   loading: boolean
   error: boolean
   refresh: () => void
@@ -24,6 +25,7 @@ interface RosterState {
 export function useRoster(): RosterState {
   const [riders, setRiders] = useState<Rider[] | null>(null)
   const [squadValue, setSquadValue] = useState<number | null>(null)
+  const [salaryReview, setSalaryReview] = useState<SalaryReview | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
   const cancelledRef = useRef(false)
@@ -34,6 +36,7 @@ export function useRoster(): RosterState {
         if (cancelledRef.current) return
         setRiders(data.riders)
         setSquadValue(data.squad_value)
+        setSalaryReview(data.salary_review)
         setError(false)
         setLoading(false)
       })
@@ -55,5 +58,5 @@ export function useRoster(): RosterState {
     }
   }, [])
 
-  return { riders, squadValue, loading, error, refresh: fetchRiders }
+  return { riders, squadValue, salaryReview, loading, error, refresh: fetchRiders }
 }

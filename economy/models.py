@@ -320,3 +320,52 @@ class SponsorContract(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.team} — {self.sponsor_name} contract ({self.profile})"
+
+
+class SalaryReviewReport(TimeStampedModel):
+    """What a season close's re-pricing did for one team's wage bill.
+
+    A convenience snapshot for the Roster screen, written the moment the
+    re-pricing happens — the stored salary afterwards cannot tell you what
+    it was before. Living in economy/ because it is a statement about a
+    team's wage bill (economy/README.md, *Salary review*); `season` is a
+    string reference so economy/models.py needs no import of schedule/
+    (AGENTS.md), the same pattern SponsorOffer/SponsorContract use.
+    """
+
+    team = models.ForeignKey(
+        "teams.Team",
+        on_delete=models.CASCADE,
+        related_name="salary_reviews",
+        help_text="A deleted team's reviews go with it.",
+    )
+    season = models.ForeignKey(
+        "schedule.Season",
+        on_delete=models.CASCADE,
+        related_name="salary_reviews",
+        help_text="The season that just closed.",
+    )
+    changes = models.JSONField(
+        default=list,
+        help_text=(
+            '[{"rider_id", "rider_name", "from", "to"}], whole credits. Only '
+            "riders whose wage moved by at least the report threshold. An "
+            "empty list is normal and valid."
+        ),
+    )
+    payroll_before = models.PositiveIntegerField(
+        help_text="Team's total weekly wage bill before re-pricing.",
+    )
+    payroll_after = models.PositiveIntegerField(
+        help_text="Team's total weekly wage bill after re-pricing.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["team", "season"], name="one_salary_review_per_team_per_season",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.team}, {self.season}"

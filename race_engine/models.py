@@ -852,7 +852,14 @@ def run_race(
     team_codes: dict[str, dict[str, str]] | None = None,
     wind: bool = True,
     wind_band: str | None = None,
-) -> list[RiderState]:
+) -> tuple[list[RiderState], int, int]:
+    """Run a race and return the results plus the log's sampling metadata.
+
+    Returns ``(results, sample_count, sample_interval)``. ``sample_count``
+    counts the sample lines the logger wrote (0 when no log was requested);
+    ``sample_interval`` is the race seconds between samples. Together they let
+    a caller record what the log contains without reading it back.
+    """
     from .race_logger import RaceLogger
 
     validate_team_leaders(riders)
@@ -905,4 +912,4 @@ def run_race(
             flush=True,
         )
 
-    return state.get_results()
+    return state.get_results(), (logger.sample_count if logger else 0), (logger.sample_interval if logger else 0)

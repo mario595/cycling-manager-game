@@ -92,19 +92,32 @@ that had already moved.
 
 Follow **Bringing master in** below, then come back here.
 
-### 6. Record the baseline — before you change any file
+### 6. Check the environment works
+
+**Do not run the full suite here.** CI runs it on every push to master, so the
+branch you just merged is green by construction. What CI cannot tell you is
+whether *this machine* is set up: Postgres up on 5433, this worktree's database
+created, the main checkout's interpreter resolving from inside a worktree.
+
+Two quick commands prove all of that in seconds:
 
 ```bash
-PYTEST
+/home/mario/dev/cycling-manager/.venv/bin/python scripts/dev_db.py
+/home/mario/dev/cycling-manager/.venv/bin/python manage.py migrate
+PYTEST race_engine
 ```
 
-Write down the result: how many passed, how many failed. That is your baseline,
-taken **after** the merge, so it measures the branch you are actually about to
-build on — current master plus this ticket's spec and plan commits.
+`migrate` exercises the interpreter, the settings, the connection and the
+schema. `race_engine` is 51 plain-Python tests with no database, under a second,
+so a failure there means something is wrong with the checkout itself rather than
+with the database.
 
-**If anything fails now, stop and report it.** Do not start work in a red repo —
-you will not be able to tell your breakage from the breakage that was already
-there.
+**If either fails, stop and ask.** Do not start work in an environment you have
+not proved, and do not "fix" it by editing settings.
+
+There is no baseline number to carry. Because master is green when you start,
+the rule for the rest of this document is simply: **the suite must be green**.
+Any failure after this point is yours.
 
 ## The loop
 
@@ -160,9 +173,9 @@ PYTEST path/to/test_file.py
 PYTEST
 ```
 
-Compare with the baseline. The count must be **the same or better**. Any test
-that passed before and fails now is a regression **you** caused. Fix it before
-going any further.
+**It must be green.** You started from a green tree, so any failure is yours.
+Fix it before going any further — do not carry a red suite into the next work
+item, and do not tell yourself it was probably already broken.
 
 Three things you must not do to get green:
 
@@ -205,7 +218,7 @@ Stop when:
 - the plan can be read **two reasonable ways** and they lead to different code;
 - you **cannot find an existing pattern** to copy;
 - a test fails and you **do not understand why** after one honest attempt;
-- the **baseline was not green**;
+- the **environment check failed** — migrations, the database, or the engine tests;
 - the **database will not start**;
 - doing what the plan says would **break a rule in `AGENTS.md`**;
 - you need a **package that is not in `requirements.txt`**;
@@ -228,7 +241,10 @@ you can see, and which you would pick.
 - Never write a `TODO` and move on. If you cannot do it, stop and ask.
 - Never leave commented-out code, or dead code you added.
 - Never add a dependency without asking.
-- Never edit `specs/<slug>.md`, or change a decision in the plan.
+- Never edit `specs/<slug>.md`, or change a decision in the plan — beyond
+  setting `Status: implemented` when the work is done.
+- **Never delete a spec or a plan.** They stay in `specs/` as the record of
+  why; the README carries what the code does now.
 - Never merge the pull request, and never merge your branch into master. (Merging master *into* your branch is required — see **Bringing master in**.)
 - Never end a work item with the suite red.
 
@@ -272,7 +288,17 @@ are the ones that get broken:
 
 1. Run the full suite one last time. It must be green.
 2. Do the plan's **Documentation update** section. It is not optional.
-3. Commit that documentation change.
+3. **Archive the spec and the plan.** Set `Status:` to `implemented` in both,
+   then move them into `specs/archive/`:
+
+   ```bash
+   git mv specs/<slug>.md specs/<slug>-plan.md specs/archive/
+   ```
+
+   Commit them with the documentation change, and fix any `specs/<slug>.md`
+   reference you just broke — a `README.md` pointing at the old path is a dead
+   link. Do **not** delete them: they are the record of why the feature is the
+   way it is. `README.md` is current and maintained; `specs/archive/` is frozen.
 4. **Bring master in again** — see below. You merged it before you started;
    master has probably moved since. Do this *before* the user tries it, so what
    they verify is what will actually merge.
@@ -331,7 +357,7 @@ are the ones that get broken:
    - the scenarios, so they stay in the conversation as well as the PR;
    - the branch name;
    - which work items are done (and any that are not, and why);
-   - tests added, and the baseline count versus the final count;
+   - tests added, and the suite's final state;
    - anything you had to stop and ask about;
    - anything you noticed that the plan did not cover.
 

@@ -6,6 +6,7 @@ import pytest
 
 from riders.generation import SPECIALITY_PROFILES
 from riders.models import ENGINE_ATTRIBUTES, Rider
+from riders.pricing import weekly_salary_for
 from riders.services import (
     FRESHNESS_FLOOR,
     FRESHNESS_MAX,
@@ -21,6 +22,7 @@ from riders.services import (
     freshness_multiplier,
     mark_team_change,
     recovery_amount,
+    reprice_all,
     training_deltas,
     weekly_deltas,
 )
@@ -349,6 +351,100 @@ def test_ageing_stops_at_the_model_maximum(db):
     rider.refresh_from_db()
 
     assert rider.age == 40
+
+
+def make_repriced_rider(name: str, salary_move: int) -> Rider:
+    """A rider whose stored salary is off the formula's value by
+    `salary_move`, so reprice_all() moves it by exactly that amount."""
+    rider = Rider.objects.create(
+        name=name,
+        speciality=Rider.Speciality.CLIMBER,
+        age=25,
+        climb=70,
+        sprint=40,
+        flat=40,
+        resistance=40,
+        positioning=40,
+    )
+    target = weekly_salary_for(rider)
+    rider.weekly_salary = target - salary_move
+    rider.save(update_fields=["weekly_salary"])
+    return rider
+
+
+def test_reprice_all_updates_every_rider_salary(db):
+    rider = Rider.objects.create(
+        name="Breakout Climber",
+        speciality=Rider.Speciality.CLIMBER,
+        age=25,
+        climb=70,
+        sprint=40,
+        flat=40,
+        resistance=40,
+        positioning=40,
+    )
+    expected = weekly_salary_for(rider)
+    rider.weekly_salary = 1200
+    rider.save(update_fields=["weekly_salary"])
+
+    changes = reprice_all()
+    rider.refresh_from_db()
+
+    assert changes[0]["to"] == expected
+    assert rider.weekly_salary == expected
+
+
+def test_reprice_all_reports_only_changes_over_threshold(db):
+    small = make_repriced_rider("Moved Fifty", salary_move=50)
+    large = make_repriced_rider("Moved Two Hundred", salary_move=200)
+
+    changes = reprice_all()
+
+    # D4: the write is unconditional — the 50-move rider is still stored at
+    # the exact formula value, even though it is not worth reporting.
+    small.refresh_from_db()
+    large.refresh_from_db()
+    assert small.weekly_salary == weekly_salary_for(small)
+    assert large.weekly_salary == weekly_salary_for(large)
+
+    returned = {change["rider_name"] for change in changes}
+    assert returned == {"Moved Two Hundred"}
+
+
+def test_reprice_all_returns_before_and_after(db):
+    rider = make_repriced_rider("Raised Rider", salary_move=200)
+
+    changes = reprice_all()
+
+    assert changes == [{
+        "rider_id": rider.pk,
+        "rider_name": "Raised Rider",
+        "team_id": rider.team_id,
+        "from": rider.weekly_salary,
+        "to": weekly_salary_for(rider),
+    }]
+
+
+def test_reprice_all_includes_free_agents(db):
+    rider = make_repriced_rider("Free Agent", salary_move=200)
+    rider.team = None
+    rider.save(update_fields=["team"])
+
+    changes = reprice_all()
+    rider.refresh_from_db()
+
+    assert changes[0]["team_id"] is None
+    assert rider.weekly_salary == weekly_salary_for(rider)
+
+
+def test_reprice_all_is_stable_when_nothing_changed(db):
+    make_repriced_rider("Stable Rider", salary_move=200)
+
+    first_run = reprice_all()
+    second_run = reprice_all()
+
+    assert len(first_run) == 1
+    assert second_run == []
 
 
 def test_freshness_multiplier_is_one_at_full():

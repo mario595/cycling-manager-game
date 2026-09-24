@@ -8,7 +8,7 @@ all reading the real API. No screen renders invented data.
 | Route | Screen | State |
 |-------|--------|-------|
 | `/` | Dashboard | Built — season, standings, next race and squad status from the API, no fixture data |
-| `/roster` | Roster | Built — filter, sort, rider detail panel, each rider's weekly salary, market value and release cost, a squad-value total, and the same freshness bar as squad selection, from the API, no fixture data |
+| `/roster` | Roster | Built — filter, sort, rider detail panel, each rider's weekly salary, market value and release cost, a squad-value total, the same freshness bar as squad selection, and the season-end salary review panel with the wage bill and each moved rider's old→new salary, from the API, no fixture data |
 | `/staff` | Staff | Built — hire/fire a trainer, with each trainer's fee and weekly salary, from the API, no fixture data |
 | `/sponsors` | Sponsors | Built — sign one of three sponsor offers, or see the signed contract, from the API, no fixture data |
 | `/finances` | Finances | Built — balance, weekly wage bill and ledger history from the API, no fixture data |
@@ -262,7 +262,7 @@ server would refuse.
 as a feature — and follows the same rule, composing `PageHeading`, `Card`,
 `CardHeader` and `Button` the way `Staff.tsx` does. Its shapes mirror the
 API's `TrainingState` payload exactly: the last-rollover changes panel and
-the focus picker are the two things `specs/weekly-training-focus.md` asks
+the focus picker are the two things `specs/archive/weekly-training-focus.md` asks
 for, with nothing invented around them.
 
 `Finances.tsx` likewise has **no mockup** — `design/` predates the economy

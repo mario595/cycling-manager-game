@@ -60,7 +60,7 @@ DRF routers and serializers that aggregate other apps' data for the SPA.
   `squad_value` is that same function summed over the response's own
   riders in Python, not a separate query, so the two numbers can never
   disagree (`transfers/README.md`, [#31](https://github.com/mario595/cycling-manager/issues/31)).
-  Since #29 each rider also carries `release_cost`
+Since #29 each rider also carries `release_cost`
   (`transfers.services.release_cost_for`, exact credits): 0 while the
   claim cooldown shields a rider inherited from the team's most recent
   claim, full severance once fewer than `CLAIM_COOLDOWN_WEEKS` in-season
@@ -70,6 +70,18 @@ DRF routers and serializers that aggregate other apps' data for the SPA.
   future second call site fails a test rather than 500ing in production.
   The weeks are counted by `_cooldown_weeks_opened` in `api/views.py`
   (0 for a never-claimed team) — the caller counts, never `transfers/`.
+  A third top-level key, `salary_review`, carries the team's most recent
+  season-end salary review or `null` when there isn't one (#26).
+  `economy.services.latest_salary_review` picks the newest by
+  `season__starts_at`, and the payload is `{season_number, payroll_before,
+  payroll_after, changes: [{rider_id, rider_name, from_value, to_value}]}`
+  — the wage-bill numbers are exact whole credits, and `changes` lists only
+  the riders whose salary moved by at least the threshold
+  (`riders.pricing.SALARY_REVIEW_THRESHOLD`); see
+  `economy/README.md`, *Salary review*. The change keys are exposed as
+  `from_value`/`to_value` because the stored document names them `from`/
+  `to` — a Python keyword that cannot be a serializer field name, hence
+  DRF's `source="from"` mapping.
   This response shape changed with #31: it was previously a bare array.
 - `GET /api/transfers/free-agents/` (`FreeAgentPoolSerializer`,
   `FreeAgentsView`) — the whole transfer market in one payload:

@@ -38,7 +38,9 @@ work item, then opens a PR and moves the ticket to **Implemented**; and
 **Closing a ticket:** once a ticket is implemented, before opening the pull
 request, update the `README.md` of every folder the feature touched with what
 was actually built. **Keep the spec and the plan.** Set the `Status:` line in
-each to `implemented` and commit them with the rest of the work.
+each to `implemented`, move both into `specs/archive/`, and commit them with the
+rest of the work. `specs/` is then only what is in flight; `specs/archive/` is
+everything already built.
 
 They are kept because they record *why*, which a `README.md` does not. A README
 says what the code does today; it does not say which alternative was rejected,
@@ -148,12 +150,12 @@ up front — an empty app is just noise. The table below marks which exist.
 | `racing/` | Racing | **built**, `README.md` | The seam between Django and the engine: race records, results, log storage, ORM↔dataclass adapter. |
 | `core/` | Core | **built** | Shared abstract models. Deliberately tiny. |
 | `accounts/` | Accounts | **built**, `README.md` | Custom `User`, login by email. Register, log in, log out. |
-| `riders/` | Riders | **built**, `README.md` | Persisted riders: engine attributes plus speciality, build, age, generation, the weekly age curve (growth/decline), trainer-driven weekly training, rider freshness (fatigue and weekly recovery), and a per-rider weekly salary set at generation and frozen for the season. |
+| `riders/` | Riders | **built**, `README.md` | Persisted riders: engine attributes plus speciality, build, age, generation, the weekly age curve (growth/decline), trainer-driven weekly training, rider freshness (fatigue and weekly recovery), and a per-rider weekly salary recomputed by `reprice_all()` at every season close and frozen in between. |
 | `teams/` | Teams | **built**, `README.md` | Teams, codes, colours, manager link, claiming an unmanaged team (which resets its ledger balance and fanbase via takeover entries), and releasing a managed team back to the pool with a private record of the spell (#62). Staff/tactics still to come. |
 | `transfers/` | Transfers | **built**, `README.md` | A rider's market value — a pure, unstored valuation reusing `riders/`'s `strength()` with its own age curve — plus the free-agent market: signing a teamless rider at 60% of value, releasing at 30% (free while the claim cooldown holds), and weekly expiry of long-unattached, bottom-quintile riders. No `models.py` — its schema lives on `Rider` and in `economy/`'s ledger. Buying/selling riders, auctions and contracts still to come. (The youth academy is a **development squad** and lives in `riders/`.) |
 | `competitions/` | Competitions | **built**, `README.md` | Race points, prize money and season standings, one Group. The prize table is computed here but written to `economy/`'s ledger. Divisions, multiple Groups, promotion/relegation, classifications and season history still to come. A **Division** is a tier; a **Group** is a parallel section within one. |
 | `schedule/` | Schedule | **built**, `README.md` | Seasons, their twelve weeks, and the race calendar declared within them. **Not** `calendar/` — that shadows the stdlib module. |
-| `economy/` | Economy | **built**, `README.md` | The append-only ledger: every team's balance is the sum of its `LedgerEntry` rows — starting balance, weekly wages (the sum of each rider's own weekly salary), race prize money, trainer hire fee and weekly trainer salary, merchandise income, sponsorship, claim takeover — and its fanbase, the sum of its `FanbaseEntry` rows. A team picks one of three fanbase-sized sponsor offers per season; its weekly payment then swings with race results inside a promised range. Budgets still to come. |
+| `economy/` | Economy | **built**, `README.md` | The append-only ledger: every team's balance is the sum of its `LedgerEntry` rows — starting balance, weekly wages (the sum of each rider's own weekly salary), race prize money, trainer hire fee and weekly trainer salary, merchandise income, sponsorship, claim takeover — and its fanbase, the sum of its `FanbaseEntry` rows. A team picks one of three fanbase-sized sponsor offers per season; its weekly payment then swings with race results inside a promised range. It also owns the season-end `SalaryReviewReport` (one per managed team per closed season), which records what repricing did to a team's wage bill. Budgets still to come. |
 | `staff/` | Staff | **built**, `README.md` | Trainers hireable from a shared pool into one fixed slot per team at a speciality-derived hire fee plus a weekly salary, plus the team's weekly training focus and its rollover report. Physios and scouts still to come. |
 | `world/` | World Simulation | **built**, `README.md` | The game clock and the tick (which charges each team its weekly wages and trainer salary, adjusts fanbase, pays merchandise income and sponsorship, generates each team's sponsor offer round on season open, and releases the team of any manager inactive for ten in-season weeks). AI team decisions still to come. |
 | `api/` | API | **built**, `README.md` | DRF routers aggregating each app's serializers and views. |
@@ -261,7 +263,7 @@ cycling-manager/
 
 ## Generated files
 
-Race logs (`*.jsonl`) are never source. They are gitignored; never commit them.
+Race logs (`*.jsonl.br`) are never source. They are gitignored; never commit them.
 
 Two ways they come into being, and the distinction matters:
 
@@ -272,9 +274,9 @@ Two ways they come into being, and the distinction matters:
   engine evolves, so re-running a stored seed on a newer engine will not
   reproduce the race it recorded. See `racing/README.md`.
 
-The log format is knowingly verbose and slimming it is planned work — the static
-header is repeated on every line, and a single mountain stage runs to 75 MB.
-Tracked as [#88](https://github.com/mario595/cycling-manager/issues/88); details in `racing/README.md`.
+The format is one brotli-compressed header line plus sampled positional ticks
+(#88) — `mountain_stage.jsonl.br` is ~0.75 MB, down from 75.7 MB. Details in
+`racing/README.md`.
 
 ## Displaying game money
 

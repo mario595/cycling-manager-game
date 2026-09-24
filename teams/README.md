@@ -57,7 +57,7 @@ If no unmanaged team exists, `claim_team` raises `NoTeamAvailable`. A second
 claim by an already-managing user is not checked here — `Team.manager` is a
 `OneToOneField`, so it raises `IntegrityError`; the caller
 (`api.views.ClaimTeamView`) checks first via `team_for()` so the happy path
-never relies on that exception. See `specs/claiming-a-team.md` (deleted once
+never relies on that exception. See `specs/archive/claiming-a-team.md` (deleted once
 this closed — see git history) for the product reasoning: the team's
 position, points and race history carry over unchanged (inherit the past),
 while its roster does not (reset the present).

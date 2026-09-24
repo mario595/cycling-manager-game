@@ -11,13 +11,14 @@ npm run dev
 
 Other scripts: `npm run build`, `npm run test` (vitest), `npm run lint` (oxlint).
 
-The player reads `.jsonl` logs from `public/`. Generate one from the repository
-root with `python -m race_engine race_engine/configs/<name>.json`, which writes
-straight into `race_player/public/`.
+The player reads brotli-compressed `.jsonl.br` logs from `public/`. Generate
+one from the repository root with `python -m race_engine
+race_engine/configs/<name>.json`, which writes straight into
+`race_player/public/`.
 
 ## Project Goals
 
-- **Primary:** Provide a sophisticated, interactive visualization of race logs (`.jsonl` files).
+- **Primary:** Provide a sophisticated, interactive visualization of race logs (`.jsonl.br` files).
 - **Design:** Mimic professional cycling visualizers like Strava or VeloViewer (elevation profile + rider markers).
 - **Integration:** Must be modular and portable enough to integrate into the future Django-based game web app.
 
@@ -34,49 +35,61 @@ straight into `race_player/public/`.
 ## Data Source & Format
 
 ### Input
-- **File:** `.jsonl` files in `public/` (produced by `race_engine`).
-- **Structure:** One JSON object per line, representing a full snapshot of the race at a specific tick (1 tick = 1 second).
+- **File:** `.jsonl.br` files in `public/` (produced by `race_engine`).
+  Brotli-compressed, so a log has no usable bytes until the browser decodes
+  it — the dev endpoint and the static server both serve it with
+  `Content-Encoding: br` (see *Running the visualizer*, below).
+- **Structure:** Line 1 is a header object holding everything constant for the
+  race; every later line is one **sampled** snapshot. Sampling is every
+  `tick_interval` race-seconds (the player multiplies tick indices by it to get
+  real time), and a tick where someone's `finished` flag changes is always
+  captured, so no finish is missed — only its exact instant is quantised. The
+  parser hard-rejects anything without a header or with an unsupported `v`.
+
+### The header (line 1)
+`{ "v": 1, "tick_interval": 2, "course_length": ..., "segments": [...],
+"teams": {...}, "riders": [...], "wind_band"? }`. `v` is the format version and
+must be understood or the parse fails loudly. The player uses `maxTicks =
+snapshots.length - 1` and `tickInterval` together to drive the clock; both the
+time display and the playback rate derive from `tickInterval`.
 
 ### Key Data Fields
-- **Segments:** Array of `{ length, gradient }` objects. Used to derive the elevation profile.
-- **Teams:** Top-level `teams` object on every tick line, sibling to
-  `course_length`/`segments` — **not** per-rider: `{ "t1": { "code": "ALP",
-  "name": "Alpine Racing" }, ... }`, a `team_id -> {code, name}` map. `code`
-  is the UCI-style 3-letter TV abbreviation; `name` is the full team name
-  (engine-enforced non-empty whenever a team block exists — see
-  `race_engine/config.py`'s `_parse_teams`). Written even when no teams are
-  configured (`"teams": {}`) — **optional** in TypeScript only because logs
-  predating this change lack the field entirely; `parseRaceLog` reads it
-  once from the first snapshot (both are static for the race) into
-  `ParsedRace.teamCodes`/`teamNames`, defaulting to `{}`. See `teamCode()`/
-  `teamName()` in `utils/teamColors.ts`.
-- **Riders:** Array of rider objects containing:
-  - `id`, `name`
-  - `team` (string team id, e.g. `t1`-`t4`) — **optional.** Absent on logs
-    predating team tactics; falls back to a neutral colour (`teamColor()` in
-    `utils/teamColors.ts`).
-  - `role` (`"leader"` | `"support"`) — **optional.** Absent riders default to
-    leader (`isLeader()` in `utils/teamColors.ts`), matching the engine's own
-    dataclass default. Exactly one leader per team when present.
+- **Segments:** Array of `{ length, gradient }` objects, in the header. Used to
+  derive the elevation profile.
+- **Teams:** In the header — `{ "t1": { "code": "ALP", "name": "Alpine
+  Racing" }, ... }`, a `team_id -> {code, name}` map. `code` is the UCI-style
+  3-letter TV abbreviation; `name` is the full team name (engine-enforced
+  non-empty whenever a team block exists — see `race_engine/config.py`'s
+  `_parse_teams`). Always present, even when empty (`"teams": {}`).
+  `parseRaceLog` reads it into `ParsedRace.teamCodes`/`teamNames`, defaulting
+  to `{}`. See `teamCode()`/`teamName()` in `utils/teamColors.ts`.
+- **Riders:** The header lists identity only — `id`, `name`, `team`, `role` —
+  in race order. Every sample references a rider **by array index**, so the
+  order never changes and a rider is never re-listed. Per-sample values:
   - `pos` (meters from start)
   - `speed` (m/s)
   - `energy`, `stamina` (0-100)
-  - `pulling`, `surging` (booleans) — `pulling` is set only for the rider
-    setting the pace at the front of a pack; there is no separate "drafting"
-    flag (shelter degree in a pack is continuous, not a meaningful boolean —
-    every non-pulling pack member is assumed to be benefiting to some
-    degree; see `race_engine/README.md`'s "Drafting & pack cohesion")
-  - `finished`, `finish_time`
-- **Wind:** Top-level `wind` object on a tick line, sibling to
-  `course_length`/`segments`: `{ "speed": 17.3, "angle": 214.6, "band":
-  "moderate" }`. `speed` is km/h; `angle` is degrees `[0, 360)`, **relative
-  to the rider, not a compass bearing** — `0` = headwind, `90` = crosswind
-  from the rider's right, `180` = tailwind, `270` = crosswind from the left;
-  `band` is `"calm" | "light" | "moderate" | "strong"`, constant for the
-  race. **Optional** — entirely absent (not `null`) when wind is disabled or
-  the log predates the feature; every current `public/*.jsonl` at the time
-  this was written predates it. See `race_engine/WIND_PLAN.md` for the
-  simulation side and the `Wind`/`WindBand` types in `types/race.ts`.
+  - flags bitmask — `1` pulling, `2` surging, `4` finished. `pulling` is set
+    only for the rider setting the pace at the front of a pack; there is no
+    separate "drafting" flag (shelter degree in a pack is continuous, not a
+    meaningful boolean — every non-pulling pack member is assumed to be
+    benefiting to some degree; see `race_engine/README.md`'s "Drafting & pack
+    cohesion")
+  - `finish_time`
+  Identity fields are on the header rider, never on the sample: `team` (string
+  team id, e.g. `t1`-`t4`, or `null` for a rider with no team, falling back to
+  a neutral colour — `teamColor()` in `utils/teamColors.ts`) and `role`
+  (`"leader"` | `"support"`, exactly one leader per team; `isLeader()` in
+  `utils/teamColors.ts`).
+- **Wind:** One `[speed, angle]` pair per **sample** (wind changes tick by
+  tick) when wind is on; `speed` is km/h, `angle` is degrees `[0, 360)`,
+  **relative to the rider, not a compass bearing** — `0` = headwind, `90` =
+  crosswind from the rider's right, `180` = tailwind, `270` = crosswind from
+  the left. The `band` (`"calm" | "light" | "moderate" | "strong"`) lives in
+  the **header** as `wind_band` — it is constant for the race and the parser
+  merges it with each sample's pair into the `Wind` object the compass renders.
+  Both are absent when wind is disabled. See `race_engine/WIND_PLAN.md` for
+  the simulation side and the `Wind`/`WindBand` types in `types/race.ts`.
 
 ### Elevation Derivation
 Since absolute altitude is not stored in the engine logs, it must be derived from the segment data (`utils/profile.ts`):
@@ -142,7 +155,7 @@ visualizer always agree on how a course looks.
 - **Keyboard:** `←` steps back, `→` steps forward, `Space` toggles play/pause.
 - **Speed Selector:** Options for x1, x2, x5, x10, x25, x50 playback speeds.
 - **Seek Slider:** Native `<input type="range">` (not antd `Slider`, see known issue below) spanning `0..maxTicks`; scrubs to any tick regardless of play state.
-- **Elapsed/Total Display:** Ticks (1 tick = 1s) formatted as `Hh Mm Ss / Hh Mm Ss` (hours/minutes omitted when zero).
+- **Elapsed/Total Display:** Race seconds (tick index × `tickInterval`) formatted as `Hh Mm Ss / Hh Mm Ss` (always the full `Hh Mm Ss` shape — even `0h 2m 4s` — since the digits are fixed-width tabular, not units that get dropped). A ~4 h race reads as ~4 h, not ~2 h — the display runs on the header's `tickInterval`, not on sample count. The raw `tick x / y` counters stay beside it for debugging.
 - **Logic:** `useEffect` with `setInterval` advances ticks based on selected speed.
 
 ### 3. Rider Leaderboard (Packs)
@@ -159,9 +172,9 @@ visualizer always agree on how a course looks.
 - **Team Colour Bar:** 3px left border on each row in the rider's team colour
   (`teamColor()`), cheap enough to survive rows re-sorting into packs every
   tick.
-- **Team Code Column:** The rider's 3-letter UCI code (`teamCode()`), coloured
-  to match the row's team colour bar. Shows `—` when the rider has no team or
-  the log predates team codes — same optional-field fallback as team colour.
+- **Team Code Column:** The rider's 3-letter UCI code (`teamCode()`) whenever
+  their `team` is set, coloured to match the row's team colour bar; shows `—`
+  for the teamless.
   Hovering the cell shows the full team name (`teamName()`) via a native
   `title` attribute — no custom tooltip component, since it's one line of
   plain text.
@@ -194,9 +207,9 @@ visualizer always agree on how a course looks.
 
 ### 4. File Explorer (Sidebar)
 - **Location:** `FileExplorer.tsx` — standalone dev tool, decoupled from player logic.
-- **Endpoint:** `GET /api/races` returns `{ files: [{ name, mtime }, ...] }` listing all `.jsonl` in `public/`, `mtime` as an ISO timestamp; the sidebar shows each file's last-modified date/time below its name.
+- **Endpoint:** `GET /api/races` returns `{ files: [{ name, mtime }, ...] }` listing all `.jsonl.br` in `public/`, `mtime` as an ISO timestamp; the sidebar shows each file's last-modified date/time below its name.
   - Dev: Vite plugin in `vite.config.ts` (middleware, not built into the app).
-  - Prod: custom `RaceHandler` in `serve_viewer.py` + copies all `.jsonl` into `dist/`.
+  - Prod: custom `RaceHandler` in `serve_viewer.py` + copies all `.jsonl.br` into `dist/`. Both paths also set `Content-Encoding: br` when serving a `.br` file — load-bearing, or the browser hands the player compressed bytes and `JSON.parse` throws on line 1.
 - **Refresh button:** Re-fetches the file list without page reload.
 - **Selection:** Clicking a file loads and parses it via `App.tsx`; the `RaceViz` component receives parsed data as a prop — zero coupling to the file system.
 
@@ -221,8 +234,10 @@ visualizer always agree on how a course looks.
   the `band` name is used only for the text label underneath. Two channels
   keep it readable for colour-blind viewers.
 - **Optional, absent means absent:** returns `null` when `wind` is
-  `undefined` (disabled races, or logs predating the feature) — no
-  placeholder, no "no wind data" box, layout collapses cleanly.
+  `undefined` (races run with wind disabled) — no placeholder, no "no wind
+  data" box, layout collapses cleanly. (Wind is only absent for disabled
+  races now: the format reads `wind_band` from the header and a per-sample
+  pair, so there are no stale predating-wind files to defend against.)
 - **Memoised** (`memo(WindCompass)`, matching `RiderMarker`/`PackMarker`) —
   it re-renders every tick.
 - Explicitly **not built**: animated particle streaks, a per-segment wind
@@ -237,7 +252,7 @@ visualizer always agree on how a course looks.
 ```
 race-player/
 ├── public/
-│   └── *.jsonl                 # Race data files (any number)
+│   └── *.jsonl.br               # Brotli-compressed race data files (any number)
 ├── src/
 │   ├── components/
 │   │   ├── RaceViz.tsx         # Main container: playback loop, keyboard, pack computation
@@ -245,10 +260,10 @@ race-player/
 │   │   ├── ElevationProfile.tsx# CourseChart + rider markers/blobs/tooltips via the overlay prop
 │   │   ├── RiderMarker.tsx     # Custom SVG circle marker (memoized), team colour + leader shape
 │   │   ├── PackMarker.tsx      # Segmented-ring pack blob (memoized): size, team composition, leader pips
-│   │   ├── PlaybackControls.tsx# Play/Pause, speed selector, tick counter, wind compass
+│   │   ├── PlaybackControls.tsx# Play/Pause, speed selector, elapsed/race-time readout, wind compass
 │   │   ├── RiderList.tsx       # Pack-grouped table with gap dividers, team colour bar, crown
 │   │   ├── WindCompass.tsx     # Fixed-bike/rotating-arrow wind readout (memoized)
-│   │   └── FileExplorer.tsx    # Dev sidebar: lists .jsonl, refresh, standalone
+│   │   └── FileExplorer.tsx    # Dev sidebar: lists .jsonl.br, refresh, standalone
 │   ├── types/
 │   │   └── race.ts             # TypeScript interfaces (Rider, Pack, ProfilePoint, Wind, etc.)
 │   ├── utils/
@@ -265,7 +280,7 @@ race-player/
 │   ├── App.tsx                 # Sidebar + dynamic file fetch (the only glue point)
 │   └── main.tsx
 ├── scripts/
-│   └── serve_viewer.py         # CLI tool: serves player + all .jsonl in public/ + /api/races
+│   └── serve_viewer.py         # CLI tool: serves player + all .jsonl.br in public/ + /api/races
 ├── package.json
 ├── vite.config.ts              # Plugins: React, Tailwind, race-file-listing dev endpoint
 └── tsconfig.json
@@ -304,7 +319,7 @@ App.tsx
 
 ### Current (Standalone)
 - Serve via `vite dev` (HMR + `/api/races` middleware) or `serve_viewer.py` (static build + `/api/races` handler).
-- Fetch any `.jsonl` from `public/` via the file explorer sidebar.
+- Fetch any `.jsonl.br` from `public/` via the file explorer sidebar.
 
 **The elevation chart is already integrated.** The frontend SPA's
 `CourseProfile.tsx` imports `CourseChart.tsx` and `utils/profile.ts`
