@@ -33,9 +33,9 @@ glance rather than five numbers to compare one at a time. Underneath, the
 same five attributes plotted as lines over time — flat at first for a rider
 who just joined the roster, with real movement appearing as seasons pass.
 Below that, every race the rider has started: the race, the date, who they
-were riding for at the time, where they finished, and how many points it
-was worth. A short strip of career numbers — races, wins, podiums, top tens,
-DNFs, total points — gives the season-to-date shape without counting rows.
+were riding for at the time, and where they finished. A short strip of
+career numbers — races, wins, podiums, top tens, DNFs — gives the
+season-to-date shape without counting rows.
 
 The same page opens from a race result: a manager watching the league table
 notices an opponent's rider keeps finishing in the top five and clicks their
@@ -72,9 +72,9 @@ wrong.
    selection.
 6. Race history: every race the rider has a recorded result for, newest
    first, showing the race name, its date, which team the rider was riding
-   for, their finishing position (or DNF), finish time, and points scored.
+   for, their finishing position (or DNF), and finish time.
 7. Career totals derived from that race history: races started, wins,
-   podiums, top-ten finishes, DNFs, and total points scored.
+   podiums, top-ten finishes, and DNFs.
 8. A rider with no race history yet shows that plainly rather than an empty
    table.
 9. A rider who can no longer be found (removed from the game) shows a page
@@ -101,9 +101,14 @@ wrong.
   who should start this race — belongs to squad selection, not a rider's own
   page. **No**, for this feature; may resurface once course suitability
   (#45) exists.
-- **Prize money on this page.** Prize money belongs to the team, not the
-  rider, and already appears on each race's own screen. This page shows
-  points, which are earned individually; not money, which is not. **No.**
+- **Prize money and race points on this page.** Both are team awards, not
+  individual ones — a race's points go to the team's single best-placed
+  finisher, and prize money is summed from the team's own placed riders
+  (`competitions/README.md`, `racing/README.md`). A rider's own row showing
+  either figure would misrepresent it as something they personally earned,
+  and a career total built from it would not agree with the team's own
+  standings. Both already appear on each race's own screen and on
+  Finances/League. **No.**
 - **Season-by-season summary.** Only one season has been played; a
   season-grouped view is indistinguishable from the flat race list until a
   second season exists. **Later.**
@@ -192,6 +197,12 @@ assuming it cannot happen.
 - The radar chart uses whole-number rings and points, matching the existing
   0–10 display scale precisely — it must not imply resolution the roster
   doesn't have.
+- Race points and prize money are dropped from the race-history rows and
+  the career strip. Both are team awards, computed for the team's single
+  best finisher or its placed riders as a group, not per individual rider;
+  a per-row points column would show a number the rider did not personally
+  earn and a career total that could not be reconciled against the
+  standings.
 - "Teams previously ridden for" is not a separate section; the race-history
   list already carries it per row once a rider changes teams, so a second
   list would be redundant.

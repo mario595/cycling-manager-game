@@ -31,17 +31,16 @@ of it yet.
   exactly one matching `RaceSquadRider`. `Rider.team` is the **current** team
   and changes when a rider is released or signed (#29). Releasing never
   deletes squad rows.
-- **Points** (`competitions.models.RacePoints`) are a **team** award: one row
-  per team per race, for the team's *best classified finisher*, with that
-  finisher's `position`. Positions are unique within a race
-  (`unique_position_per_race`), so `(race, team, position)` identifies the
-  scoring rider.
+- **Race points and prize money are team awards, not individual ones** — one
+  `competitions.models.RacePoints` row per team per race (its best classified
+  finisher only), and prize money summed from a team's placed riders'
+  `LedgerEntry` rows. The spec deliberately excludes both from this page for
+  exactly that reason (*Out of scope*); this plan does not touch
+  `competitions/` or the ledger at all.
 - **API** (`api/README.md`): only `api/` and `world/` may import across every
-  app (`AGENTS.md`, *Dependency direction*). `racing/` may not import
-  `competitions/`, which is why joining results to points belongs in `api/`.
-  Every endpoint is `IsAuthenticated` by default. `RaceDetailView` is the
-  precedent for "readable by any authenticated manager, not scoped to the
-  caller's team".
+  app (`AGENTS.md`, *Dependency direction*). Every endpoint is
+  `IsAuthenticated` by default. `RaceDetailView` is the precedent for
+  "readable by any authenticated manager, not scoped to the caller's team".
 - **Frontend** (`frontend/README.md`): inline styles, colours from
   `src/theme.ts`, money through `src/format.ts`'s `formatMoney`. Screens mock
   their data hooks in tests. Parameterised routes are explicit `<Route>`s in
@@ -53,8 +52,9 @@ of it yet.
 1. `GET /api/riders/<id>/` returns one rider's visible profile to any
    authenticated manager. That profile is identity, current team, freshness,
    salary, market value, attributes on the 0-10 scale, attribute history,
-   race history and career totals. It never includes a hidden trait. It
-   returns 404 for a rider that does not exist.
+   race history (team raced for, position, time) and career totals (starts,
+   wins, podiums, top tens, DNFs — no points, no prize money). It never
+   includes a hidden trait. It returns 404 for a rider that does not exist.
 2. `/riders/:riderId` in the SPA draws that profile: a radar, a five-line
    history chart, identity, freshness, a race-history list and a career
    strip. It has explicit empty states, and a "no longer in the game" state
@@ -96,19 +96,12 @@ because for a released or re-signed rider that is the wrong team for every
 past race. `RaceResultsView` currently does exactly that, and W2 fixes it
 there too, so the two screens agree about the same race.
 
-**D5. "Points" on a race row are the points that result earned for the
-rider's team.** That is `RacePoints.points` when the row for
-`(race, team-raced-for)` exists **and** its `position` equals this result's
-position. Otherwise it is 0.
-
-The spec's *Out of scope* rationale says points are "earned individually".
-They are not: `competitions.services.score_race` awards one row per team,
-for its best finisher only. The tempting alternative is
-`competitions.scoring.points_for(result.position)` for every row. That is
-**wrong**: a team's second-placed rider would show 15 points the team never
-received, and career totals would add up to more than the standings. The
-chosen rule keeps the spec's promise ("points scored") honest against the
-standings. Read `RacePoints`, the frozen award, never the current table.
+**D5. No points and no prize money anywhere on this page.** Both are team
+awards (see *Context you need*), not individual ones, and the spec cuts them
+explicitly. **Do not** add a `points` key to a race row or the career totals,
+and do not join to `competitions.RacePoints` or `economy.LedgerEntry` at all
+— this plan has no reason to import `competitions/` from `api/` for this
+feature.
 
 **D6. The career totals are computed in Python from the same list the page
 shows.** Do not use separate aggregate queries. This follows the
@@ -118,7 +111,6 @@ cannot disagree.
 - `wins`, `podiums` and `top_tens` count *finished* rows at position 1, ≤3
   and ≤10.
 - `dnfs` counts rows with `finish_time is None`.
-- `points` is the sum of D5.
 
 A DNF never counts as a podium, even though it carries a position.
 
@@ -201,7 +193,6 @@ No changes. No migrations. Everything is read from existing models:
 - `riders.Rider`
 - `riders.RiderAttributeSnapshot`
 - `racing.RaceResult`, `racing.RaceSquadRider` (with `squad__team`)
-- `competitions.RacePoints`
 - `schedule.Week` / `Season`, via `current_position`
 
 ## The payload
@@ -230,11 +221,10 @@ No changes. No migrations. Everything is read from existing models:
       "position": 2,
       "finish_time": 3642.0,                             // null = DNF
       "winner_time": 3600.0,                             // null only if nobody finished
-      "finished": true,
-      "points": 15                                       // D5
+      "finished": true
     }
   ],
-  "career": {"starts": 9, "wins": 1, "podiums": 3, "top_tens": 7, "dnfs": 1, "points": 52}
+  "career": {"starts": 9, "wins": 1, "podiums": 3, "top_tens": 7, "dnfs": 1}
 }
 ```
 
@@ -244,9 +234,10 @@ default).
 ## `api/rider_profile.py` (new)
 
 A module of plain functions that build the dict above for the serializer.
-It lives in `api/` because it joins `racing/` and `competitions/`, which
-only `api/` and `world/` may both import (D4, D5). Keeping it out of
-`views.py` makes it unit-testable without HTTP.
+It lives in `api/` because it joins `riders/`, `racing/` and `schedule/`,
+which only `api/` and `world/` may all import (`AGENTS.md`, *Dependency
+direction*). Keeping it out of `views.py` makes it unit-testable without
+HTTP.
 
 ```python
 def rider_profile(rider: Rider, *, at: datetime) -> dict: ...
@@ -262,7 +253,8 @@ the serializer maps them, plus the four added keys. It takes `at`, not
 
 `race_history` has a fixed number of queries, whatever the career length.
 The query shape below is where the natural first attempt goes wrong: a
-per-row `.rider.team` or a per-race `RacePoints` lookup.
+per-row `.rider.team` lookup, which reads the rider's **current** team
+instead of the team they raced for (D4).
 
 ```python
 def race_history(rider):
@@ -280,10 +272,6 @@ def race_history(rider):
             .filter(rider=rider, squad__race_id__in=race_ids)
             .select_related("squad__team")
     }
-    award = {
-        (p.race_id, p.team_id): p
-        for p in RacePoints.objects.filter(race_id__in=race_ids)
-    }
     winner_time = dict(
         RaceResult.objects
         .filter(race_id__in=race_ids, finish_time__isnull=False)
@@ -294,15 +282,13 @@ def race_history(rider):
     rows = []
     for r in results:
         team = team_by_race.get(r.race_id)
-        p = award.get((r.race_id, team.pk)) if team else None
-        earned = p.points if (p and r.finish_time is not None and p.position == r.position) else 0
         rows.append({...})
     return rows
 ```
 
 `team_by_race.get` may legitimately miss a row only for data written
 outside `simulate_race`, such as the admin or old fixtures. Ship `team:
-null` and `points: 0` in that case rather than raising.
+null` in that case rather than raising.
 
 `attribute_history`: one query,
 `rider.attribute_snapshots.select_related("week__season")`. Sort it in
@@ -323,8 +309,9 @@ as `None` for the baseline.
 - `CurrentWeekSerializer`: `season`, `week`.
 - `RiderRaceSerializer`: `race` (a nested `id`/`name`/`starts_at`), `team`
   (`allow_null=True`), `position`, `finish_time` (`allow_null`),
-  `winner_time` (`allow_null`), `finished`, `points`.
-- `CareerSerializer`: the six integers.
+  `winner_time` (`allow_null`), `finished`. No `points` field (D5).
+- `CareerSerializer`: `starts`, `wins`, `podiums`, `top_tens`, `dnfs`. No
+  `points` field (D5).
 - `RiderProfileSerializer(RiderSerializer)`: adds `team`
   (`allow_null=True`), `current_week` (`allow_null=True`),
   `attribute_history` (`many=True`), `races` (`many=True`) and `career`.
@@ -353,8 +340,9 @@ squad-derived team. Take one extra query,
 `RaceSquadRider.objects.filter(squad__race=race).select_related("squad__team")`,
 map `rider_id` to team, and use that map for the `team` key of each result
 row. The `select_related("rider__team")` becomes `select_related("rider")`.
-Nothing else in the view changes. `points` already comes from `RacePoints`,
-keyed by team, and was always correct.
+Nothing else in the view changes: `results[].team` becomes the team raced
+for, and the existing `points` list (each *team's* award from `RacePoints`,
+unrelated to this cut) is untouched.
 
 ## Frontend
 
@@ -434,12 +422,12 @@ This is the route component for `/riders/:riderId`. It reads `riderId` with
      `/wk`), market value (`formatMoney`), freshness (`n / 10`).
   3. A two-column grid that collapses to one column under ~720px: the
      `AttributeRadar` card and the `AttributeHistoryChart` card.
-  4. A career strip of six `StatTile`s: Races, Wins, Podiums, Top 10, DNF,
-     Points. These are plain numbers with **no `$`**, per `AGENTS.md`,
-     *Displaying game money*.
+  4. A career strip of five `StatTile`s: Races, Wins, Podiums, Top 10, DNF.
+     These are plain numbers with **no `$`**, per `AGENTS.md`, *Displaying
+     game money*. No points tile (D5).
   5. A "Race history" `Card` with one row per race: date, race name
      (`Link` to `/race/:id`), the team code raced for, the position (or `—`
-     when not finished), the time cell (D11) and the points (blank when 0).
+     when not finished), and the time cell (D11). No points column (D5).
      With no races, show one muted line: "No races yet."
 
 There are no action buttons (D12).
@@ -486,11 +474,10 @@ weeks and a finished race whose squads and results are written directly:
 - `test_rider_profile_race_team_is_team_raced_for_not_current_team`: the
   rider races for A, is then moved to B (`rider.team = b; save()`), and the
   row still says A.
-- `test_rider_profile_points_only_for_teams_scoring_rider`: two riders from
-  the same team finish 1st and 2nd. `score_race`. The 1st gets 20 and the
-  2nd gets 0.
 - `test_rider_profile_dnf_row_and_career_counts`: a DNF at position 3 counts
   as a start and a DNF, and does not count as a podium.
+- `test_rider_profile_has_no_points_field`: neither a race row nor `career`
+  carries a `points` key.
 - `test_rider_profile_winner_time_and_order_newest_first`.
 - `test_rider_profile_current_week_in_off_and_no_season`.
 - `test_rider_profile_query_count_is_constant`: with
@@ -542,7 +529,7 @@ Test `src/components/AttributeHistoryChart.test.tsx`, which is mostly
 ### W6 — `src/screens/RiderProfile.tsx`, `src/App.tsx`, `src/navigation.ts`: the page and route
 
 Test `src/screens/RiderProfile.test.tsx`, mocking `useRiderProfile`:
-- The full profile renders the name, team, `$` salary and value, the six
+- The full profile renders the name, team, `$` salary and value, the five
   career numbers and a race row with a `+gap`.
 - A free agent's subtitle says "Free agent".
 - A DNF row shows `—` and `DNF`.
@@ -550,6 +537,7 @@ Test `src/screens/RiderProfile.test.tsx`, mocking `useRiderProfile`:
 - `notFound` shows "no longer part of the game".
 - `error` shows "Couldn't load this rider."
 - No `button` is rendered (D12).
+- No points figure appears anywhere on the page (D5).
 
 In `src/navigation.test.ts`, test that `riderPath(7)` returns `'/riders/7'`
 and that `titleForPath('/riders/7')` returns `'Rider'`.
@@ -595,7 +583,8 @@ catches type drift the tests do not.
   - 404 on a missing rider;
   - the identity keys are inherited from `RiderSerializer`;
   - the team raced for comes from squads;
-  - the D5 points rule, with the reason it is not `points_for(position)`;
+  - that race points and prize money are deliberately absent — both are team
+    awards, not individual ones (`competitions/README.md`);
   - attribute history ordering, and that values are already display-scale;
   - `current_week`.
 
@@ -648,9 +637,9 @@ Then check each of these:
    row still shows the old team code. Open the rider's page: the race row
    still shows the old team, and the subtitle says "Free agent". Before W2,
    the results row would lose its team code, so this check can fail.
-3. **Points honesty.** For one finished race, the sum of the rider-page
-   points of every rider on a team equals that team's points on the race's
-   "Team points" table.
+3. **No points anywhere.** Neither a race row nor the career strip on the
+   rider page shows a points figure, even for a rider who scored heavily —
+   the race's own screen and the League table are still where points live.
 4. **Radar/graph agreement.** On a rider whose attributes moved during the
    ticks (see the Training screen's last-week list), the radar's value for
    that attribute equals the right-hand end of that attribute's line, and
@@ -666,8 +655,8 @@ Then check each of these:
 | Risk | Mitigation |
 |---|---|
 | Taking the team from `Rider.team`, the natural spelling, which silently mislabels every past race of a moved rider | D4. `test_rider_profile_race_team_is_team_raced_for_not_current_team`. Verification step 2. |
-| Showing `points_for(position)` per rider, which inflates totals past the standings | D5. `test_rider_profile_points_only_for_teams_scoring_rider`. Verification step 3. |
-| An N+1 over race rows (per-row team, points or winner-time lookups) that grows with career length | `race_history` has a fixed query shape. `test_rider_profile_query_count_is_constant`. |
+| Adding a per-rider points figure (race row or career total), which double-counts a team award as an individual one and cannot be reconciled against the standings | D5. `test_rider_profile_has_no_points_field`. Verification step 3. |
+| An N+1 over race rows (per-row team or winner-time lookups) that grows with career length | `race_history` has a fixed query shape. `test_rider_profile_query_count_is_constant`. |
 | A new hidden trait added to `Rider` later leaks through a hand-listed serializer | D3 inherits `RiderSerializer`. The exact-key-set test fails on any addition. |
 | Snapshot values passed through `to_display_scale` again, which turns 8 into 0 | Called out in the serializer section. `test_rider_profile_attribute_history_values_are_not_rescaled`. |
 | Ordering history by `created_at`, which the backfill made meaningless | D7. The ordering test creates rows out of `created_at` order. |
@@ -678,7 +667,4 @@ Then check each of these:
 
 ## Open questions
 
-None blocking. D5 corrects a factual slip in the spec's *Out of scope*
-wording ("points … earned individually"). The player-visible promise,
-"points scored", is kept, and the honest reading is implemented. Overrule it
-here if per-position points were really intended.
+None blocking.
