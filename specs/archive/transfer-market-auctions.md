@@ -1,6 +1,6 @@
 # Transfer market with rider auctions
 
-**Status:** proposed
+**Status:** implemented
 **Domain(s):** `transfers/`, `economy/`, `world/`
 **One-liner:** A manager can list any rider from their own roster for auction; other managers bid over a few real days, and the highest bid at the deadline buys the rider — money and rider changing hands automatically.
 

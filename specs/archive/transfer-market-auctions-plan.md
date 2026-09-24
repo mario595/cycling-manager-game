@@ -1,6 +1,6 @@
 # Transfer market with rider auctions — Implementation Plan
 
-**Spec:** `specs/transfer-market-auctions.md` · **Issue:** #28 · **Status:** proposed
+**Spec:** `specs/archive/transfer-market-auctions.md` · **Issue:** #28 · **Status:** implemented
 **Apps touched:** `transfers/` (first models + migration), `economy/`, `world/`, `api/`, `frontend/`
 
 ## Context you need
