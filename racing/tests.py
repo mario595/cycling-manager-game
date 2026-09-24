@@ -512,6 +512,57 @@ def test_only_selected_riders_appear_in_the_results(running_race):
         assert bench_rider.pk not in result_rider_ids
 
 
+def test_simulate_race_excludes_a_squad_member_sold_before_the_race_runs(running_race, team, four_riders):
+    # A listed rider keeps racing while the auction is live (spec item 9),
+    # so a manager will leave them in a saved squad — but if the auction
+    # resolves and moves the rider to the buyer before this race's own
+    # tick, the squad row still points at the seller. Racing them anyway
+    # would let the engine and score_race/prizes_by_team (both keyed off
+    # the rider's CURRENT team_id) credit the result to the buyer, not the
+    # team that actually fielded them.
+    running_race.status = Race.Status.SCHEDULED
+    running_race.save(update_fields=["status"])
+    set_squad(running_race, team, [r.pk for r in four_riders], four_riders[0].pk)
+    running_race.status = Race.Status.RUNNING
+    running_race.save(update_fields=["status"])
+
+    buyer = Team.objects.create(name="Team Bravo", code="BRA")
+    sold = four_riders[0]
+    sold.team = buyer
+    sold.save(update_fields=["team"])
+
+    results = simulate_race(running_race, game_time=timezone.now())
+
+    assert len(results) == 3
+    assert not RaceResult.objects.filter(race=running_race, rider=sold).exists()
+    assert {r.rider_id for r in results} == {r.pk for r in four_riders[1:]}
+
+
+def test_simulate_race_promotes_a_leader_when_the_picked_one_is_sold(running_race, team, four_riders):
+    # The engine requires exactly one leader per team present
+    # (race_engine.models.validate_team_leaders) — dropping the sold
+    # leader without promoting a replacement would crash the race for
+    # every team, not just leave the seller a rider short.
+    running_race.status = Race.Status.SCHEDULED
+    running_race.save(update_fields=["status"])
+    leader = four_riders[0]
+    set_squad(running_race, team, [r.pk for r in four_riders], leader.pk)
+    running_race.status = Race.Status.RUNNING
+    running_race.save(update_fields=["status"])
+
+    buyer = Team.objects.create(name="Team Bravo", code="BRA")
+    leader.team = buyer
+    leader.save(update_fields=["team"])
+
+    results = simulate_race(running_race, game_time=timezone.now())
+
+    # No exception, and the squad's own stored selection is untouched —
+    # this is a simulation-time-only workaround.
+    assert len(results) == 3
+    squad = RaceSquad.objects.get(race=running_race, team=team)
+    assert squad.members.get(rider=four_riders[1]).is_leader is False
+
+
 def test_the_squad_leader_races_as_leader(running_race, team, four_riders):
     # Name a rider other than the first as this race's leader. set_squad
     # refuses a started race, so pick the squad while scheduled, then flip
