@@ -7,7 +7,7 @@ from django.db import IntegrityError, transaction
 
 from riders.models import Rider
 from teams.models import Team
-from transfers.models import Auction
+from transfers.models import Auction, Bid
 
 
 def _rider(**overrides) -> Rider:
@@ -48,3 +48,48 @@ def test_one_open_auction_per_rider_constraint(db):
     _auction(rider, team, status=Auction.Status.SOLD)
 
     assert Auction.objects.filter(rider=rider).count() == 2
+
+
+def test_live_excludes_withdrawn_bids(db):
+    team = Team.objects.create(name="Team Alpha", code="ALP")
+    rider = _rider(team=team)
+    auction = _auction(rider, team)
+    now = datetime(2027, 3, 1, 0, 0, tzinfo=dt_timezone.utc)
+    live_bid = Bid.objects.create(
+        auction=auction,
+        bidder_team=team,
+        amount=50_000,
+        placed_at=now,
+    )
+    withdrawn_bid = Bid.objects.create(
+        auction=auction,
+        bidder_team=team,
+        amount=52_500,
+        placed_at=now + timedelta(minutes=1),
+        withdrawn_at=now + timedelta(minutes=2),
+    )
+
+    assert list(Bid.objects.live()) == [live_bid]
+    assert withdrawn_bid not in Bid.objects.live()
+
+
+def test_related_manager_supports_live(db):
+    team = Team.objects.create(name="Team Alpha", code="ALP")
+    rider = _rider(team=team)
+    auction = _auction(rider, team)
+    now = datetime(2027, 3, 1, 0, 0, tzinfo=dt_timezone.utc)
+    live_bid = Bid.objects.create(
+        auction=auction,
+        bidder_team=team,
+        amount=50_000,
+        placed_at=now,
+    )
+    Bid.objects.create(
+        auction=auction,
+        bidder_team=team,
+        amount=52_500,
+        placed_at=now + timedelta(minutes=1),
+        withdrawn_at=now + timedelta(minutes=2),
+    )
+
+    assert list(auction.bids.live()) == [live_bid]

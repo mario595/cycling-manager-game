@@ -16,8 +16,9 @@ passed, and the world responded.
 The single source of truth for what time it is in the game, and the machinery
 that finds and processes due work: `world/clocks.py` (`Clock`, `RealClock`,
 `MockClock`), `GameClock`, `TickRun`, and the `tick` and `mock_clock`
-management commands. No calendar, no AI decisions — later work for this app
-(see `AGENTS.md`).
+management commands. No calendar. It also owns **the AI market**
+(`world/ai_market.py`): what an unmanaged team bids on and what it lists
+when nobody is managing it — see *The AI market (#30)* below.
 
 The tick also records season and week boundaries as they're crossed, via
 `schedule.services.process_transitions()` and
@@ -73,7 +74,7 @@ a millisecond apart would almost never compare equal.
 ## How a tick works
 
 `manage.py tick` — the only entry point cron, or a developer, ever calls —
-reads `now()` once, then finds and processes whatever is due, in five steps:
+reads `now()` once, then finds and processes whatever is due, in six steps:
 
 0. **Transitions** — `schedule.services.process_transitions(at)` records any
    season boundary crossed at or before `now()` that hasn't been recorded
@@ -242,7 +243,16 @@ count of teams released lands on `TickRun.teams_released`.
    before `TickRun` is created, so a won auction's roster change cannot
    interfere with a squad already locked in for this tick's races.
    `TickRun.auctions_sold` / `auctions_unsold` count the outcomes.
-4. **Execute** — outside any transaction: simulate each claimed race,
+4. **The AI market** (#30) — `world.ai_market.place_ai_bids(at)`, and on a
+   tick that crossed at least one week `world.ai_market.list_ai_riders(
+   last_crossed_week, at)` before it. Both run **after** step 3, so the AI
+   never sees an auction this same tick is about to close, and listing runs
+   before bidding. Bidding runs on every tick because auction deadlines are
+   wall-clock; listing is week-keyed and uses the **last** week crossed, so a
+   tick catching up three weeks lists once, not three times. Counts land on
+   `TickRun.ai_bids_placed` / `ai_listings_created`
+   (`world/migrations/0015`). See *The AI market (#30)*.
+5. **Execute** — outside any transaction: simulate each claimed race,
    record its result, then score it (`competitions.services.score_race`),
    then pay its prize money (`economy.services.pay_race_prizes`).
 
@@ -318,6 +328,97 @@ Unlike the previous design, there is no "clock catching up" — the game's
 time is always the true current time. What can lag is *processing*: races
 that fell due while nothing was checking are still worked out, in order, the
 next time a tick runs.
+
+## The AI market (#30)
+
+`world/ai_market.py` is what an unmanaged team does in the auction market
+when no manager is telling it what to do. It lives here and not in
+`transfers/` because it needs a balance (`economy/`) and a manager
+(`teams/`), and `transfers/` may import neither. It is two pure decision
+helpers plus two orchestrators, and it writes nothing the auction market
+does not already own: it calls `place_bid` and `list_for_auction` like any
+other client of `transfers/`.
+
+**Buying** (`place_ai_bids`) — an unmanaged team bids on a human listing
+when all of these hold:
+
+- Nobody has bid on it yet. The AI **only ever bids the reserve** on an
+  auction with no live bid, never `current_price + min_increment`. With no
+  bids, the asking price *is* the reserve, and an AI bid above the reserve
+  would put it into a bidding war it is not equipped to win — worse, it
+  would reopen the buy-from-AI, sell-to-AI flip the spec closes, where a
+  managed team sells a rider, an AI team buys it at a premium, then the
+  managed team buys it straight back off the AI. `place_bid` re-checks the
+  minimum under its lock, so a reserve bid that lost a race with a human
+  comes back as `BidTooLow` and is skipped silently — a normal outcome, not
+  an error.
+- The seller is **managed**. The AI never bids on another unmanaged team's
+  listing: AI-to-AI trading is out of scope, and it guarantees the AI can
+  never hit `SelfBid`.
+- It wants the rider, judged on **visible attributes only**:
+  `riders.pricing.strength`, never `potential` or any other hidden trait —
+  a human must never be able to infer a rider's future from where the AI
+  bid. The rider is under `AI_AGEING_AGE` (the AI would list such a rider
+  straight back out), the roster plus pending wins is under `AI_MAX_ROSTER`,
+  and either the roster is **thin** (under `AI_MIN_ROSTER`) or the rider
+  would rank among the `AI_NEED_RANK` strongest of that speciality.
+- It can afford it. **Headroom** is half the balance
+  (`AI_CUSHION_FRACTION`), less the sum of its **pending wins** — the live
+  bids it is currently leading on open auctions — floored at zero. Nothing
+  is escrowed at bid time, so without subtracting commitments one team
+  could promise the same money to five auctions. A team with a zero or
+  negative balance never bids.
+- It is the best-placed team. When several want the same auction the bid
+  goes to the lowest `buyer_rank`: thin rosters first, then the team with
+  fewest riders of that speciality, then pk. Deterministic, and a tick
+  re-run gives the same answer.
+
+**Selling** (`list_ai_riders`) — on a tick that crosses a week, an unmanaged
+team lists at most one rider, and only on the weeks
+`(week.number + team.pk) % AI_LISTING_EVERY_WEEKS == 0` picks for it, so
+roughly a quarter of them list each week. It never has an open listing of
+its own, and never shrinks below `AI_MIN_ROSTER` — a team must stay a racing
+team. From the riders that have no open auction, no `UNSOLD` one within
+`AI_RELIST_COOLDOWN` (4 weeks, so the same unsold veteran does not reappear
+every month) and a reserve above zero, it lists:
+
+- its **weakest** candidate, if the roster is above `ROSTER_SIZE` (surplus);
+- otherwise its **oldest ageing** candidate that is **not** among the
+  `AI_NEED_RANK` strongest of their speciality — the veterans worth keeping
+  are exactly the ones not for sale;
+- otherwise nothing.
+
+| Constant | Value | Why |
+|---|---|---|
+| `AI_MIN_ROSTER` | 10 | Two and a half 4-rider squads: freshness rotation at one race a week, with slack. |
+| `AI_MAX_ROSTER` | 15 | Stops an AI team buying up to `ROSTER_CAP` (30). |
+| `AI_NEED_RANK` | 2 | "Among its stronger riders" means the top two of a speciality. |
+| `AI_AGEING_AGE` | 33 | About 20% of generated riders; value's career horizon has already fallen well below 1.0. |
+| `AI_CUSHION_FRACTION` | 0.5 | An AI team spends at most half its balance. |
+| `AI_LISTING_EVERY_WEEKS` | 4 | A trickle of AI sellers, not a flood. |
+| `AI_RELIST_COOLDOWN` | 4 weeks | Stops the same unsold rider reappearing monthly. |
+
+**Claiming a team stops the bidding.** `api/`'s claim endpoint withdraws
+every live bid the claimed team held, in the same transaction as the claim
+(`transfers/README.md`, *Withdrawal on claim*), so a new manager never
+inherits an in-progress purchase.
+
+**A failing AI market is recorded, never fatal.** Three levels, all landing
+on `TickRun.error`: a bid that raises for one auction is skipped and the pass
+continues; a listing that raises for one team is skipped and the other teams
+still list; and a failure *building* the buyer table — which reads every
+unmanaged team's ledger, before any per-auction guard exists — is caught
+around the whole AI step, so the tick still settles its week, charges wages
+and writes its `TickRun`. Losing a tick to the garnish would be a bad trade.
+
+**Balances, measured.** Unmanaged teams earn no wages, prize money or
+sponsorship; they only spend. A seeded season 1 left the average unmanaged
+team with about **$330,000**, and at roughly `12 × $1,200` a week of wages
+each team owes the market rather than the other way round, that is about
+**three seasons** before AI buying dries up. The fix when it bites is
+[#45](https://github.com/mario595/cycling-manager/issues/45)'s sponsorship,
+not a fatter cushion here: a cushion large enough to matter would also let
+AI teams bid away the human market.
 
 ## Running the tick
 

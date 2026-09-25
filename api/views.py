@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.db.models import Prefetch, Sum
 from django.http import Http404
 from django.shortcuts import get_object_or_404
@@ -68,6 +68,7 @@ from transfers.services import (
     place_bid,
     release_rider,
     sign_free_agent,
+    withdraw_bids,
 )
 from world.services import now
 
@@ -354,13 +355,16 @@ class ClaimTeamView(APIView):
 
         serializer = ClaimTeamSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        at = now()
         try:
-            team = claim_team(
-                request.user,
-                name=serializer.validated_data["name"],
-                code=serializer.validated_data["code"],
-                at=now(),
-            )
+            with transaction.atomic():
+                team = claim_team(
+                    request.user,
+                    name=serializer.validated_data["name"],
+                    code=serializer.validated_data["code"],
+                    at=at,
+                )
+                withdraw_bids(team, at=at)
         except NoTeamAvailable as exc:
             return Response({"detail": str(exc)}, status=409)
         except DjangoValidationError as exc:
@@ -561,7 +565,9 @@ class AuctionMarketView(APIView):
         auctions_qs = (
             Auction.objects.filter(status=Auction.Status.OPEN)
             .select_related("rider")
-            .prefetch_related(Prefetch("bids", queryset=Bid.objects.select_related("bidder_team")))
+            .prefetch_related(
+                Prefetch("bids", queryset=Bid.objects.live().select_related("bidder_team"))
+            )
         )
         auctions = []
         for auction in auctions_qs:
@@ -660,9 +666,13 @@ class MyBidsView(APIView):
         if team is None:
             return Response({"detail": "You do not manage a team."}, status=403)
 
-        my_bids = Bid.objects.filter(bidder_team=team).order_by("-amount", "-placed_at")
+        my_bids = Bid.objects.live().filter(bidder_team=team).order_by("-amount", "-placed_at")
         auctions = (
-            Auction.objects.filter(status=Auction.Status.OPEN, bids__bidder_team=team)
+            Auction.objects.filter(
+                status=Auction.Status.OPEN,
+                bids__bidder_team=team,
+                bids__withdrawn_at__isnull=True,
+            )
             .distinct()
             .select_related("rider")
             .prefetch_related(Prefetch("bids", queryset=my_bids, to_attr="my_bids"))

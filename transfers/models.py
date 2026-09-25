@@ -78,9 +78,15 @@ class Auction(TimeStampedModel):
         return f"{self.rider} — {self.get_status_display()} auction"
 
 
+class BidQuerySet(models.QuerySet):
+    def live(self):
+        return self.filter(withdrawn_at__isnull=True)
+
+
 class Bid(TimeStampedModel):
-    """One bid against an auction. Never mutated or deleted after creation
-    — the same append-only discipline `LedgerEntry`/`FanbaseEntry` use."""
+    """One bid against an auction. Append-only except for the one-way
+    `withdrawn_at` stamp set when a team is claimed: the row remains as
+    history, while live readers exclude the withdrawn intent."""
 
     auction = models.ForeignKey(Auction, on_delete=models.CASCADE, related_name="bids")
     bidder_team = models.ForeignKey(
@@ -90,6 +96,13 @@ class Bid(TimeStampedModel):
     )
     amount = models.PositiveIntegerField()
     placed_at = models.DateTimeField(help_text="Game time.")
+    withdrawn_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Game time the bid was withdrawn when its team was claimed. Never cleared.",
+    )
+
+    objects = BidQuerySet.as_manager()
 
     class Meta:
         ordering = ["-placed_at", "-pk"]

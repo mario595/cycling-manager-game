@@ -64,7 +64,16 @@ while its roster does not (reset the present).
 
 **A claim is atomic or it does not happen.** A half-claimed team — renamed
 but with no roster — must never be observable. Everything above runs inside
-one `transaction.atomic()`.
+one `transaction.atomic()`. `api/`'s `ClaimTeamView` widens that transaction
+to cover the auction-bid withdrawal that follows the claim
+(`transfers/README.md`, *Withdrawal on claim*), so a claimed team never
+exists even briefly with its old bids still live.
+
+**`seed_teams --claim-for` does not withdraw that team's bids.** It runs
+against freshly seeded teams, which have never bid on anything, and
+`teams/` may not import `transfers/` — so the seeding path skips a step that
+has nothing to do. Every real claim goes through the endpoint, which does
+withdraw.
 
 ## Releasing a team
 
