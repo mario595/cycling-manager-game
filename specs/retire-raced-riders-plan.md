@@ -477,7 +477,7 @@ Tests, `api/tests.py`, next to the existing rider-profile tests:
   list, and the retired rider is not in `riders`.
 - `test_signing_a_retired_rider_returns_409`.
 
-### W6 — `frontend/`: show "Retired · Season S, Week W"
+### W6 — `frontend/`: show "Retired · Season S, Week W" — done
 
 Tests, `frontend/src/screens/RiderProfile.test.tsx`:
 - `shows "Retired · Season 1, Week 11" in place of the team for a retired rider`

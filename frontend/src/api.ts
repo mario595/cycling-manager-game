@@ -422,6 +422,11 @@ export interface CurrentWeek {
   week: number
 }
 
+export interface RiderRetired {
+  season: number | null
+  week: number | null
+}
+
 /** One race-history row. `team` is the team the rider raced for, not their
  * current team — a released or re-signed rider's past rows never change.
  * No points field: race points are a team award, not an individual one. */
@@ -446,21 +451,23 @@ export interface Career {
 
 /** One rider's full profile: everything Rider already carries, plus their
  * current team (null for a free agent), where the world is now, the
- * attribute-history chart's points, the race history and the career
- * totals. Identical for every viewer — no field is redacted based on who
- * is looking. */
+ * retirement details (null while active), the attribute-history chart's
+ * points, the race history and the career totals. Identical for every
+ * viewer — no field is redacted based on who is looking. */
 export interface RiderProfile extends Rider {
   team: RaceResultTeam | null
   current_week: CurrentWeek | null
+  retired: RiderRetired | null
   attribute_history: AttributeSnapshot[]
   races: RiderRace[]
   career: Career
 }
 
-/** Thrown by getRiderProfile on a 404 — the rider no longer exists (a
- * long-unclaimed free agent, expired from the pool). The hook exposes this
- * as a separate `notFound` state, not folded into a generic error, so the
- * page can explain the absence rather than show a broken-page state. */
+/** Thrown by getRiderProfile on a 404 — the rider no longer exists because
+ * they were deleted without ever racing. A retired rider still returns 200.
+ * The hook exposes this as a separate `notFound` state, not folded into a
+ * generic error, so the page can explain the absence rather than show a
+ * broken-page state. */
 export class RiderNotFound extends Error {}
 
 export async function getRiderProfile(riderId: number): Promise<RiderProfile> {

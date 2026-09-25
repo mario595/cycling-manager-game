@@ -1,6 +1,6 @@
 import { Link, useParams } from 'react-router-dom'
 
-import type { RiderRace } from '../api'
+import type { RiderProfile as RiderProfileData, RiderRace, RiderRetired } from '../api'
 import { AttributeHistoryChart } from '../components/AttributeHistoryChart'
 import { AttributeRadar } from '../components/AttributeRadar'
 import { Card, CardHeader, PageBody, PageHeading, StatTile } from '../components/primitives'
@@ -8,6 +8,18 @@ import { formatMoney } from '../format'
 import { formatGap, formatRaceTime } from '../raceTime'
 import { color, font } from '../theme'
 import { useRiderProfile } from '../useRiderProfile'
+
+function retiredLabel(retired: RiderRetired): string {
+  if (retired.season === null && retired.week === null) return 'Retired'
+  if (retired.week === null) return `Retired · Season ${retired.season}`
+  return `Retired · Season ${retired.season}, Week ${retired.week}`
+}
+
+function affiliation(profile: RiderProfileData): string {
+  if (profile.team) return profile.team.name
+  if (profile.retired) return retiredLabel(profile.retired)
+  return 'Free agent'
+}
 
 export function RiderProfile() {
   const { riderId } = useParams<{ riderId: string }>()
@@ -45,7 +57,7 @@ export function RiderProfile() {
         eyebrow={profile.speciality.toUpperCase()}
         title={profile.name}
         titleSize={29}
-        subtitle={`${profile.team?.name ?? 'Free agent'} · ${profile.age} yrs · ${profile.nationality}`}
+        subtitle={`${affiliation(profile)} · ${profile.age} yrs · ${profile.nationality}`}
       />
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
