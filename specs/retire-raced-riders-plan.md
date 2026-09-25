@@ -405,7 +405,7 @@ Tests, `riders/tests/test_models.py`:
   `retired_at`, and `save()` raises `IntegrityError` (wrap in
   `transaction.atomic()` inside the test).
 
-### W2 — `riders/services.py`: `retire_riders`; freeze retired riders in the four weekly/seasonal loops
+### W2 — `riders/services.py`: `retire_riders`; freeze retired riders in the four weekly/seasonal loops — done
 
 Tests, `riders/tests/test_services.py`:
 - `test_retire_riders_stamps_only_teamless_active_riders`: a free agent, a

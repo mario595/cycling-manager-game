@@ -112,6 +112,20 @@ def mark_team_change(riders: Iterable[Rider], *, team_now, at) -> None:
         Rider.objects.bulk_update(riders, ["joined_team_at", "unattached_since"])
 
 
+def retire_riders(rider_ids: Iterable[int], *, at) -> int:
+    """Retire every still-active free agent in `rider_ids`, as of `at`
+    (game time). Returns rows updated.
+
+    One UPDATE whose WHERE re-checks team IS NULL and retired_at IS NULL —
+    that re-check, not a lock, is what makes a concurrent sign_free_agent
+    safe (plan D5). A rider signed or already retired in the meantime is
+    silently skipped, never an error.
+    """
+    return Rider.objects.filter(
+        pk__in=list(rider_ids), team__isnull=True, retired_at__isnull=True,
+    ).update(retired_at=at)
+
+
 def attribute_ceilings(rider: Rider) -> dict[str, float]:
     """Per-attribute ceilings preserving the rider's speciality shape.
 
@@ -231,7 +245,7 @@ def apply_weekly_growth(
     """
     records: list[dict] = []
     riders_to_update: list[Rider] = []
-    for rider in Rider.objects.all():
+    for rider in Rider.objects.active():
         deltas = weekly_deltas(rider, weeks=weeks)
         extra = extra_deltas.get(rider.pk, {}) if extra_deltas else {}
         debt = dict(rider.growth_debt)
@@ -267,7 +281,7 @@ def advance_ages() -> int:
     A rider at the cap holds there until retirement (#42) exists. One
     UPDATE statement via F(), not a per-row loop.
     """
-    return Rider.objects.filter(age__lt=40).update(age=F("age") + 1)
+    return Rider.objects.active().filter(age__lt=40).update(age=F("age") + 1)
 
 
 def reprice_all() -> list[dict]:
@@ -285,7 +299,7 @@ def reprice_all() -> list[dict]:
     """
     changes = []
     updated = []
-    for rider in Rider.objects.all().only(
+    for rider in Rider.objects.active().only(
         "id", "name", "team_id", "speciality", "age",
         "weekly_salary", *ENGINE_ATTRIBUTES,
     ):
@@ -349,7 +363,7 @@ def apply_weekly_recovery(*, exclude_ids: set[int]) -> int:
     capped at FRESHNESS_MAX. Returns rows updated.
     """
     to_update: list[Rider] = []
-    for rider in Rider.objects.exclude(pk__in=exclude_ids):
+    for rider in Rider.objects.active().exclude(pk__in=exclude_ids):
         restored = min(FRESHNESS_MAX, rider.freshness + recovery_amount(rider))
         if restored != rider.freshness:
             rider.freshness = restored
