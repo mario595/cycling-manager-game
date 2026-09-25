@@ -17,7 +17,7 @@ import traceback
 from dataclasses import dataclass, field
 from datetime import timedelta
 
-from django.db.models import Exists, OuterRef, Q
+from django.db.models import Exists, OuterRef
 
 from economy.services import balance_for
 from riders.models import Rider
@@ -214,8 +214,8 @@ def place_ai_bids(at) -> tuple[int, str]:
 
 def list_ai_riders(week, at) -> tuple[int, str]:
     """One pass of the AI over the auction market's sell side: every
-    unmanaged team lists at most one rider, and only on the weeks the
-    stagger picks for it.
+    unmanaged team lists at most one rider, only on the weeks the stagger
+    picks for it, and never while it already has an open listing.
 
     `week` is the last week the tick crossed, so a tick catching up three
     weeks lists once rather than three times. Returns (listings, error text).
@@ -231,13 +231,23 @@ def list_ai_riders(week, at) -> tuple[int, str]:
             roster = list(team.riders.all())
             if len(roster) - 1 < AI_MIN_ROSTER:
                 continue
+            # One open listing per team at a time, so a second pass inside the
+            # same window cannot put a second rider up for sale. Reached only
+            # if a listing outlives its auction, since the stagger is four
+            # weeks and an auction resolves in three days.
+            if Auction.objects.filter(
+                seller_team=team, status=Auction.Status.OPEN,
+            ).exists():
+                continue
+            # Relisting cooldown, on top of that: an unsold rider stays off
+            # the market for AI_RELIST_COOLDOWN rather than reappearing every
+            # time the team's week comes round.
             blocked = set(
                 Auction.objects.filter(
-                    Q(status=Auction.Status.OPEN)
-                    | Q(status=Auction.Status.UNSOLD, resolved_at__gte=cooldown_from)
-                )
-                .filter(seller_team=team)
-                .values_list("rider_id", flat=True)
+                    seller_team=team,
+                    status=Auction.Status.UNSOLD,
+                    resolved_at__gte=cooldown_from,
+                ).values_list("rider_id", flat=True)
             )
             candidates = [
                 rider

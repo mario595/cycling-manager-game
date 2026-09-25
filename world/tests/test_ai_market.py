@@ -428,6 +428,25 @@ def test_ai_lists_at_most_one_open_auction_per_team(db):
     assert Auction.objects.filter(seller_team=ai, status=Auction.Status.OPEN).count() == 1
 
 
+def test_ai_skips_a_team_that_already_has_an_open_listing(db):
+    ai = _ai_team("AI Alpha", "AIA")
+    _ai_roster(ai, size=12)
+    # Stronger than the spare below, so the surplus rule would pick the spare
+    # and not the already-listed rider: the open listing is then the only
+    # thing that can stop this team listing twice.
+    listed_already = _saved_rider("Already Listed", ai, level=45, speciality=Rider.Speciality.DOMESTIQUE)
+    spare = _saved_rider("Spare Surplus", ai, level=30, speciality=Rider.Speciality.DOMESTIQUE)
+    list_for_auction(ai, listed_already.pk, at=now())
+
+    listed, error = list_ai_riders(_stagger_week(ai, _season()), at=now())
+
+    assert (listed, error) == (0, "")
+    open_auctions = Auction.objects.filter(seller_team=ai, status=Auction.Status.OPEN)
+    assert open_auctions.count() == 1
+    assert open_auctions.get().rider_id == listed_already.pk
+    assert Auction.objects.filter(rider=spare).exists() is False
+
+
 def test_ai_does_not_relist_rider_unsold_within_cooldown(db):
     ai = _ai_team("AI Alpha", "AIA")
     _, sellable = _ageing_roster(ai)
