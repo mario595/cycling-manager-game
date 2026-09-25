@@ -1092,22 +1092,40 @@ def test_claim_withdraws_the_claimed_teams_standing_bids(
     assert auction.current_price == auction.reserve_price
 
 
-def test_claim_rolls_back_withdrawal_when_claim_fails(
-    db, claim_client, market_team, bidder_team,
+def test_claim_rolls_back_the_withdrawal_when_it_fails(
+    db, claim_client, market_team, monkeypatch,
 ):
+    # The point is atomicity: claim_team commits on its own, so if the
+    # withdrawal that follows it raised outside the view's transaction, the
+    # manager would be left holding a renamed, re-rostered team with the bid
+    # still standing. Forcing the withdrawal to blow up is the only way to see
+    # which of the two happened.
     from transfers.services import list_for_auction, place_bid
 
+    bidder = Team.objects.create(name="AI Team", code="AIT")
+    for i in range(3):
+        _market_rider(name=f"AI Rider {i}", team=bidder)
     rider = _market_rider(name="For Sale", team=market_team)
     auction = list_for_auction(market_team, rider.pk, at=now())
-    place_bid(auction.pk, bidder_team, auction.reserve_price, at=now())
+    place_bid(auction.pk, bidder, auction.reserve_price, at=now())
+    roster_before = list(bidder.riders.values_list("pk", flat=True))
 
-    response = claim_client.post(
-        "/api/teams/claim/", {"name": "Mountain Goats", "code": "MGO"}, format="json",
-    )
+    def _explode(*args, **kwargs):
+        raise RuntimeError("the ledger is on fire")
 
-    bid = Bid.objects.get(auction=auction, bidder_team=bidder_team)
-    assert response.status_code == 409
-    assert bid.withdrawn_at is None
+    monkeypatch.setattr("api.views.withdraw_bids", _explode)
+
+    with pytest.raises(RuntimeError):
+        claim_client.post(
+            "/api/teams/claim/", {"name": "Mountain Goats", "code": "MGO"}, format="json",
+        )
+
+    bidder.refresh_from_db()
+    assert bidder.manager is None
+    assert (bidder.name, bidder.code) == ("AI Team", "AIT")
+    assert list(bidder.riders.values_list("pk", flat=True)) == roster_before
+    assert Bid.objects.get(auction=auction, bidder_team=bidder).withdrawn_at is None
+    assert Auction.objects.get(pk=auction.pk).current_price == auction.reserve_price
 
 
 def test_claim_lowercase_code_is_accepted_and_uppercased(db, claim_client):
