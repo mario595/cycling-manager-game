@@ -462,7 +462,7 @@ Tests, `world/tests/test_expiry.py`:
 `world/tests/test_models.py` (or wherever `TickRun` defaults are tested):
 no new test is needed unless one already asserts the full field list.
 
-### W5 — `api/`: `retired` on the rider profile
+### W5 — `api/`: `retired` on the rider profile — done
 
 Tests, `api/tests.py`, next to the existing rider-profile tests:
 - `test_rider_profile_of_a_retired_rider_returns_200_with_retired_week`:

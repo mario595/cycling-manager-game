@@ -21,11 +21,25 @@ def _team_payload(team) -> dict:
     return {"id": team.pk, "name": team.name, "code": team.code}
 
 
+def retired_payload(rider: Rider) -> dict | None:
+    """{season, week} the rider retired in, or None if active."""
+    if rider.retired_at is None:
+        return None
+
+    position = current_position(rider.retired_at)
+    if position.state == "no_season":
+        return {"season": None, "week": None}
+    if position.state == "off_season":
+        return {"season": position.season.number, "week": None}
+    return {"season": position.season.number, "week": position.week.number}
+
+
 def rider_profile(rider: Rider, *, at: datetime) -> dict:
     races = race_history(rider)
     return {
         "team": _team_payload(rider.team) if rider.team_id else None,
         "current_week": current_week_payload(at),
+        "retired": retired_payload(rider),
         "attribute_history": attribute_history(rider),
         "races": races,
         "career": career_totals(races),
