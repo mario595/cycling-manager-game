@@ -1,6 +1,6 @@
 # AI teams participating in the transfer market
 
-**Status:** proposed
+**Status:** implemented
 **Domain(s):** `transfers/`, `world/`
 **One-liner:** Unmanaged teams bid on human listings they need and can afford, and occasionally list their own surplus riders, so the auction market has real activity even though most teams have no human manager.
 

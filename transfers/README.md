@@ -2,8 +2,9 @@
 
 ## What this app owns
 
-Two pricing functions (`transfers/pricing.py`) and the free-agent market
-(`transfers/services.py`):
+Two pricing functions (`transfers/pricing.py`) and the two write paths the
+market needs (`transfers/services.py`): the free-agent market and rider
+auctions.
 
 - **Market value** — `pricing.market_value_for(rider)`, a rider's worth in
   whole credits. **No models, no migrations, no stored field.** Value is a
@@ -20,10 +21,11 @@ Two pricing functions (`transfers/pricing.py`) and the free-agent market
   `sign_free_agent` / `release_rider`.
 - **Rider auctions** ([#28](https://github.com/mario595/cycling-manager/issues/28))
   — `models.Auction` / `models.Bid`, `services.list_for_auction`,
-  `services.place_bid` and `services.resolve_auction`. See *Auctions*
-  below. Buying and selling riders outright, contracts and AI trading
-  ([#30](https://github.com/mario595/cycling-manager/issues/30)) still to
-  come.
+  `services.place_bid`, `services.resolve_auction` and
+  `services.withdraw_bids`. See *Auctions* and *Withdrawal on claim* below.
+  Buying and selling riders outright and contracts still to come. **Who the
+  other bidders are** — unmanaged teams playing themselves — belongs to
+  `world/`, not here: `world/README.md`, *The AI market (#30)*.
 
 `transfers/` owns one `models.py` — `Auction` and `Bid`, added for
 auctions (#28), the first thing in this app that needs to persist across
@@ -101,9 +103,16 @@ buys the rider.
   There is no FK to a winning team: the winner is derivable as the highest
   `Bid` on a `SOLD` auction, the same "don't cache what you can derive"
   reasoning `economy/README.md` gives for never storing a balance.
-- **`Bid`** — `auction`, `bidder_team`, `amount`, `placed_at`. Never
-  mutated or deleted after creation, the same append-only discipline
-  `LedgerEntry`/`FanbaseEntry` use.
+- **`Bid`** — `auction`, `bidder_team`, `amount`, `placed_at`,
+  `withdrawn_at`. Append-only **except** that one field: a claim stamps
+  `withdrawn_at` and never clears it, so a withdrawn bid stays in the
+  history as a record while reading as never having happened
+  (see *Withdrawal on claim* below). **Every reader of bids must go
+  through `Bid.objects.live()`** (or `auction.bids.live()`, which inherits
+  it) — that filters `withdrawn_at IS NULL`. `Bid.objects` *is* that
+  queryset, so a bare `auction.bids.all()` is wrong by default; do not
+  make callers remember to add `.filter(withdrawn_at__isnull=True)`, which
+  is exactly how a withdrawn bid ends up winning an auction.
 - **Pricing** (`pricing.py`) — `reserve_price_for(rider)` is
   `RESERVE_RATE` (50%) of `market_value_for(rider)`, rounded the same way
   every other price here rounds (nearest 1,000). 50% sits below
@@ -170,6 +179,33 @@ buys the rider.
   resolution is its own unconditional step in `tick()`, run every tick
   regardless of what else is due, never folded into the week-transition
   loop. See `world/README.md`.
+
+## Withdrawal on claim
+
+A team that nobody manages can hold live bids from when it was managed (or
+before). When a manager claims that team they must not inherit an
+in-progress purchase, so the claim withdraws them —
+`withdraw_bids(team, *, at)`,
+[#30](https://github.com/mario595/cycling-manager/issues/30):
+
+- It withdraws **every** live bid the team holds on an `OPEN` auction, not
+  just the leading one, and whoever placed it. A non-top bid can never win
+  anyway, and "every" avoids having to decide "which is top" under a lock.
+- Each affected auction's `current_price` is reset to its highest remaining
+  live bid, or to the reserve if none remain, so the auction reads exactly
+  as if those bids had never been made.
+- **Deadlines are left alone.** Undoing an anti-snipe extension would need a
+  record of which extension each bid caused, and a slightly longer auction
+  harms nobody.
+- Rows are locked in pk order, so two claims touching overlapping auctions
+  take the same locks in the same order and cannot deadlock.
+- `api/`'s `ClaimTeamView` calls it **inside the claim's own transaction**
+  (`api/README.md`), so a claimed team can never exist with its old bids
+  still live and have a tick resolve one to the new manager in between.
+
+`seed_teams --claim-for` deliberately does **not** withdraw: it is a dev
+seeding command run against fresh teams, and `teams/` may not import
+`transfers/`.
 
 ## Value vs salary
 
@@ -243,11 +279,8 @@ follows.
 ## Future work / possible improvements
 
 Market value was built to serve four consumers; auctions (#28) is the
-second to land, after free agents:
+second to land, after free agents, and AI bidding (#30) the third:
 
-- **AI bidding logic.** [#30](https://github.com/mario595/cycling-manager/issues/30)
-  needs some number to decide what to bid and when to stop; market value
-  is it.
 - **Forced sales under insolvency.** [#27](https://github.com/mario595/cycling-manager/issues/27)
   needs a price when there is no auction to discover one.
 - **Season-boundary salary renegotiation.** [#26](https://github.com/mario595/cycling-manager/issues/26)

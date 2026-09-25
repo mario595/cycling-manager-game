@@ -1,6 +1,6 @@
 # AI teams participating in the transfer market — Implementation Plan
 
-**Spec:** `specs/ai-transfer-market.md` · **Issue:** #30 · **Status:** proposed
+**Spec:** `specs/archive/ai-transfer-market.md` · **Issue:** #30 · **Status:** implemented
 **Apps touched:** `world/` (new module `ai_market.py`), `transfers/`, `api/`
 
 ## Context you need
@@ -534,7 +534,7 @@ balance with `economy.services.ensure_opening_balance(team, at=...)`.
   bids), move the clock past the deadline, tick; the rider is on the AI
   team and both ledger rows exist.
 
-### W8 — Documentation (see below); set spec and plan to `implemented`; archive both
+### W8 — Documentation (see below); set spec and plan to `implemented`; archive both ✅
 
 ## Execution order
 
