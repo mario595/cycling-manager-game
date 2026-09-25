@@ -280,13 +280,16 @@ def test_ai_skips_when_reserve_exceeds_headroom(db):
 
 def test_ai_commitments_reduce_headroom_within_one_pass(db):
     seller = _seller()
-    affordable = _saved_rider("Cheap", seller, level=40)
-    too_dear = _saved_rider("Dear", seller, level=60)
-    first = list_for_auction(seller, affordable.pk, at=now())
-    second = list_for_auction(seller, too_dear.pk, at=now())
-    assert first.reserve_price < second.reserve_price
-    # Headroom of exactly the cheaper reserve: enough for the first listing
-    # only if what it just committed is subtracted within this pass.
+    first_listed = _saved_rider("First", seller, level=40)
+    second_listed = _saved_rider("Second", seller, level=40)
+    first = list_for_auction(seller, first_listed.pk, at=now())
+    second = list_for_auction(seller, second_listed.pk, at=now())
+    # Equal reserves on purpose. The second listing is out of reach ONLY
+    # because the first one already committed its reserve inside this pass, so
+    # deleting `buyer.committed += auction.reserve_price` fails this test
+    # rather than passing it by accident.
+    assert first.reserve_price == second.reserve_price
+    # Headroom of exactly one reserve: the first fits, the second does not.
     ai = _ai_team("AI Alpha", "AIA", balance=2 * first.reserve_price)
     _ai_roster(ai)
 
