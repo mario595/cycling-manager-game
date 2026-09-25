@@ -4,11 +4,25 @@ from datetime import timedelta
 
 from economy.models import LedgerEntry
 from riders.models import Rider
+from schedule.models import SEASON_WEEKS, Season, Week
 from teams.models import Team
 from transfers.models import Auction
 from transfers.services import EXTENSION_WINDOW, list_for_auction, place_bid
 from world.clocks import MockClock
 from world.services import get_clock, now, tick
+
+
+def make_season_with_weeks(number: int, starts_at) -> Season:
+    season = Season.objects.create(number=number, starts_at=starts_at)
+    for week_number in range(1, SEASON_WEEKS + 1):
+        week_start = season.starts_at + timedelta(weeks=week_number - 1)
+        Week.objects.create(
+            season=season,
+            number=week_number,
+            starts_at=week_start,
+            ends_at=week_start + timedelta(weeks=1),
+        )
+    return season
 
 
 def _team(name, code) -> Team:
@@ -104,3 +118,31 @@ def test_tick_extends_deadline_test_still_resolves_eventually(db):
     assert run.auctions_sold == 1
     auction.refresh_from_db()
     assert auction.status == Auction.Status.SOLD
+
+
+def test_tick_cancels_retiring_riders_open_auction(db):
+    # A rider who retires by age at the season close leaves the game, so an
+    # auction of theirs must not stay biddable until its deadline — and no
+    # money may move for either side, because nothing was ever escrowed.
+    clock: MockClock = get_clock()
+    seller = _team("Seller", "SEL")
+    bidder = _team("Bidder", "BID")
+    season = make_season_with_weeks(1, now())
+    rider = Rider.objects.create(
+        name="For Sale", team=seller, age=38, peak_age=32, decline_rate=1,
+        climb=60, sprint=60, flat=60, resistance=60, positioning=60,
+    )
+    auction = list_for_auction(seller, rider.pk, at=now())
+    place_bid(auction.pk, bidder, auction.reserve_price, at=now())
+
+    clock.set(season.ends_at + timedelta(hours=1))
+    run = tick()
+
+    assert run.riders_retired == 1
+    auction.refresh_from_db()
+    rider.refresh_from_db()
+    assert auction.status == Auction.Status.CANCELLED
+    assert rider.retired_at is not None
+    assert not LedgerEntry.objects.filter(
+        kind=LedgerEntry.Kind.TRANSFER_FEE, team__in=[seller, bidder],
+    ).exists()

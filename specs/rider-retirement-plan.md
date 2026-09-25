@@ -403,7 +403,7 @@ Add `cancel_open_auctions`. Tests go in `transfers/tests/test_services.py`:
   structural (the function takes no charge or pay callbacks), and W3's
   world-level test checks the ledger.
 
-### W3 — `world/`: retire at season close, before ageing
+### W3 — `world/`: retire at season close, before ageing ✅
 Add the `TickRun.riders_retired` field and migration 0016, plus the step in
 `tick()`. Tests go in `world/tests/test_services.py`:
 - `test_tick_retires_due_riders_at_season_close`.
