@@ -13,13 +13,17 @@ from accounts.models import User
 from economy.models import STARTING_BALANCE, LedgerEntry
 from economy.services import ensure_opening_balance
 from riders.models import Rider
+from schedule.models import Season, Week
 from teams.models import Team
 from transfers.models import Auction, Bid
+from transfers.pricing import reserve_price_for
 from transfers.services import list_for_auction, place_bid, withdraw_bids
 from world.ai_market import (
+    AI_LISTING_EVERY_WEEKS,
     AI_MIN_ROSTER,
     buyer_rank,
     headroom,
+    list_ai_riders,
     pick_listing,
     place_ai_bids,
     wants_rider,
@@ -325,3 +329,151 @@ def test_ai_skips_auction_past_deadline(db):
     assert (placed, error) == (0, "")
     assert auction.bids.exists() is False
     assert Auction.objects.get(pk=auction.pk).status == Auction.Status.OPEN
+
+
+def _season() -> Season:
+    return Season.objects.create(number=1, starts_at=now() - timedelta(weeks=8))
+
+
+def _week(number: int, season: Season) -> Week:
+    return Week.objects.create(
+        season=season,
+        number=number,
+        starts_at=now(),
+        ends_at=now() + timedelta(weeks=1),
+    )
+
+
+def _stagger_week(team: Team, season: Season) -> Week:
+    """The week on which `team` is due to list: the stagger is
+    `(week.number + team.pk) % AI_LISTING_EVERY_WEEKS`."""
+    return _week(-team.pk % AI_LISTING_EVERY_WEEKS or AI_LISTING_EVERY_WEEKS, season)
+
+
+def _ageing_roster(team: Team) -> tuple[list[Rider], Rider]:
+    """A full (not surplus) roster whose one ageing non-top rider is the
+    rider an ageing listing should sell: two stronger rouleurs it wants to
+    keep, one it does not."""
+    keepers = [
+        _saved_rider("Keeper One", team, level=70, age=40, speciality=Rider.Speciality.ROULEUR),
+        _saved_rider("Keeper Two", team, level=65, age=38, speciality=Rider.Speciality.ROULEUR),
+    ]
+    sellable = _saved_rider("Sellable", team, level=50, age=36, speciality=Rider.Speciality.ROULEUR)
+    fillers = [
+        _saved_rider(f"Filler {i}", team, level=40, speciality=Rider.Speciality.DOMESTIQUE)
+        for i in range(9)
+    ]
+    return keepers + [sellable, *fillers], sellable
+
+
+def test_ai_lists_surplus_rider_when_roster_above_normal(db):
+    ai = _ai_team("AI Alpha", "AIA")
+    _ai_roster(ai, size=12)
+    surplus = _saved_rider("Surplus", ai, level=30, speciality=Rider.Speciality.DOMESTIQUE)
+
+    listed, error = list_ai_riders(_stagger_week(ai, _season()), at=now())
+
+    auction = Auction.objects.get()
+    assert (listed, error) == (1, "")
+    assert auction.rider_id == surplus.pk
+    assert auction.seller_team_id == ai.pk
+    assert auction.status == Auction.Status.OPEN
+
+
+def test_ai_lists_ageing_rider_on_its_stagger_week_only(db):
+    ai = _ai_team("AI Alpha", "AIA")
+    _, sellable = _ageing_roster(ai)
+    season = _season()
+    on_week = _stagger_week(ai, season)
+    off_week = _week(on_week.number + 1, season)
+
+    skipped, error = list_ai_riders(off_week, at=now())
+
+    assert (skipped, error) == (0, "")
+    assert Auction.objects.exists() is False
+
+    listed, error = list_ai_riders(on_week, at=now())
+
+    assert (listed, error) == (1, "")
+    assert Auction.objects.get().rider_id == sellable.pk
+
+
+def test_ai_never_lists_below_min_roster(db):
+    ai = _ai_team("AI Alpha", "AIA")
+    _saved_rider("Keeper One", ai, level=70, age=40, speciality=Rider.Speciality.ROULEUR)
+    _saved_rider("Keeper Two", ai, level=65, age=38, speciality=Rider.Speciality.ROULEUR)
+    _saved_rider("Sellable", ai, level=50, age=36, speciality=Rider.Speciality.ROULEUR)
+    for i in range(AI_MIN_ROSTER - 3):
+        _saved_rider(f"Filler {i}", ai, level=40, speciality=Rider.Speciality.DOMESTIQUE)
+    assert ai.riders.count() == AI_MIN_ROSTER
+
+    listed, error = list_ai_riders(_stagger_week(ai, _season()), at=now())
+
+    assert (listed, error) == (0, "")
+    assert Auction.objects.exists() is False
+
+
+def test_ai_lists_at_most_one_open_auction_per_team(db):
+    ai = _ai_team("AI Alpha", "AIA")
+    _ai_roster(ai, size=12)
+    _saved_rider("Surplus One", ai, level=30, speciality=Rider.Speciality.DOMESTIQUE)
+    _saved_rider("Surplus Two", ai, level=32, speciality=Rider.Speciality.DOMESTIQUE)
+
+    listed, error = list_ai_riders(_stagger_week(ai, _season()), at=now())
+
+    assert (listed, error) == (1, "")
+    assert Auction.objects.filter(seller_team=ai, status=Auction.Status.OPEN).count() == 1
+
+
+def test_ai_does_not_relist_rider_unsold_within_cooldown(db):
+    ai = _ai_team("AI Alpha", "AIA")
+    _, sellable = _ageing_roster(ai)
+    Auction.objects.create(
+        rider=sellable,
+        seller_team=ai,
+        reserve_price=10_000,
+        current_price=10_000,
+        min_increment=1_000,
+        deadline=now() - timedelta(days=3),
+        listed_at=now() - timedelta(days=5),
+        status=Auction.Status.UNSOLD,
+        resolved_at=now() - timedelta(weeks=1),
+    )
+
+    week = _stagger_week(ai, _season())
+    blocked, error = list_ai_riders(week, at=now())
+
+    assert (blocked, error) == (0, "")
+    assert Auction.objects.filter(status=Auction.Status.OPEN).exists() is False
+
+    relisted, error = list_ai_riders(week, at=now() + timedelta(weeks=5))
+
+    assert (relisted, error) == (1, "")
+    assert Auction.objects.filter(status=Auction.Status.OPEN, rider=sellable).exists()
+
+
+def test_ai_skips_zero_reserve_rider(db):
+    ai = _ai_team("AI Alpha", "AIA")
+    _saved_rider("Keeper One", ai, level=70, age=40, speciality=Rider.Speciality.ROULEUR)
+    _saved_rider("Keeper Two", ai, level=65, age=38, speciality=Rider.Speciality.ROULEUR)
+    worthless = _saved_rider("Worthless", ai, level=10, age=40, speciality=Rider.Speciality.ROULEUR)
+    for i in range(9):
+        _saved_rider(f"Filler {i}", ai, level=40, speciality=Rider.Speciality.DOMESTIQUE)
+    assert reserve_price_for(worthless) == 0
+
+    listed, error = list_ai_riders(_stagger_week(ai, _season()), at=now())
+
+    assert (listed, error) == (0, "")
+    assert Auction.objects.exists() is False
+
+
+def test_managed_team_is_never_listed_for(db):
+    managed = _seller()
+    for i in range(12):
+        _saved_rider(f"Rider {i}", managed, level=40, speciality=Rider.Speciality.DOMESTIQUE)
+    _saved_rider("Surplus", managed, level=30, speciality=Rider.Speciality.DOMESTIQUE)
+
+    listed, error = list_ai_riders(_stagger_week(managed, _season()), at=now())
+
+    assert (listed, error) == (0, "")
+    assert Auction.objects.exists() is False

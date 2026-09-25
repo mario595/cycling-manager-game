@@ -513,7 +513,7 @@ balance with `economy.services.ensure_opening_balance(team, at=...)`.
   human outbids; no new AI bid.
 - `test_ai_skips_auction_past_deadline`
 
-### W6 — `world/ai_market.py`: `list_ai_riders`
+### W6 — `world/ai_market.py`: `list_ai_riders` ✅
 **Tests** in `world/tests/test_ai_market.py`:
 - `test_ai_lists_surplus_rider_when_roster_above_normal`
 - `test_ai_lists_ageing_rider_on_its_stagger_week_only`

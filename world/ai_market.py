@@ -17,7 +17,7 @@ import traceback
 from dataclasses import dataclass, field
 from datetime import timedelta
 
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, OuterRef, Q
 
 from economy.services import balance_for
 from riders.models import Rider
@@ -25,7 +25,8 @@ from riders.pricing import strength
 from teams.models import Team
 from teams.services import ROSTER_SIZE
 from transfers.models import Auction, Bid
-from transfers.services import TransferError, place_bid
+from transfers.pricing import reserve_price_for
+from transfers.services import TransferError, list_for_auction, place_bid
 
 #: Two and a half 4-rider squads, so freshness can rotate at one race a week.
 AI_MIN_ROSTER = 10
@@ -209,3 +210,49 @@ def place_ai_bids(at) -> tuple[int, str]:
         buyer.pending += 1
 
     return placed, error
+
+
+def list_ai_riders(week, at) -> tuple[int, str]:
+    """One pass of the AI over the auction market's sell side: every
+    unmanaged team lists at most one rider, and only on the weeks the
+    stagger picks for it.
+
+    `week` is the last week the tick crossed, so a tick catching up three
+    weeks lists once rather than three times. Returns (listings, error text).
+    """
+    listed = 0
+    error = ""
+    cooldown_from = at - AI_RELIST_COOLDOWN
+
+    for team in Team.objects.filter(manager__isnull=True).order_by("pk"):
+        if (week.number + team.pk) % AI_LISTING_EVERY_WEEKS:
+            continue
+        try:
+            roster = list(team.riders.all())
+            if len(roster) - 1 < AI_MIN_ROSTER:
+                continue
+            blocked = set(
+                Auction.objects.filter(
+                    Q(status=Auction.Status.OPEN)
+                    | Q(status=Auction.Status.UNSOLD, resolved_at__gte=cooldown_from)
+                )
+                .filter(seller_team=team)
+                .values_list("rider_id", flat=True)
+            )
+            candidates = [
+                rider
+                for rider in roster
+                if rider.pk not in blocked and reserve_price_for(rider) > 0
+            ]
+            rider = pick_listing(roster, candidates)
+            if rider is None:
+                continue
+            list_for_auction(team, rider.pk, at=at)
+            listed += 1
+        except TransferError:
+            # A concurrent listing won the race for this rider. Next pass.
+            continue
+        except Exception:
+            error += f"ai listing for team {team.pk}:\n{traceback.format_exc()}\n"
+
+    return listed, error
