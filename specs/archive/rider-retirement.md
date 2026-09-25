@@ -1,6 +1,6 @@
 # Rider retirement and roster churn
 
-**Status:** proposed
+**Status:** implemented
 **Domain(s):** `riders/`, `world/`
 **One-liner:** Every rider retires from the game at a hidden age within a fixed window, with a full season's warning before it happens.
 

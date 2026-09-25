@@ -50,6 +50,14 @@ observable consequence is how fast `freshness` — a visible number that moves
 every week — climbs back up, so it clears the same bar. #41 must clear it too
 when it lands.
 
+**The retirement age (#42) is the one hidden value shipped only as its
+consequence.** `peak_age` and `decline_rate` are read together to place a
+rider in the 33–38 window, and the API ships *only* the boolean
+`final_season` — never the age, never the traits, never a "why". That clears
+the inferability rule the same way the others do: a player can watch a
+late-peaking rider play on and a fast-declining one go sooner, and read *that*
+a rider is in their last season, without ever seeing the number behind it.
+
 ## Display scale: stored 1-100, shown 0-10
 
 The five engine attributes are stored 1-100 — the same range the engine
@@ -127,10 +135,9 @@ call them and how many weeks have passed. The signature gained
 This keeps the dependency direction in `AGENTS.md` intact: `riders/` may not
 import `schedule/` or `world/`.
 
-**Decline has no floor, but retirement is explicit.** A rider can decline
-indefinitely toward the bottom of the range and sit on a roster, unusable,
-forever; retirement is a separate permanent exit from the game. See
-*Retirement*, below.
+**Decline has no floor, but retirement is what ends the decline.** A rider
+can decline indefinitely toward the bottom of the range; the season close is
+where they leave instead, by age. See *Retiring by age*, below.
 
 ## Weekly training
 
@@ -394,8 +401,57 @@ new loop that processes every rider must use it rather than
 rider is frozen: `apply_weekly_growth`, `apply_weekly_recovery`,
 `advance_ages`, and `reprice_all`. Once `retired_at` is set, attributes,
 `growth_debt`, freshness, age, and `weekly_salary` do not change. Expiry dates
-the stamp to the qualifying `week.starts_at`; age-driven retirement (#42) will
-use the same field.
+the stamp to the qualifying `week.starts_at`; age-driven retirement
+(#42) does the same with the closing season's final week — see *Retiring by
+age*, below.
+
+### Retiring by age
+
+A rider leaves the game at a **hidden age between 33 and 38**
+(`RETIREMENT_AGE_MIN` + `RETIREMENT_AGE_SPAN` in `services.py`), with a full
+season's warning first
+([#42](https://github.com/mario595/cycling-manager/issues/42)). Every active
+rider is affected — rostered or a free agent, managed team or unmanaged. The
+window is a band, not a number: no rider retires young, and every rider
+eventually does, but *where* in the band is the rider's own.
+
+**The age is derived, never stored.** `retirement_age(rider)` is a pure
+function of the two hidden traits set once at generation and never mutated —
+`peak_age` and `decline_rate` — weighted 3 for peak age against 2 for decline
+rate. A late peaker and a slow decliner play on; a fast decliner goes sooner,
+and a rider who peaked at 32 outlasts one who peaked at 24. Peak age being
+the bigger driver is deliberate: it makes the trait *inferable* — a player
+watching many careers can learn "late bloomers last" without ever seeing the
+number. Both inputs are immutable, so the result is stable for a rider's
+whole life, and there is no backfill for existing riders. The formula clamps
+its `peak_age` share to the generation range (now the public
+`PEAK_AGE_RANGE`, renamed from `_PEAK_AGE_RANGE` and imported rather than
+copied, so the window cannot drift from what generation produces), because
+the validator allows a `peak_age` outside it.
+
+**`is_due_to_retire(rider)` is the read-time marker**, and returns `False`
+for a retired rider whatever their age — which is what lets `api/` tag riders
+without ever tagging one who is already gone.
+
+**`retire_due_riders(at=...)` is one conditional UPDATE** that clears the team
+and stamps `retired_at` together, so the `retired_rider_has_no_team`
+constraint holds row by row. It deliberately does **not** reuse
+`retire_riders()`, which filters `team__isnull=True` to serve free-agent
+expiry and would silently skip every rostered rider. Nor does it call
+`mark_team_change`: `unattached_since` means "released into the pool at", and
+a retired rider never sat in the pool — both that stamp and `joined_team_at`
+are left untouched, so the roster they left still says when they joined it.
+`world/` decides when it runs; this app knows nothing about seasons, in the
+same way `advance_ages()` and `reprice_all()` do not.
+
+**The stamp is the closing season's final week's `starts_at`,** written by
+`world.services.tick()` — not `season.ends_at`, which falls outside the
+season and would resolve to the next season's week 1 in the profile's
+`Retired · Season N, Week W` label. The `is_due_to_retire` check and the
+retire pass both run **before** `advance_ages()` at that close, which is what
+gives the rider their full season of warning: the reverse order would age
+them into the window and retire them in the same tick. See `world/README.md`,
+*How a tick works*.
 
 ## Generation
 
@@ -469,10 +525,6 @@ command is an entry point, the same latitude
   `generation.py` are structured as one entry per country specifically so
   that adding one is a choices-list and name-pool edit, not a migration or
   a `generate_rider` signature change.
-- **Age-driven retirement.** The permanent retirement state now exists and
-  is documented in *Retirement*, above. Automatic age-driven retirement
-  ([#42](https://github.com/mario595/cycling-manager/issues/42)) is still to
-  come; it will stamp the same `retired_at` field.
 - **Attributing movement to growth vs training.** The "what moved" list is
   built — `staff.TrainingWeekReport` at each rollover, shown on the Training
   screen — but a change is the visible number moving, with no split of how

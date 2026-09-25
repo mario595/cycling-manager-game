@@ -1,6 +1,6 @@
 # Rider retirement and roster churn — Implementation Plan
 
-**Spec:** `specs/rider-retirement.md` · **Issue:** #42 · **Status:** proposed
+**Spec:** `specs/archive/rider-retirement.md` · **Issue:** #42 · **Status:** implemented
 **Apps touched:** `riders/`, `transfers/`, `world/`, `api/`, `frontend/`
 
 ## Context you need
@@ -443,7 +443,7 @@ Type, primitive, the four render sites and the fixture updates. Tests:
 - `Transfers.test.tsx`: the tag appears on a free-agent card when true.
 - `npm run lint`, `npm run build` (runs `tsc -b`) and the full `npm test` pass.
 
-### W6 — Docs, seed note, spec/plan archive
+### W6 — Docs, seed note, spec/plan archive ✅
 See *Documentation update*. Set both `Status:` lines to `implemented` and
 move both files to `specs/archive/`.
 

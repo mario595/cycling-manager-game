@@ -185,6 +185,30 @@ buys the rider.
   resolution is its own unconditional step in `tick()`, run every tick
   regardless of what else is due, never folded into the week-transition
   loop. See `world/README.md`.
+- **Cancellation** (`cancel_open_auctions`) — the other way an auction can
+  end, and the one that needs no buyer
+  ([#42](https://github.com/mario595/cycling-manager/issues/42)). It flips
+  every `OPEN` auction of the given rider ids to `CANCELLED` in one UPDATE,
+  stamping `resolved_at` and **moving no money**: a bid was never
+  escrowed (see *Bidding* above — affordability is checked at bid time, not
+  reserved), so there is nothing to refund, and a team whose rider is sold
+  out from under it simply never got the rider. It is idempotent, so a tick
+  that catches up several boundaries late can call it twice for one rider
+  and the second call writes nothing.
+
+  The one caller is a rider **retiring at the season close**
+  (`riders/README.md`, *Retiring by age*): `world.services.tick()` passes
+  the riders `retire_due_riders()` just released. Without it their auctions
+  would keep accepting bids for a rider who is no longer in the game, and
+  `resolve_auction` — which only sees "past its deadline" — would settle
+  them as a sale weeks later. The alternative, a `retired_at` re-check inside
+  `resolve_auction` (which already handles the released-into-the-pool case
+  above), was rejected: the same re-check would silently unsell the
+  rider from the selling team's roster mid-season, which is a different bug
+  with a different fix, and it would leave the auction open — visibly
+  bidding — until its deadline. Both functions run in one transaction with
+  the retirement itself, so there is no window in which the rider has left
+  and the auction is still open.
 
 ## Withdrawal on claim
 
