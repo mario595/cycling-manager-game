@@ -4,6 +4,7 @@ from datetime import timedelta
 
 import pytest
 
+from accounts.models import User
 from economy.models import (
     MERCHANDISE_FANBASE_PER_CREDIT,
     STARTING_FANBASE,
@@ -12,13 +13,16 @@ from economy.models import (
     LedgerEntry,
     SponsorOffer,
 )
-from economy.services import sign_offer
+from economy.services import ensure_opening_balance, sign_offer
 from racing.models import Race, RaceResult
 from riders.models import Rider
 from schedule.models import SEASON_WEEKS, Season, Week
 from staff.models import Trainer
 from staff.pricing import weekly_salary
 from teams.models import Team
+from transfers.models import Auction
+from transfers.services import list_for_auction
+from world.ai_market import AI_LISTING_EVERY_WEEKS
 from world.clocks import MockClock
 from world.services import get_clock, now, tick
 
@@ -465,3 +469,113 @@ def test_catch_up_tick_pays_each_week_separately(db, team, riders):
     assert LedgerEntry.objects.filter(
         team=team, kind=LedgerEntry.Kind.SPONSORSHIP,
     ).count() == 3
+
+
+def managed_seller(code: str) -> Team:
+    manager = User.objects.create_user(
+        email=f"{code.lower()}-seller@example.com", password="s0meth1ng-good",
+    )
+    return Team.objects.create(name=f"{code} Human Team", code=code, manager=manager)
+
+
+def ai_buyer(code: str, *, roster: int = 12) -> Team:
+    team = Team.objects.create(name=f"{code} AI Team", code=code)
+    ensure_opening_balance(team, at=now())
+    for i in range(roster):
+        Rider.objects.create(
+            name=f"{code} Domestique {i}", team=team, age=27,
+            climb=40, sprint=40, flat=40, resistance=40, positioning=40,
+        )
+    return team
+
+
+def rider_for(name: str, team: Team, *, level: int = 60) -> Rider:
+    return Rider.objects.create(
+        name=name, team=team, age=27,
+        climb=level, sprint=level, flat=level, resistance=level, positioning=level,
+    )
+
+
+def test_tick_places_ai_bids_without_a_week_transition(db):
+    # No season is declared, so the AI's listing side has no week to act on —
+    # but its buying side is keyed to wall-clock deadlines and must still run.
+    seller = managed_seller("SEL")
+    listed = rider_for("For Sale", seller)
+    auction = list_for_auction(seller, listed.pk, at=now())
+    ai = ai_buyer("AIA")
+
+    run = tick()
+
+    assert run.weeks_processed == 0
+    assert run.ai_listings_created == 0
+    assert run.ai_bids_placed == 1
+    assert auction.bids.live().get().bidder_team_id == ai.pk
+
+
+def test_tick_lists_ai_riders_once_when_catching_up_several_weeks(db):
+    clock: MockClock = get_clock()
+    # The listing stagger is (week.number + team.pk) % AI_LISTING_EVERY_WEEKS
+    # == 0 and pks depend on the sequence, so add teams until this one's
+    # third week — the last the tick below will cross — is its own.
+    filler = 0
+    while True:
+        ai = Team.objects.create(name=f"AI {filler}", code=f"A{filler:02d}")
+        filler += 1
+        if (3 + ai.pk) % AI_LISTING_EVERY_WEEKS == 0:
+            break
+    for i in range(12):
+        Rider.objects.create(
+            name=f"{ai.code} Domestique {i}", team=ai, age=27,
+            climb=40, sprint=40, flat=40, resistance=40, positioning=40,
+        )
+    rider_for("Surplus", ai, level=30)
+    season = make_season_with_weeks(1, now() - timedelta(weeks=2))
+    clock.set(season.weeks.get(number=3).starts_at + timedelta(hours=1))
+
+    run = tick()
+
+    assert run.weeks_processed == 3
+    assert run.ai_listings_created == 1
+    assert Auction.objects.get(seller_team=ai, status=Auction.Status.OPEN).rider.name == "Surplus"
+
+
+def test_tick_resolves_before_ai_bids(db):
+    # The auction is due this tick, so it resolves UNSOLD: the AI must not
+    # rescue a listing it can no longer win by bidding on it first.
+    clock: MockClock = get_clock()
+    seller = managed_seller("SEL")
+    listed = rider_for("For Sale", seller)
+    auction = list_for_auction(seller, listed.pk, at=now())
+    ai_buyer("AIA")
+    clock.set(auction.deadline + timedelta(hours=1))
+
+    run = tick()
+
+    assert run.auctions_unsold == 1
+    assert run.ai_bids_placed == 0
+    auction.refresh_from_db()
+    assert auction.status == Auction.Status.UNSOLD
+    assert auction.bids.exists() is False
+
+
+def test_ai_won_auction_moves_rider_and_money_end_to_end(db):
+    clock: MockClock = get_clock()
+    seller = managed_seller("SEL")
+    listed = rider_for("For Sale", seller)
+    auction = list_for_auction(seller, listed.pk, at=now())
+    ai = ai_buyer("AIA")
+    tick()
+
+    clock.set(auction.deadline + timedelta(hours=1))
+    run = tick()
+
+    assert run.ai_bids_placed == 0
+    assert run.auctions_sold == 1
+    listed.refresh_from_db()
+    assert listed.team_id == ai.pk
+    assert LedgerEntry.objects.filter(
+        team=ai, kind=LedgerEntry.Kind.TRANSFER_FEE, amount=-auction.reserve_price,
+    ).exists()
+    assert LedgerEntry.objects.filter(
+        team=seller, kind=LedgerEntry.Kind.TRANSFER_FEE, amount=auction.reserve_price,
+    ).exists()

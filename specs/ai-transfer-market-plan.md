@@ -523,7 +523,7 @@ balance with `economy.services.ensure_opening_balance(team, at=...)`.
 - `test_ai_skips_zero_reserve_rider`
 - `test_managed_team_is_never_listed_for`
 
-### W7 — `world/services.py`, `world/models.py`, migration 0015: wire into the tick
+### W7 — `world/services.py`, `world/models.py`, migration 0015: wire into the tick ✅
 **Tests** in `world/tests/test_tick.py`:
 - `test_tick_places_ai_bids_without_a_week_transition`: no season declared;
   a human listing receives an AI bid, and `run.ai_bids_placed == 1`.

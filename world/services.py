@@ -58,6 +58,7 @@ from transfers.services import (
     resolve_auction,
 )
 
+from .ai_market import list_ai_riders, place_ai_bids
 from .clocks import Clock
 from .models import GameClock, TickRun
 
@@ -501,6 +502,18 @@ def tick() -> TickRun:
     # weeks:` above (plan's Design decision 2).
     auctions_sold, auctions_unsold, auction_error = _resolve_expired_auctions(at)
 
+    # The AI market, after resolution, so the AI never sees an auction this
+    # same tick is about to close (Design decision 12). Listing first, and
+    # only on a tick that crossed a week, using the LAST week crossed — a
+    # tick catching up three weeks lists once, not three times. Bidding runs
+    # every tick, because auction deadlines are wall-clock, not week-bound.
+    ai_listings_created = 0
+    ai_market_error = ""
+    if weeks:
+        ai_listings_created, ai_market_error = list_ai_riders(weeks[-1].week, at)
+    ai_bids_placed, bid_error = place_ai_bids(at)
+    ai_market_error += bid_error
+
     run = TickRun.objects.create(
         races_started=len(claimed),
         seasons_opened=sum(1 for t in transitions if t.kind == SeasonTransition.Kind.OPENED),
@@ -519,7 +532,9 @@ def tick() -> TickRun:
         agents_expired=agents_expired,
         auctions_sold=auctions_sold,
         auctions_unsold=auctions_unsold,
-        error=inactivity_error + auction_error,
+        ai_bids_placed=ai_bids_placed,
+        ai_listings_created=ai_listings_created,
+        error=inactivity_error + auction_error + ai_market_error,
     )
     _execute(reclaimed + claimed, run, at=at)
     run.capped = capped
