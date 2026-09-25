@@ -25,7 +25,7 @@ from riders.models import DISPLAY_MAX, Rider, RiderAttributeSnapshot
 from schedule.models import SEASON_WEEKS, Season, Week
 from staff.models import Trainer, TrainingWeekReport
 from staff.pricing import hire_fee, weekly_salary
-from transfers.models import Auction
+from transfers.models import Auction, Bid
 from transfers.pricing import market_value_for, severance_fee_for, signing_fee_for
 from teams.models import ManagerialSpell, Team
 from world.services import now
@@ -1071,6 +1071,45 @@ def test_claim_with_no_teams_available_is_409(db, claim_client):
     assert response.status_code == 409
 
 
+def test_claim_withdraws_the_claimed_teams_standing_bids(
+    db, claim_client, market_team,
+):
+    from transfers.services import list_for_auction, place_bid
+
+    bidder_team = Team.objects.create(name="AI Team", code="AIT")
+    rider = _market_rider(name="For Sale", team=market_team)
+    auction = list_for_auction(market_team, rider.pk, at=now())
+    place_bid(auction.pk, bidder_team, auction.reserve_price, at=now())
+
+    response = claim_client.post(
+        "/api/teams/claim/", {"name": "Claimed Team", "code": "CLM"}, format="json",
+    )
+
+    bid = Bid.objects.get(auction=auction, bidder_team=bidder_team)
+    auction.refresh_from_db()
+    assert response.status_code == 201
+    assert bid.withdrawn_at is not None
+    assert auction.current_price == auction.reserve_price
+
+
+def test_claim_rolls_back_withdrawal_when_claim_fails(
+    db, claim_client, market_team, bidder_team,
+):
+    from transfers.services import list_for_auction, place_bid
+
+    rider = _market_rider(name="For Sale", team=market_team)
+    auction = list_for_auction(market_team, rider.pk, at=now())
+    place_bid(auction.pk, bidder_team, auction.reserve_price, at=now())
+
+    response = claim_client.post(
+        "/api/teams/claim/", {"name": "Mountain Goats", "code": "MGO"}, format="json",
+    )
+
+    bid = Bid.objects.get(auction=auction, bidder_team=bidder_team)
+    assert response.status_code == 409
+    assert bid.withdrawn_at is None
+
+
 def test_claim_lowercase_code_is_accepted_and_uppercased(db, claim_client):
     Team.objects.create(name="Unclaimed Team", code="UNC")
 
@@ -2114,6 +2153,26 @@ def test_auction_market_orders_bid_history_newest_first(
     assert [b["amount"] for b in bids] == [second_amount, auction.reserve_price]
 
 
+def test_auction_market_hides_withdrawn_bids(market_client, market_team):
+    rider = _market_rider(name="For Sale", team=market_team)
+    market_client.post("/api/transfers/auctions/list/", {"rider_id": rider.pk})
+    auction = Auction.objects.get(rider=rider)
+    bidder_team = Team.objects.create(name="Bidder Team", code="BID")
+    Bid.objects.create(
+        auction=auction,
+        bidder_team=bidder_team,
+        amount=auction.reserve_price,
+        placed_at=now(),
+        withdrawn_at=now(),
+    )
+
+    response = market_client.get("/api/transfers/auctions/")
+
+    entry = response.data["auctions"][0]
+    assert entry["bids"] == []
+    assert entry["min_next_bid"] == auction.reserve_price
+
+
 def test_my_bids_shows_winning_status_when_high_bidder(
     market_client, market_team, bidder_client, bidder_team,
 ):
@@ -2189,6 +2248,32 @@ def test_my_bids_excludes_a_resolved_auction(
     resolve_auction(
         auction, at=auction.deadline,
         charge_buyer=lambda *a, **kw: None, pay_seller=lambda *a, **kw: None,
+    )
+
+    response = bidder_client.get("/api/transfers/auctions/mine/")
+
+    assert response.data == []
+
+
+def test_my_bids_excludes_withdrawn_bids(
+    market_team, bidder_client, bidder_team,
+):
+    rider = _market_rider(name="For Sale", team=market_team)
+    auction = Auction.objects.create(
+        rider=rider,
+        seller_team=market_team,
+        reserve_price=50_000,
+        current_price=50_000,
+        min_increment=2_500,
+        deadline=now() + timedelta(days=3),
+        listed_at=now(),
+    )
+    Bid.objects.create(
+        auction=auction,
+        bidder_team=bidder_team,
+        amount=auction.reserve_price,
+        placed_at=now(),
+        withdrawn_at=now(),
     )
 
     response = bidder_client.get("/api/transfers/auctions/mine/")

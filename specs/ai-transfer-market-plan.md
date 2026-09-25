@@ -470,7 +470,7 @@ Switch `place_bid` and `resolve_auction` to `live()`, and add `withdraw_bids`.
 - `test_withdrawn_only_bid_resolves_unsold`
 - `test_opening_bid_after_withdrawal_accepts_reserve`
 
-### W3 — `api/views.py`: claim withdraws bids; market views read live bids
+### W3 — `api/views.py`: claim withdraws bids; market views read live bids ✅
 **Tests** in `api/tests.py`:
 - `test_claim_withdraws_the_claimed_teams_standing_bids`: seed an unmanaged
   team's bid, claim through the endpoint, assert `withdrawn_at` is set and
