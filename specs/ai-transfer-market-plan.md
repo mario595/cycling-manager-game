@@ -497,7 +497,7 @@ objects:
 - `test_headroom_keeps_the_cushion_and_subtracts_commitments`
 - `test_headroom_is_zero_for_negative_balance`
 
-### W5 — `world/ai_market.py`: `place_ai_bids`
+### W5 — `world/ai_market.py`: `place_ai_bids` ✅
 **Tests** in `world/tests/test_ai_market.py`, database-backed. Give teams a
 balance with `economy.services.ensure_opening_balance(team, at=...)`.
 - `test_ai_bids_reserve_on_a_needed_human_listing`

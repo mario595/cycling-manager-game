@@ -13,11 +13,19 @@ can never infer a rider's potential from the AI's bids.
 
 from __future__ import annotations
 
+import traceback
+from dataclasses import dataclass, field
 from datetime import timedelta
 
+from django.db.models import Exists, OuterRef
+
+from economy.services import balance_for
 from riders.models import Rider
 from riders.pricing import strength
+from teams.models import Team
 from teams.services import ROSTER_SIZE
+from transfers.models import Auction, Bid
+from transfers.services import TransferError, place_bid
 
 #: Two and a half 4-rider squads, so freshness can rotate at one race a week.
 AI_MIN_ROSTER = 10
@@ -110,3 +118,94 @@ def headroom(balance: int, committed: int) -> int:
     escrowed, so without that subtraction the same money could be committed
     to several auctions at once."""
     return max(0, int(balance * (1 - AI_CUSHION_FRACTION)) - committed)
+
+
+@dataclass
+class _Buyer:
+    """One unmanaged team's position for the length of a bidding pass, built
+    once and then updated in memory as it wins auctions: its roster does not
+    change, but its commitments do."""
+
+    team: Team
+    roster: list[Rider] = field(default_factory=list)
+    balance: int = 0
+    committed: int = 0
+    pending: int = 0
+
+
+def _buyers() -> dict[int, _Buyer]:
+    """Every unmanaged team, keyed by pk, with its roster, balance and pending
+    commitments loaded: one roster query and one bid query each, not one per
+    auction."""
+    buyers: dict[int, _Buyer] = {}
+    for team in Team.objects.filter(manager__isnull=True).order_by("pk"):
+        bids = Bid.objects.live().filter(
+            bidder_team=team, auction__status=Auction.Status.OPEN,
+        ).select_related("auction")
+        top = [bid for bid in bids if bid.amount == bid.auction.current_price]
+        buyers[team.pk] = _Buyer(
+            team=team,
+            roster=list(team.riders.all()),
+            balance=balance_for(team),
+            committed=sum(bid.amount for bid in top),
+            pending=len(top),
+        )
+    return buyers
+
+
+def _biddable_auctions(at):
+    """Open, unexpired, human listings that nobody has bid on yet.
+
+    `~Exists` rather than an `exclude(bids__withdrawn_at__isnull=True)`: an
+    isnull lookup across a reverse join also matches the empty side, which
+    would drop exactly the auctions with no bids at all.
+    """
+    return (
+        Auction.objects.filter(
+            status=Auction.Status.OPEN,
+            deadline__gt=at,
+            seller_team__manager__isnull=False,
+        )
+        .filter(~Exists(Bid.objects.live().filter(auction=OuterRef("pk"))))
+        .select_related("rider")
+        .order_by("listed_at", "pk")
+    )
+
+
+def place_ai_bids(at) -> tuple[int, str]:
+    """One pass of the AI over the auction market: every unmanaged team bids
+    the reserve on at most one listing it wants per auction, and exactly one
+    AI team bids per auction.
+
+    Returns (bids placed, accumulated error text) — the same shape
+    `world.services._release_inactive` uses, so one bad auction cannot strand
+    the rest of the tick.
+    """
+    placed = 0
+    error = ""
+    buyers = _buyers()
+
+    for auction in _biddable_auctions(at):
+        wanted = [
+            buyer
+            for buyer in buyers.values()
+            if wants_rider(buyer.roster, auction.rider, pending_wins=buyer.pending)
+            and auction.reserve_price <= headroom(buyer.balance, buyer.committed)
+        ]
+        if not wanted:
+            continue
+        buyer = min(wanted, key=lambda b: buyer_rank(b.roster, auction.rider, b.team.pk))
+        try:
+            place_bid(auction.pk, buyer.team, auction.reserve_price, at=at)
+        except TransferError:
+            # Losing a race with a human, or an auction that closed under us.
+            # A normal outcome, not an error.
+            continue
+        except Exception:
+            error += f"ai bid on auction {auction.pk}:\n{traceback.format_exc()}\n"
+            continue
+        placed += 1
+        buyer.committed += auction.reserve_price
+        buyer.pending += 1
+
+    return placed, error
