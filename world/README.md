@@ -398,6 +398,14 @@ every live bid the claimed team held, in the same transaction as the claim
 (`transfers/README.md`, *Withdrawal on claim*), so a new manager never
 inherits an in-progress purchase.
 
+**A failing AI market is recorded, never fatal.** Three levels, all landing
+on `TickRun.error`: a bid that raises for one auction is skipped and the pass
+continues; a listing that raises for one team is skipped and the other teams
+still list; and a failure *building* the buyer table — which reads every
+unmanaged team's ledger, before any per-auction guard exists — is caught
+around the whole AI step, so the tick still settles its week, charges wages
+and writes its `TickRun`. Losing a tick to the garnish would be a bad trade.
+
 **Balances, measured.** Unmanaged teams earn no wages, prize money or
 sponsorship; they only spend. A seeded season 1 left the average unmanaged
 team with about **$330,000**, and at roughly `12 × $1,200` a week of wages

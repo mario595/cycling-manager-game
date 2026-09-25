@@ -107,12 +107,14 @@ buys the rider.
   `withdrawn_at`. Append-only **except** that one field: a claim stamps
   `withdrawn_at` and never clears it, so a withdrawn bid stays in the
   history as a record while reading as never having happened
-  (see *Withdrawal on claim* below). **Every reader of bids must go
-  through `Bid.objects.live()`** (or `auction.bids.live()`, which inherits
-  it) — that filters `withdrawn_at IS NULL`. `Bid.objects` *is* that
-  queryset, so a bare `auction.bids.all()` is wrong by default; do not
-  make callers remember to add `.filter(withdrawn_at__isnull=True)`, which
-  is exactly how a withdrawn bid ends up winning an auction.
+  (see *Withdrawal on claim* below). **Every reader of bids must call
+  `Bid.objects.live()`** (or `auction.bids.live()`, which inherits it) —
+  that filters `withdrawn_at IS NULL`. `Bid.objects` is an ordinary
+  `BidQuerySet` manager that *provides* `.live()`; it does not apply it for
+  you, so `Bid.objects.filter(...)` and a bare `auction.bids.all()` still
+  hand back withdrawn bids. Call `.live()` rather than writing
+  `.filter(withdrawn_at__isnull=True)` at each call site — a reader that
+  forgets is exactly how a withdrawn bid ends up winning an auction.
 - **Pricing** (`pricing.py`) — `reserve_price_for(rider)` is
   `RESERVE_RATE` (50%) of `market_value_for(rider)`, rounded the same way
   every other price here rounds (nearest 1,000). 50% sits below
@@ -205,7 +207,7 @@ in-progress purchase, so the claim withdraws them —
 
 `seed_teams --claim-for` deliberately does **not** withdraw: it is a dev
 seeding command run against fresh teams, and `teams/` may not import
-`transfers/`.
+`transfers/`. That note lives with the claim itself, in `teams/README.md`.
 
 ## Value vs salary
 

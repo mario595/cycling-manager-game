@@ -219,7 +219,7 @@ def test_ai_ignores_auction_that_already_has_a_live_bid(db):
     seller = _seller()
     listed = _saved_rider("For Sale", seller, level=60)
     auction = list_for_auction(seller, listed.pk, at=now())
-    human = _ai_team("Human Bidders", "HUM")
+    human = _seller("HUM")
     place_bid(auction.pk, human, auction.reserve_price, at=now())
     ai = _ai_team("AI Alpha", "AIA")
     _ai_roster(ai)
@@ -331,7 +331,7 @@ def test_ai_never_raises_after_being_outbid(db):
     ai = _ai_team("AI Alpha", "AIA")
     _ai_roster(ai)
     place_ai_bids(at=now())
-    human = _ai_team("Human Bidders", "HUM")
+    human = _seller("HUM")
     place_bid(auction.pk, human, auction.current_price + auction.min_increment, at=now())
     auction.refresh_from_db()
 

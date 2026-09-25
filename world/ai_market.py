@@ -77,7 +77,7 @@ def wants_rider(roster: list[Rider], rider: Rider, *, pending_wins: int) -> bool
         return False
     if len(roster) < AI_MIN_ROSTER:
         return True
-    return _stronger_than(_same_speciality(roster, rider), rider) < AI_NEED_RANK
+    return _is_top_of_speciality(roster, rider)
 
 
 def buyer_rank(roster: list[Rider], rider: Rider, team_pk: int) -> tuple[int, int, int]:
