@@ -419,7 +419,7 @@ Add the `TickRun.riders_retired` field and migration 0016, plus the step in
   `LedgerEntry` is written for either team.
 - `test_tick_records_riders_retired`.
 
-### W4 — `api/`: `final_season` on every rider payload
+### W4 — `api/`: `final_season` on every rider payload ✅
 Serializer field and `_in_season` helper. Tests go in `api/tests.py`:
 - `test_roster_marks_final_season_rider_in_season`.
 - `test_roster_does_not_mark_final_season_off_season`: clock between
