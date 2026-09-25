@@ -558,6 +558,52 @@ def test_tick_resolves_before_ai_bids(db):
     assert auction.bids.exists() is False
 
 
+def _explode(*args, **kwargs):
+    raise RuntimeError("the ledger is on fire")
+
+
+def test_a_failing_ai_bid_is_recorded_on_the_run_and_the_week_still_settles(db, monkeypatch):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now() - timedelta(weeks=1))
+    seller = managed_seller("SEL")
+    listed = rider_for("For Sale", seller)
+    auction = list_for_auction(seller, listed.pk, at=now())
+    ai_buyer("AIA")
+    clock.set(season.weeks.get(number=1).starts_at + timedelta(hours=1))
+    monkeypatch.setattr("world.ai_market.place_bid", _explode)
+
+    run = tick()
+
+    assert run.ai_bids_placed == 0
+    assert f"ai bid on auction {auction.pk}" in run.error
+    assert "RuntimeError: the ledger is on fire" in run.error
+    # The tick's own work is untouched by the AI market failing.
+    assert run.weeks_processed == 1
+    assert run.wage_entries >= 1
+    assert run.finished_at is not None
+    assert auction.bids.exists() is False
+
+
+def test_a_failing_ai_balance_read_is_recorded_on_the_run(db, monkeypatch):
+    # balance_for is called once per unmanaged team while the buyer table is
+    # built, before any per-auction guard exists. That read failing must not
+    # take the tick down with it.
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now() - timedelta(weeks=1))
+    ai_buyer("AIA")
+    clock.set(season.weeks.get(number=1).starts_at + timedelta(hours=1))
+    monkeypatch.setattr("world.ai_market.balance_for", _explode)
+
+    run = tick()
+
+    assert run.ai_bids_placed == 0
+    assert "ai market:" in run.error
+    assert "RuntimeError: the ledger is on fire" in run.error
+    assert run.weeks_processed == 1
+    assert run.wage_entries >= 1
+    assert run.finished_at is not None
+
+
 def test_ai_won_auction_moves_rider_and_money_end_to_end(db):
     clock: MockClock = get_clock()
     seller = managed_seller("SEL")

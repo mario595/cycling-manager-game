@@ -507,12 +507,21 @@ def tick() -> TickRun:
     # only on a tick that crossed a week, using the LAST week crossed — a
     # tick catching up three weeks lists once, not three times. Bidding runs
     # every tick, because auction deadlines are wall-clock, not week-bound.
+    #
+    # The guard is wider than the per-auction and per-team ones inside
+    # ai_market: building the buyer table reads every unmanaged team's ledger,
+    # and a failure there would otherwise take the whole tick down with it.
+    # An AI market that cannot run this tick is not worth losing the tick for.
     ai_listings_created = 0
+    ai_bids_placed = 0
     ai_market_error = ""
-    if weeks:
-        ai_listings_created, ai_market_error = list_ai_riders(weeks[-1].week, at)
-    ai_bids_placed, bid_error = place_ai_bids(at)
-    ai_market_error += bid_error
+    try:
+        if weeks:
+            ai_listings_created, ai_market_error = list_ai_riders(weeks[-1].week, at)
+        ai_bids_placed, bid_error = place_ai_bids(at)
+        ai_market_error += bid_error
+    except Exception:
+        ai_market_error += f"ai market:\n{traceback.format_exc()}\n"
 
     run = TickRun.objects.create(
         races_started=len(claimed),

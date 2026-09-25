@@ -300,6 +300,30 @@ def test_ai_commitments_reduce_headroom_within_one_pass(db):
     assert second.bids.exists() is False
 
 
+def test_ai_commitments_reduce_headroom_across_ticks(db):
+    seller = _seller()
+    first_listed = _saved_rider("First", seller, level=40)
+    first = list_for_auction(seller, first_listed.pk, at=now())
+    # Headroom of exactly one reserve, and an equal reserve on the second
+    # listing, so this pass can only afford it if the next one rebuilds the
+    # commitment from the bid it is already holding.
+    ai = _ai_team("AI Alpha", "AIA", balance=2 * first.reserve_price)
+    _ai_roster(ai)
+
+    placed, error = place_ai_bids(at=now())
+
+    assert (placed, error) == (1, "")
+    second_listed = _saved_rider("Second", seller, level=40)
+    second = list_for_auction(seller, second_listed.pk, at=now())
+    assert second.reserve_price == first.reserve_price
+
+    later, error = place_ai_bids(at=now())
+
+    assert (later, error) == (0, "")
+    assert second.bids.exists() is False
+    assert first.bids.live().count() == 1
+
+
 def test_ai_never_raises_after_being_outbid(db):
     seller = _seller()
     listed = _saved_rider("For Sale", seller, level=60)
