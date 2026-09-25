@@ -435,7 +435,7 @@ Serializer field and `_in_season` helper. Tests go in `api/tests.py`:
   expected. Add `"retirement_age"` to the list of keys that must never
   appear.
 
-### W5 — `frontend/`: the Last season tag
+### W5 — `frontend/`: the Last season tag ✅
 Type, primitive, the four render sites and the fixture updates. Tests:
 - `Roster.test.tsx`: the tag renders on a `final_season: true` card and is
   absent on `false`.
