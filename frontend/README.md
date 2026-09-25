@@ -16,7 +16,7 @@ all reading the real API. No screen renders invented data.
 | `/calendar` | Calendar | Built — twelve weeks from the API, no fixture data |
 | `/transfers` | Transfers | Built — two tabs: the free-agent pool with each rider's signing fee and sign action, and live auctions with current price, minimum next bid, a live `dd hh mm ss` countdown to the deadline, a bid action and each auction's full bid history (bidding is not anonymous — collapsed by default, expandable), plus an outbid notice and the team's balance, from the API, no fixture data |
 | `/race/:raceId` | Race | Built — the full race screen: course profile (with any declared markers overlaid and listed) and squad before it runs, course profile and results after, plus a marker-results card once finished, all from the API, no fixture data |
-| `/riders/:riderId` | RiderProfile | Built — one rider's full profile: identity, freshness, salary and value, the five-axis radar and the attribute-history chart, a career strip and race history, from the API, no fixture data |
+| `/riders/:riderId` | RiderProfile | Built — one rider's full profile: identity, freshness, salary and value, the five-axis radar and the attribute-history chart, a career strip and race history, from the API, no fixture data. The affiliation segment is the current team, `Retired · Season S, Week W`, or `Free agent`. |
 | `/league` | League | Built — season standings table from the API, no fixture data |
 | `/login`, `/register` | Login, Register | Built — real accounts, no fixture data |
 | `/claim` | ClaimTeam | Built — real claim, no fixture data |

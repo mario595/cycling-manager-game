@@ -31,6 +31,7 @@ function makeProfile(overrides: Partial<RiderProfile> = {}): RiderProfile {
     release_cost: null,
     team: { id: 1, name: 'Team', code: 'TEA' },
     current_week: { season: 1, week: 7 },
+    retired: null,
     attribute_history: [],
     races: [],
     career: { starts: 0, wins: 0, podiums: 0, top_tens: 0, dnfs: 0 },

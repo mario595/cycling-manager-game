@@ -86,15 +86,20 @@ Since #29 each rider also carries `release_cost`
 - `GET /api/riders/<rider_id>/` (`RiderProfileSerializer`, `RiderProfileView`)
   — one rider's full profile, readable by **any** authenticated manager
   regardless of team (like `RaceDetailView`, not `RiderListView` — no
-  `team_for()` gate). `404` for a rider that no longer exists. The identity
-  keys (`id` through `release_cost`) are inherited unchanged from
-  `RiderSerializer` — `release_cost` serializes as `null` here, the same
-  documented behaviour `FreeAgentSerializer` relies on, since no team
-  context is passed. Four keys are added: `team` (`id`/`name`/`code`, or
-  `null` for a free agent — the rider's **current** team, not who they
-  raced for); `current_week` (`{season, week}`, or `null` before any season
-  has ever been declared — `schedule.services.current_position`, with an
+  `team_for()` gate). `404` only for a deleted never-raced rider; a retired
+  rider remains available. The identity keys (`id` through `release_cost`)
+  are inherited unchanged from `RiderSerializer` — `release_cost` serializes
+  as `null` here, the same documented behaviour `FreeAgentSerializer` relies
+  on, since no team context is passed. Six keys are added: `team`
+  (`id`/`name`/`code`, or `null` for a free agent — the rider's **current**
+  team, not who they raced for); `current_week` (`{season, week}`, or `null`
+  before any season has ever been declared — `schedule.services.current_position`,
+  with an
   off-season world reporting its just-finished season's last week);
+  `retired` (`{season, week}` when the rider has retired, otherwise
+  `null`) — an in-season retirement reports the season and week, an
+  off-season retirement reports the season and `week: null`, and a retirement
+  with no season reports `{season: null, week: null}`;
   `attribute_history`, the rider's `riders.RiderAttributeSnapshot` rows in
   time order — the baseline (`week: null`) first, then by
   `(season, week)`, **never** by `created_at`, which a backfill made
@@ -117,8 +122,8 @@ Since #29 each rider also carries `release_cost`
   career length — no per-race lookup.
 - `GET /api/transfers/free-agents/` (`FreeAgentPoolSerializer`,
   `FreeAgentsView`) — the whole transfer market in one payload:
-  `{riders: [...], balance}`. `riders` is the free-agent pool, every rider
-  with no team, ordered by name, each carrying `signing_fee`
+  `{riders: [...], balance}`. `riders` is the active free-agent pool, every
+  active rider with no team, ordered by name, each carrying `signing_fee`
   (`transfers.pricing.signing_fee_for`, exact credits) and — inherited
   from `RiderSerializer` — all the roster fields; a free agent's
   `release_cost` serializes as `null` (it is on nobody's roster).
@@ -131,9 +136,9 @@ Since #29 each rider also carries `release_cost`
   that debits the ledger through `economy.services.charge_transfer_fee`
   (a `TRANSFER_FEE` row, description "Signed X"); the closure raises
   `InsufficientFunds` when `balance_for(team) < fee`. A rider already
-  signed, a full roster, or unaffordable fee is a **409** — the request
-  is well-formed but the game's state refuses it; no team is a 403.
-  Success is 204.
+  signed, a retired rider, a full roster, or an unaffordable fee is a **409**
+  — the request is well-formed but the game's state refuses it; no team is
+  a 403. Success is 204.
 - `POST /api/transfers/riders/release/` (`ReleaseRiderSerializer`,
   `ReleaseRiderView`) — release one of the caller's riders to the pool,
   debiting `release_cost_for` the same way. The view's `charge` closure

@@ -29,6 +29,12 @@ def _attribute_field(help_text: str) -> models.PositiveSmallIntegerField:
     )
 
 
+class RiderQuerySet(models.QuerySet):
+    def active(self):
+        """Riders still in the game — everyone except the retired."""
+        return self.filter(retired_at__isnull=True)
+
+
 class Rider(TimeStampedModel):
     """A rider as persisted by the game.
 
@@ -51,7 +57,11 @@ class Rider(TimeStampedModel):
     one. `freshness` is visible (0-10 via to_display_scale, like any
     attribute) but its recovery rate is not — the value is what the
     player acts on; how fast it climbs back is learned by watching it.
+    `retired_at` is visible, and a retired rider is frozen (see
+    riders/README.md, *Retirement*).
     """
+
+    objects = RiderQuerySet.as_manager()
 
     class Speciality(models.TextChoices):
         CLIMBER = "climber", "Climber"
@@ -155,6 +165,14 @@ class Rider(TimeStampedModel):
             "(transfers/README.md)."
         ),
     )
+    retired_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Game time this rider left the game for good. Null means active; "
+            "a retired rider is frozen and can never be signed."
+        ),
+    )
 
     # --- Hidden, between-race traits (never serialized — see class docstring) ---
     potential = models.PositiveSmallIntegerField(
@@ -207,6 +225,13 @@ class Rider(TimeStampedModel):
 
     class Meta:
         ordering = ["name"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(retired_at__isnull=True)
+                | models.Q(team__isnull=True),
+                name="retired_rider_has_no_team",
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.name
