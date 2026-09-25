@@ -20,6 +20,7 @@ from transfers.services import (
     RiderNotOnRoster,
     RosterFull,
     SelfBid,
+    cancel_open_auctions,
     free_agents,
     list_for_auction,
     place_bid,
@@ -608,3 +609,48 @@ def test_opening_bid_after_withdrawal_accepts_reserve(db, claimed_at):
     assert updated.current_price == auction.reserve_price
     assert auction.bids.live().count() == 1
     assert auction.bids.live().get().bidder_team_id == second_bidder.pk
+
+
+def test_cancel_open_auctions_cancels_only_open(db, claimed_at):
+    seller = Team.objects.create(name="Seller", code="SEL")
+    bidder = Team.objects.create(name="Bidder", code="BID")
+    rider = _rider(name="For Sale", team=seller)
+    open_auction = list_for_auction(seller, rider.pk, at=claimed_at)
+    place_bid(open_auction.pk, bidder, open_auction.reserve_price, at=claimed_at)
+    sold = list_for_auction(seller, _rider(name="Sold", team=seller).pk, at=claimed_at)
+    sold.status = Auction.Status.SOLD
+    sold.save(update_fields=["status", "updated_at"])
+    unsold = list_for_auction(seller, _rider(name="Unsold", team=seller).pk, at=claimed_at)
+    unsold.status = Auction.Status.UNSOLD
+    unsold.save(update_fields=["status", "updated_at"])
+    retired = datetime(2027, 3, 8, tzinfo=dt_timezone.utc)
+
+    cancelled = cancel_open_auctions([rider.pk], at=retired)
+
+    open_auction.refresh_from_db()
+    sold.refresh_from_db()
+    unsold.refresh_from_db()
+    assert cancelled == 1
+    assert open_auction.status == Auction.Status.CANCELLED
+    assert open_auction.resolved_at == retired
+    assert sold.status == Auction.Status.SOLD
+    assert sold.resolved_at is None
+    assert unsold.status == Auction.Status.UNSOLD
+    assert unsold.resolved_at is None
+
+
+def test_cancel_open_auctions_keeps_bid_history(db, claimed_at):
+    """Bids are append-only, so cancelling an auction leaves the record of
+    who was interested — which is also the structural proof that no money
+    moved: the function has no charge or pay callback to move any."""
+    seller = Team.objects.create(name="Seller", code="SEL")
+    bidder = Team.objects.create(name="Bidder", code="BID")
+    rider = _rider(name="For Sale", team=seller)
+    auction = list_for_auction(seller, rider.pk, at=claimed_at)
+    place_bid(auction.pk, bidder, auction.reserve_price, at=claimed_at)
+
+    cancel_open_auctions([rider.pk], at=claimed_at + timedelta(minutes=1))
+
+    assert auction.bids.count() == 1
+    assert auction.bids.get().amount == auction.reserve_price
+    assert auction.bids.get().bidder_team_id == bidder.pk

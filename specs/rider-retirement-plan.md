@@ -394,7 +394,7 @@ Rename `PEAK_AGE_RANGE`, and add `RETIREMENT_AGE_MIN/SPAN`, `retirement_age`,
   `retired_at` is kept.
 - `test_retire_due_riders_leaves_unattached_since_untouched`.
 
-### W2 — `transfers/`: cancel open auctions
+### W2 — `transfers/`: cancel open auctions ✅
 Add `cancel_open_auctions`. Tests go in `transfers/tests/test_services.py`:
 - `test_cancel_open_auctions_cancels_only_open`: OPEN → CANCELLED with
   `resolved_at`; SOLD/UNSOLD untouched.

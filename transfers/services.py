@@ -15,6 +15,7 @@ instead of counting `schedule/`'s Week rows itself — see `transfers/README.md`
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import timedelta
 
 from django.db import IntegrityError, transaction
@@ -425,3 +426,18 @@ def withdraw_bids(team, *, at) -> int:
             auction.current_price = top.amount if top else auction.reserve_price
             auction.save(update_fields=["current_price", "updated_at"])
     return withdrawn
+
+
+def cancel_open_auctions(rider_ids: Iterable[int], *, at) -> int:
+    """Cancel every OPEN auction of these riders — no money moves (bids are
+    never escrowed). Returns auctions cancelled.
+
+    Used when a rider retires by age at a season close (#42): resolve_auction
+    would cancel these anyway once it saw the rider had left the seller's
+    roster, but only at the deadline, leaving managers free to keep bidding on
+    a rider who is already gone. Takes no charge or pay callback precisely
+    because there is nothing to move: an auction holds no funds.
+    """
+    return Auction.objects.filter(
+        rider_id__in=list(rider_ids), status=Auction.Status.OPEN,
+    ).update(status=Auction.Status.CANCELLED, resolved_at=at)
