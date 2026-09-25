@@ -423,7 +423,7 @@ Tests, `riders/tests/test_services.py`:
   `weekly_salary_for` would change. `reprice_all()` leaves it, and the
   rider is absent from the returned changes.
 
-### W3 — `transfers/services.py`: pool and signing exclude retired riders
+### W3 — `transfers/services.py`: pool and signing exclude retired riders — done
 
 Tests, `transfers/tests/test_services.py`:
 - `test_free_agents_excludes_retired_riders`.
