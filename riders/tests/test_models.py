@@ -86,3 +86,27 @@ def test_a_rider_can_have_two_baseline_snapshots(rider):
     RiderAttributeSnapshot.objects.create(week=None, **_snapshot_kwargs(rider))
 
     assert rider.attribute_snapshots.count() == 2
+
+
+def test_active_excludes_retired_riders(rider):
+    retired_at = datetime(2027, 3, 1, tzinfo=dt_timezone.utc)
+    retired = Rider.objects.create(
+        name="Retired Rider",
+        climb=50,
+        sprint=50,
+        flat=50,
+        resistance=50,
+        positioning=50,
+        retired_at=retired_at,
+    )
+
+    assert list(Rider.objects.active()) == [rider]
+    assert retired.retired_at == retired_at
+
+
+def test_retired_rider_cannot_have_a_team(rider):
+    rider.retired_at = datetime(2027, 3, 1, tzinfo=dt_timezone.utc)
+
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            rider.save()

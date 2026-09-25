@@ -396,7 +396,7 @@ applies to a deleted never-raced rider. No other layout change (D9).
 
 ## Work items
 
-### W1 — `riders/models.py`: `retired_at`, constraint, `active()`; migration `0012_rider_retired_at`
+### W1 — `riders/models.py`: `retired_at`, constraint, `active()`; migration `0012_rider_retired_at` — done
 
 Tests, `riders/tests/test_models.py`:
 - `test_active_excludes_retired_riders`: two riders, one with `retired_at`
