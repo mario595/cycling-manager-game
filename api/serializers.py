@@ -398,6 +398,11 @@ class CurrentWeekSerializer(serializers.Serializer):
     week = serializers.IntegerField()
 
 
+class RetiredSerializer(serializers.Serializer):
+    season = serializers.IntegerField(allow_null=True)
+    week = serializers.IntegerField(allow_null=True)
+
+
 class RiderProfileRaceInfoSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     name = serializers.CharField()
@@ -437,6 +442,7 @@ class RiderProfileSerializer(RiderSerializer):
 
     team = serializers.SerializerMethodField()
     current_week = serializers.SerializerMethodField()
+    retired = serializers.SerializerMethodField()
     attribute_history = serializers.SerializerMethodField()
     races = serializers.SerializerMethodField()
     career = serializers.SerializerMethodField()
@@ -448,6 +454,10 @@ class RiderProfileSerializer(RiderSerializer):
     def get_current_week(self, instance) -> dict | None:
         current_week = self.context["profile"]["current_week"]
         return CurrentWeekSerializer(current_week).data if current_week is not None else None
+
+    def get_retired(self, instance) -> dict | None:
+        retired = self.context["profile"]["retired"]
+        return RetiredSerializer(retired).data if retired is not None else None
 
     def get_attribute_history(self, instance) -> list[dict]:
         return AttributeSnapshotSerializer(self.context["profile"]["attribute_history"], many=True).data

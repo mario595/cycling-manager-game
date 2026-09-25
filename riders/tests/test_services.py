@@ -25,6 +25,7 @@ from riders.services import (
     record_week_snapshots,
     recovery_amount,
     reprice_all,
+    retire_riders,
     training_deltas,
     weekly_deltas,
 )
@@ -578,3 +579,83 @@ def test_record_week_snapshots_is_a_no_op_the_second_time_for_the_same_week(db):
     record_week_snapshots([rider.pk], week_id=week.pk)
 
     assert RiderAttributeSnapshot.objects.filter(rider=rider, week_id=week.pk).count() == 1
+
+
+def test_retire_riders_stamps_only_teamless_active_riders(db):
+    team = Team.objects.create(name="Team Alpha", code="ALP")
+    at = datetime(2027, 3, 8, tzinfo=dt_timezone.utc)
+    older = datetime(2027, 3, 1, tzinfo=dt_timezone.utc)
+    free_agent = Rider.objects.create(
+        name="Free Agent", climb=40, sprint=40, flat=40, resistance=40, positioning=40,
+    )
+    teamed = Rider.objects.create(
+        name="Teamed", team=team, climb=40, sprint=40, flat=40, resistance=40, positioning=40,
+    )
+    already_retired = Rider.objects.create(
+        name="Already Retired", climb=40, sprint=40, flat=40, resistance=40,
+        positioning=40, retired_at=older,
+    )
+
+    changed = retire_riders([free_agent.pk, teamed.pk, already_retired.pk], at=at)
+
+    free_agent.refresh_from_db()
+    teamed.refresh_from_db()
+    already_retired.refresh_from_db()
+    assert changed == 1
+    assert free_agent.retired_at == at
+    assert teamed.retired_at is None
+    assert already_retired.retired_at == older
+
+
+def test_retired_rider_does_not_grow_or_decline(db):
+    rider = Rider.objects.create(
+        name="Retired Climber", age=20, peak_age=27, potential=80,
+        climb=40, sprint=40, flat=40, resistance=40, positioning=40,
+        retired_at=datetime(2027, 3, 1, tzinfo=dt_timezone.utc),
+    )
+    before = {name: getattr(rider, name) for name in ENGINE_ATTRIBUTES}
+    before_debt = rider.growth_debt
+
+    apply_weekly_growth(extra_deltas={rider.pk: {"climb": 5.0}})
+    rider.refresh_from_db()
+
+    assert {name: getattr(rider, name) for name in ENGINE_ATTRIBUTES} == before
+    assert rider.growth_debt == before_debt
+
+
+def test_retired_rider_does_not_recover_freshness(db):
+    rider = Rider.objects.create(
+        name="Retired Rider", climb=40, sprint=40, flat=40, resistance=40,
+        positioning=40, freshness=40,
+        retired_at=datetime(2027, 3, 1, tzinfo=dt_timezone.utc),
+    )
+
+    apply_weekly_recovery(exclude_ids=set())
+    rider.refresh_from_db()
+
+    assert rider.freshness == 40
+
+
+def test_retired_rider_does_not_age(db):
+    rider = Rider.objects.create(
+        name="Retired Rider", age=25, climb=40, sprint=40, flat=40, resistance=40,
+        positioning=40, retired_at=datetime(2027, 3, 1, tzinfo=dt_timezone.utc),
+    )
+
+    advance_ages()
+    rider.refresh_from_db()
+
+    assert rider.age == 25
+
+
+def test_retired_rider_is_not_repriced(db):
+    rider = make_repriced_rider("Retired Rider", salary_move=200)
+    original_salary = rider.weekly_salary
+    rider.retired_at = datetime(2027, 3, 1, tzinfo=dt_timezone.utc)
+    rider.save(update_fields=["retired_at"])
+
+    changes = reprice_all()
+    rider.refresh_from_db()
+
+    assert rider.weekly_salary == original_salary
+    assert changes == []

@@ -1961,6 +1961,17 @@ def test_free_agents_view_lists_teamless_riders(market_client, market_team):
     assert alice_payload["release_cost"] is None
 
 
+def test_free_agents_endpoint_omits_retired_riders(market_client, market_team):
+    _market_rider(name="Active Free")
+    retired = _market_rider(name="Retired Free", retired_at=datetime(2027, 3, 1, tzinfo=dt_timezone.utc))
+
+    response = market_client.get("/api/transfers/free-agents/")
+
+    assert response.status_code == 200
+    assert [rider["name"] for rider in response.data["riders"]] == ["Active Free"]
+    assert retired.pk not in {rider["id"] for rider in response.data["riders"]}
+
+
 def test_sign_free_agent_debits_the_fee_and_assigns_the_rider(market_client, market_team):
     make_ledger_entry(
         market_team, "starting_balance", STARTING_BALANCE, now(), "Starting balance",
@@ -1977,6 +1988,22 @@ def test_sign_free_agent_debits_the_fee_and_assigns_the_rider(market_client, mar
     fee_entry = LedgerEntry.objects.get(team=market_team, kind="transfer_fee")
     assert fee_entry.amount == -signing_fee_for(free)
     assert "Free Rider" in fee_entry.description
+
+
+def test_signing_a_retired_rider_returns_409(market_client, market_team):
+    retired = _market_rider(
+        name="Retired Sign Target",
+        retired_at=datetime(2027, 3, 1, tzinfo=dt_timezone.utc),
+    )
+
+    response = market_client.post(
+        "/api/transfers/free-agents/sign/", {"rider_id": retired.pk}, format="json",
+    )
+
+    assert response.status_code == 409
+    retired.refresh_from_db()
+    assert retired.team_id is None
+    assert retired.retired_at is not None
 
 
 def test_sign_free_agent_409s_when_unaffordable(market_client, market_team):
@@ -2415,6 +2442,50 @@ def test_rider_profile_readable_by_any_manager_and_by_teamless_user(profile_ride
     assert response.status_code == 200
 
 
+def test_rider_profile_of_a_retired_rider_returns_200_with_retired_week(
+    profile_client, profile_rider, profile_teams,
+):
+    monday = datetime(2027, 3, 1, 0, 0, tzinfo=dt_timezone.utc)
+    season = _create_season_with_weeks(monday)
+    week_11 = season.weeks.get(number=11)
+    team_a, _ = profile_teams
+    race = _finished_race("Retired Rider Race", starts_at=week_11.starts_at)
+    _enter_squad(race, team_a, profile_rider)
+    RaceResult.objects.create(
+        race=race, rider=profile_rider, position=1, finish_time=3600.0,
+    )
+    profile_rider.team = None
+    profile_rider.retired_at = week_11.starts_at
+    profile_rider.save()
+
+    response = profile_client.get(f"/api/riders/{profile_rider.pk}/")
+
+    assert response.status_code == 200
+    assert response.data["retired"] == {"season": 1, "week": 11}
+    assert response.data["team"] is None
+    assert response.data["races"]
+
+
+def test_rider_profile_of_an_active_rider_has_null_retired(profile_client, profile_rider):
+    response = profile_client.get(f"/api/riders/{profile_rider.pk}/")
+
+    assert response.status_code == 200
+    assert response.data["retired"] is None
+
+
+def test_retired_payload_outside_a_season_does_not_error(profile_client, profile_rider):
+    monday = datetime(2027, 3, 1, 0, 0, tzinfo=dt_timezone.utc)
+    season = _create_season_with_weeks(monday)
+    profile_rider.team = None
+    profile_rider.retired_at = season.ends_at + timedelta(days=1)
+    profile_rider.save()
+
+    response = profile_client.get(f"/api/riders/{profile_rider.pk}/")
+
+    assert response.status_code == 200
+    assert response.data["retired"] == {"season": 1, "week": None}
+
+
 def test_rider_profile_unknown_rider_is_404(profile_client):
     response = profile_client.get("/api/riders/999999/")
 
@@ -2431,7 +2502,7 @@ def test_rider_profile_has_no_hidden_traits(profile_client, profile_rider):
         "id", "name", "speciality", "nationality", "age", "height_cm", "weight_kg",
         "climb", "sprint", "flat", "resistance", "positioning",
         "freshness", "weekly_salary", "market_value", "release_cost",
-        "team", "current_week", "attribute_history", "races", "career",
+        "team", "current_week", "retired", "attribute_history", "races", "career",
     }
 
 

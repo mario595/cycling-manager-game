@@ -29,6 +29,7 @@ const profile: RiderProfileData = {
   release_cost: null,
   team: { id: 3, name: 'Profile Team', code: 'PFT' },
   current_week: { season: 1, week: 7 },
+  retired: null,
   attribute_history: [
     { season: null, week: null, climb: 7, sprint: 3, flat: 5, resistance: 6, positioning: 5 },
   ],
@@ -91,6 +92,19 @@ describe('RiderProfile', () => {
     renderRiderProfile()
 
     expect(screen.getByText(/Free agent/)).toBeInTheDocument()
+  })
+
+  it('shows retirement details in place of the team', () => {
+    mockUseRiderProfile.mockReturnValue({
+      profile: { ...profile, team: null, retired: { season: 1, week: 11 } },
+      loading: false,
+      notFound: false,
+      error: false,
+    })
+
+    renderRiderProfile()
+
+    expect(screen.getByText(/Retired · Season 1, Week 11/)).toBeInTheDocument()
   })
 
   it('shows a dash for a DNF row', () => {

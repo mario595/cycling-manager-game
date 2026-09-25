@@ -72,7 +72,8 @@ class TransferError(Exception):
 
 
 class RiderNotAvailable(TransferError):
-    """That rider is not a free agent — signed by someone else, or never was."""
+    """That rider is not an available free agent — signed, retired, or
+    never was."""
 
 
 class RosterFull(TransferError):
@@ -104,8 +105,8 @@ class SelfBid(TransferError):
 
 
 def free_agents() -> QuerySet[Rider]:
-    """Every rider with no team, ordered by name — the free-agent pool."""
-    return Rider.objects.filter(team__isnull=True).order_by("name")
+    """Every active rider with no team — retired riders are never in the pool."""
+    return Rider.objects.active().filter(team__isnull=True).order_by("name")
 
 
 def release_cost_for(team, rider: Rider, *, weeks_opened: int) -> int:
@@ -165,6 +166,9 @@ def sign_free_agent(team, rider_id: int, *, at, charge=None) -> Rider:
         # than overwriting the winner's signing.
         if rider.team_id is not None:
             raise RiderNotAvailable("That rider has already been signed.")
+
+        if rider.retired_at is not None:
+            raise RiderNotAvailable("That rider has retired.")
 
         # Roster-cap COUNT under the RIDER's lock, not the team's — an
         # accepted narrowing race (Design decision 8): two concurrent

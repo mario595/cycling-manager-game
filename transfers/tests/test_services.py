@@ -61,6 +61,32 @@ def test_free_agents_returns_only_teamless_riders(db):
     assert rostered not in pool
 
 
+def test_free_agents_excludes_retired_riders(db):
+    retired = _rider(
+        name="Retired Rider", team=None,
+        retired_at=datetime(2027, 3, 1, tzinfo=dt_timezone.utc),
+    )
+    active = _rider(name="Active Rider", team=None)
+
+    assert list(free_agents()) == [active]
+    assert retired not in free_agents()
+
+
+def test_signing_a_retired_rider_raises_not_available(db, claimed_at):
+    team = Team.objects.create(name="Team Alpha", code="ALP", managed_since=claimed_at)
+    retired_at = datetime(2027, 3, 1, tzinfo=dt_timezone.utc)
+    rider = _rider(name="Retired Rider", team=None, retired_at=retired_at)
+    charge = Mock()
+
+    with pytest.raises(RiderNotAvailable):
+        sign_free_agent(team, rider.pk, at=claimed_at, charge=charge)
+
+    rider.refresh_from_db()
+    charge.assert_not_called()
+    assert rider.team_id is None
+    assert rider.retired_at == retired_at
+
+
 def test_release_cost_is_zero_during_claim_cooldown(db, claimed_at):
     team = Team.objects.create(
         name="Team Alpha", code="ALP", managed_since=claimed_at,

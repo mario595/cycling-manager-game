@@ -92,9 +92,9 @@ ceiling; at or above it, attributes fall at a rate scaled by
 `decline_rate` and by years past peak, capped at `DECLINE_YEARS_CAP` (3)
 so decline keeps accelerating for a rider newly past their peak — where it
 matters for a manager's decision — without compounding without bound the
-longer a rider has been retired-in-all-but-name. Growth speed and decline
-speed are governed by different hidden traits and must be tunable apart —
-a rider's `potential` says nothing about how fast they fall once they're
+longer a rider remains active without an age-driven exit. Growth speed and
+decline speed are governed by different hidden traits and must be tunable
+apart — a rider's `potential` says nothing about how fast they fall once they're
 past their best. Both constants are tuned so a season of growth or
 decline for the *representative* case — a young rider well below
 potential, or an average-`decline_rate` veteran comfortably past peak —
@@ -127,9 +127,10 @@ call them and how many weeks have passed. The signature gained
 This keeps the dependency direction in `AGENTS.md` intact: `riders/` may not
 import `schedule/` or `world/`.
 
-**Decline has no floor, and there is no retirement.** A rider can decline
+**Decline has no floor, but retirement is explicit.** A rider can decline
 indefinitely toward the bottom of the range and sit on a roster, unusable,
-forever — deliberately out of scope here. See *Future work*, below.
+forever; retirement is a separate permanent exit from the game. See
+*Retirement*, below.
 
 ## Weekly training
 
@@ -359,16 +360,42 @@ Who reads them, and why:
   by comparing a rider's `joined_team_at` with the team's `managed_since`:
   a rider who joined at the exact claim instant releases for free while the
   cooldown holds, a rider signed afterwards pays severance.
-  `free_agents()` is simply `team__isnull=True`.
+  `free_agents()` is `Rider.objects.active().filter(team__isnull=True)`, so
+  retired riders are never in the pool.
 - `world/` — `_expire_free_agents` ages `unattached_since` against `Week`
   rows (the same count schedule.services.weeks_opened_between uses for managers) to find free
-  agents that have sat too long, then deletes them. See
-  `transfers/README.md`, *Free agents*, and `world/README.md`, the tick.
+  agents that have sat too long, then retires selected riders who have raced
+  and deletes selected riders who never raced. See `transfers/README.md`,
+  *Free agents*, and `world/README.md`, the tick.
 
 The stamps are game time (same clock as salary/tick), never wall-clock time,
 and are both null for riders generated teamless (generation creates riders
 off the market; see `transfers/README.md` for what happens to pre-migration
 rows whose `unattached_since` is null).
+
+## Retirement
+
+`retired_at` is a nullable game-time stamp on `Rider`: `NULL` means the rider
+is active, and a non-null value is the permanent moment they left the game. It
+is never cleared. A timestamp is deliberately used instead of a status enum so
+it can answer when the rider retired and can later be shared with age-driven
+retirement ([#42](https://github.com/mario595/cycling-manager/issues/42))
+without adding a week foreign key to this app.
+
+A retired rider must have no team. The database constraint
+`retired_rider_has_no_team` enforces `retired_at IS NULL OR team_id IS NULL`;
+`riders.services.retire_riders` rechecks both teamlessness and active state in
+its conditional update. The rider's profile and historical race rows remain
+available, but the rider is out of circulation for good.
+
+`Rider.objects.active()` is the single definition of an active rider. Every
+new loop that processes every rider must use it rather than
+`Rider.objects.all()`. The four existing all-rider passes use it so a retired
+rider is frozen: `apply_weekly_growth`, `apply_weekly_recovery`,
+`advance_ages`, and `reprice_all`. Once `retired_at` is set, attributes,
+`growth_debt`, freshness, age, and `weekly_salary` do not change. Expiry dates
+the stamp to the qualifying `week.starts_at`; age-driven retirement (#42) will
+use the same field.
 
 ## Generation
 
@@ -442,10 +469,10 @@ command is an entry point, the same latitude
   `generation.py` are structured as one entry per country specifically so
   that adding one is a choices-list and name-pool edit, not a migration or
   a `generate_rider` signature change.
-- **Retirement.** Decline has no floor and no exit today — a rider can
-  fall indefinitely and stay on the roster, unusable, forever. Belongs to
-  a dedicated retirement feature ([#42](https://github.com/mario595/cycling-manager/issues/42)),
-  not to the age curve itself.
+- **Age-driven retirement.** The permanent retirement state now exists and
+  is documented in *Retirement*, above. Automatic age-driven retirement
+  ([#42](https://github.com/mario595/cycling-manager/issues/42)) is still to
+  come; it will stamp the same `retired_at` field.
 - **Attributing movement to growth vs training.** The "what moved" list is
   built — `staff.TrainingWeekReport` at each rollover, shown on the Training
   screen — but a change is the visible number moving, with no split of how

@@ -12,7 +12,7 @@ interface RiderProfileState {
 /**
  * Fetches once on mount (and when riderId changes) — no polling, the same
  * cancelled-flag shape as useRaceDetail. `notFound` is a separate flag from
- * `error`: a 404 means the rider is gone (an expired free agent), which the
+ * `error`: a 404 means the rider was deleted after never racing, which the
  * page must explain rather than show as a broken page. Changing riderId
  * resets all three flags so moving from one rider's page to another's does
  * not show the previous rider mid-load.

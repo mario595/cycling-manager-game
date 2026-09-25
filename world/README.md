@@ -204,11 +204,16 @@ reads `now()` once, then finds and processes whatever is due, in six steps:
    the same per-item guard *Execute* below uses for a broken race — and the
 count of teams released lands on `TickRun.teams_released`.
     After `_release_inactive`, `world.services._expire_free_agents(week)`
-    prunes the free-agent pool: it deletes every rider whose
-    `unattached_since` has crossed `transfers.services.EXPIRY_WEEKS` (eight)
-    in-season weeks (weeks_opened_between's same Week-row count) and whose
-    value at that moment falls in the pool's bottom quintile
-    (`EXPIRY_VALUE_PERCENTILE`, 0.20). Value is never stored, so the
+    prunes the active free-agent pool. The pool comes from
+    `transfers.services.free_agents()`, so retired riders are excluded. It
+    selects riders whose `unattached_since` has crossed
+    `transfers.services.EXPIRY_WEEKS` (eight) in-season weeks
+    (weeks_opened_between's same Week-row count) and whose value at that
+    moment falls in the pool's bottom quintile
+    (`EXPIRY_VALUE_PERCENTILE`, 0.20). A selected rider with at least one
+    `RaceResult` is retired with `retired_at = week.starts_at` and counted
+    on `TickRun.agents_retired`; a selected rider who never raced is deleted
+    and counted on `TickRun.agents_expired`. Value is never stored, so the
     cutoff is computed fresh each pass, and a pool too small for a real
     bottom quintile expires nobody. A rider with null `unattached_since`
     (pre-migration free agents) is exempt, never treated as long-lost.
