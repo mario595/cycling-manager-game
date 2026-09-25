@@ -289,7 +289,7 @@ def place_bid(auction_id: int, team, amount: int, *, at) -> Auction:
             raise SelfBid("You cannot bid on your own listing.")
 
         minimum = auction.current_price
-        if auction.bids.exists():
+        if auction.bids.live().exists():
             minimum += auction.min_increment
         if amount < minimum:
             raise BidTooLow(f"Bid must be at least {minimum}.")
@@ -367,7 +367,7 @@ def resolve_auction(auction, *, at, pay_seller=None, charge_buyer=None) -> Aucti
             auction.save(update_fields=["status", "resolved_at", "updated_at"])
             return auction
 
-        winning_bid = auction.bids.order_by("-amount", "-placed_at").first()
+        winning_bid = auction.bids.live().order_by("-amount", "-placed_at").first()
         if winning_bid is None:
             auction.status = Auction.Status.UNSOLD
             auction.resolved_at = at
@@ -395,3 +395,29 @@ def resolve_auction(auction, *, at, pay_seller=None, charge_buyer=None) -> Aucti
         auction.resolved_at = at
         auction.save(update_fields=["status", "resolved_at", "updated_at"])
     return auction
+
+
+def withdraw_bids(team, *, at) -> int:
+    """Withdraw every live bid `team` holds in an OPEN auction, and reset each
+    affected auction's current_price to its highest remaining live bid (or the
+    reserve if none remain). Returns bids withdrawn. Deadlines are left as
+    they are.
+    """
+    withdrawn = 0
+    with transaction.atomic():
+        auction_ids = list(
+            Bid.objects.live()
+            .filter(bidder_team=team, auction__status=Auction.Status.OPEN)
+            .values_list("auction_id", flat=True)
+            .distinct()
+        )
+        for auction in (
+            Auction.objects.select_for_update().filter(pk__in=auction_ids).order_by("pk")
+        ):
+            if auction.status != Auction.Status.OPEN:
+                continue
+            withdrawn += auction.bids.live().filter(bidder_team=team).update(withdrawn_at=at)
+            top = auction.bids.live().order_by("-amount", "-placed_at").first()
+            auction.current_price = top.amount if top else auction.reserve_price
+            auction.save(update_fields=["current_price", "updated_at"])
+    return withdrawn

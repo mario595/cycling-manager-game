@@ -457,7 +457,7 @@ Add the field, `BidQuerySet` and the manager, and update the docstring. Run
 **Test:** `transfers/tests/test_models.py::test_live_excludes_withdrawn_bids`,
 and `::test_related_manager_supports_live` (`auction.bids.live()`).
 
-### W2 — `transfers/services.py`: live-bid readers and `withdraw_bids`
+### W2 — `transfers/services.py`: live-bid readers and `withdraw_bids` ✅
 Switch `place_bid` and `resolve_auction` to `live()`, and add `withdraw_bids`.
 **Load-bearing:** `resolve_auction`'s winning-bid query.
 **Tests** in `transfers/tests/test_services.py`:

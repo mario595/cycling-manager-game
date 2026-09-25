@@ -27,6 +27,7 @@ from transfers.services import (
     release_rider,
     resolve_auction,
     sign_free_agent,
+    withdraw_bids,
 )
 
 
@@ -430,3 +431,154 @@ def test_resolve_auction_is_idempotent_under_charge_buyer_failure(db, claimed_at
     rider.refresh_from_db()
     assert rider.team_id == seller.pk
     assert Bid.objects.filter(auction=auction).count() == 1
+
+
+def test_withdraw_bids_resets_current_price_to_next_live_bid(db, claimed_at):
+    seller = Team.objects.create(name="Seller", code="SEL")
+    first_bidder = Team.objects.create(name="First Bidder", code="FIR")
+    second_bidder = Team.objects.create(name="Second Bidder", code="SEC")
+    rider = _rider(name="For Sale", team=seller)
+    auction = list_for_auction(seller, rider.pk, at=claimed_at)
+    place_bid(auction.pk, first_bidder, auction.reserve_price, at=claimed_at)
+    place_bid(
+        auction.pk,
+        second_bidder,
+        auction.reserve_price + auction.min_increment,
+        at=claimed_at + timedelta(minutes=1),
+    )
+
+    withdrawn = withdraw_bids(second_bidder, at=claimed_at + timedelta(minutes=2))
+
+    auction.refresh_from_db()
+    assert withdrawn == 1
+    assert auction.current_price == auction.reserve_price
+    assert list(auction.bids.live()) == [first_bidder.transfer_bids.get()]
+
+
+def test_withdraw_bids_resets_to_reserve_when_no_bid_remains(db, claimed_at):
+    seller = Team.objects.create(name="Seller", code="SEL")
+    bidder = Team.objects.create(name="Bidder", code="BID")
+    rider = _rider(name="For Sale", team=seller)
+    auction = list_for_auction(seller, rider.pk, at=claimed_at)
+    place_bid(auction.pk, bidder, auction.reserve_price, at=claimed_at)
+
+    withdrawn = withdraw_bids(bidder, at=claimed_at + timedelta(minutes=1))
+
+    auction.refresh_from_db()
+    assert withdrawn == 1
+    assert auction.current_price == auction.reserve_price
+    assert not auction.bids.live().exists()
+
+
+def test_withdraw_bids_ignores_resolved_auctions(db, claimed_at):
+    seller = Team.objects.create(name="Seller", code="SEL")
+    bidder = Team.objects.create(name="Bidder", code="BID")
+    rider = _rider(name="For Sale", team=seller)
+    auction = list_for_auction(seller, rider.pk, at=claimed_at)
+    place_bid(auction.pk, bidder, auction.reserve_price, at=claimed_at)
+    auction.status = Auction.Status.UNSOLD
+    auction.resolved_at = claimed_at + timedelta(minutes=1)
+    auction.save(update_fields=["status", "resolved_at", "updated_at"])
+
+    withdrawn = withdraw_bids(bidder, at=claimed_at + timedelta(minutes=2))
+
+    bid = bidder.transfer_bids.get(auction=auction)
+    assert withdrawn == 0
+    assert bid.withdrawn_at is None
+    assert auction.bids.live().exists()
+
+
+def test_withdraw_bids_leaves_other_teams_bids_live(db, claimed_at):
+    seller = Team.objects.create(name="Seller", code="SEL")
+    first_bidder = Team.objects.create(name="First Bidder", code="FIR")
+    second_bidder = Team.objects.create(name="Second Bidder", code="SEC")
+    rider = _rider(name="For Sale", team=seller)
+    auction = list_for_auction(seller, rider.pk, at=claimed_at)
+    place_bid(auction.pk, first_bidder, auction.reserve_price, at=claimed_at)
+    place_bid(
+        auction.pk,
+        second_bidder,
+        auction.reserve_price + auction.min_increment,
+        at=claimed_at + timedelta(minutes=1),
+    )
+
+    withdraw_bids(first_bidder, at=claimed_at + timedelta(minutes=2))
+
+    assert not first_bidder.transfer_bids.live().exists()
+    assert second_bidder.transfer_bids.live().exists()
+
+
+def test_withdrawn_bid_never_wins_resolution(db, claimed_at):
+    seller = Team.objects.create(name="Seller", code="SEL")
+    first_bidder = Team.objects.create(name="First Bidder", code="FIR")
+    second_bidder = Team.objects.create(name="Second Bidder", code="SEC")
+    rider = _rider(name="For Sale", team=seller)
+    auction = list_for_auction(seller, rider.pk, at=claimed_at)
+    place_bid(auction.pk, first_bidder, auction.reserve_price, at=claimed_at)
+    place_bid(
+        auction.pk,
+        second_bidder,
+        auction.reserve_price + auction.min_increment,
+        at=claimed_at + timedelta(minutes=1),
+    )
+    withdraw_bids(second_bidder, at=claimed_at + timedelta(minutes=2))
+    charge_buyer = Mock()
+    pay_seller = Mock()
+
+    resolved = resolve_auction(
+        auction,
+        at=auction.deadline,
+        charge_buyer=charge_buyer,
+        pay_seller=pay_seller,
+    )
+
+    assert resolved.status == Auction.Status.SOLD
+    assert charge_buyer.call_args.args == (first_bidder, auction.reserve_price)
+    pay_seller.assert_called_once_with(seller, auction.reserve_price)
+    rider.refresh_from_db()
+    assert rider.team_id == first_bidder.pk
+
+
+def test_withdrawn_only_bid_resolves_unsold(db, claimed_at):
+    seller = Team.objects.create(name="Seller", code="SEL")
+    bidder = Team.objects.create(name="Bidder", code="BID")
+    rider = _rider(name="For Sale", team=seller)
+    auction = list_for_auction(seller, rider.pk, at=claimed_at)
+    place_bid(auction.pk, bidder, auction.reserve_price, at=claimed_at)
+    withdraw_bids(bidder, at=claimed_at + timedelta(minutes=1))
+    charge_buyer = Mock()
+    pay_seller = Mock()
+
+    resolved = resolve_auction(
+        auction,
+        at=auction.deadline,
+        charge_buyer=charge_buyer,
+        pay_seller=pay_seller,
+    )
+
+    assert resolved.status == Auction.Status.UNSOLD
+    charge_buyer.assert_not_called()
+    pay_seller.assert_not_called()
+    rider.refresh_from_db()
+    assert rider.team_id == seller.pk
+
+
+def test_opening_bid_after_withdrawal_accepts_reserve(db, claimed_at):
+    seller = Team.objects.create(name="Seller", code="SEL")
+    first_bidder = Team.objects.create(name="First Bidder", code="FIR")
+    second_bidder = Team.objects.create(name="Second Bidder", code="SEC")
+    rider = _rider(name="For Sale", team=seller)
+    auction = list_for_auction(seller, rider.pk, at=claimed_at)
+    place_bid(auction.pk, first_bidder, auction.reserve_price, at=claimed_at)
+    withdraw_bids(first_bidder, at=claimed_at + timedelta(minutes=1))
+
+    updated = place_bid(
+        auction.pk,
+        second_bidder,
+        auction.reserve_price,
+        at=claimed_at + timedelta(minutes=2),
+    )
+
+    assert updated.current_price == auction.reserve_price
+    assert auction.bids.live().count() == 1
+    assert auction.bids.live().get().bidder_team_id == second_bidder.pk
