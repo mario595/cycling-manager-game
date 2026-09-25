@@ -152,10 +152,13 @@ Since #29 each rider also carries `release_cost`
   rider (same visible fields the roster shows), `current_price`,
   `min_next_bid`, `deadline`, `is_own_listing` and `bids` — the auction's
   full history, newest first, each row a `{team_name, amount, placed_at}`
-  (#28; see `transfers/README.md`, *Auctions*). Bidding is not anonymous:
-  every bid names the team that placed it. `bids` is prefetched with its
-  `bidder_team` to keep the market a fixed number of queries regardless of
-  how many bids or auctions are open. A caller with no team gets a 403.
+   (#28; see `transfers/README.md`, *Auctions*). Bidding is not anonymous:
+   every bid names the team that placed it. `bids` is prefetched with its
+   `bidder_team` to keep the market a fixed number of queries regardless of
+   how many bids or auctions are open. History and `min_next_bid` both read
+   **live** bids only (`Bid.objects.live()`, #30): a bid withdrawn by a team
+   claim stays in the row as history but must read as never having happened.
+   A caller with no team gets a 403.
 - `POST /api/transfers/auctions/list/` (`ListForAuctionSerializer`,
   `ListForAuctionView`) — list one of the caller's own riders for
   auction. `RiderNotOnRoster` or `AuctionAlreadyExists` (the rider already
@@ -173,7 +176,9 @@ Since #29 each rider also carries `release_cost`
 - `GET /api/transfers/auctions/mine/` (`MyBidStatusSerializer`,
   `MyBidsView`) — every open auction the caller's team has an active bid
   on, with `is_high_bidder` — backs the outbid notice (spec item 8).
-  Read-only, polled the same way `FreeAgentsView` is.
+  **Live bids only** (#30), so a withdrawn bid drops out of the list as well
+  as out of `is_high_bidder`. Read-only, polled the same way
+  `FreeAgentsView` is.
 - `GET /api/racing/races/<race_id>/` — one race's own facts
   (`RaceDetailSerializer`, `RaceDetailView`): id, name, status, starts_at,
   distance and the raw `{length, gradient}` course segments. It also carries
@@ -240,6 +245,11 @@ Since #29 each rider also carries `release_cost`
   world with no unmanaged team left, both return 409 — the request is
   well-formed but the world's state refuses it. A malformed code or a name
   already taken returns 400. See `teams/README.md`, *Claiming a team*.
+  The claim and `transfers.services.withdraw_bids(team, at=at)` run inside
+  **one** `transaction.atomic()`, with the `except` clauses outside it, so a
+  new manager never inherits the team's standing bids and no tick can resolve
+  one of them to them in between (#30; see `transfers/README.md`,
+  *Withdrawal on claim*).
 - `GET /api/staff/` (`StaffSerializer`, `StaffView`) — the **caller's own**
   team's staff: `trainer` (null when the slot is empty), `pool` (every
   unemployed trainer, but only populated when the slot is empty — a team

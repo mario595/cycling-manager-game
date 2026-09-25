@@ -129,6 +129,14 @@ class TickRun(models.Model):
         default=0,
         help_text="Auctions that reached their deadline with no winner this tick (#28).",
     )
+    ai_bids_placed = models.PositiveIntegerField(
+        default=0,
+        help_text="Bids placed by unmanaged teams this tick (#30).",
+    )
+    ai_listings_created = models.PositiveIntegerField(
+        default=0,
+        help_text="Auctions opened by unmanaged teams this tick (#30).",
+    )
     error = models.TextField(
         blank=True, default="",
         help_text="Traceback if the run failed. Empty on success.",

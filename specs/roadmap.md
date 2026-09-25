@@ -28,7 +28,7 @@ coming back to.
 | **Racing decisions** | [#37](https://github.com/mario595/cycling-manager/issues/37) squad selection · [#64](https://github.com/mario595/cycling-manager/issues/64) leadership is per-race · [#39](https://github.com/mario595/cycling-manager/issues/39) absent-manager default · [#44](https://github.com/mario595/cycling-manager/issues/44) unmanaged-team squads |
 | **Signing up** | [#50](https://github.com/mario595/cycling-manager/issues/50) accounts · [#46](https://github.com/mario595/cycling-manager/issues/46) claiming a team · [#62](https://github.com/mario595/cycling-manager/issues/62) losing a team · [#63](https://github.com/mario595/cycling-manager/issues/63) inactivity trigger |
 | **The competitive loop** | [#15](https://github.com/mario595/cycling-manager/issues/15) race points · [#12](https://github.com/mario595/cycling-manager/issues/12) standings |
-| **Transfers** | [#31](https://github.com/mario595/cycling-manager/issues/31) market value · [#29](https://github.com/mario595/cycling-manager/issues/29) free agents |
+| **Transfers** | [#31](https://github.com/mario595/cycling-manager/issues/31) market value · [#29](https://github.com/mario595/cycling-manager/issues/29) free agents · [#28](https://github.com/mario595/cycling-manager/issues/28) auctions ✅ · [#30](https://github.com/mario595/cycling-manager/issues/30) AI teams trade ✅ |
 | **Riders as assets** | [#1](https://github.com/mario595/cycling-manager/issues/1)/[#57](https://github.com/mario595/cycling-manager/issues/57) attributes · [#95](https://github.com/mario595/cycling-manager/issues/95) attribute history · [#96](https://github.com/mario595/cycling-manager/issues/96) rider detail view  · [#58](https://github.com/mario595/cycling-manager/issues/58) growth and decline · [#59](https://github.com/mario595/cycling-manager/issues/59) freshness |
 | **Staff and training** | [#35](https://github.com/mario595/cycling-manager/issues/35) trainers · [#36](https://github.com/mario595/cycling-manager/issues/36) weekly training focus |
 | **Money** | [#20](https://github.com/mario595/cycling-manager/issues/20) ledger · [#19](https://github.com/mario595/cycling-manager/issues/19) prize money · [#21](https://github.com/mario595/cycling-manager/issues/21) fanbase and merchandise · [#22](https://github.com/mario595/cycling-manager/issues/22) sponsorship · [#23](https://github.com/mario595/cycling-manager/issues/23) sponsor renewal · [#25](https://github.com/mario595/cycling-manager/issues/25) per-rider salaries · [#69](https://github.com/mario595/cycling-manager/issues/69) trainer fee and salary |
@@ -79,8 +79,8 @@ The largest coherent block left, and the first that makes a roster something you
 
 | Order | Issue | Note | Blocked by |
 |---|---|---|---|
-| 3 | [#28](https://github.com/mario595/cycling-manager/issues/28) auctions | The market itself. | [#29](https://github.com/mario595/cycling-manager/issues/29) ✅ · [#20](https://github.com/mario595/cycling-manager/issues/20) ✅ |
-| 4 | [#30](https://github.com/mario595/cycling-manager/issues/30) AI teams trade | Without it the market is dead at launch — most teams have no manager. | [#28](https://github.com/mario595/cycling-manager/issues/28) |
+| 3 | [#28](https://github.com/mario595/cycling-manager/issues/28) auctions ✅ | The market itself. | [#29](https://github.com/mario595/cycling-manager/issues/29) ✅ · [#20](https://github.com/mario595/cycling-manager/issues/20) ✅ |
+| 4 | [#30](https://github.com/mario595/cycling-manager/issues/30) AI teams trade ✅ | Without it the market is dead at launch — most teams have no manager. Built: `world/ai_market.py`, and the tick runs it. | [#28](https://github.com/mario595/cycling-manager/issues/28) ✅ |
 
 Completing this also unblocks **[#27](https://github.com/mario595/cycling-manager/issues/27)** (forced sales need buyers) and
 **[#26](https://github.com/mario595/cycling-manager/issues/26)** (post-season salary renegotiation needs a value to renegotiate against).
@@ -162,7 +162,7 @@ The chains that actually constrain order:
 ```
 #20 ledger ✅ ──┬─→ #19 prize money ✅
                 ├─→ #69 trainer pricing ✅
-                ├─→ #25 per-rider salaries ✅ ──→ #31 value ✅ ──→ #29 agents ✅ ──→ #28 market ──→ #30 AI trades
+                ├─→ #25 per-rider salaries ✅ ──→ #31 value ✅ ──→ #29 agents ✅ ──→ #28 market ✅ ──→ #30 AI trades ✅
                 └─→ #21 fanbase ✅ ──→ #22 sponsors ✅ ──→ #23 renewal ✅
 
 #46 claiming ✅ ──→ #62 losing a team ✅ ──→ #63 inactivity ✅
