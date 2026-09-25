@@ -112,6 +112,14 @@ class TickRun(models.Model):
         "in-season weeks and priced in the pool's bottom "
         "EXPIRY_VALUE_PERCENTILE (#29).",
     )
+    auctions_sold = models.PositiveIntegerField(
+        default=0,
+        help_text="Auctions that resolved to a sale this tick (#28).",
+    )
+    auctions_unsold = models.PositiveIntegerField(
+        default=0,
+        help_text="Auctions that reached their deadline with no winner this tick (#28).",
+    )
     error = models.TextField(
         blank=True, default="",
         help_text="Traceback if the run failed. Empty on success.",

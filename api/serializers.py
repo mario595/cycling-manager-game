@@ -196,6 +196,63 @@ class ReleaseRiderSerializer(serializers.Serializer):
     rider_id = serializers.IntegerField()
 
 
+class BidSerializer(serializers.Serializer):
+    """One bid in an auction's full history — which team placed it, when,
+    and for how much. Bidding is not anonymous (spec, *Rules and edge
+    cases*): every listing shows its whole history, newest/highest first,
+    not just the current leader."""
+
+    team_name = serializers.CharField()
+    amount = serializers.IntegerField()
+    placed_at = serializers.DateTimeField()
+
+
+class AuctionSerializer(serializers.Serializer):
+    """One live auction as the market screen shows it: rider, price, time
+    left, and its full bid history. `min_next_bid`, `is_own_listing` and
+    `bids` are computed by the view, not derived here, since none is a
+    plain attribute of an Auction row. `min_next_bid` is `current_price`
+    itself while `bids` is empty — the reserve is a valid opening bid
+    (transfers.services.place_bid) — and `current_price + min_increment`
+    once a bid exists."""
+
+    id = serializers.IntegerField()
+    rider = RiderSerializer()
+    current_price = serializers.IntegerField()
+    min_next_bid = serializers.IntegerField()
+    deadline = serializers.DateTimeField()
+    is_own_listing = serializers.BooleanField()
+    bids = BidSerializer(many=True)
+
+
+class AuctionMarketSerializer(serializers.Serializer):
+    """Same both-keys-always-present shape FreeAgentPoolSerializer uses."""
+
+    auctions = AuctionSerializer(many=True)
+    balance = serializers.IntegerField()
+
+
+class ListForAuctionSerializer(serializers.Serializer):
+    rider_id = serializers.IntegerField()
+
+
+class PlaceBidSerializer(serializers.Serializer):
+    amount = serializers.IntegerField(min_value=1)
+
+
+class MyBidStatusSerializer(serializers.Serializer):
+    """One row for "auctions I've bid on" — spec item 8, outbid
+    visibility. `is_high_bidder` tells the frontend whether to show
+    "you're winning" vs "outbid"."""
+
+    auction_id = serializers.IntegerField()
+    rider_name = serializers.CharField()
+    my_last_bid = serializers.IntegerField()
+    current_price = serializers.IntegerField()
+    is_high_bidder = serializers.BooleanField()
+    deadline = serializers.DateTimeField()
+
+
 class SquadSerializer(serializers.Serializer):
     race = serializers.IntegerField()
     race_name = serializers.CharField()

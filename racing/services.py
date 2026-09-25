@@ -15,6 +15,7 @@ from pathlib import Path
 
 from django.core.files.base import ContentFile
 from django.db import transaction
+from django.db.models import F
 
 from riders.models import ENGINE_ATTRIBUTES, Rider
 from riders.services import apply_race_cost, freshness_multiplier
@@ -286,6 +287,30 @@ def ensure_squads(race: Race) -> None:
         _write_squad(race, team, rider_ids, leader_id, auto=True)
 
 
+def _effective_leader_ids(members: list[RaceSquadRider]) -> set[int]:
+    """Which riders race as leader, after simulate_race has dropped any
+    squad member whose rider has left the team.
+
+    Normally this is just whoever the manager marked `is_leader`. But if
+    that rider was the one dropped, their team still races (the remaining
+    members) with no leader among them — and the engine requires exactly
+    one leader per team present (`race_engine.models.validate_team_leaders`).
+    The lowest-pk remaining member of that team is promoted for this race
+    only; the squad's own stored `is_leader` is untouched, since this is a
+    simulation-time workaround, not a correction to what the manager
+    picked.
+    """
+    by_team: dict[int, list[RaceSquadRider]] = {}
+    for m in members:
+        by_team.setdefault(m.squad.team_id, []).append(m)
+
+    leader_ids: set[int] = set()
+    for team_members in by_team.values():
+        leader = next((m for m in team_members if m.is_leader), team_members[0])
+        leader_ids.add(leader.rider_id)
+    return leader_ids
+
+
 def simulate_race(race: Race, *, game_time: datetime) -> list[RaceResult]:
     """Run one race through the engine and record it.
 
@@ -302,20 +327,30 @@ def simulate_race(race: Race, *, game_time: datetime) -> list[RaceResult]:
 
     ensure_squads(race)
 
+    # A squad member whose rider has since left the team it was picked
+    # for — sold in an auction, released to the free agent pool, whatever
+    # moved them — is dropped rather than raced: the squad was picked for
+    # a roster that no longer holds them, and racing them here would let
+    # the engine and score_race/prizes_by_team (which both read the
+    # rider's CURRENT team_id, not the squad's) credit the result to
+    # whichever team they belong to now, not the team that actually
+    # fielded them. The team that picked them simply races a man short —
+    # the same outcome as if they had never had that rider at all.
     members = list(
         RaceSquadRider.objects
-        .filter(squad__race=race)
+        .filter(squad__race=race, rider__team_id=F("squad__team_id"))
         .select_related("rider", "squad__team")
         .order_by("rider__pk")
     )
     if not members:
         raise ValueError("no squads to race")
 
+    leader_ids = _effective_leader_ids(members)
     db_riders = [m.rider for m in members]
     engine_riders = [
         to_engine_rider(
             m.rider,
-            role="leader" if m.is_leader else "support",
+            role="leader" if m.rider_id in leader_ids else "support",
             freshness_scale=freshness_multiplier(m.rider.freshness),
         )
         for m in members

@@ -22,11 +22,13 @@ from competitions.services import points_by_team, prizes_by_team, score_race
 from economy.services import (
     apply_weekly_fanbase,
     charge_trainer_salaries,
+    charge_transfer_fee,
     charge_weekly_wages,
     ensure_offer_round,
     pay_merchandise,
     pay_race_prizes,
     pay_sponsorship,
+    pay_transfer_income,
     write_salary_reviews,
 )
 from racing.models import Race
@@ -47,8 +49,14 @@ from staff.pricing import weekly_salary
 from staff.services import focus_for, top_up_pool
 from teams.models import ManagerialSpell, Team
 from teams.services import release_team
+from transfers.models import Auction
 from transfers.pricing import market_value_for
-from transfers.services import EXPIRY_VALUE_PERCENTILE, EXPIRY_WEEKS
+from transfers.services import (
+    EXPIRY_VALUE_PERCENTILE,
+    EXPIRY_WEEKS,
+    due_auctions,
+    resolve_auction,
+)
 
 from .clocks import Clock
 from .models import GameClock, TickRun
@@ -336,6 +344,56 @@ def _write_training_reports(week, changes, focus_by_team) -> int:
     return written
 
 
+def _resolve_expired_auctions(at) -> tuple[int, int, str]:
+    """Resolve every auction whose deadline has passed as of `at`.
+
+    Called ONCE per tick, unconditionally, OUTSIDE the week-transition
+    loop (plan's Design decision 2) — an auction's deadline is wall-clock
+    real time, decoupled from week boundaries, so this must not wait for
+    one: a hard week with zero transitions must still resolve due
+    auctions.
+
+    Supplies resolve_auction's two callbacks, since transfers/ cannot
+    import economy/: charge_buyer debits the winner via
+    charge_transfer_fee (negative amount), pay_seller credits the seller
+    via pay_transfer_income (positive amount) — same transaction, same
+    shape sign_free_agent's injected `charge` uses.
+
+    Returns (sold_count, unsold_count, accumulated error text) for the
+    TickRun counters, mirroring _release_inactive's (int, str) return
+    (TickRun does not exist yet at this point in tick()).
+    """
+    sold = unsold = 0
+    error = ""
+    for auction in due_auctions(at):
+        try:
+            def charge_buyer(team, amount):
+                charge_transfer_fee(
+                    team, amount=-amount, at=at,
+                    description=f"Won auction for {auction.rider.name}",
+                )
+
+            def pay_seller(team, amount):
+                pay_transfer_income(
+                    team, amount=amount, at=at,
+                    description=f"Sold {auction.rider.name} at auction",
+                )
+
+            result = resolve_auction(
+                auction, at=at, charge_buyer=charge_buyer, pay_seller=pay_seller,
+            )
+            if result.status == Auction.Status.SOLD:
+                sold += 1
+            elif result.status == Auction.Status.UNSOLD:
+                unsold += 1
+        except Exception:
+            # One bad resolution must not strand the rest of the tick's
+            # auctions or the race claim step after it — same per-item
+            # guard _release_inactive and _execute already use.
+            error += f"resolve auction {auction.pk}:\n{traceback.format_exc()}\n"
+    return sold, unsold, error
+
+
 def tick() -> TickRun:
     """Find and process whatever is due, exactly once. The only entry point
     cron — or a developer, after moving the mock clock with `mock_clock` —
@@ -438,6 +496,11 @@ def tick() -> TickRun:
     claimed = _claim(limit=max(0, max_races - len(reclaimed)), at=at)
     capped = len(reclaimed) + len(claimed) >= max_races
 
+    # After the week loop, before TickRun is created: unconditional, once
+    # per tick, on wall-clock deadlines — never inside `for transition in
+    # weeks:` above (plan's Design decision 2).
+    auctions_sold, auctions_unsold, auction_error = _resolve_expired_auctions(at)
+
     run = TickRun.objects.create(
         races_started=len(claimed),
         seasons_opened=sum(1 for t in transitions if t.kind == SeasonTransition.Kind.OPENED),
@@ -454,7 +517,9 @@ def tick() -> TickRun:
         trainer_salary_entries=trainer_salary_entries,
         teams_released=teams_released,
         agents_expired=agents_expired,
-        error=inactivity_error,
+        auctions_sold=auctions_sold,
+        auctions_unsold=auctions_unsold,
+        error=inactivity_error + auction_error,
     )
     _execute(reclaimed + claimed, run, at=at)
     run.capped = capped

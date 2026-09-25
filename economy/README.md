@@ -14,7 +14,9 @@ the weekly **merchandise payout** derived from a team's fanbase, its first
 income since #21. #69 also adds the one-off `trainer_fee` row written when a
 team hires a trainer (see *Trainer salaries run off the same loop*), and the
 free-agent market (#29) adds the one-off `transfer_fee` row written on a
-signing or a release (see *Free-agent fees* below). It also
+signing or a release, and rider auctions (#28) add that same kind's credit
+side — a won auction pays the seller and debits the buyer, both
+`transfer_fee` rows (see *Free-agent fees* below). It also
 owns the entries that give a team its starting money, the `takeover` row that
 resets a claimed team's balance, and the `prize_money` rows a finished race
 pays out (#19).
@@ -239,6 +241,20 @@ release severance are the same shape of transaction — money out, no week
 attached — so they share `TRANSFER_FEE` and are told apart by `description`
 (Design decision 7). The Finances screen renders them under one **Transfer
 fee** label.
+
+**`economy.services.pay_transfer_income(team, *, amount, at, description)`**
+is the credit-side mirror, added for rider auctions (#28): same
+`TRANSFER_FEE` kind — a sale is still "money moved for a transfer reason,"
+just told apart by `description` and sign — but a deliberately **separate**
+function rather than a repurposing of `charge_transfer_fee`, whose
+docstring is an explicit, tested "amount is negative, debits only"
+contract. `amount` here is always positive. Unlike the free-agent fee
+(charged from `api/`), this one is called from `world.services.
+_resolve_expired_auctions`, alongside `charge_transfer_fee` for the
+buyer's debit — both injected into `transfers.services.resolve_auction`
+as callbacks, since `transfers/` may not import `economy/` — see
+`world/README.md`, *How a tick works*, and `transfers/README.md`,
+*Auctions*.
 
 ## Fanbase is derived too
 
