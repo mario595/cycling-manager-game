@@ -32,7 +32,8 @@ DAY_INDEX = {
 _VALID_WIND_BANDS = {"calm", "light", "moderate", "strong"}
 
 _KNOWN_KEYS = {"number", "starts_at", "races"}
-_KNOWN_RACE_KEYS = {"week", "day", "time", "name", "course", "wind", "seed"}
+_KNOWN_RACE_KEYS = {"week", "day", "time", "name", "course", "wind", "seed", "markers"}
+_KNOWN_MARKER_KEYS = {"kind", "name", "distance"}
 
 
 class SeasonFileError(ValueError):
@@ -49,6 +50,7 @@ class RaceDeclaration:
     wind_enabled: bool
     wind_band: str | None
     seed: int | None
+    markers: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -141,12 +143,17 @@ def _parse_race(raw: Any, path: str, warnings: list[str]) -> RaceDeclaration:
         raise SeasonFileError(f"{path}.name must be at most 150 characters")
 
     course = _parse_course(raw.get("course"), f"{path}.course")
+    course_length = sum(seg["length"] for seg in course)
+    markers = _parse_markers(
+        raw.get("markers"), f"{path}.markers", course_length, warnings,
+    )
     wind_enabled, wind_band = _parse_wind(raw.get("wind"), path)
     seed = _parse_seed(raw.get("seed"), path)
 
     return RaceDeclaration(
         week=week, day=day, time=race_time, name=name, course=course,
         wind_enabled=wind_enabled, wind_band=wind_band, seed=seed,
+        markers=markers,
     )
 
 
@@ -189,6 +196,45 @@ def _parse_course(raw: Any, path: str) -> list[dict[str, float]]:
             raise SeasonFileError(f"{at}.length must be positive")
         segments.append({"length": length, "gradient": gradient})
     return segments
+
+
+def _parse_markers(
+    raw: Any, path: str, course_length: float, warnings: list[str],
+) -> list[dict[str, Any]]:
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise SeasonFileError(f"{path} must be a list of markers")
+    markers = []
+    for i, entry in enumerate(raw):
+        at = f"{path}[{i}]"
+        if not isinstance(entry, dict):
+            raise SeasonFileError(f"{at} must be an object")
+        unknown_keys = set(entry) - _KNOWN_MARKER_KEYS
+        if unknown_keys:
+            warnings.append(
+                f"{at}: ignoring unknown key(s): {', '.join(sorted(unknown_keys))}"
+            )
+        kind = entry.get("kind")
+        if kind not in ("sprint", "mountain"):
+            raise SeasonFileError(
+                f"{at}.kind must be 'sprint' or 'mountain', got {kind!r}"
+            )
+        name = entry.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise SeasonFileError(f"{at}.name must be a non-empty string")
+        if len(name) > 100:
+            raise SeasonFileError(f"{at}.name must be at most 100 characters")
+        try:
+            distance = float(entry["distance"])
+        except (TypeError, ValueError):
+            raise SeasonFileError(f"{at}.distance must be a number")
+        if not 0 < distance <= course_length:
+            raise SeasonFileError(
+                f"{at}.distance must be in (0, {course_length}] meters, got {distance}"
+            )
+        markers.append({"kind": kind, "name": name, "distance": distance})
+    return markers
 
 
 def _parse_wind(raw: Any, path: str) -> tuple[bool, str | None]:
@@ -246,5 +292,6 @@ def create_races(
             wind_enabled=d.wind_enabled,
             wind_band=d.wind_band or "",
             seed=d.seed,
+            markers=d.markers,
         ))
     return created

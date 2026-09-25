@@ -12,7 +12,14 @@ import world.services as world_services
 from competitions.scoring import points_for, prize_for
 from competitions.services import score_race
 from economy.models import STARTING_BALANCE, LedgerEntry, SalaryReviewReport
-from racing.models import Race, RaceResult, RaceSquad, RaceSquadRider
+from racing.models import (
+    MarkerCrossing,
+    Race,
+    RaceMarker,
+    RaceResult,
+    RaceSquad,
+    RaceSquadRider,
+)
 from riders.display import to_display_scale
 from riders.models import DISPLAY_MAX, Rider, RiderAttributeSnapshot
 from schedule.models import SEASON_WEEKS, Season, Week
@@ -905,6 +912,128 @@ def test_race_detail_requires_login(db):
     response = client.get(f"/api/racing/races/{race.pk}/")
 
     assert response.status_code == 403
+
+
+def test_race_detail_includes_markers(db):
+    race = Race.objects.create(
+        name="Marked Detail Race",
+        course=[{"length": 40000.0, "gradient": 0.0}],
+        status=Race.Status.SCHEDULED,
+    )
+    first = RaceMarker.objects.create(
+        race=race, kind=RaceMarker.Kind.SPRINT, name="Line One", distance=10000.0
+    )
+    second = RaceMarker.objects.create(
+        race=race, kind=RaceMarker.Kind.MOUNTAIN, name="Summit", distance=30000.0
+    )
+    client = APIClient()
+    user = User.objects.create_user(email="marker-detail@example.com", password="s0meth1ng-good")
+    client.force_authenticate(user=user)
+
+    response = client.get(f"/api/racing/races/{race.pk}/")
+
+    assert response.status_code == 200
+    assert response.data["markers"] == [
+        {"id": first.pk, "kind": "sprint", "name": "Line One", "distance": 10000.0},
+        {"id": second.pk, "kind": "mountain", "name": "Summit", "distance": 30000.0},
+    ]
+
+
+def test_race_detail_markers_empty_for_plain_course(db):
+    race = Race.objects.create(
+        name="Plain Detail Race",
+        course=[{"length": 40000.0, "gradient": 0.0}],
+        status=Race.Status.SCHEDULED,
+    )
+    client = APIClient()
+    user = User.objects.create_user(email="plain-detail@example.com", password="s0meth1ng-good")
+    client.force_authenticate(user=user)
+
+    response = client.get(f"/api/racing/races/{race.pk}/")
+
+    assert response.status_code == 200
+    assert response.data["markers"] == []
+
+
+def test_race_results_include_first_three_per_marker(db):
+    team = Team.objects.create(name="Marker Team", code="MKT")
+    race = Race.objects.create(
+        name="Marked Results Race",
+        course=[{"length": 40000.0, "gradient": 0.0}],
+        status=Race.Status.FINISHED,
+    )
+    markers = [
+        RaceMarker.objects.create(
+            race=race, kind=RaceMarker.Kind.SPRINT, name=f"Line {i}", distance=5000.0 * i
+        )
+        for i in range(1, 4)
+    ]
+    squad = RaceSquad.objects.create(race=race, team=team)
+    riders = []
+    for i in range(4):
+        rider = Rider.objects.create(
+            name=f"Marker Rider {i}", team=team,
+            climb=50, sprint=50, flat=50, resistance=50, positioning=50,
+        )
+        riders.append(rider)
+        RaceSquadRider.objects.create(squad=squad, rider=rider, is_leader=i == 0)
+        RaceResult.objects.create(
+            race=race, rider=rider, position=i + 1, finish_time=100.0 + i,
+        )
+    for marker in markers:
+        for position, rider in enumerate(riders, start=1):
+            MarkerCrossing.objects.create(
+                marker=marker, rider=rider, position=position, crossed_at=100.0 + position,
+            )
+
+    client = APIClient()
+    user = User.objects.create_user(email="marker-results@example.com", password="s0meth1ng-good")
+    client.force_authenticate(user=user)
+
+    response = client.get(f"/api/racing/races/{race.pk}/results/")
+
+    assert response.status_code == 200
+    for marker in markers:
+        entry = next(m for m in response.data["markers"] if m["id"] == marker.pk)
+        assert [c["position"] for c in entry["crossings"]] == [1, 2, 3]
+        assert [c["rider"]["name"] for c in entry["crossings"]] == [
+            riders[0].name, riders[1].name, riders[2].name,
+        ]
+
+
+def test_race_results_marker_team_is_team_raced_for(db):
+    """Same load-bearing rule as the results rows: a marker crossing's team
+    is the one the rider raced for, from RaceSquadRider — so releasing the
+    rider afterwards must not blank it."""
+    team = Team.objects.create(name="Marker Release Team", code="MRT")
+    rider = Rider.objects.create(
+        name="Released Marker Rider", team=team,
+        climb=50, sprint=50, flat=50, resistance=50, positioning=50,
+    )
+    race = Race.objects.create(
+        name="Marker Team Race",
+        course=[{"length": 40000.0, "gradient": 0.0}],
+        status=Race.Status.FINISHED,
+    )
+    squad = RaceSquad.objects.create(race=race, team=team)
+    RaceSquadRider.objects.create(squad=squad, rider=rider, is_leader=True)
+    RaceResult.objects.create(race=race, rider=rider, position=1, finish_time=3600.0)
+    marker = RaceMarker.objects.create(
+        race=race, kind=RaceMarker.Kind.SPRINT, name="Line", distance=10000.0
+    )
+    MarkerCrossing.objects.create(marker=marker, rider=rider, position=1, crossed_at=1000.0)
+
+    rider.team = None
+    rider.save()
+
+    client = APIClient()
+    user = User.objects.create_user(email="marker-release@example.com", password="s0meth1ng-good")
+    client.force_authenticate(user=user)
+
+    response = client.get(f"/api/racing/races/{race.pk}/results/")
+
+    assert response.status_code == 200
+    assert response.data["markers"][0]["crossings"][0]["team"]["id"] == team.pk
 
 
 def test_claim_returns_the_new_team(db, claim_client):

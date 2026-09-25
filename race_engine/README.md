@@ -80,6 +80,13 @@ choice is expressible and will lose.
 - A rider's `position` is meters from the start; each tick adds their speed
   (m/s) to it. When `position >= total_distance` the rider **finishes** and is
   frozen at the line.
+- `Marker` = `kind` (`MarkerKind`, a str enum: `"sprint"` or `"mountain"`) + a
+  display `name` + `distance` (meters from the start, strictly inside the
+  course). `Course` carries an ordered `markers` list (empty by default);
+  `Course.__post_init__` range-checks each marker's distance against the total
+  course length and non-blank names. A marker is a named point riders can
+  contest (see Tactics, rule 2) and whose crossings are recorded (see
+  *Simulation tick*, step 6).
 
 ### Per-rider runtime state (`RiderState`)
 - `speed` (m/s), `position` (m), `energy` (0–100), `stamina` (0–100).
@@ -94,6 +101,9 @@ choice is expressible and will lose.
 - `dnf` (bool, default `False`) — cut by the time limit (see *Simulation
   tick*, below). Mutually exclusive with `finished`; a DNF rider's
   `finish_time` stays `None`, the same as an abandon.
+- `marker_times` (dict of marker index → float time, set when the rider
+  crosses it), `contested` (set of marker indices this rider has already
+  decided whether to contest — see Tactics, rule 2).
 
 `RaceState` carries one race-level field for this: `time_limit` (seconds,
 or `None` until the first rider finishes) — the tick at which the finish
@@ -119,6 +129,9 @@ makes it easy to keep multiple reusable race configurations side by side.
       "t1": {"code": "ALP", "name": "Alpine Racing"}
     },
     "wind": {"band": "strong"},
+    "markers": [
+      {"kind": "sprint", "name": "Run-in Sprint", "distance": 40000.0}
+    ],
     "riders": [
       {
         "id": "c1",
@@ -164,10 +177,18 @@ makes it easy to keep multiple reusable race configurations side by side.
   entirely; only `load_config`/the CLI carry it through to the JSONL log).
 - `name` — optional display name for the race (informational).
 - `wind` — optional; see "Wind" below. Absent means the weather band is
-  rolled from the seeded RNG at construction, which is the case for all six
-  bundled configs. `band` forces `"calm"`/`"light"`/`"moderate"`/`"strong"`
+  rolled from the seeded RNG at construction, which is the case for every
+  bundled config. `band` forces `"calm"`/`"light"`/`"moderate"`/`"strong"`
   (any other value is a `ConfigError`); `enabled: false` disables wind
   entirely, for A/B comparison against pre-wind baselines.
+- `markers` — optional list of `{"kind", "name", "distance"}` named points on
+  the course. `kind` is `"sprint"` or `"mountain"` (anything else is a
+  `ConfigError` naming `race.markers[i].kind`), `name` a non-empty string of
+  at most 100 chars, `distance` a positive number strictly inside the course
+  length (`Course.__post_init__` range-checks each one against the parsed
+  segments, error naming `race.markers[i].distance`). Absent means no markers.
+  Markers are read by the tactics rule and recorded as crossings; they are
+  **not** written to the JSONL log (see *JSONL output format*).
 - Starting `energy`/`stamina` are always 100 (engine-internal, not configurable).
   Engine constants (draft distance, surge thresholds, etc.) are not exported to
   config; they remain fixed in `formulas.py`. Wind's constants (aero
@@ -196,7 +217,7 @@ team — team membership lives only in the `team` field — so `audit.py`'s
 `_archetype()` needs no changes and terrain alone still determines the
 winning archetype (see "Realism status" below).
 
-**Team roster and identities** (same 16 riders across all 6 configs):
+**Team roster and identities** (same 16 riders across all 8 configs):
 
 | Team | Identity | Composition |
 |------|----------|-------------|
@@ -218,8 +239,10 @@ outcome of a bad leader choice):
 | `classics_hilly` | `gc1` | `pu1` | `pu2` | `gc4` |
 | `summit_finish` | `gc1` | `pu1` | `gc3` | `gc4` |
 | `mountain_stage` | `gc1` | `pu1` | `gc3` | `gc4` |
+| `sprinters_classic_markers` | `ru1` | `sp1` | `pu2` | `sp2` |
+| `mountain_stage_markers` | `gc1` | `pu1` | `gc3` | `gc4` |
 
-All 6 bundled configs (and `_roster.json`) declare the same team codes:
+All 8 bundled configs (and `_roster.json`) declare the same team codes:
 `t1`=`ALP`, `t2`=`SPR`, `t3`=`CLA`, `t4`=`MIX` (arbitrary picks, not tied to
 any real team).
 
@@ -229,7 +252,13 @@ any real team).
 - `classics_hilly.json` — long shallow climbs + short steep finale.
 - `summit_finish.json` — flat/downhill approach to a summit climb.
 - `mountain_stage.json` — sustained climbs with descents between.
-- `grand_field.json` — not one of the six above: 64 riders (the shared
+- `sprinters_classic_markers.json` — `sprinters_classic`'s course with three
+  markers: two sprint points early (km 40, km 80) and a mountain point on the
+  late rise. The marker half of the sprinters-align twin pair.
+- `mountain_stage_markers.json` — `mountain_stage`'s course with three
+  markers: an early flat sprint and the two big climbs. The marker half of
+  the climbers-align twin pair.
+- `grand_field.json` — not one of the eight above: 64 riders (the shared
   roster x4, new team ids per copy) on `lombardia.json`'s course with every
   segment doubled to 200 km — the in-game field size the time-cut work was
   calibrated against (see *Realism status* and *Regression audit*).
@@ -243,11 +272,19 @@ The way engine changes are validated: runs every bundled config across a
 fixed seed set (`1, 7, 42, 123, 2024` by default) and reports, per run, the
 winner and archetype, winner time/avg km/h, 1st-2nd and 1st-last gaps, riders
 within 5s/30s/60s of the winner, riders finishing at stamina 0, the first
-tick+position any rider falls more than 100 m off the front, per-rider
+ticks+position any rider falls more than 100 m off the front, per-rider
 surge-tick counts, and a `time-cut DNFs` count/line (printed only when
-non-zero — see *Simulation tick*, step 7, above). Expected winning archetype
+non-zero — see *Simulation tick*, step 7, above). Configs that declare
+markers also print a `marker winners` line per seed: the winning archetype of
+the first rider across each marker in course order (a dash when no rider
+crossed it) — the quick reading of whether the contest rule, not the pace of
+the bunch, is deciding who leads the field onto each named point. Expected
+winning archetype
 per course lives in `EXPECTED_ARCHETYPE`, a dict literal inside the script —
-test data, not engine knowledge, so configs stay free of it. `grand_field`
+test data, not engine knowledge, so configs stay free of it. The two marker
+configs have real entries there (`sp` for `sprinters_classic_markers`, `gc`
+for `mountain_stage_markers`) — unlike `grand_field`, they exist to check the
+finale against a named expectation, not just the tail. `grand_field`
 (see *Bundled configs*) gets no entry there — it exists to cover the tail at
 in-game field size, not to assert a winner.
 
@@ -381,6 +418,25 @@ tactics (A1–A4) active:
 | `mountain_stage` | GC climber | GC Climber, 5/5 seeds |
 | `grand_field` (64 riders, 200 km) | — (no `EXPECTED_ARCHETYPE` entry) | GC Climber, 5/5 seeds; zero time-cut DNFs |
 
+**Marker configs (5 seeds each).** The twin pairs share a roster, so the only
+difference between each marker config and its base is the named points —
+which makes the marker audit a direct reading of whether the contest rule
+changes anything real. On `sprinters_classic_markers` the marker winners are
+`sp` for **both sprint points in all 5 seeds** — the specialists contest and
+lead the field onto them; the late mountain point (km 94, on the final rise)
+is won by whoever happens to be leading the bunch through it (`sp` in 3
+seeds, `do`/`ru` once each), because no rider in the sprint-win window is a
+mountain specialist, so nobody contests it and the first wheel over earns the
+point by position, not effort — the intended reading, not a leaky rule (the
+Sprinters Classic winner, when a sprinter wins, arrives *with* the sprints,
+not by being handed the mountain point). Winner archetype hits 4/5 — one
+marginal seed flips the finale, the same jitter the base config itself shows
+(3/5 running in the same run's twin audit: `pu2(123)`, `pu3(2024)`). On
+`mountain_stage_markers` every marker behaves cleanly: the early flat sprint
+is won by `sp` in all 5 seeds, and **both mountain points by `gc` in all 5**
+— the climbers contest the summits and the sprinter's early effort buys
+nothing at altitude. Winner stays `gc` 5/5.
+
 **Known limitation — dropped riders decay without limit — now bounded by the
 time cut, not fixed at the mechanism level.** A rider who cracks and falls
 off the back of every pack has no way back to equilibrium in principle:
@@ -468,7 +524,17 @@ The tick runs in phases so all riders see a consistent snapshot.
    state.
 6. **Apply deltas**: write speed/flags, move each rider by their speed
    (1 tick = 1 s), subtract drains (m meters clamped to `[0, 100]`), mark
-   finishers, advance `current_time`.
+   finishers, advance `current_time`. On this same loop, **marker crossings
+   are detected and interpolated**: for each marker index the rider has not
+   already recorded, if `prev < marker.distance <= position` (using the
+   Phase-1 snapshot as `prev`, so a rider who crosses and finishes in the
+   same tick is still caught after the finish clamp), store
+   `marker_times[idx] = current_time + (marker.distance - prev) / speed` —
+   the fractional crossing time within the tick. Several riders cross one
+   marker a second apart; interpolating — rather than recording the tick —
+   is what orders them by who got there first, not by rider list order.
+   A marker exactly at the finish line is caught here too; its crossing
+   order is then exactly the finishing order.
 7. **Time limit / cut** (broom wagon): once the first rider finishes,
    `time_limit` is fixed at `ceil(winner_time * (1 + TIME_CUT_MARGIN))` and
    never recomputed. Once `current_time >= time_limit`, every rider not yet
@@ -852,7 +918,7 @@ multi-member pack, never pulls.
 
 The engine's rule-set is a set of *reflexes* layered over emergent group
 behavior (drafting, pace-sharing, fatigue cracking), with one reflex
-(rule 3, Bridge to a break, below) gated by team role — see Tier A4 and A3.
+(rule 4, Bridge to a break, below) gated by team role — see Tier A4 and A3.
 It is **not** a full team-tactics model; finer roles and cross-team
 cooperation remain a future concern (see Future work). Reflexes are terrain-
 and phase-aware: riders evaluate their situation (remaining distance, terrain
@@ -883,6 +949,14 @@ Defined by remaining distance as a fraction of the total course length:
 | **Early** | `> 25%` | No attacking. Ride in pack, conserve energy. |
 | **Transition** | `10–25%` | Positioning; attack only in the finale-approach. |
 | **Finale** | `< 10%` | Attacks and the contest for the finish. |
+
+The marker contest (rule 2, below) is the **one effort exempt from these
+gates**: it fires in the early and middle race too, because a course author
+may place a marker anywhere and an intermediate sprint or summit point at km
+40 is the point of having it. Gating it to the late race would void every
+early marker the moment the game declares one. It does not let the pack into
+a free-for-all — the specialist gate (rule 2) keeps it to the riders a marker
+is actually for.
 
 Constants: `EARLY_PHASE_THRESHOLD (0.25)`, `TRANSITION_PHASE_THRESHOLD (0.10)`.
 
@@ -920,11 +994,27 @@ terrain/phase/strength gate below.
    it no longer gates eligibility. A weak sprinter's kick is simply worth
    less — the sprint finally resolves on the `sprint` attribute rather than
    being a yes/no gate that left every qualifying rider's kick identical.
-2. **Attack a climb** — remaining `< ATTACK_PHASE_THRESHOLD (25%)`, current
+2. **Contest a marker** — a specialist surging for a named point ahead. When
+   a marker of the rider's kind is within its window, they kick: a **sprint**
+   marker means a `sprint`-sized kick (`sprinting`, `SPRINT_DURATION`), a
+   **mountain** marker a plain surge (`SURGE_DURATION`). Gated by attribute
+   and energy, not by phase or terrain (see *Race phases*): `distance - pos
+   <= MARKER_SPRINT_WINDOW (300 m)` and `sprint >= MARKER_MIN_SPRINT (95)` for
+   a sprint marker; `<= MARKER_CLIMB_WINDOW (150 m)` and
+   `climb >= MARKER_MIN_CLIMB (90)` for a mountain one; either way the kick
+   needs `energy >= MARKER_MIN_ENERGY (60)`. The decision is recorded in
+   `contested` the moment the window is entered, whether or not the energy
+   gate passes — a rider who rolls through (too tired, wrong moment) does not
+   re-try every later tick as energy trickles back. A marker not of the
+   rider's specialist kind is simply skipped, dropping them through to rules
+   3/4. Markers exactly on the finish line are excluded — rule 1 owns the
+   last kilometer. The nearest un-contested, un-passed marker wins; the
+   nearest-of-several tie breaks by distance.
+3. **Attack a climb** — remaining `< ATTACK_PHASE_THRESHOLD (25%)`, current
    terrain bucket `STEEP` (gradient `>= 7.0` %), and `climb >= ATTACK_MIN_CLIMB (75)`.
    A strong climber tries to break away only in the late race on a genuinely
    steep section.
-3. **Bridge to a break** — team leaders don't consider this rule at all
+4. **Bridge to a break** — team leaders don't consider this rule at all
    (**Tier A4**: a leader sits in and saves themself for the finale instead
    of spending energy on a speculative early move — that's what support
    riders are for). For a `role == "support"` rider: only those at the front
@@ -942,9 +1032,10 @@ terrain/phase/strength gate below.
    terrain, don't chase a leader who is markedly a stronger climber —
    `CHASE_MIN_CLIMB_ADVANTAGE = -10` points).
 
-   Rules 1 (finish sprint) and 2 (climb attack) stay role-blind — a team
-   leader must still be able to attack a climb or contest the sprint, that
-   is their whole purpose; only the speculative bridge move is gated by role.
+   Rules 1 (finish sprint), 2 (marker contest) and 3 (climb attack) stay
+   role-blind — a team leader must still be able to attack a climb, contest a
+   marker or contest the sprint, that is their whole purpose; only the
+   speculative bridge move is gated by role.
 
    This replaced a much looser rule ("no wheel within `DRAFT_DISTANCE`
    ahead, and a 3-30 m gap to the absolute race leader") that every rider in
@@ -1068,6 +1159,13 @@ grid — the DNF is always in the record, even though nothing renders it yet
   stream is only complete after `close()`.
 - Note there is currently **no** per-tick event/commentary stream; a visualizer
   derives narrative purely from these snapshots.
+- Markers and marker crossings are **deliberately not** in the log. The log
+  is purely the rider positional sample stream a replay draws; a marker is a
+  named point *off* the riders, and its crossings are recorded and stored
+  next to the race (`racing.MarkerCrossing`) for the in-game race screen to
+  serve after the fact. Putting them in the sampled positions would both
+  duplicate what the stored rows already say and re-introduce per-tick
+  event data this format was deliberately slimmed of.
 
 ## Future work / possible improvements
 

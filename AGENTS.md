@@ -115,7 +115,7 @@ root, in dependency order:
 .venv/bin/python manage.py seed_user      # accounts: test@mail.com / 123456789
 .venv/bin/python manage.py seed_teams --claim-for test@mail.com  # teams: one claimed for the demo account, the rest claimable
 .venv/bin/python manage.py seed_trainers  # staff: hireable trainers in the pool
-.venv/bin/python manage.py load_season seasons/season-1.example.json  # schedule: season 1's twelve weeks and races
+.venv/bin/python manage.py load_season seasons/season-1.example.json  # schedule: season 1's twelve weeks and races (three of which declare course markers)
 ```
 
 `seed_user` is idempotent; the others only add (`load_season` errors if the
@@ -204,7 +204,9 @@ See `staff/README.md`.
 
 **`schedule -> core` still holds even though `schedule`'s `load_season`
 command creates `racing.Race` rows.** `schedule/management/commands/load_season.py`
-imports `racing.models.Race` and `world.services.now` **inside `handle()`**,
+imports `racing.models.Race`, `racing.services.create_race` (races with markers
+are born through it — see `racing/README.md`) and `world.services.now`
+**inside `handle()`**,
 never at module scope, and `schedule/`'s library code (`models.py`,
 `services.py`, `loaders.py`) imports neither — a management command is an
 entry point, the same way `world/`'s own commands are. This is deliberate,

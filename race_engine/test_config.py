@@ -214,3 +214,62 @@ def test_grand_field_config_loads_sixty_four_riders_in_sixteen_teams():
     assert len(result["riders"]) == 64
     assert len({r.team_id for r in result["riders"]}) == 16
     assert result["course"].total_distance == 200_000.0
+
+
+def _markers_cfg(markers) -> dict:
+    cfg = _config([_rider("c1")])
+    cfg["race"]["markers"] = markers
+    return cfg
+
+
+def test_config_parses_markers_onto_the_course(tmp_path):
+    from race_engine.models import MarkerKind
+
+    cfg = _markers_cfg(
+        [
+            {"kind": "sprint", "name": "Intermediate", "distance": 400.0},
+            {"kind": "mountain", "name": "Col", "distance": 900.0},
+        ]
+    )
+    result = load_config(_write(tmp_path, cfg))
+    markers = result["course"].markers
+    assert len(markers) == 2
+    assert markers[0].kind is MarkerKind.SPRINT
+    assert markers[0].name == "Intermediate"
+    assert markers[0].distance == 400.0
+    assert markers[1].kind is MarkerKind.MOUNTAIN
+    assert markers[1].distance == 900.0
+
+
+def test_config_absent_markers_gives_empty_list(tmp_path):
+    cfg = _config([_rider("c1")])
+    result = load_config(_write(tmp_path, cfg))
+    assert result["course"].markers == []
+
+
+def test_config_rejects_bad_marker_kind(tmp_path):
+    with pytest.raises(ConfigError, match=r"race\.markers\[0\]\.kind"):
+        load_config(
+            _write(tmp_path, _markers_cfg([{"kind": "jump", "name": "X", "distance": 100.0}]))
+        )
+
+
+def test_config_rejects_empty_marker_name(tmp_path):
+    with pytest.raises(ConfigError, match=r"race\.markers\[0\]\.name"):
+        load_config(
+            _write(tmp_path, _markers_cfg([{"kind": "sprint", "name": "  ", "distance": 100.0}]))
+        )
+
+
+def test_config_rejects_marker_distance_out_of_range(tmp_path):
+    # course is 1000m; 1500 is beyond the finish.
+    with pytest.raises(ConfigError, match=r"race\.markers\[0\]\.distance"):
+        load_config(
+            _write(tmp_path, _markers_cfg([{"kind": "sprint", "name": "X", "distance": 1500.0}]))
+        )
+
+
+def test_config_rejects_non_list_markers(tmp_path):
+    cfg = _markers_cfg({"kind": "sprint", "name": "X", "distance": 100.0})
+    with pytest.raises(ConfigError, match="race.markers must be a list"):
+        load_config(_write(tmp_path, cfg))

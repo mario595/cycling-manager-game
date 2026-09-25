@@ -155,7 +155,7 @@ def test_places_a_race_on_the_right_instant(season):
 
 
 def test_every_placed_race_satisfies_its_week_containment(season):
-    from racing.models import Race
+    from racing.services import create_race
 
     days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
     declarations = [
@@ -167,7 +167,93 @@ def test_every_placed_race_satisfies_its_week_containment(season):
         for day in days
     ]
 
-    created = create_races(season, declarations, create_race=Race.objects.create)
+    created = create_races(season, declarations, create_race=create_race)
 
     for race_obj in created:
         race_obj.full_clean()
+
+
+LONG_COURSE = {"length": 10000.0, "gradient": 0.0}
+
+
+def marked_race(**overrides):
+    data = {
+        "week": 1,
+        "day": "sunday",
+        "time": "14:00",
+        "name": "Marked Race",
+        "course": [LONG_COURSE],
+        "markers": [
+            {"kind": "sprint", "name": "First", "distance": 2000},
+            {"kind": "mountain", "name": "Top", "distance": 9000.5},
+        ],
+    }
+    data.update(overrides)
+    return data
+
+
+def test_parses_markers_on_a_race():
+    decl = parse_season_file({**BASE, "races": [marked_race()]})
+
+    assert decl.races[0].markers == [
+        {"kind": "sprint", "name": "First", "distance": 2000.0},
+        {"kind": "mountain", "name": "Top", "distance": 9000.5},
+    ]
+
+
+def test_markers_absent_or_null_gives_empty_list():
+    decl = parse_season_file({**BASE, "races": [marked_race(markers=None)]})
+
+    assert decl.races[0].markers == []
+
+
+def test_rejects_markers_that_are_not_a_list():
+    with pytest.raises(SeasonFileError, match=r"races\[0\]\.markers must be a list"):
+        parse_season_file({**BASE, "races": [marked_race(markers="sprint")]})
+
+
+def test_rejects_a_marker_that_is_not_an_object():
+    with pytest.raises(SeasonFileError, match=r"races\[0\]\.markers\[0\]"):
+        parse_season_file({**BASE, "races": [marked_race(markers=["sprint"])]})
+
+
+@pytest.mark.parametrize("marker", [
+    {"kind": "koM", "name": "Wrong Kind", "distance": 1000},
+    {"kind": "sprint", "name": "   ", "distance": 1000},
+    {"kind": "sprint", "name": "N" * 101, "distance": 1000},
+    {"kind": "sprint", "name": "Too Far", "distance": 0},
+    {"kind": "sprint", "name": "Too Far", "distance": 10001},
+    {"kind": "sprint", "name": "Not a Number", "distance": "far"},
+])
+def test_rejects_an_invalid_marker(marker):
+    with pytest.raises(SeasonFileError, match=r"races\[0\]\.markers\[0\]"):
+        parse_season_file({**BASE, "races": [marked_race(markers=[marker])]})
+
+
+def test_unknown_marker_key_is_warned_and_ignored():
+    decl = parse_season_file({**BASE, "races": [marked_race(markers=[
+        {"kind": "sprint", "name": "N", "distance": 2000, "points": 10},
+    ])]})
+
+    assert decl.races[0].markers == [{"kind": "sprint", "name": "N", "distance": 2000.0}]
+    assert any("ignoring unknown" in w and "points" in w for w in decl.warnings)
+
+
+def test_create_races_passes_markers_to_the_creator(season):
+    created = []
+    declarations = [
+        RaceDeclaration(
+            week=1, day="sunday", time=time(14, 0), name="Marked",
+            course=[{"length": 5000.0, "gradient": 0.0}],
+            wind_enabled=True, wind_band=None, seed=None,
+            markers=[{"kind": "sprint", "name": "N", "distance": 2000.0}],
+        )
+    ]
+
+    def create_race(**kwargs):
+        created.append(kwargs)
+        return None
+
+    create_races(season, declarations, create_race=create_race)
+
+    assert created[0]["markers"] == [{"kind": "sprint", "name": "N", "distance": 2000.0}]

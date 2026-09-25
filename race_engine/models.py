@@ -46,9 +46,49 @@ class Segment:
     gradient: float  # percentage, positive = uphill
 
 
+class MarkerKind(str, Enum):
+    """The two kinds of course marker, distinguished by what they award."""
+
+    SPRINT = "sprint"
+    MOUNTAIN = "mountain"
+
+
+@dataclass(frozen=True)
+class Marker:
+    """A named point on a course that a race records riders crossing.
+
+    Placed at a distance from the start, authored as part of the course. A
+    marker knows nothing about points or prizes — the features above it
+    decide what a crossing is worth.
+    """
+
+    kind: MarkerKind
+    distance: float  # meters from the start
+    name: str
+
+
 @dataclass
 class Course:
     segments: list[Segment]
+    markers: list[Marker] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        total = self.total_distance
+        for idx, marker in enumerate(self.markers):
+            if not 0 < marker.distance <= total:
+                raise RaceSetupError(
+                    f"marker {idx} ({marker.name!r}): distance must be in "
+                    f"(0, {total}] meters from the start, got {marker.distance}"
+                )
+            if not marker.name or len(marker.name) > 100:
+                raise RaceSetupError(
+                    f"marker {idx}: name must be 1-100 characters, got {marker.name!r}"
+                )
+            if not isinstance(marker.kind, MarkerKind):
+                raise RaceSetupError(
+                    f"marker {idx} ({marker.name!r}): kind must be a MarkerKind, "
+                    f"got {marker.kind!r}"
+                )
 
     @property
     def total_distance(self) -> float:
@@ -151,6 +191,8 @@ class RiderState:
     finished: bool = False
     finish_time: int | None = None  # seconds
     dnf: bool = False  # cut by the time limit; mutually exclusive with finished
+    marker_times: dict[int, float] = field(default_factory=dict)  # marker index -> race second of the crossing
+    contested: set[int] = field(default_factory=set)  # marker indices already decided on
 
 
 @dataclass
@@ -568,6 +610,7 @@ class RaceState:
 
         # Phase 2: apply all deltas consistently.
         winner_finished_this_tick = False
+        markers = self.course.markers
         for i, rs in enumerate(self.rider_states):
             if rs.finished:
                 continue
@@ -583,6 +626,7 @@ class RaceState:
             if not rs.surging:
                 rs.sprinting = False
 
+            prev = positions[i]
             rs.position += speed  # 1 tick = 1 second
 
             rs.energy = max(0.0, min(100.0, rs.energy - energy_drain))
@@ -594,6 +638,22 @@ class RaceState:
                 rs.finish_time = self.current_time
                 if self.time_limit is None:
                     winner_finished_this_tick = True
+
+            # Marker crossings are interpolated inside the tick: several
+            # riders routinely cross a marker in one second, and recording
+            # the tick alone would order them by the rider list, not by who
+            # got there first. `prev` is the rider's pre-move position (the
+            # Phase 1 snapshot), so the crossing is detected even for a
+            # rider who finished this tick (the finish clamp above already
+            # set `rs.position` to the course length).
+            if markers:
+                for m_idx, marker in enumerate(markers):
+                    if (
+                        m_idx not in rs.marker_times
+                        and prev < marker.distance <= rs.position
+                    ):
+                        frac = (marker.distance - prev) / speed if speed > 0 else 0.0
+                        rs.marker_times[m_idx] = self.current_time + frac
 
         # Time cut (broom wagon): once the winner finishes, fix a limit at
         # ceil(winner_time * (1 + TIME_CUT_MARGIN)). Riders still racing once
@@ -628,8 +688,13 @@ class RaceState:
           1. Finish sprint — inside the final kilometer, everyone kicks; the
              `sprint` attribute sizes the boost (see `sprinting` handling in
              `tick`), it no longer gates eligibility.
-          2. Climb attack — in the finale/transition, on a steep gradient.
-          3. Bridge to a break — a genuinely clear move (not just "no wheel
+          2. Contest a marker — a specialist kicked for a named point ahead
+             (sprint marker: `sprint`-sized kick; mountain marker: normal
+             surge). The one effort allowed in the early race — not phase- or
+             terrain-gated, so it works wherever a course author places a
+             marker. Markers at the finish line are left to rule 1.
+          3. Climb attack — in the finale/transition, on a steep gradient.
+          4. Bridge to a break — a genuinely clear move (not just "no wheel
              within 3m"), only from the front of one's own group.
         Otherwise the rider rides the pack tempo.
         """
@@ -640,6 +705,7 @@ class RaceState:
             BRIDGE_GAP_MAX,
             BRIDGE_MAX_DEPTH,
             CHASE_MIN_ENERGY,
+            MARKER_MIN_ENERGY,
             SPRINT_BOOST_MAX,
             SPRINT_BOOST_MIN,
             SPRINT_DISTANCE,
@@ -652,6 +718,7 @@ class RaceState:
         )
 
         profile = self.profile
+        markers = self.course.markers
 
         for i, rs in enumerate(self.rider_states):
             if rs.finished or rs.surge_ticks > 0 or rs.surge_cooldown > 0:
@@ -666,6 +733,8 @@ class RaceState:
             sprinting = False
             duration = SURGE_DURATION
 
+            contest = self._marker_to_contest(rs, pos) if markers else None
+
             # 1. Finish sprint — inside the last stretch, everyone kicks; the
             # `sprint` attribute sizes the boost (applied in `tick`), not
             # whether the kick happens at all.
@@ -674,8 +743,18 @@ class RaceState:
                     surge = True
                     sprinting = True
                     duration = SPRINT_DURATION
-            # 2. Attack a climb — in the finale/transition, on a steep gradient,
-            # only within a viable distance of the finish.
+            # 2. Contest a marker — a specialist surges for a named point
+            # ahead. The marker is decided on the moment the window is entered
+            # (whatever the energy gate says), so a rider who rolls through
+            # does not re-try every tick as energy trickles back.
+            elif contest is not None:
+                m_idx, marker = contest
+                rs.contested.add(m_idx)
+                if rs.energy >= MARKER_MIN_ENERGY:
+                    surge = True
+                    sprinting = marker.kind is MarkerKind.SPRINT
+            # 3. Attack a climb — in the finale/transition, on a steep
+            # gradient, only within a viable distance of the finish.
             elif (
                 remaining_frac < ATTACK_PHASE_THRESHOLD
                 and profile.terrain_at(pos) is Terrain.STEEP
@@ -684,7 +763,7 @@ class RaceState:
                 if rs.energy >= SURGE_MIN_ENERGY:
                     surge = True
 
-            # 3. Bridge to a break — only riders at the front of their own
+            # 4. Bridge to a break — only riders at the front of their own
             # group (depth <= BRIDGE_MAX_DEPTH) consider it, and only when
             # someone is genuinely clear (break_ahead, the same test pack
             # tempo uses — not just "no wheel within 3m", which every rider
@@ -712,6 +791,45 @@ class RaceState:
                 rs.surge_ticks = duration
                 rs.surge_cooldown = SURGE_COOLDOWN
                 rs.sprinting = sprinting
+
+    def _marker_to_contest(self, rs: RiderState, pos: float) -> tuple[int, Marker] | None:
+        """Nearest undecided, non-finish marker within its kind's window that
+        this rider is specialist enough to contest, or None.
+
+        The attribute gate lives here: a rider who is not a specialist for a
+        marker's kind gets None for it and falls through to the climb-attack
+        and bridge rules exactly as if no marker were there. Markers exactly on
+        the finish line are excluded — rule 1 (the finish sprint) owns the last
+        kilometer. Returns (marker index, marker) so the caller can record the
+        decision in `contested`.
+        """
+        from .formulas import (
+            MARKER_CLIMB_WINDOW,
+            MARKER_MIN_CLIMB,
+            MARKER_MIN_SPRINT,
+            MARKER_SPRINT_WINDOW,
+        )
+
+        attrs = rs.rider.attributes
+        best: tuple[int, Marker] | None = None
+        for m_idx, marker in enumerate(self.course.markers):
+            if marker.distance >= self.profile.total_distance:
+                continue
+            if m_idx in rs.contested or marker.distance <= pos:
+                continue
+            if marker.kind is MarkerKind.SPRINT:
+                if attrs.sprint < MARKER_MIN_SPRINT:
+                    continue
+                if marker.distance - pos > MARKER_SPRINT_WINDOW:
+                    continue
+            else:
+                if attrs.climb < MARKER_MIN_CLIMB:
+                    continue
+                if marker.distance - pos > MARKER_CLIMB_WINDOW:
+                    continue
+            if best is None or marker.distance < best[1].distance:
+                best = (m_idx, marker)
+        return best
 
     def _can_chase(
         self,

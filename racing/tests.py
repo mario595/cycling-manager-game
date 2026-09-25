@@ -10,11 +10,20 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from racing.adapters import to_engine_course, to_engine_rider, to_team_codes
-from racing.models import Race, RaceLog, RaceResult, RaceSquad, RaceSquadRider
+from racing.models import (
+    MarkerCrossing,
+    Race,
+    RaceLog,
+    RaceMarker,
+    RaceResult,
+    RaceSquad,
+    RaceSquadRider,
+)
 from racing.services import (
     SquadError,
     auto_pick_squad,
     course_training_attribute,
+    create_race,
     previous_squad,
     riders_who_raced,
     riders_who_started,
@@ -80,12 +89,22 @@ def test_course_json_converts_to_engine_course(db):
             {"length": 1000.0, "gradient": 5.0},
         ],
     )
+    first = RaceMarker.objects.create(
+        race=race, kind=RaceMarker.Kind.SPRINT, name="First", distance=3000.0
+    )
+    second = RaceMarker.objects.create(
+        race=race, kind=RaceMarker.Kind.MOUNTAIN, name="Summit", distance=7500.0
+    )
 
-    course = to_engine_course(race)
+    course = to_engine_course(race, [first, second])
 
     assert len(course.segments) == 2
     assert course.total_distance == 8000.0
     assert course.segments[1].gradient == 5.0
+    assert [(m.kind.value, m.name, m.distance) for m in course.markers] == [
+        ("sprint", "First", 3000.0),
+        ("mountain", "Summit", 7500.0),
+    ]
 
 
 def test_team_codes_match_player_format(team):
@@ -869,3 +888,152 @@ def test_tired_riders_finish_worse_than_fresh_ones_on_the_same_seed(db):
 
     assert fresh_min < tired_min
     assert fresh_team_min < tired_min
+
+
+def test_marker_beyond_course_is_rejected(db):
+    race = Race.objects.create(
+        name="Big Hill",
+        course=[{"length": 1000.0, "gradient": 0.0}],
+    )
+
+    with pytest.raises(ValidationError):
+        RaceMarker.objects.create(
+            race=race,
+            kind=RaceMarker.Kind.SPRINT,
+            name="Past the top",
+            distance=1500.0,
+        )
+
+
+def test_marker_with_blank_name_is_rejected(db):
+    race = Race.objects.create(
+        name="Flat Day",
+        course=[{"length": 1000.0, "gradient": 0.0}],
+    )
+
+    with pytest.raises(ValidationError):
+        RaceMarker.objects.create(
+            race=race,
+            kind=RaceMarker.Kind.SPRINT,
+            name="   ",
+            distance=500.0,
+        )
+
+
+def test_markers_order_by_distance(db):
+    race = Race.objects.create(
+        name="Ordered",
+        course=[{"length": 5000.0, "gradient": 0.0}],
+    )
+    RaceMarker.objects.create(
+        race=race, kind=RaceMarker.Kind.SPRINT, name="Later", distance=4000.0
+    )
+    RaceMarker.objects.create(
+        race=race, kind=RaceMarker.Kind.SPRINT, name="First", distance=1000.0
+    )
+    RaceMarker.objects.create(
+        race=race, kind=RaceMarker.Kind.SPRINT, name="Second", distance=2500.0
+    )
+
+    assert [m.name for m in race.markers.all()] == ["First", "Second", "Later"]
+
+
+def test_crossing_position_is_unique_per_marker(db, team):
+    race = Race.objects.create(
+        name="Sprint Day",
+        course=[{"length": 5000.0, "gradient": 0.0}],
+    )
+    marker = RaceMarker.objects.create(
+        race=race, kind=RaceMarker.Kind.SPRINT, name="Line", distance=4000.0
+    )
+    first = Rider.objects.create(
+        name="Alpha", team=team, climb=50, sprint=50, flat=50, resistance=50, positioning=50
+    )
+    second = Rider.objects.create(
+        name="Beta", team=team, climb=50, sprint=50, flat=50, resistance=50, positioning=50
+    )
+    MarkerCrossing.objects.create(marker=marker, rider=first, position=1, crossed_at=100.0)
+
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            MarkerCrossing.objects.create(marker=marker, rider=second, position=1, crossed_at=101.0)
+
+
+def test_create_race_creates_its_markers(db):
+    race = create_race(
+        name="Marked Stage",
+        course=[{"length": 5000.0, "gradient": 0.0}],
+        markers=[
+            {"kind": "sprint", "name": "First", "distance": 1000.0},
+            {"kind": "mountain", "name": "Summit", "distance": 4500.0},
+        ],
+    )
+
+    assert list(race.markers.values_list("kind", "name", "distance")) == [
+        ("sprint", "First", 1000.0),
+        ("mountain", "Summit", 4500.0),
+    ]
+
+
+def test_simulate_race_records_every_crossing_in_order(running_race, four_riders):
+    marker = RaceMarker.objects.create(
+        race=running_race, kind=RaceMarker.Kind.SPRINT, name="Mid-line", distance=250.0
+    )
+
+    simulate_race(running_race, game_time=timezone.now())
+
+    crossings = list(marker.crossings.all())
+    assert len(crossings) == 4
+    assert [c.position for c in crossings] == [1, 2, 3, 4]
+    assert [c.crossed_at for c in crossings] == sorted(c.crossed_at for c in crossings)
+
+
+def test_finish_line_marker_matches_the_result_order(running_race, four_riders, monkeypatch):
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    marker = RaceMarker.objects.create(
+        race=running_race, kind=RaceMarker.Kind.SPRINT, name="Line", distance=500.0
+    )
+    # The finish times tie (both 100.0), so the result order follows the
+    # states' position key: rider 1 (position 20) places ahead of rider 0
+    # (position 10). The marker_times say the opposite — rider 0 crossed at
+    # 110, rider 1 at 120 — so a naively interpolated order would disagree
+    # with the results. By D5 the finish-line marker's crossings must follow
+    # the result order regardless.
+    states = [
+        SimpleNamespace(
+            finish_time=100.0, position=10.0,
+            rider=SimpleNamespace(id=str(four_riders[0].pk)), marker_times={0: 110.0},
+        ),
+        SimpleNamespace(
+            finish_time=100.0, position=20.0,
+            rider=SimpleNamespace(id=str(four_riders[1].pk)), marker_times={0: 120.0},
+        ),
+        SimpleNamespace(
+            finish_time=None, position=999.0,
+            rider=SimpleNamespace(id=str(four_riders[2].pk)), marker_times={},
+        ),
+        SimpleNamespace(
+            finish_time=None, position=500.0,
+            rider=SimpleNamespace(id=str(four_riders[3].pk)), marker_times={},
+        ),
+    ]
+
+    def fake_run_race(riders, course, log_path, *args, **kwargs):
+        Path(log_path).touch()
+        return states, 0, 2
+
+    monkeypatch.setattr("racing.services.run_race_via_adapter", fake_run_race)
+
+    simulate_race(running_race, game_time=timezone.now())
+
+    crossings = list(marker.crossings.order_by("position"))
+    assert [c.rider.pk for c in crossings] == [four_riders[1].pk, four_riders[0].pk]
+    assert [c.crossed_at for c in crossings] == [100.0, 100.0]
+
+
+def test_race_without_markers_records_no_crossings(running_race, four_riders):
+    simulate_race(running_race, game_time=timezone.now())
+
+    assert MarkerCrossing.objects.filter(marker__race=running_race).count() == 0

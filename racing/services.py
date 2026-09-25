@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import tempfile
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 
@@ -21,7 +22,16 @@ from riders.services import apply_race_cost, freshness_multiplier
 from teams.models import Team
 
 from .adapters import run_race_via_adapter, to_engine_course, to_engine_rider, to_team_codes
-from .models import SQUAD_SIZE, Race, RaceLog, RaceResult, RaceSquad, RaceSquadRider
+from .models import (
+    SQUAD_SIZE,
+    Race,
+    RaceLog,
+    RaceMarker,
+    RaceResult,
+    RaceSquad,
+    RaceSquadRider,
+    MarkerCrossing,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -236,6 +246,28 @@ def set_squad(race: Race, team: Team, rider_ids: list[int], leader_id: int) -> R
     return _write_squad(race, team, rider_ids, leader_id, auto=False)
 
 
+def create_race(*, markers: Iterable[dict] = (), **fields) -> Race:
+    """Create a race and its markers in one transaction.
+
+    `markers` entries are `{"kind", "name", "distance"}` dicts, as the
+    season loader produces them. Each `save()` runs `RaceMarker.clean()`, so
+    an invalid marker fails the whole creation. `schedule/`'s loader injects
+    this in place of `Race.objects.create` — D10: markers are authored in the
+    same declaration as the race, and the loader still imports nothing from
+    `racing/`.
+    """
+    with transaction.atomic():
+        race = Race.objects.create(**fields)
+        for marker in markers:
+            RaceMarker.objects.create(
+                race=race,
+                kind=marker["kind"],
+                name=marker["name"],
+                distance=marker["distance"],
+            )
+    return race
+
+
 def ensure_squads(race: Race) -> None:
     """Give every team with enough riders a squad for this race, if it has
     not got one. Called from simulate_race so a team whose manager never
@@ -325,7 +357,11 @@ def simulate_race(race: Race, *, game_time: datetime) -> list[RaceResult]:
     ]
     teams = list({m.squad.team.pk: m.squad.team for m in members}.values())
 
-    course = to_engine_course(race)
+    # D9: fetch once, in index order — the positions below and the crossings
+    # writer both use this same list, so the engine's marker index always
+    # refers to the same RaceMarker row.
+    markers = list(race.markers.order_by("distance", "pk"))
+    course = to_engine_course(race, markers)
 
     # The engine writes the log itself with a raw open(), and it may not
     # learn about Django. So it writes to a temp file and we hand the
@@ -377,6 +413,37 @@ def simulate_race(race: Race, *, game_time: datetime) -> list[RaceResult]:
         # results transaction, so "started" and "paid for it" are atomic —
         # see the plan's Design decision 7.
         apply_race_cost([by_pk[s.rider.id].pk for s in states])
+        # Marker crossings join the same transaction, after the results they
+        # are written against. A crossing row is a fact of what happened,
+        # never amended later, so it is written once here. Ordering: D5 makes
+        # a finish-line marker's order the results' order; D4 gives an
+        # in-course marker the stable interpolated crossing time, ordered the
+        # same way the audit sorts is, with ties left to state order.
+        course_length = sum(s["length"] for s in race.course)
+        crossings = []
+        for idx, marker in enumerate(markers):
+            if marker.distance >= course_length:  # D5: finish line
+                crossers = [
+                    (s, float(s.finish_time))
+                    for s in ordered
+                    if s.finish_time is not None
+                ]
+            else:  # D4: interpolated time, stable
+                crossers = sorted(
+                    (
+                        (s, s.marker_times[idx])
+                        for s in states
+                        if idx in s.marker_times
+                    ),
+                    key=lambda pair: pair[1],
+                )
+            crossings += [
+                MarkerCrossing(
+                    marker=marker, rider=by_pk[s.rider.id], position=p, crossed_at=t
+                )
+                for p, (s, t) in enumerate(crossers, start=1)
+            ]
+        MarkerCrossing.objects.bulk_create(crossings)
         race.status = Race.Status.FINISHED
         race.finished_at = game_time
         race.save(update_fields=["status", "finished_at"])

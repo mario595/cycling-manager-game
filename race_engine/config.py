@@ -6,6 +6,8 @@ from typing import Any
 
 from race_engine.models import (
     Course,
+    Marker,
+    MarkerKind,
     RaceSetupError,
     Rider,
     RiderAttributes,
@@ -85,7 +87,59 @@ def _parse_course(raw: Any) -> Course:
         if segments[-1].length <= 0:
             raise ConfigError(f"{path}.length must be positive")
 
-    return Course(segments=segments)
+    base = Course(segments=segments)
+    try:
+        # Course.__post_init__ range-checks the markers against the course
+        # length; surface that (and its kind/name rules) as a ConfigError.
+        return Course(segments=segments, markers=_parse_markers(raw, base))
+    except RaceSetupError as exc:
+        raise ConfigError(str(exc)) from exc
+
+
+def _parse_markers(raw: dict[str, Any], course: Course) -> list[Marker]:
+    """Parse the optional `race.markers` list: {"kind", "name", "distance"}.
+
+    A sibling of `race.course`, not inside it. Each distance is range-checked
+    against the course length here so the error names `race.markers[i]`; the
+    returned list is then handed to `Course`, whose `__post_init__` checks it
+    again for callers that build a Course without this parser.
+    """
+    markers_raw = raw.get("markers")
+    if markers_raw is None:
+        return []
+    if not isinstance(markers_raw, list):
+        raise ConfigError("race.markers must be a list")
+
+    markers: list[Marker] = []
+    for i, entry in enumerate(markers_raw):
+        path = f"race.markers[{i}]"
+        kind_raw = _require(entry, "kind", path)
+        try:
+            kind = MarkerKind(kind_raw)
+        except ValueError:
+            raise ConfigError(
+                f"{path}.kind must be one of {[k.value for k in MarkerKind]}, got {kind_raw!r}"
+            ) from None
+
+        name = _require(entry, "name", path)
+        if not isinstance(name, str) or not name.strip():
+            raise ConfigError(f"{path}.name must be a non-empty string")
+
+        distance = _require(entry, "distance", path)
+        try:
+            distance_float = float(distance)
+        except (TypeError, ValueError):
+            raise ConfigError(f"{path}.distance must be a number") from None
+        if not 0 < distance_float <= course.total_distance:
+            raise ConfigError(
+                f"{path}.distance must be in (0, {course.total_distance}] meters, "
+                f"got {distance_float}"
+            )
+
+        markers.append(
+            Marker(kind=kind, distance=distance_float, name=name.strip())
+        )
+    return markers
 
 
 _VALID_WIND_BANDS = {"calm", "light", "moderate", "strong"}

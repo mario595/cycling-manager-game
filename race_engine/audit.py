@@ -35,11 +35,13 @@ DEFAULT_SEEDS = [1, 7, 42, 123, 2024]
 # Test data, not engine knowledge — configs carry none (see README.md).
 EXPECTED_ARCHETYPE = {
     "sprinters_classic": "sp",
+    "sprinters_classic_markers": "sp",
     "san_remo": {"pu", "sp"},
     "lombardia": {"gc", "pu"},
     "classics_hilly": {"gc", "pu"},
     "summit_finish": "gc",
     "mountain_stage": "gc",
+    "mountain_stage_markers": "gc",
 }
 
 ARCHETYPE_NAMES = {
@@ -82,6 +84,7 @@ class RunResult:
     surge_ticks: dict[str, int] = field(default_factory=dict)
     hit_tick_cap: bool = False
     dnf_riders: list[str] = field(default_factory=list)
+    marker_winners: list[str] = field(default_factory=list)
 
 
 def _run_one(
@@ -155,6 +158,15 @@ def _run_one(
     stamina_zero_count = sum(1 for rs in results if rs.stamina <= 0.0)
     last_over_winner_ratio = max(all_times) / winner_time if winner_time else 0.0
 
+    marker_winners: list[str] = []
+    for m_idx in range(len(course.markers)):
+        first = min(
+            (rs for rs in results if m_idx in rs.marker_times),
+            key=lambda rs: rs.marker_times[m_idx],
+            default=None,
+        )
+        marker_winners.append(_archetype(first.rider.id) if first is not None else "-")
+
     return RunResult(
         config=Path(config_path).stem,
         seed=seed,
@@ -174,6 +186,7 @@ def _run_one(
         surge_ticks=surge_ticks,
         hit_tick_cap=hard_cap is not None and state.current_time >= hard_cap and not state.is_finished(),
         dnf_riders=dnf_riders,
+        marker_winners=marker_winners,
     )
 
 
@@ -270,6 +283,10 @@ def _print_report(results: list[RunResult], baseline: dict[str, Any] | None) -> 
             print("  WARNING: at least one run hit the tick cap (possible Finding 2 regression)")
         if s["total_dnf"] > 0:
             print(f"  time-cut DNFs: {s['total_dnf']}")
+
+        for r in results:
+            if r.config == config and r.marker_winners:
+                print(f"  marker winners (seed {r.seed}): {', '.join(r.marker_winners)}")
 
         if baseline and config in baseline:
             b = baseline[config]

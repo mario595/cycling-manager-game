@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
+import type { RaceMarker } from '../api'
 import { CourseProfile } from './CourseProfile'
 
 /** The drawn course, as one pair of y coordinates per segment stroke
@@ -42,5 +43,25 @@ describe('CourseProfile', () => {
     const [first] = segmentYs(container)
     expect(first[0]).toBe(first[1])
     expect(screen.getByText('0%')).toBeInTheDocument()
+  })
+
+  it('draws a line and a list entry per marker', () => {
+    const course = [{ length: 110000, gradient: 0 }]
+    const markers: RaceMarker[] = [
+      { id: 1, kind: 'sprint', name: 'Line One', distance: 40000 },
+      { id: 2, kind: 'mountain', name: 'Summit', distance: 80000 },
+    ]
+    const { container } = render(<CourseProfile course={course} markers={markers} />)
+
+    expect(container.querySelectorAll('line[stroke-dasharray]')).toHaveLength(2)
+    expect(screen.getByText('Sprint · Line One · km 40.0')).toBeInTheDocument()
+    expect(screen.getByText('Mountain · Summit · km 80.0')).toBeInTheDocument()
+  })
+
+  it('renders nothing extra without markers', () => {
+    const { container } = render(<CourseProfile course={[{ length: 110000, gradient: 0 }]} />)
+
+    expect(container.querySelectorAll('line[stroke-dasharray]')).toHaveLength(0)
+    expect(screen.queryByText(/Sprint|Mountain/)).toBeNull()
   })
 })

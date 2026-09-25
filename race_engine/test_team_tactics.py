@@ -1,7 +1,8 @@
 """Tests for the Tier A team-tactics behaviours (TEAM_TACTICS_PLAN.md).
 
-Covers A2 (role-scaled rotation floor: support riders take more than their
-share of front-line time so the leader is protected) and A3 (a pack doesn't
+Covers A2 (role-scaled rotation floor: the leader is credited with a deeper
+rotation average than an equal support teammate, protecting them from the
+drop test and fatigue when they ride at the front) and A3 (a pack doesn't
 chase a break made up solely of its own teammates).
 """
 
@@ -27,28 +28,54 @@ def _rider(rid: str, team: str, role: str) -> Rider:
     return Rider(id=rid, name=rid, attributes=ATTRS, team_id=team, role=role)
 
 
-def test_support_pulls_more_than_leader():
-    """In a tight team pack, the support rider accumulates more pulling
-    ticks than the leader over time, since the leader's rotation floor is
-    higher (protected) and the support's lower (Tier A2)."""
-    riders = [
-        _rider("leader", "t1", "leader"),
-        _rider("support", "t1", "support"),
-    ]
-    course = Course(segments=[Segment(length=500_000.0, gradient=0.0)])
-    state = RaceState.create_initial_state(riders, course, wind=False)
-    # Start tied so who pulls first is decided by the tactics, not a head start.
-    for rs in state.rider_states:
-        rs.position = 100_000.0
+def test_rotation_floor_protects_leader_at_the_front():
+    """A2's rotation floor is a fatigue-protection *credit*, not a pack-geometry
+    rule: a team's leader is credited with a deeper rotation average than an
+    equal support teammate, so the drop-test and fatigue reference rate a
+    leader at the front as more sheltered. Deterministic — no RNG.
 
-    pulling_ticks = {"leader": 0, "support": 0}
-    for _ in range(500):
-        state.tick()
-        for rs in state.rider_states:
-            if rs.pulling:
-                pulling_ticks[rs.rider.id] += 1
+    Pack size matters. The floor is `share * (pack_size - 1)`, and
+    `draft_hold_multiplier` treats any depth below 1.0 as fully exposed
+    (`DRAFT_HOLD_MIN`), so a 2-rider pack never binds: both the 0.65 leader
+    credit and the 0.35 support credit sit under the 1.0 exposure threshold
+    and the two ride identically. The floor clears it only with three or more
+    riders, which is what this test pins. (The original version tallied the
+    positional `pulling` flag in a 2-rider pack — the flag is set for
+    whichever rider is physically at the front, and the A2 credit does not
+    feed it — so it flipped with the speed jitter.)"""
+    from race_engine.formulas import (
+        DRAFT_HOLD_MIN,
+        ROTATION_SHARE_LEADER,
+        ROTATION_SHARE_SUPPORT,
+        draft_hold_multiplier,
+    )
 
-    assert pulling_ticks["support"] >= pulling_ticks["leader"]
+    positioning = 60
+    pack_size = 3
+
+    # The credit the drop-test and fatigue reference see (mirrored from
+    # `models.py` tick(), "Role-scaled (Tier A2)"). At the front (depth 0,
+    # gap_factor 1, no teammate on a wheel ahead) the rotation floor
+    # `share * (pack_size - 1)` is the binding term.
+    leader_front = ROTATION_SHARE_LEADER * (pack_size - 1)
+    support_front = ROTATION_SHARE_SUPPORT * (pack_size - 1)
+
+    assert ROTATION_SHARE_LEADER > ROTATION_SHARE_SUPPORT
+    # The floor binds from three riders up (a 2-rider pack stays below the
+    # exposure threshold on both sides and the pair would ride identically).
+    assert leader_front > 1.0
+    # The support at the front gets no credit (fully exposed); the leader
+    # gets partial shelter — the leader is the protected one.
+    assert draft_hold_multiplier(positioning, support_front, 0.0) == DRAFT_HOLD_MIN
+    assert (
+        draft_hold_multiplier(positioning, leader_front, 0.0)
+        > draft_hold_multiplier(positioning, support_front, 0.0)
+    )
+    # The floor protects but never over-credits: a leader at the front is
+    # still rated more exposed than a rider tucked into the wheels.
+    assert draft_hold_multiplier(positioning, leader_front, 0.0) < (
+        draft_hold_multiplier(positioning, 2.0, 0.0)
+    )
 
 
 def test_pack_does_not_chase_teammates_only_break():

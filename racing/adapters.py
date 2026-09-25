@@ -16,7 +16,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from race_engine.models import Course, Rider as EngineRider, RiderAttributes, Segment
+from race_engine.models import (
+    Course,
+    Marker,
+    MarkerKind,
+    Rider as EngineRider,
+    RiderAttributes,
+    Segment,
+)
 from riders.models import ENGINE_ATTRIBUTES
 
 if TYPE_CHECKING:
@@ -24,7 +31,7 @@ if TYPE_CHECKING:
     from riders.models import Rider as DBRider
     from teams.models import Team
 
-    from .models import Race
+    from .models import Race, RaceMarker
 
 
 def _scaled(value: int, scale: float) -> int:
@@ -68,13 +75,24 @@ def to_engine_rider(rider: DBRider, *, role: str, freshness_scale: float = 1.0) 
     )
 
 
-def to_engine_course(race: Race) -> Course:
-    """Build the engine's Course from a Race's stored segment JSON."""
+def to_engine_course(race: Race, markers: list[RaceMarker]) -> Course:
+    """Build the engine's Course from a Race's stored segment JSON.
+
+    `markers` is **required**, not defaulted — D9: the caller fetches the
+    marker rows once and passes the same list both here and to the crossing
+    writer, so the engine's marker index always refers to the same
+    `RaceMarker` row. Each row maps in the given order, which is the
+    `("distance", "pk")` Meta ordering.
+    """
     return Course(
         segments=[
             Segment(length=float(s["length"]), gradient=float(s["gradient"]))
             for s in race.course
-        ]
+        ],
+        markers=[
+            Marker(kind=MarkerKind(m.kind), distance=m.distance, name=m.name)
+            for m in markers
+        ],
     )
 
 
