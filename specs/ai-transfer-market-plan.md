@@ -450,7 +450,7 @@ Import `withdraw_bids` from `transfers.services` and `transaction` from
 
 ## Work items
 
-### W1 — `transfers/models.py`, migration 0002: `Bid.withdrawn_at` and `live()`
+### W1 — `transfers/models.py`, migration 0002: `Bid.withdrawn_at` and `live()` ✅
 Add the field, `BidQuerySet` and the manager, and update the docstring. Run
 `makemigrations transfers`, then rename the migration to
 `0002_bid_withdrawn_at.py`.
