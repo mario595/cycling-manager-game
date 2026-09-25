@@ -431,7 +431,7 @@ Tests, `transfers/tests/test_services.py`:
   (the injected `charge` is never called), and the rider is still teamless
   and retired.
 
-### W4 — `world/`: split expiry into retire/delete; `TickRun.agents_retired`; migration `0015_tickrun_agents_retired`
+### W4 — `world/`: split expiry into retire/delete; `TickRun.agents_retired`; migration `0015_tickrun_agents_retired` — done
 
 Tests, `world/tests/test_expiry.py`:
 - **Rewrite** `test_expiry_counts_riders_deleted_not_cascaded_rows`. It

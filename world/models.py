@@ -108,9 +108,18 @@ class TickRun(models.Model):
     )
     agents_expired = models.PositiveSmallIntegerField(
         default=0,
-        help_text="Free agents expired this tick: unattached EXPIRY_WEEKS+ "
-        "in-season weeks and priced in the pool's bottom "
-        "EXPIRY_VALUE_PERCENTILE (#29).",
+        help_text=(
+            "Free agents deleted this tick: selected by expiry (unattached "
+            "EXPIRY_WEEKS+ in-season weeks, priced in the pool's bottom "
+            "EXPIRY_VALUE_PERCENTILE) and never raced (#29, #104)."
+        ),
+    )
+    agents_retired = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Free agents retired this tick: selected by expiry, with at least "
+            "one race result."
+        ),
     )
     auctions_sold = models.PositiveIntegerField(
         default=0,

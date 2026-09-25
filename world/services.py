@@ -31,7 +31,7 @@ from economy.services import (
     pay_transfer_income,
     write_salary_reviews,
 )
-from racing.models import Race
+from racing.models import Race, RaceResult
 from racing.services import riders_who_raced, riders_who_started, simulate_race
 from riders.models import Rider
 from riders.services import (
@@ -40,6 +40,7 @@ from riders.services import (
     apply_weekly_recovery,
     record_week_snapshots,
     reprice_all,
+    retire_riders,
     training_deltas,
 )
 from schedule.models import SeasonTransition, Week
@@ -55,6 +56,7 @@ from transfers.services import (
     EXPIRY_VALUE_PERCENTILE,
     EXPIRY_WEEKS,
     due_auctions,
+    free_agents,
     resolve_auction,
 )
 
@@ -199,10 +201,10 @@ def _release_inactive(week) -> tuple[int, str]:
     return released, error
 
 
-def _expire_free_agents(week) -> int:
-    """Delete every free agent unattached EXPIRY_WEEKS+ in-season weeks as
-    of this week boundary, and priced at or below the pool's
-    EXPIRY_VALUE_PERCENTILE at that moment. Returns riders deleted.
+def _expire_free_agents(week) -> tuple[int, int]:
+    """Retire or delete every free agent unattached EXPIRY_WEEKS+ in-season
+    weeks as of this week boundary, and priced at or below the pool's
+    EXPIRY_VALUE_PERCENTILE at that moment. Returns (retired, deleted).
 
     Mirrors _release_inactive's shape: counts Week rows via
     schedule.services.weeks_opened_between — world/ just provides the
@@ -215,23 +217,16 @@ def _expire_free_agents(week) -> int:
     not a signal. A null `unattached_since` (pre-migration riders) is
     excluded, never treated as "unattached since the beginning of time."
 
-    Deletes the Rider row outright, exactly `reset_riders`'s precedent
-    (Design decision 6): the cascade takes the rider's RaceResult/
-    RaceSquadRider rows with it, which is acceptable because an expired
-    rider never raced for the releasing team, and killing a long-stale,
-    bottom-quintile free agent is the whole point of the mechanic.
-
-    The count returned is `len(doomed)` — the number of *riders* — NOT the
-    first element of delete()'s return, which sums every cascaded row
-    (a free agent with race history would inflate it by one per
-    RaceResult/RaceSquadRider).
+    A selected rider with at least one RaceResult is retired and keeps its
+    history. A selected rider with no RaceResult is deleted. Both outcomes
+    return rider counts, never delete()'s cascaded-row total.
     """
-    pool = list(Rider.objects.filter(team__isnull=True))
+    pool = list(free_agents())
     # Truncation is the small-pool guard (Design decision 5): a floor leaves
     # a 2-rider pool pointing at a "bottom" quintile of one rider.
     bottom_count = int(len(pool) * EXPIRY_VALUE_PERCENTILE)
     if bottom_count == 0:
-        return 0
+        return 0, 0
     value_by_rider = {rider.pk: market_value_for(rider) for rider in pool}
     values = sorted(value_by_rider.values())
     cutoff = values[bottom_count - 1]
@@ -248,7 +243,7 @@ def _expire_free_agents(week) -> int:
         .values_list("starts_at", flat=True)[:EXPIRY_WEEKS]
     )
     if len(opened) < EXPIRY_WEEKS:
-        return 0
+        return 0, 0
     expiry_cutoff = opened[EXPIRY_WEEKS - 1]
     doomed = [
         rider.pk
@@ -257,8 +252,15 @@ def _expire_free_agents(week) -> int:
         and rider.unattached_since <= expiry_cutoff
         and value_by_rider[rider.pk] <= cutoff
     ]
-    Rider.objects.filter(pk__in=doomed).delete()
-    return len(doomed)
+    raced = set(
+        RaceResult.objects.filter(rider_id__in=doomed)
+        .values_list("rider_id", flat=True)
+        .distinct()
+    )
+    retired = retire_riders(raced, at=boundary)
+    never_raced = [pk for pk in doomed if pk not in raced]
+    Rider.objects.filter(pk__in=never_raced, team__isnull=True).delete()
+    return retired, len(never_raced)
 
 
 def _apply_training_week(week) -> int:
@@ -296,7 +298,7 @@ def _apply_training_week(week) -> int:
             )
 
     # Riders whose team has no trainer still get the race effect.
-    for rider in Rider.objects.exclude(pk__in=extra):
+    for rider in Rider.objects.active().exclude(pk__in=extra):
         attrs = raced.get(rider.pk, [])
         if attrs:
             extra[rider.pk] = training_deltas(
@@ -445,6 +447,7 @@ def tick() -> TickRun:
     trainer_salary_entries = 0
     teams_released = 0
     agents_expired = 0
+    agents_retired = 0
     inactivity_error = ""
 
     # Built once, outside the loop: a trainer's skill does not move between
@@ -490,7 +493,9 @@ def tick() -> TickRun:
         # expired the same pass (their unattached_since postdates the
         # boundary). Expiry only touches unattached riders, so it cannot
         # change what this week already charged anyone.
-        agents_expired += _expire_free_agents(week)
+        retired, expired = _expire_free_agents(week)
+        agents_retired += retired
+        agents_expired += expired
 
     reclaimed = _reclaim_unfinished()
     claimed = _claim(limit=max(0, max_races - len(reclaimed)), at=at)
@@ -517,6 +522,7 @@ def tick() -> TickRun:
         trainer_salary_entries=trainer_salary_entries,
         teams_released=teams_released,
         agents_expired=agents_expired,
+        agents_retired=agents_retired,
         auctions_sold=auctions_sold,
         auctions_unsold=auctions_unsold,
         error=inactivity_error + auction_error,
