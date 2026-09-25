@@ -30,7 +30,7 @@ WEEKLY_GROWTH_FRACTION = 0.035
 #: display points across a season — the spec's promised band
 #: (specs/rider-growth-and-decline.md, In scope #7) for the representative
 #: case, not just the ceiling — rather than compounding without bound the
-#: longer a rider has been retired-in-all-but-name.
+#: longer a rider remains active without an age-driven exit.
 WEEKLY_DECLINE_UNIT = 0.006
 
 #: Years past peak_age after which decline stops accelerating and holds
@@ -278,8 +278,8 @@ def apply_weekly_growth(
 def advance_ages() -> int:
     """Advance every rider's age by one, capped at the model's maximum.
 
-    A rider at the cap holds there until retirement (#42) exists. One
-    UPDATE statement via F(), not a per-row loop.
+    A rider at the cap holds there; automatic age-driven retirement (#42)
+    is still future work. One UPDATE statement via F(), not a per-row loop.
     """
     return Rider.objects.active().filter(age__lt=40).update(age=F("age") + 1)
 

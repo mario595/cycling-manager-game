@@ -1,6 +1,6 @@
 # Retire raced riders instead of deleting them
 
-**Status:** proposed
+**Status:** implemented
 **Domain(s):** `transfers/`, `riders/`, `world/`
 **One-liner:** A free agent who has ever raced is retired, not deleted, when the pool expires them — their history stays put; only a rider nobody ever fielded is removed outright.
 

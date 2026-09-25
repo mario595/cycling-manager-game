@@ -30,27 +30,30 @@ auctions (#28), the first thing in this app that needs to persist across
 ticks. Free agents still need no models of their own: the schema they need
 lives on `Rider` itself (nullable `team`, plus the `joined_team_at` /
 `unattached_since` stamps `riders/`'s `mark_team_change` writes), and the
-pool is a pure derived query (`team__isnull=True`) with nothing to
+pool is a pure derived query
+(`Rider.objects.active().filter(team__isnull=True)`) with nothing to
 remember.
 
 ## Free agents
 
 The first built slice of the transfer market (#29). A **free agent** is any
-`Rider` with no team; the pool is `Rider.objects.filter(team__isnull=True)`.
-Two actions move riders in and out of it, both row-locked write paths in
-`transfers/services.py` that charge an **injected** `charge(rider, fee)`
-callback the way `hire_trainer` does — `transfers/` may not import
-`economy/` (AGENTS.md), so the caller (`api/`) supplies the ledger write
-(`economy.services.charge_transfer_fee`, a `TRANSFER_FEE` ledger entry whose
-description records the rider and the direction).
+active `Rider` with no team; the pool is
+`Rider.objects.active().filter(team__isnull=True)`, ordered by name. Retired
+riders are never returned. Two actions move riders in and out of it, both
+row-locked write paths in `transfers/services.py` that charge an **injected**
+`charge(rider, fee)` callback the way `hire_trainer` does — `transfers/` may
+not import `economy/` (AGENTS.md), so the caller (`api/`) supplies the ledger
+write (`economy.services.charge_transfer_fee`, a `TRANSFER_FEE` ledger entry
+whose description records the rider and the direction).
 
 - **Signing** (`sign_free_agent`) — a free agent comes in for
   `signing_fee_for(rider)` (60% of market value). The rider row is locked
   WITHOUT `skip_locked` (the caller wants this specific rider), teamlessness
-  is re-checked under the lock, then `ROSTER_CAP` (30) is re-checked under
-  the same lock, then `charge()` runs. The whole thing is one transaction:
-  a `charge()` raise rolls back the team move, keeping roster and ledger in
-  step.
+  and active status are re-checked under the lock, then `ROSTER_CAP` (30) is
+  re-checked under the same lock, then `charge()` runs. The whole thing is
+  one transaction: a `charge()` raise rolls back the team move, keeping
+  roster and ledger in step. A retired rider raises `RiderNotAvailable` and
+  cannot be signed for any fee.
 - **Releasing** (`release_rider`) — a roster rider goes out, charging
   `release_cost_for(team, rider, weeks_opened=...)`: full severance (30% of
   market value) for everyone **except** the claim-cooldown exemption.
@@ -65,13 +68,14 @@ description records the rider and the direction).
   boundary Week-row count `world/` uses). A team with no `managed_since` has
   no cooldown, so nothing is exempt.
 - **Expiry** — every weekly tick, `world.services._expire_free_agents`
-  deletes free agents that have been unattached for at least
+  selects active free agents that have been unattached for at least
   `EXPIRY_WEEKS` (8) in-season weeks **and** are priced at or below the
   bottom `EXPIRY_VALUE_PERCENTILE` (0.20) of the pool's values at that
-  moment. Value is never stored, so the cutoff is recomputed fresh each
-  pass; a pool too small to have a meaningful bottom quintile simply expires
-  nobody. This is a permanent deletion (the same precedent as
-  `reset_riders`), never a re-release to the pool.
+  moment. A selected rider with at least one race result is **retired**,
+  kept frozen with their history intact, and never returns to the pool. A
+  selected rider who never raced is **deleted**. Value is never stored, so
+  the cutoff is recomputed fresh each pass; a pool too small to have a
+  meaningful bottom quintile simply expires nobody.
 
 The pool, balances and costs reach the player through `api/`: the market
 screen (`frontend/`) signs riders; the Roster shows each rider's current

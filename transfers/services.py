@@ -72,7 +72,8 @@ class TransferError(Exception):
 
 
 class RiderNotAvailable(TransferError):
-    """That rider is not a free agent — signed by someone else, or never was."""
+    """That rider is not an available free agent — signed, retired, or
+    never was."""
 
 
 class RosterFull(TransferError):

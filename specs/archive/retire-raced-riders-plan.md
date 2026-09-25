@@ -1,6 +1,6 @@
 # Retire raced riders instead of deleting them — Implementation Plan
 
-**Spec:** `specs/retire-raced-riders.md` · **Issue:** #104 · **Status:** proposed
+**Spec:** `specs/retire-raced-riders.md` · **Issue:** #104 · **Status:** implemented
 **Apps touched:** `riders/`, `transfers/`, `world/`, `api/`, `frontend/`
 
 ## Context you need
