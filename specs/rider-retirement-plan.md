@@ -370,7 +370,7 @@ needs `final_season: false` added, or `tsc -b` fails. They are in
 
 ## Work items
 
-### W1 — `riders/`: retirement age and the retire step
+### W1 — `riders/`: retirement age and the retire step ✅
 Rename `PEAK_AGE_RANGE`, and add `RETIREMENT_AGE_MIN/SPAN`, `retirement_age`,
 `is_due_to_retire` and `retire_due_riders`. Tests go in
 `riders/tests/test_services.py`:
