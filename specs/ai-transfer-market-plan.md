@@ -480,7 +480,7 @@ Switch `place_bid` and `resolve_auction` to `live()`, and add `withdraw_bids`.
 - `test_auction_market_hides_withdrawn_bids`
 - `test_my_bids_excludes_withdrawn_bids`
 
-### W4 — `world/ai_market.py`: pure helpers
+### W4 — `world/ai_market.py`: pure helpers ✅
 Constants and the four helpers, with no orchestrators yet.
 **Tests** in `world/tests/test_ai_market.py` (new), using unsaved `Rider`
 objects:
