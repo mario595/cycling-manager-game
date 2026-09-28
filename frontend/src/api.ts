@@ -660,10 +660,10 @@ export async function setTrainingFocus(attribute: string): Promise<void> {
 
 /** One ledger entry as the Finances screen needs it. `kind` is the machine
  * name (starting_balance/wages/takeover/prize_money/merchandise/
- * sponsorship/trainer_fee/trainer_salary/transfer_fee); the screen renders
- * the label. `rider_count` is set on wage entries only — null elsewhere.
- * `balance_after` is computed server-side: the running balance just after
- * this entry. */
+ * sponsorship/trainer_fee/trainer_salary/transfer_fee/development_squad/
+ * development_squad_fee); the screen renders the label. `rider_count` is set
+ * on wage entries only — null elsewhere. `balance_after` is computed
+ * server-side: the running balance just after this entry. */
 export interface LedgerEntry {
   id: number
   kind:
@@ -676,6 +676,8 @@ export interface LedgerEntry {
     | 'trainer_fee'
     | 'trainer_salary'
     | 'transfer_fee'
+    | 'development_squad'
+    | 'development_squad_fee'
   description: string
   amount: number
   occurred_at: string | null
@@ -745,4 +747,55 @@ export async function getSponsors(): Promise<Sponsors> {
 
 export async function signOffer(offerId: number): Promise<void> {
   return writeJson('/api/economy/sponsors/sign/', 'POST', { offer_id: offerId })
+}
+
+/** One development squad level, priced as the server sees it.
+ *
+ * `change_fee` is what moving to this level from where the team is now would
+ * cost: the full opening fee when the squad is closed, the difference when it
+ * is an upgrade, zero for a downgrade, and null for the level already held —
+ * there is no such move, and the SPA reads that null as the "Current" badge
+ * rather than a disabled button. The server owns the rule, so the figure
+ * shown and the figure charged cannot drift. */
+export interface DevelopmentSquadLevel {
+  level: number
+  name: string
+  opening_fee: number
+  weekly_cost: number
+  season_cost: number
+  change_fee: number | null
+  is_current: boolean
+}
+
+/** The Development squad screen's whole state: `level` is null while the
+ * squad is closed (not an error — a state the screen exists to show), and
+ * `balance` is here so an action the team cannot afford can be disabled
+ * without a second round trip. */
+export interface DevelopmentSquad {
+  level: number | null
+  levels: DevelopmentSquadLevel[]
+  balance: number
+}
+
+export async function getDevelopmentSquad(): Promise<DevelopmentSquad> {
+  const response = await fetch('/api/development-squad/')
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new Error(body?.detail ?? `development squad request failed: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function openDevelopmentSquad(level: number): Promise<void> {
+  return writeJson('/api/development-squad/open/', 'POST', { level })
+}
+
+export async function changeDevelopmentSquadLevel(level: number): Promise<void> {
+  return writeJson('/api/development-squad/level/', 'POST', { level })
+}
+
+/** POST, not DELETE: closing deletes the squad row, but the opening fee
+ * already paid stays in the ledger, so nothing here is destroyed. */
+export async function closeDevelopmentSquad(): Promise<void> {
+  return writeJson('/api/development-squad/close/', 'POST')
 }

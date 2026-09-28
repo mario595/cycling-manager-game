@@ -474,7 +474,7 @@ shape:
 - `test_downgrade_debits_nothing`
 - `test_close_then_close_again_is_409`
 
-### W7 — `frontend/`: screen, hook, nav, Finances labels
+### W7 — `frontend/`: screen, hook, nav, Finances labels ✅
 **Tests** in `src/screens/DevelopmentSquad.test.tsx`, mocking
 `useDevelopmentSquad` as `Staff.test.tsx` mocks `useStaff`:
 - renders three levels with fee, weekly and per-season cost in `$` format
