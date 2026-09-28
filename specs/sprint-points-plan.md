@@ -411,7 +411,7 @@ New file `competitions/tests/test_sprints.py`. Add a `make_crossing` fixture to
 - `test_race_without_sprint_markers_scores_nothing`
 - `test_points_frozen_when_table_changes` (monkeypatch the table after scoring; the row is unchanged)
 
-### W5 — `competitions/services.py`: `points_by_team` and `standings` include sprint points
+### W5 — `competitions/services.py`: `points_by_team` and `standings` include sprint points ✅
 Tests in `competitions/tests/test_services.py` and `test_standings.py`:
 - `test_points_by_team_adds_sprint_points`
 - `test_points_by_team_ignores_mountain_marker_points` (a hand-made

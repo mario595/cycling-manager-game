@@ -3,6 +3,7 @@ from __future__ import annotations
 from django.db.models import Sum
 from racing.models import MarkerCrossing, Race, RaceMarker, RaceResult
 from schedule.models import Season, Week
+from teams.models import Team
 
 from .models import MarkerPoints, RacePoints
 from .scoring import (
@@ -141,21 +142,35 @@ def _countback_key(entry: dict) -> tuple:
 
 
 def points_by_team(week: Week) -> dict[int, int]:
-    """Total race points each team scored in `week`. Teams that scored
-    nothing are absent from the mapping — callers treat a missing key as 0.
+    """Total points each team scored in `week` — finish points plus sprint
+    points. Teams that scored nothing are absent from the mapping —
+    callers treat a missing key as 0.
 
     Read by world.services.tick() and handed to economy's fanbase
     adjustment: economy/ may not import competitions/ (AGENTS.md), so the
     caller does the join. Same shape as score_race being called from
     world/ rather than from racing/.
     """
-    rows = (
+    totals: dict[int, int] = {}
+    finish_rows = (
         RacePoints.objects
         .filter(race__week=week)
         .values("team_id")
         .annotate(total=Sum("points"))
     )
-    return {row["team_id"]: row["total"] for row in rows}
+    for row in finish_rows:
+        totals[row["team_id"]] = totals.get(row["team_id"], 0) + row["total"]
+
+    sprint_rows = (
+        MarkerPoints.objects
+        .filter(marker__race__week=week, marker__kind=RaceMarker.Kind.SPRINT)
+        .values("team_id")
+        .annotate(total=Sum("points"))
+    )
+    for row in sprint_rows:
+        totals[row["team_id"]] = totals.get(row["team_id"], 0) + row["total"]
+
+    return totals
 
 
 def standings(season: Season) -> list[dict]:
@@ -163,9 +178,13 @@ def standings(season: Season) -> list[dict]:
 
     Ordered by total points descending, then by most 1st places, then most
     2nd places, and so on down the scoring positions. A team with no points
-    sorts last.
+    sorts last. Countback counts finish positions only — a sprint win is
+    not a "1st place" for tie-breaking, so a team that only ever scored via
+    sprints sorts last among equal point totals.
 
-    Each entry: {"team": Team, "points": int, "positions": {pos: count}}.
+    Each entry: {"team": Team, "points": int, "sprint_points": int,
+    "positions": {pos: count}}. `points` is the combined total; the
+    countback key ignores sprint_points entirely.
     """
     rows = (
         RacePoints.objects
@@ -176,9 +195,27 @@ def standings(season: Season) -> list[dict]:
     by_team: dict[int, dict] = {}
     for row in rows:
         entry = by_team.setdefault(row.team_id, {
-            "team": row.team, "points": 0, "positions": {},
+            "team": row.team, "points": 0, "sprint_points": 0, "positions": {},
         })
         entry["points"] += row.points
         entry["positions"][row.position] = entry["positions"].get(row.position, 0) + 1
+
+    sprint_rows = list(
+        MarkerPoints.objects
+        .filter(marker__race__week__season=season, marker__kind=RaceMarker.Kind.SPRINT)
+        .values("team_id")
+        .annotate(total=Sum("points"))
+    )
+    missing_team_ids = [
+        row["team_id"] for row in sprint_rows if row["team_id"] not in by_team
+    ]
+    teams_by_id = Team.objects.in_bulk(missing_team_ids)
+    for row in sprint_rows:
+        entry = by_team.setdefault(row["team_id"], {
+            "team": teams_by_id.get(row["team_id"]), "points": 0,
+            "sprint_points": 0, "positions": {},
+        })
+        entry["points"] += row["total"]
+        entry["sprint_points"] += row["total"]
 
     return sorted(by_team.values(), key=_countback_key)
