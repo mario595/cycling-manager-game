@@ -10,6 +10,7 @@ import { League } from './screens/League'
 import { Login } from './screens/Login'
 import { Race } from './screens/Race'
 import { Register } from './screens/Register'
+import { Replay } from './screens/Replay'
 import { RiderProfile } from './screens/RiderProfile'
 import { Roster } from './screens/Roster'
 import { Sponsors } from './screens/Sponsors'
@@ -54,6 +55,9 @@ export function App() {
             {/* Parameterised, so it doesn't fit the path -> component map
                 above — reached only by clicking a race on the calendar. */}
             <Route path="/race/:raceId" element={<Race />} />
+            {/* The replay of one of those races: its own screen, for the
+                same reason the race is its own. */}
+            <Route path="/race/:raceId/replay" element={<Replay />} />
             {/* Parameterised, same reason /race/:raceId is — reached from
                 the Roster panel, a race result row or a free-agent card. */}
             <Route path="/riders/:riderId" element={<RiderProfile />} />
