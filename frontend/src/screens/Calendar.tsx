@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 
 import type { Calendar as CalendarData, CalendarRace, CalendarWeek } from '../api'
 import { Card, PageBody, PageHeading, StatTile } from '../components/primitives'
+import { racePath } from '../navigation'
 import { raceStatusLabel, raceStatusTone } from '../raceStatus'
 import { calendarAccent, color, font } from '../theme'
 import { useCalendar } from '../useCalendar'
@@ -226,7 +227,7 @@ function RaceRow({ race }: { race: CalendarRace }) {
 
   return (
     <Link
-      to={`/race/${race.id}`}
+      to={racePath(race.id)}
       style={{
         display: 'grid',
         gridTemplateColumns: 'minmax(0,1fr) auto',

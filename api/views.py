@@ -733,14 +733,21 @@ class RaceDetailView(APIView):
 def _accepts_brotli(header: str) -> bool:
     """Does this request's Accept-Encoding offer brotli? Browsers only
     advertise it on a secure context, so a plain-HTTP deploy or an odd client
-    gets the decompressed body instead (D4). A token refused with `q=0` is
-    not offered."""
+    gets the decompressed body instead (D4). A token refused with `q=0` — in
+    any equivalent spelling, trailing zeroes included — is not offered."""
     for token in header.split(","):
         parts = [p.strip() for p in token.split(";")]
         if parts[0] != "br":
             continue
-        if any(p == "q=0" or p == "q=0.0" for p in parts[1:]):
-            return False
+        for param in parts[1:]:
+            if param.startswith("q="):
+                try:
+                    if float(param[2:]) <= 0:
+                        return False
+                except ValueError:
+                    # An unreadable q-value is not a refusal; treat the token
+                    # as offered rather than guessing what the client meant.
+                    pass
         return True
     return False
 

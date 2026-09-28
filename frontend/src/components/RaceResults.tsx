@@ -12,10 +12,9 @@ import { useRaceResults } from '../useRaceResults'
 /**
  * A finished race's tables, behind a reveal.
  *
- * A race screen is where a manager goes to read a result, so the results are
- * not fetched at all until asked for: the log replay (see `HiddenResults` in
- * `screens/Replay.tsx`) reaches for the same tables, and a second screen
- * asking on its behalf would double a request nobody has made.
+ * The results are not fetched until asked for: only a reveal turns the
+ * network call on, so a race screen that shows the replay — where one exists
+ * — never spoils who won until the manager asks to see the tables.
  */
 export function HiddenResults({ race }: { race: RaceDetail }) {
   const [revealed, setRevealed] = useState(false)

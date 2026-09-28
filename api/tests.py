@@ -1027,6 +1027,28 @@ def test_race_log_br_with_q_zero_is_not_accepted(logged_race, log_client):
     assert response.content == LOG_BODY
 
 
+def test_race_log_br_with_q_zero_padded_zeroes_is_not_accepted(logged_race, log_client):
+    response = log_client.get(
+        f"/api/racing/races/{logged_race.pk}/log/",
+        HTTP_ACCEPT_ENCODING="br;q=0.00, gzip",
+    )
+
+    assert response.status_code == 200
+    assert not response.has_header("Content-Encoding")
+    assert response.content == LOG_BODY
+
+
+def test_race_log_br_with_low_but_positive_q_is_accepted(logged_race, log_client):
+    response = log_client.get(
+        f"/api/racing/races/{logged_race.pk}/log/",
+        HTTP_ACCEPT_ENCODING="br;q=0.5, gzip",
+    )
+
+    assert response.status_code == 200
+    assert response["Content-Encoding"] == "br"
+    assert b"".join(response.streaming_content) == LOG_BYTES
+
+
 def test_race_log_404_for_unfinished_race(db, settings, tmp_path, log_client):
     settings.MEDIA_ROOT = tmp_path
     race = Race.objects.create(

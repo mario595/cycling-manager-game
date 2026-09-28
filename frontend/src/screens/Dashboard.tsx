@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { placeBid, type AuctionListing } from '../api'
 import { AuctionCard } from '../components/AuctionCard'
 import { Card, CardHeader, PageBody, PageHeading } from '../components/primitives'
+import { racePath } from '../navigation'
 import { nextRace } from '../nextRace'
 import { seasonLabel } from '../seasonLabel'
 import { color, font } from '../theme'
@@ -91,7 +92,7 @@ function NextRaceCard() {
           }}
         >
           <Link
-            to={`/race/${race.id}`}
+            to={racePath(race.id)}
             style={{ fontSize: 17, fontWeight: 600, color: color.ink, textDecoration: 'none' }}
           >
             {race.name}
