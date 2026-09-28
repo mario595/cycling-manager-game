@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone as dt_timezone
 
 import pytest
 
-from riders.generation import SPECIALITY_PROFILES
+from riders.generation import SPECIALITY_PROFILES, generate_rider
 from riders.models import ENGINE_ATTRIBUTES, Rider, RiderAttributeSnapshot
 from riders.pricing import weekly_salary_for
 from riders.services import (
@@ -13,6 +13,8 @@ from riders.services import (
     MAX_ATTRIBUTE,
     MIN_ATTRIBUTE,
     PENALTY_AT_FLOOR,
+    RETIREMENT_AGE_MIN,
+    RETIREMENT_AGE_SPAN,
     _settle,
     advance_ages,
     apply_race_cost,
@@ -20,12 +22,15 @@ from riders.services import (
     apply_weekly_recovery,
     attribute_ceilings,
     freshness_multiplier,
+    is_due_to_retire,
     mark_team_change,
     record_initial_snapshots,
     record_week_snapshots,
     recovery_amount,
     reprice_all,
+    retire_due_riders,
     retire_riders,
+    retirement_age,
     training_deltas,
     weekly_deltas,
 )
@@ -605,6 +610,129 @@ def test_retire_riders_stamps_only_teamless_active_riders(db):
     assert free_agent.retired_at == at
     assert teamed.retired_at is None
     assert already_retired.retired_at == older
+
+
+def test_retirement_age_spans_33_to_38():
+    earliest = make_rider(peak_age=24, decline_rate=100)
+    latest = make_rider(peak_age=32, decline_rate=1)
+
+    assert retirement_age(earliest) == RETIREMENT_AGE_MIN
+    assert retirement_age(latest) == RETIREMENT_AGE_MIN + RETIREMENT_AGE_SPAN
+
+
+def test_retirement_age_is_later_for_late_peakers():
+    early = make_rider(peak_age=24, decline_rate=50)
+    late = make_rider(peak_age=32, decline_rate=50)
+
+    assert retirement_age(late) > retirement_age(early)
+
+
+def test_retirement_age_is_sooner_for_fast_decliners():
+    slow = make_rider(peak_age=28, decline_rate=1)
+    fast = make_rider(peak_age=28, decline_rate=100)
+
+    assert retirement_age(fast) < retirement_age(slow)
+
+
+def test_retirement_age_clamps_out_of_generation_peak():
+    below = make_rider(peak_age=22, decline_rate=50)
+    above = make_rider(peak_age=34, decline_rate=50)
+
+    assert RETIREMENT_AGE_MIN <= retirement_age(below) <= RETIREMENT_AGE_MIN + RETIREMENT_AGE_SPAN
+    assert RETIREMENT_AGE_MIN <= retirement_age(above) <= RETIREMENT_AGE_MIN + RETIREMENT_AGE_SPAN
+
+
+def test_generated_population_retires_within_window():
+    """Pins the window against generation: every rider the world actually
+    produces must retire inside it, or a generated roster can hold a rider
+    forever (or a young one is culled)."""
+    ages = [retirement_age(generate_rider()) for _ in range(2000)]
+
+    assert min(ages) == RETIREMENT_AGE_MIN
+    assert max(ages) == RETIREMENT_AGE_MIN + RETIREMENT_AGE_SPAN
+    assert 35 <= sum(ages) / len(ages) <= 36
+
+
+def test_is_due_to_retire_false_for_retired_rider():
+    retired = make_rider(age=40, retired_at=datetime(2027, 3, 1, tzinfo=dt_timezone.utc))
+
+    assert is_due_to_retire(retired) is False
+
+
+def test_retire_due_riders_retires_rostered_rider_and_clears_team(db):
+    team = Team.objects.create(name="Team Alpha", code="ALP")
+    at = datetime(2027, 3, 8, tzinfo=dt_timezone.utc)
+    rider = Rider.objects.create(
+        name="Veteran", team=team, age=40, peak_age=32, decline_rate=1,
+        climb=40, sprint=40, flat=40, resistance=40, positioning=40,
+    )
+
+    retired = retire_due_riders(at=at)
+
+    rider.refresh_from_db()
+    assert retired == [rider.pk]
+    assert rider.retired_at == at
+    assert rider.team is None
+
+
+def test_retire_due_riders_retires_free_agent(db):
+    at = datetime(2027, 3, 8, tzinfo=dt_timezone.utc)
+    rider = Rider.objects.create(
+        name="Veteran", team=None, age=40, peak_age=32, decline_rate=1,
+        climb=40, sprint=40, flat=40, resistance=40, positioning=40,
+    )
+
+    retire_due_riders(at=at)
+
+    rider.refresh_from_db()
+    assert rider.retired_at == at
+
+
+def test_retire_due_riders_skips_riders_below_their_age(db):
+    at = datetime(2027, 3, 8, tzinfo=dt_timezone.utc)
+    young = Rider.objects.create(
+        name="Young", age=24, peak_age=32, decline_rate=1,
+        climb=40, sprint=40, flat=40, resistance=40, positioning=40,
+    )
+
+    retired = retire_due_riders(at=at)
+
+    young.refresh_from_db()
+    assert retired == []
+    assert young.retired_at is None
+
+
+def test_retire_due_riders_leaves_already_retired_untouched(db):
+    at = datetime(2027, 3, 8, tzinfo=dt_timezone.utc)
+    older = datetime(2027, 3, 1, tzinfo=dt_timezone.utc)
+    rider = Rider.objects.create(
+        name="Veteran", age=40, peak_age=32, decline_rate=1,
+        climb=40, sprint=40, flat=40, resistance=40, positioning=40,
+        retired_at=older,
+    )
+
+    retire_due_riders(at=at)
+
+    rider.refresh_from_db()
+    assert rider.retired_at == older
+
+
+def test_retire_due_riders_leaves_unattached_since_untouched(db):
+    """A retired rider never sat in the free-agent pool, so the release
+    stamp must keep saying when they were last released to it."""
+    at = datetime(2027, 3, 8, tzinfo=dt_timezone.utc)
+    released = datetime(2027, 1, 4, tzinfo=dt_timezone.utc)
+    rider = Rider.objects.create(
+        name="Veteran", team=None, age=40, peak_age=32, decline_rate=1,
+        climb=40, sprint=40, flat=40, resistance=40, positioning=40,
+        unattached_since=released,
+    )
+
+    retire_due_riders(at=at)
+
+    rider.refresh_from_db()
+    assert rider.retired_at == at
+    assert rider.unattached_since == released
 
 
 def test_retired_rider_does_not_grow_or_decline(db):

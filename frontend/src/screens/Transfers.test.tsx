@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { placeBid, signFreeAgent, type AuctionMarket, type FreeAgentPool, type Me } from '../api'
+import { placeBid, signFreeAgent, type AuctionMarket, type FreeAgent, type FreeAgentPool, type Me } from '../api'
 import { useAuctions } from '../useAuctions'
 import { useAuth } from '../useAuth'
 import { useClock } from '../useClock'
@@ -52,6 +52,7 @@ const pool: FreeAgentPool = {
       weekly_salary: 3_900,
       market_value: 90_000,
       release_cost: null,
+      final_season: false,
       signing_fee: 46_800,
     },
     {
@@ -71,6 +72,7 @@ const pool: FreeAgentPool = {
       weekly_salary: 1_700,
       market_value: 40_000,
       release_cost: null,
+      final_season: false,
       signing_fee: 20_000,
     },
     {
@@ -90,6 +92,7 @@ const pool: FreeAgentPool = {
       weekly_salary: 2_800,
       market_value: 75_000,
       release_cost: null,
+      final_season: false,
       signing_fee: 34_000,
     },
   ],
@@ -125,6 +128,7 @@ const auctionMarket: AuctionMarket = {
         weekly_salary: 3_500,
         market_value: 120_000,
         release_cost: null,
+        final_season: false,
       },
     },
   ],
@@ -177,6 +181,26 @@ describe('Transfers', () => {
     renderTransfers()
 
     expect(screen.getByText('Coach One')).toHaveAttribute('href', '/riders/7')
+  })
+
+  it('tags a free agent in their final season, so a buyer sees it before signing', () => {
+    const veteran: FreeAgent = { ...pool.riders[0], name: 'Vera Old', final_season: true }
+    mockUseFreeAgents.mockReturnValue({
+      pool: { ...pool, riders: [veteran, ...pool.riders] },
+      loading: false,
+      error: false,
+      refresh: vi.fn(),
+    })
+
+    renderTransfers()
+
+    expect(screen.getAllByText('LAST SEASON')).toHaveLength(1)
+  })
+
+  it('does not tag a free agent who has seasons left', () => {
+    renderTransfers()
+
+    expect(screen.queryByText('LAST SEASON')).not.toBeInTheDocument()
   })
 
   it('disables Sign with a reason when the fee exceeds the balance', () => {

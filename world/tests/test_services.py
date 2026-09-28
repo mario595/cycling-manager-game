@@ -548,6 +548,121 @@ def test_riders_do_not_age_mid_season(db, young_rider):
     assert young_rider.age == 20
 
 
+def _veteran(name: str, *, age: int, team, **overrides) -> Rider:
+    """A rider whose traits put their retirement age at the very top of the
+    window (38), so `age` alone decides whether they are due."""
+    defaults = dict(
+        speciality=Rider.Speciality.CLIMBER,
+        peak_age=32,
+        decline_rate=1,
+        climb=40, sprint=40, flat=40, resistance=40, positioning=40,
+    )
+    defaults.update(overrides)
+    return Rider.objects.create(name=name, team=team, age=age, **defaults)
+
+
+def test_tick_retires_due_riders_at_season_close(db, team):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    rider = _veteran("Due", age=38, team=team)
+    clock.set(season.ends_at + timedelta(hours=1))
+
+    run = tick()
+    rider.refresh_from_db()
+
+    assert run.riders_retired == 1
+    assert rider.retired_at is not None
+    assert rider.team is None
+
+
+def test_tick_does_not_retire_mid_season(db, team):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    rider = _veteran("Marked", age=38, team=team)
+    week_one = season.weeks.get(number=1)
+    clock.set(week_one.starts_at + timedelta(hours=1))
+
+    run = tick()
+    rider.refresh_from_db()
+
+    assert run.riders_retired == 0
+    assert rider.retired_at is None
+    assert rider.team == team
+
+
+def test_tick_retires_before_ageing(db, team):
+    """Load-bearing ordering (plan D4): a rider must carry the warning for a
+    full season. Ageing first would take a rider from one year below their
+    retirement age into it and retire them in the same tick, with no season
+    ever having flagged them."""
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    not_yet = _veteran("Not Yet", age=37, team=team)
+    due = _veteran("Due", age=38, team=team)
+    clock.set(season.ends_at + timedelta(hours=1))
+
+    tick()
+    not_yet.refresh_from_db()
+    due.refresh_from_db()
+
+    assert not_yet.retired_at is None
+    assert not_yet.age == 38
+    assert due.retired_at is not None
+    assert due.age == 38
+
+
+def test_retired_rider_is_stamped_with_final_week_start(db, team):
+    """The stamp is the closing season's last week, not its ends_at — the
+    latter falls outside the season and would resolve to the next season's
+    week 1 in the profile's retired label."""
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    final_week = season.weeks.get(number=SEASON_WEEKS)
+    rider = _veteran("Due", age=38, team=team)
+    clock.set(season.ends_at + timedelta(hours=1))
+
+    tick()
+    rider.refresh_from_db()
+
+    assert rider.retired_at == final_week.starts_at
+
+
+def test_retired_rider_leaves_salary_review(db, managed_team):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    retiree = _veteran("Retiree", age=38, team=managed_team, weekly_salary=1000)
+    survivor = Rider.objects.create(
+        name="Survivor", team=managed_team, speciality=Rider.Speciality.CLIMBER,
+        age=25, peak_age=22, decline_rate=1, weekly_salary=1000,
+        climb=40, sprint=40, flat=40, resistance=40, positioning=40,
+    )
+    original_salary = retiree.weekly_salary
+    clock.set(season.ends_at + timedelta(hours=1))
+
+    tick()
+    retiree.refresh_from_db()
+
+    report = SalaryReviewReport.objects.get(team=managed_team)
+    assert retiree.retired_at is not None
+    assert retiree.weekly_salary == original_salary
+    assert all(change["rider_id"] != retiree.pk for change in report.changes)
+    assert any(change["rider_id"] == survivor.pk for change in report.changes)
+
+
+def test_tick_records_riders_retired(db, team):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    for i in range(3):
+        _veteran(f"Due {i}", age=38, team=team)
+    _veteran("Not Yet", age=37, team=team)
+    clock.set(season.ends_at + timedelta(hours=1))
+
+    run = tick()
+
+    assert run.riders_retired == 3
+    assert run.agents_retired == 0  # age-driven, not free-agent expiry
+
+
 def test_tick_reprices_riders_at_season_close(db, team):
     # A rider stored well below their formula price is brought up to it when
     # the season closes — a period end makes the stored wage honest again.

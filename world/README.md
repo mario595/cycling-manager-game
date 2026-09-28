@@ -94,8 +94,34 @@ reads `now()` once, then finds and processes whatever is due, in six steps:
    idempotent per `(team, season)`, so a tick that runs twice, or catches up
    late, cannot double the round the same way it cannot double-fill the
    trainer pool.
-1. **Ageing, growth, training and wages** — for every `CLOSED` transition
-   `process_transitions` returned, every rider's age advances by one
+1. **Retiring, ageing, repricing, training and wages** — for every `CLOSED`
+   transition `process_transitions` returned, the season close runs in this
+   order, and the order is load-bearing:
+   `riders.services.retire_due_riders(at=final_week.starts_at)` →
+   `transfers.services.cancel_open_auctions(retired_ids, at=at)` →
+   `riders.services.advance_ages()` → `riders.services.reprice_all()` →
+   `economy.services.write_salary_reviews(transition.season, changes)`.
+
+   **Retiring first** ([#42](https://github.com/mario595/cycling-manager/issues/42))
+   is what guarantees a full season's warning: the reverse order would age a
+   rider into their retirement window and retire them in the same breath, and
+   no season would ever have flagged them. It also keeps retirees out of the
+   salary review for free (`reprice_all` iterates `active()`), freezes their
+   age at the one the player last saw, and — in the same
+   `transaction.atomic()` — cancels any auction of theirs so managers cannot
+   keep bidding on a rider who is already gone. See `riders/README.md`,
+   *Retiring by age*, and `transfers/README.md`, *Auctions*. The count lands
+   on `TickRun.riders_retired`, which is **distinct from**
+   `TickRun.agents_retired` below: that one is free-agent expiry by neglect,
+   this one is age.
+
+   The retirement stamp is the closing season's **final week's `starts_at`**,
+   not `season.ends_at`: the profile's `retired` label resolves the stamp
+   through `current_position()`, whose ranges are half-open, so `ends_at`
+   would resolve to the *next* season's week 1 when seasons abut. A season
+   always has twelve weeks, so the final week always exists.
+
+   **Then** every rider's age advances by one
    (`riders.services.advance_ages()`). **Immediately after ageing, and only
    for a `CLOSED` transition**, every rider's salary is repriced:
    `riders.services.reprice_all()` recomputes each `weekly_salary` from the
@@ -104,8 +130,8 @@ reads `now()` once, then finds and processes whatever is due, in six steps:
    (#26; see `economy/README.md`, *Salary review*). Repricing must run
    **after** ageing — next season's wage has to reflect the rider a manager
    will actually have, age included, not the rider they had — and it is
-   exactly-once by the same rule ageing is: one `CLOSED` transition ever, so
-   the pass cannot run twice for one season. Then
+   exactly-once by the same rule retiring and ageing are: one `CLOSED`
+   transition ever, so no pass can run twice for one season. Then
    `schedule.services.process_week_transitions(at)` records any week
    boundary opened at or before `now()` that hasn't been recorded yet (see
    `schedule/README.md`, *Week transitions*), and each recorded transition
@@ -211,17 +237,21 @@ count of teams released lands on `TickRun.teams_released`.
     (weeks_opened_between's same Week-row count) and whose value at that
     moment falls in the pool's bottom quintile
     (`EXPIRY_VALUE_PERCENTILE`, 0.20). A selected rider with at least one
-    `RaceResult` is retired with `retired_at = week.starts_at` and counted
-    on `TickRun.agents_retired`; a selected rider who never raced is deleted
-    and counted on `TickRun.agents_expired`. Value is never stored, so the
-    cutoff is computed fresh each pass, and a pool too small for a real
-    bottom quintile expires nobody. A rider with null `unattached_since`
-    (pre-migration free agents) is exempt, never treated as long-lost.
-    Ageing runs before growth, so a rider who turned 33 at this same
-    boundary is evaluated against the new age immediately. None of this
-    touches a race row, so it runs outside the claim transaction below, the
-    same as race simulation does and for the same reason: a full-table
-    update must not extend the lock window race claiming holds.
+     `RaceResult` is retired with `retired_at = week.starts_at` and counted
+     on `TickRun.agents_retired` — a *different* counter from the
+     `TickRun.riders_retired` of the age-driven close above, since the two
+     retire riders for unrelated reasons; a selected rider who never raced
+     is deleted
+     and counted on `TickRun.agents_expired`. Value is never stored, so the
+     cutoff is computed fresh each pass, and a pool too small for a real
+     bottom quintile expires nobody. A rider with null `unattached_since`
+     (pre-migration free agents) is exempt, never treated as long-lost.
+     Ageing runs before growth, so a rider who turned 33 at this same
+     boundary is evaluated against the new age immediately. None of this
+     touches a race row, so it runs outside the claim transaction below, the
+     same as race simulation does and for the same reason: a full-table
+     update must not extend the lock window race claiming holds.
+
 2. **Claim** — inside one transaction, holding a row lock on the due race
    rows themselves (not a clock row — there is no longer one to lock in
    production): every `scheduled` race whose `starts_at` is at or before
