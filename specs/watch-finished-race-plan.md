@@ -696,7 +696,7 @@ See below. It is its own commit so the docs describe what landed.
 ## Execution order
 
 1. **W1.** The backend is independent and the easiest thing to prove.
-   Commit.
+   Commit. — **done**
 2. **W2.** This is pure logic with no UI change in the game yet. It must
    land before anything consumes `dnf`/`packGaps`/`resultLabel`. Commit.
 3. **W3.** The hook and the SVG props. Standalone behaviour stays

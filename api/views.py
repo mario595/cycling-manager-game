@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import brotli
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Prefetch, Sum
-from django.http import Http404
+from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.decorators import method_decorator
@@ -32,7 +33,7 @@ from economy.services import (
     sign_offer,
 )
 from economy.sponsors import PROFILES_BY_KEY
-from racing.models import SQUAD_SIZE, MarkerCrossing, Race, RaceSquadRider
+from racing.models import SQUAD_SIZE, MarkerCrossing, Race, RaceLog, RaceSquadRider
 from racing.services import SquadError, set_squad, suggested_squad
 from riders.models import ENGINE_ATTRIBUTES, Rider
 from schedule.services import current_position, weeks_opened_between
@@ -719,8 +720,72 @@ class RaceDetailView(APIView):
                 }
                 for m in race.markers.all()  # model ordering: distance, pk
             ],
+            # Whether the SPA can offer a Watch race. A row with a file is
+            # enough: stat'ing the file here would be a network round trip
+            # per detail view once logs move to object storage, and a log
+            # that has gone missing surfaces on the replay screen itself
+            # (D5).
+            "has_replay": RaceLog.objects.filter(race=race).exclude(file="").exists(),
         }
         return Response(RaceDetailSerializer(payload).data)
+
+
+def _accepts_brotli(header: str) -> bool:
+    """Does this request's Accept-Encoding offer brotli? Browsers only
+    advertise it on a secure context, so a plain-HTTP deploy or an odd client
+    gets the decompressed body instead (D4). A token refused with `q=0` is
+    not offered."""
+    for token in header.split(","):
+        parts = [p.strip() for p in token.split(";")]
+        if parts[0] != "br":
+            continue
+        if any(p == "q=0" or p == "q=0.0" for p in parts[1:]):
+            return False
+        return True
+    return False
+
+
+class RaceLogView(APIView):
+    """A finished race's stored tick-by-tick log, for the replay screen.
+
+    Streamed from storage rather than linked as media: `/media` is only
+    served under DEBUG, bypasses auth, and cannot send `Content-Encoding` —
+    without which the browser hands the player raw brotli bytes and
+    `parseRaceLog` throws on line 1. A 0.75 MB body through the app server
+    is fine at this scale, and IsAuthenticated is the project default
+    (D3). When logs move to object storage this view becomes a redirect to a
+    signed URL — a change to this one view.
+    """
+
+    def get(self, request, race_id: int):
+        race = get_object_or_404(Race, pk=race_id)
+        if race.status != Race.Status.FINISHED:
+            raise Http404("race has not finished")
+
+        log = RaceLog.objects.filter(race=race).exclude(file="").first()
+        if log is None:
+            raise Http404("race has no log")
+        try:
+            handle = log.file.open("rb")
+        except FileNotFoundError:
+            raise Http404("log file missing")
+
+        if _accepts_brotli(request.META.get("HTTP_ACCEPT_ENCODING", "")):
+            # content_type explicit: Django would otherwise guess from the
+            # .br filename and label this application/x-brotli.
+            response = FileResponse(handle, content_type="application/x-ndjson")
+            response["Content-Encoding"] = "br"
+        else:
+            with handle:
+                body = brotli.decompress(handle.read())
+            response = HttpResponse(body, content_type="application/x-ndjson")
+        # The same URL answers two different bodies, and the log is immutable
+        # once written, so a day in the player's own cache is safe; `private`
+        # keeps it out of shared caches, which must not hold a response to an
+        # authenticated request.
+        response["Vary"] = "Accept-Encoding"
+        response["Cache-Control"] = "private, max-age=86400"
+        return response
 
 
 def _result_row(result, team) -> dict:
