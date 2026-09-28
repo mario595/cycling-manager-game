@@ -451,7 +451,7 @@ Tests:
 
 Run `npm test`, `npm run lint` and `npm run build` in `frontend/`.
 
-### W9 — `seasons/season-1.example.json`: weights and a finish sprint
+### W9 — `seasons/season-1.example.json`: weights and a finish sprint ✅
 No test loads the example season today. Add
 `test_example_season_declares_weighted_and_finish_line_sprints` to
 `schedule/tests/test_loaders.py`. It parses `seasons/season-1.example.json`
