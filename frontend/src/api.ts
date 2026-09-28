@@ -561,6 +561,19 @@ export async function getRaceDetail(raceId: number): Promise<RaceDetail> {
   return response.json()
 }
 
+/** The race's recorded log, as text. The server hands back the brotli
+ * compressed bytes verbatim or the decompressed body, depending on what the
+ * browser sent; both are a race log, so there is nothing to negotiate here.
+ * Replay is only for a finished race with a stored log, so a 404 means
+ * "no replay" rather than an error worth showing. */
+export async function getRaceLog(raceId: number): Promise<string> {
+  const response = await fetch(`/api/racing/races/${raceId}/log/`)
+  if (!response.ok) {
+    throw new Error(`race log request failed: ${response.status}`)
+  }
+  return response.text()
+}
+
 /** Same state vocabulary as Calendar/Position — see api/README.md. */
 export interface Standings {
   state: 'in_season' | 'off_season' | 'no_season'

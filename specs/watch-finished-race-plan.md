@@ -703,7 +703,7 @@ See below. It is its own commit so the docs describe what landed.
 3. **W3.** The hook and the SVG props. Standalone behaviour stays
    observably the same. Commit. — **done**
 4. **W4.** Now that race_player has tests worth running. Commit. — **done**
-5. **W5.** The data path into the SPA. Commit.
+5. **W5.** The data path into the SPA. Commit. — **done**
 6. **W6.** The race-screen change is shippable on its own: the Watch button
    leads to a route added in W7, so land W6 and W7 in the same PR, as
    planned. Commit.
