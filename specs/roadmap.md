@@ -96,12 +96,17 @@ Riders decline ([#58](https://github.com/mario595/cycling-manager/issues/58)) an
 | 7 | [#33](https://github.com/mario595/cycling-manager/issues/33) youth intake | [#32](https://github.com/mario595/cycling-manager/issues/32) ✅ |
 | 8 | [#34](https://github.com/mario595/cycling-manager/issues/34) promote/retain/discard | [#33](https://github.com/mario595/cycling-manager/issues/33), [#29](https://github.com/mario595/cycling-manager/issues/29) ✅ |
 
-**[#32](https://github.com/mario595/cycling-manager/issues/32) shipped — a team can open, upgrade, downgrade and close a development
-squad, and the tick charges it weekly.** Nothing populates it yet, so it is a
-cost centre the player can choose to run and a screen showing three prices,
-and no copy anywhere promises riders. That is deliberate: #33 is the ticket
-that fills it, and the facility existing empty is what makes the next ticket
-a feature rather than a migration. `riders/README.md`, *Development squad*.
+**[#32](https://github.com/mario595/cycling-manager/issues/32) shipped — a team can open, climb and close a development
+squad, and the tick charges it weekly.** The levels are a ladder, not a
+setting: a squad opens at Regional, is upgraded one rung at a time, and each
+rung charges its own fee in full, so Elite costs 255,000 to reach. There is
+**no downgrade** — closing is the only way to spend less, and it forgets the
+level, so a reopened squad starts at the bottom. Nothing populates it yet, so
+it is a cost centre the player can choose to run and a screen showing three
+prices, and no copy anywhere promises riders. That is deliberate: #33 is the
+ticket that fills it, and the facility existing empty is what makes the next
+ticket a feature rather than a migration. `riders/README.md`, *Development
+squad*.
 
 **[#34](https://github.com/mario595/cycling-manager/issues/34) is the payoff of the hidden-attribute design** — triage is a judgement only
 because potential is hidden. It is also what gives the scout in

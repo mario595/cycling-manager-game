@@ -456,7 +456,8 @@ them into the window and retire them in the same tick. See `world/README.md`,
 
 ## Development squad
 
-A team can run a development squad at one of three levels. The whole
+A team can run a development squad at one of three levels, and the levels form
+a ladder it climbs one rung at a time. The whole
 facility lives here rather than in `transfers/`, which is where the *free-agent
 market* lives: the squad is a long-lived attribute of the team, not a
 transaction.
@@ -477,20 +478,43 @@ caller needs to know.
 could only ever drift from the table, which is the same reasoning
 `staff/pricing.py` gives for a trainer's fee and salary: derive it, never
 persist it. `LEVELS` maps level to `LevelTerms(level, name, opening_fee,
-weekly_cost)`, and `weekly_cost` / `change_fee` read it.
+weekly_cost)`, and `weekly_cost` / `level_fee` read it.
 
-**Both columns rise strictly with level, and a test enforces it.** This is
-load-bearing, not a balance note. `change_fee` prices an upgrade as the
-*difference* in opening fees, so a level that cost more to open but less to
-run would make upgrading cheaper than opening at the target level directly —
-a way to skip a fee. The numbers are tunable; the ordering is not.
+**The squad is a ladder, climbed one rung at a time, with no way back down.**
+A squad opens at `ENTRY_LEVEL` (`min(LEVELS)`, derived so adding a level
+cannot leave it stale) and is upgraded to the level directly above the one
+held. Opening above the entry level raises `LevelLocked` however rich the team
+is, skipping a rung raises it too, and any level below the one held raises
+`CannotDowngrade` — there is no way to spend less except closing the squad,
+which forgets the level, so a reopened squad starts at the bottom again.
 
-`change_fee(current, target)` is the single place the pricing rule lives:
-opening (current is `None`) costs the full opening fee, an upgrade costs the
-difference, a downgrade costs **zero** with no refund, and
-`target == current` raises `SameLevel`. `open_squad`, `change_level` and the
-API's per-level figure all go through it, so the screen can never quote a
-number the server would not charge.
+**A level's fee is what reaching it costs, in every state.** `level_fee(level)`
+is the only pricing function there is: opening (at the entry level) and
+upgrading into any level both charge the target's own `opening_fee`, so the
+figure the panel quotes is the figure the ledger is debited, and reaching Elite
+costs 30,000 + 75,000 + 150,000 = 255,000 rather than its fee alone. There is
+no per-move arithmetic to disagree with, and no discount for a team that
+climbed here before.
+
+**Both columns rise strictly with level, and a test enforces it.** Load-bearing,
+though not for the reason it first was. It is no longer about an upgrade
+undercutting a direct opening — there is no way to open above the entry level,
+so that side door is shut structurally. It is that the top of the ladder has to
+be the most expensive thing to reach *and* to run, or a player would
+rationally stop short of it, or climb to save money. The numbers are tunable;
+the ordering is not.
+
+`level_status(current, target)` is the single place the ladder rule lives,
+returning a `LevelStatus(action, note)`. `open_squad`, `change_level` and the
+API's per-level `action` all go through it, so a padlock the screen draws and a
+refusal the service raises cannot disagree. It returns the `note` alongside
+the action because a locked level has **two** reasons and they need different
+words: a rung not yet reached ("Upgrade to National first") and one already
+climbed past ("Climbed past. Close the squad to start over."), since with no
+downgrade the only way back is to close. `change_level` distinguishes its two
+exceptions by comparing levels rather than asking `LevelStatus`, because
+`note` is copy for the screen while an exception type is a promise to a caller
+about *why*.
 
 **The fee is debited by an injected `charge` callback, not here.** `riders/`
 may not import `economy/` (`AGENTS.md`: `riders -> core, teams`), so
@@ -507,17 +531,18 @@ is what the domain-level tests use.
 **All three write operations take the `Team` row lock**, in one order:
 validate the level, lock, then check state and act. When the squad is closed
 there is no squad row to lock, so the team row is the only thing that
-serialises two concurrent "open" requests — and locking it for upgrade,
-downgrade and close too means there is one lock order rather than three.
+serialises two concurrent "open" requests — and locking it for upgrade and
+close too means there is one lock order rather than two.
 `select_for_update()` **without** `skip_locked`, unlike `claim_team`: the
 caller asked for this specific team, so a contended row should make the
 request wait, not behave as though the squad were not there. The
 `OneToOneField`'s unique index is the second line of defence behind that
 lock.
 
-A downgrade and a close are the same decision — spend less from now on, not a
-chance to recover past spending. Neither refunds anything, and neither writes
-to the ledger. A mid-week change is charged at the new rate from the next
+Closing writes nothing to the ledger and refunds nothing, and it is the only
+way to reduce the weekly cost — which is what makes it a drastic measure
+rather than a cheaper setting, and why reopening has to start from the bottom
+again. A mid-week change is charged at the new rate from the next
 week boundary, with nothing prorated and nothing refunded for the half-week
 just gone; see `economy/README.md`, *Development squad costs*.
 

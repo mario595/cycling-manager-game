@@ -316,26 +316,41 @@ Since #29 each rider also carries `release_cost`
   survives in the pool.
 - `GET /api/development-squad/` (`DevelopmentSquadView`, #32) — the caller's
   development squad as the whole screen's state: `level` (null while closed),
-  `balance`, and every level with its `level`, `name`, `opening_fee`,
-  `weekly_cost`, `season_cost` (the weekly cost times
+  `balance`, and every level with its `level`, `name`, `weekly_cost`,
+  `season_cost` (the weekly cost times
   `schedule.models.SEASON_WEEKS`, so the screen can show a season's total
-  without hardcoding how long a season is), `change_fee` and `is_current`.
-  `change_fee` is what moving to that level **from where the team is now**
-  would cost — the full opening fee while closed, the difference for an
-  upgrade, zero for a downgrade, and **`null` for the level already held**,
-  which is how the SPA knows to render a "Current" badge rather than a no-op
-  button. The server owns that rule and every caller reads it from here, so
-  the figure shown and the figure charged cannot drift. A closed squad is a
-  normal `200`, not a `404`: "you have no squad" is a state this screen
+  without hardcoding how long a season is), `fee`, `action` and `requires`.
+  `fee` is what moving to that level **from where the team is now** would
+  cost, and the ladder makes that a property of the level rather than of the
+  move: opening (at the entry level) and upgrading both charge the target's
+  own `opening_fee`, so the panel quotes 150,000 for Elite and the ledger is
+  debited 150,000. `action` is the server's own `level_status` answer —
+  `open`, `upgrade`, `current`, or `locked` — and `requires` is that answer's
+  reason, non-null for every `locked` level. A closed squad is
+  a normal `200`, not a `404`: "you have no squad" is a state this screen
   exists to show.
+
+  The server owns that rule and every caller reads it from here, so the figure
+  shown, the figure charged and the padlock drawn cannot drift. `action` is
+  sent verbatim rather than as the parts it came from (`is_current`, a
+  per-level affordability flag): the rule that gates a level is a rule about
+  the game, not about the screen, and deriving it twice is how a padlock and a
+  409 come to disagree. The two lock reasons are the reason for `requires` —
+  "Upgrade to National first" and "Climbed past. Close the squad to start
+  over." are different sentences about the same `locked` action, and only the
+  server knows which applies.
 - `POST /api/development-squad/open/` (`OpenDevelopmentSquadView`) — open the
-  squad at `{level}`, debiting the opening fee. `204`; `409` if a squad is
-  already open or the team cannot afford it; `400` for a level outside
-  `1..3`, from the serializer's `ChoiceField`, before the view runs.
+  squad at `{level}`, debiting that level's fee. `204`; `409` if a squad is
+  already open, if `level` is not the entry level (`LevelLocked` — however rich
+  the team is, a squad is opened at the bottom), or the team cannot afford it;
+  `400` for a level outside `1..3`, from the serializer's `ChoiceField`, before
+  the view runs.
 - `POST /api/development-squad/level/` (`ChangeDevelopmentSquadLevelView`) —
-  move the open squad to `{level}`. `204`; `409` if no squad is open, if the
-  team is already at that level, or if it cannot afford the upgrade. A
-  downgrade costs nothing and is never refused on affordability grounds.
+  move the open squad to `{level}`, which must be the level directly above the
+  one held. `204`; `409` if no squad is open, if the team is already at that
+  level, if `level` skips a rung (`LevelLocked`), if `level` is below the one
+  held (`CannotDowngrade` — there is no way back down, and the refusal says so
+  rather than reading as an arbitrary error), or if the team cannot afford it.
 - `POST /api/development-squad/close/` (`CloseDevelopmentSquadView`) — close
   the squad. `204`; `409` if none is open, rather than a silent `204` that
   would make a double-click look like a success. `POST` rather than `DELETE`

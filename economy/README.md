@@ -230,9 +230,16 @@ Two kinds, and **one kind covers both opening and upgrading**
 `transfer_fee` (Design decision 10 in
 `specs/archive/development-squad-plan.md`). Opening, upgrading and reopening
 are the same shape of transaction — money out, no week attached, named by
-`description` ("Opened development squad — National" vs "Upgraded development
+`description` ("Opened development squad — Regional" vs "Upgraded development
 squad to Elite") — so a second kind would be a distinction with nothing behind
-it. A *downgrade* and a *close* write nothing at all.
+it. It is also all the fee transactions there are: with no downgrade, a *close*
+is the only remaining move, and it writes nothing at all.
+
+Every one of those fees is the target level's own price, charged in full
+(`riders/README.md`, *Development squad*), so climbing to Elite debits three
+rows totalling 255,000 rather than one. The ledger is where the shape of that
+climb is visible afterwards, which is the point of the fee-per-rung rule: three
+rows in the finances history read as a ladder, where one would not.
 
 The recurring weekly cost is a **separate** kind, `development_squad`, and the
 split is not tidiness. That row needs the `(team, week)` partial unique
