@@ -1,6 +1,6 @@
 # Watch a finished race
 
-**Status:** proposed
+**Status:** implemented
 **Domain(s):** `racing/`, `frontend/`, `race_player/`
 **One-liner:** A finished race's screen lets the player watch a tick-by-tick replay of how it actually unfolded.
 

@@ -1,6 +1,6 @@
 # Watch a finished race — Implementation Plan
 
-**Spec:** `specs/watch-finished-race.md` · **Issue:** #94 · **Status:** proposed
+**Spec:** `specs/archive/watch-finished-race.md` · **Issue:** #94 · **Status:** implemented
 **Apps touched:** `api/`, `race_player/`, `frontend/`, `.github/workflows/ci.yml`
 (no model changes, no migrations)
 
@@ -708,7 +708,7 @@ See below. It is its own commit so the docs describe what landed.
    leads to a route added in W7, so land W6 and W7 in the same PR, as
    planned. Commit. — **done**
 7. **W7.** Commit. — **done**
-8. **Verification** (below), then **W8**. Commit.
+8. **Verification** (below), then **W8**. Commit. — **done**
 
 W6 comes before W7 so that `HiddenResults` exists and is tested before the
 replay screen reuses it.

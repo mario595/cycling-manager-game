@@ -146,7 +146,7 @@ up front — an empty app is just noise. The table below marks which exist.
 | Folder | Domain | Status | Description |
 |--------|--------|--------|-------------|
 | `race_engine/` | Race Engine | **built**, `README.md` | Core simulation: rider attributes, tactics, terrain, weather, fatigue. Pure Python, no Django. |
-| `race_player/` | Race Player | **built**, `README.md` | React visualizer for race logs: elevation profile, rider markers, playback. |
+| `race_player/` | Race Player | **built**, `README.md` | React visualizer for race logs: elevation profile, rider markers, playback. Also the **source of the SPA's replay screen's logic and SVG**, imported directly (see `race_player/README.md`, *Integration Strategy*) — so a module it shares must stay free of antd and Tailwind. |
 | `racing/` | Racing | **built**, `README.md` | The seam between Django and the engine: race records, results, log storage, ORM↔dataclass adapter. |
 | `core/` | Core | **built** | Shared abstract models. Deliberately tiny. |
 | `accounts/` | Accounts | **built**, `README.md` | Custom `User`, login by email. Register, log in, log out. |
@@ -159,7 +159,7 @@ up front — an empty app is just noise. The table below marks which exist.
 | `staff/` | Staff | **built**, `README.md` | Trainers hireable from a shared pool into one fixed slot per team at a speciality-derived hire fee plus a weekly salary, plus the team's weekly training focus and its rollover report. Physios and scouts still to come. |
 | `world/` | World Simulation | **built**, `README.md` | The game clock and the tick (which charges each team its weekly wages and trainer salary, adjusts fanbase, pays merchandise income and sponsorship, generates each team's sponsor offer round on season open, retires riders who have reached their retirement age at each season close — and cancels any auction of theirs — releases the team of any manager inactive for ten in-season weeks, and resolves due auctions). It also owns **the AI market** (`world/ai_market.py`): unmanaged teams bid the reserve on human listings they want, and list surplus or ageing riders on staggered weeks. |
 | `api/` | API | **built**, `README.md` | DRF routers aggregating each app's serializers and views. |
-| `frontend/` | Frontend/UI | **built**, `README.md` | The React SPA. Built to `frontend/dist/`, served by Django. Ten real screens (dashboard, roster, staff, sponsors, calendar, results, league table, finances, transfers, rider profile) plus squad selection, all from the API, no fixture data. Unknown paths redirect to `/`; every route requires a session. |
+| `frontend/` | Frontend/UI | **built**, `README.md` | The React SPA. Built to `frontend/dist/`, served by Django. Eleven real screens (dashboard, roster, staff, sponsors, calendar, results, league table, finances, transfers, rider profile, race replay) plus squad selection, all from the API, no fixture data. Unknown paths redirect to `/`; every route requires a session. |
 
 ### Dependency direction
 
