@@ -975,6 +975,42 @@ def test_create_race_creates_its_markers(db):
     ]
 
 
+def test_marker_weight_defaults_to_standard(db):
+    race = Race.objects.create(
+        name="Flat Day",
+        course=[{"length": 1000.0, "gradient": 0.0}],
+    )
+    marker = RaceMarker.objects.create(
+        race=race, kind=RaceMarker.Kind.SPRINT, name="Mid-line", distance=500.0,
+    )
+
+    assert marker.weight == RaceMarker.Weight.STANDARD
+
+
+def test_create_race_stores_marker_weight(db):
+    race = create_race(
+        name="Marked Stage",
+        course=[{"length": 5000.0, "gradient": 0.0}],
+        markers=[
+            {"kind": "sprint", "name": "First", "distance": 1000.0, "weight": "major"},
+        ],
+    )
+
+    assert race.markers.get().weight == RaceMarker.Weight.MAJOR
+
+
+def test_create_race_without_weight_gives_standard(db):
+    race = create_race(
+        name="Marked Stage",
+        course=[{"length": 5000.0, "gradient": 0.0}],
+        markers=[
+            {"kind": "mountain", "name": "Summit", "distance": 4500.0},
+        ],
+    )
+
+    assert race.markers.get().weight == RaceMarker.Weight.STANDARD
+
+
 def test_simulate_race_records_every_crossing_in_order(running_race, four_riders):
     marker = RaceMarker.objects.create(
         race=running_race, kind=RaceMarker.Kind.SPRINT, name="Mid-line", distance=250.0

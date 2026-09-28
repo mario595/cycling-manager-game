@@ -366,7 +366,7 @@ So the feature is visible after seeding:
 
 ## Work items
 
-### W1 — `racing/`: `RaceMarker.weight` + migration 0008 + `create_race`
+### W1 — `racing/`: `RaceMarker.weight` + migration 0008 + `create_race` ✅
 Add the `Weight` choices, the field and the migration, and pass `weight`
 through `create_race`.
 Tests in `racing/tests.py`:
