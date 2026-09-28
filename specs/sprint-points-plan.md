@@ -421,7 +421,7 @@ Tests in `competitions/tests/test_services.py` and `test_standings.py`:
 - `test_sprint_points_do_not_count_in_countback`: two teams level on total,
   one via a finish 1st and one via sprints; the finish 1st ranks higher.
 
-### W6 — `world/services.py`: call `score_sprints` in `_execute`
+### W6 — `world/services.py`: call `score_sprints` in `_execute` ✅
 Tests in `world/tests/test_tick.py`:
 - `test_tick_scores_sprint_points_for_a_finished_race` (a race with a sprint
   marker runs through `tick()` and gets `MarkerPoints` rows)
