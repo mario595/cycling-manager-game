@@ -15,6 +15,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from django.db import IntegrityError, transaction
+from teams.models import Team
+
 from .models import DevelopmentSquad
 
 
@@ -51,8 +54,27 @@ class DevelopmentSquadError(Exception):
     """Base class for a development squad change that cannot proceed."""
 
 
+class SquadAlreadyOpen(DevelopmentSquadError):
+    """The team already has a development squad; change its level or close it."""
+
+
+class SquadNotOpen(DevelopmentSquadError):
+    """The team has no development squad to change or close."""
+
+
 class SameLevel(DevelopmentSquadError):
     """The team is already at that level — there is nothing to change to."""
+
+
+class UnknownLevel(DevelopmentSquadError):
+    """No such development squad level. The API's ChoiceField catches this
+    first, so this is the guard for any other caller."""
+
+
+class InsufficientFunds(DevelopmentSquadError):
+    """The team cannot afford the fee. Raised by the caller's `charge`
+    callback, not here — declared in this family so a caller can catch one
+    exception type for every way a squad change can be refused."""
 
 
 def weekly_cost(level: int) -> int:
@@ -83,3 +105,108 @@ def change_fee(current_level: int | None, target_level: int) -> int:
     if target_level < current_level:
         return 0
     return LEVELS[target_level].opening_fee - LEVELS[current_level].opening_fee
+
+
+def squad_for(team) -> DevelopmentSquad | None:
+    """`team`'s development squad, or None when it has none open."""
+    return DevelopmentSquad.objects.filter(team=team).first()
+
+
+def _lock_team(team):
+    """Take the `Team` row lock every squad operation shares.
+
+    When the squad is closed there is no squad row to lock, so the team row
+    is the only thing that serialises two concurrent "open" requests — and
+    locking it for upgrade, downgrade and close too gives all four
+    operations one lock order. WITHOUT skip_locked, for
+    `staff.services.hire_trainer`'s reason: the caller asked for this
+    specific team, so a contended row must make us wait rather than
+    silently behave as though the squad were not there.
+    """
+    Team.objects.select_for_update().get(pk=team.pk)
+
+
+def open_squad(team, level: int, *, at, charge=None) -> DevelopmentSquad:
+    """Open `team`'s development squad at `level`, debiting the opening fee.
+
+    `charge` is an optional callable run immediately before the squad sticks
+    — the caller (api/) passes it to book the fee and refuse the opening by
+    raising InsufficientFunds, or anything else. It runs AFTER the state
+    checks and BEFORE the row write, so a raise rolls the whole thing back
+    and leaves no fee behind. `riders/` may not import `economy/` (AGENTS.md),
+    so the debit is injected rather than imported — the pattern
+    `staff.services.hire_trainer` establishes. Without charge, the opening
+    is free, which is the path tests use.
+
+    `at` is game time, the moment the squad opens, from the caller —
+    `riders/` may not import `world/`.
+    """
+    terms = LEVELS.get(level)
+    if terms is None:
+        raise UnknownLevel(f"No development squad level {level!r}.")
+    with transaction.atomic():
+        _lock_team(team)
+        if squad_for(team) is not None:
+            raise SquadAlreadyOpen("Your development squad is already open.")
+
+        if charge is not None:
+            charge(change_fee(None, level), f"Opened development squad — {terms.name}")
+        try:
+            # A savepoint, so a failed insert leaves the enclosing
+            # transaction usable: the fee row written above is rolled back by
+            # the outer atomic() as the error propagates out of it, and the
+            # caller sees SquadAlreadyOpen rather than a broken transaction.
+            with transaction.atomic():
+                return DevelopmentSquad.objects.create(
+                    team=team, level=level, opened_at=at,
+                )
+        except IntegrityError:
+            # The OneToOneField's unique index is the second line of defence,
+            # behind the team lock above.
+            raise SquadAlreadyOpen("Your development squad is already open.")
+
+
+def change_level(team, level: int, *, charge=None) -> DevelopmentSquad:
+    """Move `team`'s open development squad to `level` and return it.
+
+    An upgrade debits the difference in opening fees; a downgrade charges
+    nothing and refunds nothing. Instant, with no notice period and no
+    waiting for a week boundary — the weekly cost simply switches rate from
+    the next boundary (world/README.md, *How a tick works*). `charge` works
+    exactly as it does in `open_squad`, and a downgrade never calls it.
+    """
+    terms = LEVELS.get(level)
+    if terms is None:
+        raise UnknownLevel(f"No development squad level {level!r}.")
+    with transaction.atomic():
+        _lock_team(team)
+        squad = squad_for(team)
+        if squad is None:
+            raise SquadNotOpen("Your team has no development squad.")
+        if level == squad.level:
+            raise SameLevel("Your development squad is already at that level.")
+
+        if level > squad.level and charge is not None:
+            charge(
+                change_fee(squad.level, level),
+                f"Upgraded development squad to {terms.name}",
+            )
+        squad.level = level
+        squad.save(update_fields=["level", "updated_at"])
+    return squad
+
+
+def close_squad(team) -> bool:
+    """Close `team`'s development squad if it has one. Returns whether there
+    was one to close.
+
+    The row is deleted rather than flagged, and nothing is refunded or
+    written to the ledger: a downgrade and a close are the same decision —
+    spend less from now on, not a chance to recover past spending.
+    `teams.services.claim_team` calls this and ignores the return; the API
+    turns False into a 409.
+    """
+    with transaction.atomic():
+        _lock_team(team)
+        deleted, _ = DevelopmentSquad.objects.filter(team=team).delete()
+    return deleted > 0

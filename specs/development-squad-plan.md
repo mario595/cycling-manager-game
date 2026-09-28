@@ -416,7 +416,7 @@ only (no operations yet).
 - `test_one_squad_per_team` (a second create raises `IntegrityError`)
 - `test_level_out_of_range_rejected_by_db`
 
-### W2 — `riders/development_squad.py`: open, change level, close
+### W2 — `riders/development_squad.py`: open, change level, close ✅
 The four operations, with the locking and callback order from Design
 decisions 5 and 6.
 **Tests**, same file:
