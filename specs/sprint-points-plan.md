@@ -441,7 +441,7 @@ Tests in `api/tests.py`:
 - `test_race_results_team_with_only_sprint_points_listed_with_them`
 - `test_standings_total_includes_sprint_points`
 
-### W8 — `frontend/`: types, course profile, results cards
+### W8 — `frontend/`: types, course profile, results cards ✅
 Tests:
 - `CourseProfile.test.tsx`: `shows weight and winner points for a sprint marker`;
   `mountain marker shows no weight`.
