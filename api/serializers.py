@@ -685,24 +685,31 @@ class SignOfferSerializer(serializers.Serializer):
 
 
 class DevelopmentSquadLevelSerializer(serializers.Serializer):
-    """One level as the screen needs to price it: what opening at it costs,
-    what running it costs, what that adds up to over a season, and what
-    moving there from where the team is now would cost.
+    """One level as the screen needs to show it: what moving onto it costs,
+    what running it costs, what that adds up to over a season, and what the
+    team can do about it right now.
 
-    `change_fee` is null for the level the squad is already at — there is no
-    such move — and that null is what the SPA turns into a "Current" badge
-    rather than a disabled button, so the distinction is carried by the data
-    and not re-derived in the frontend. When the squad is closed, every level
-    has a real change_fee, equal to its opening fee.
+    `action` is the ladder rule as the server sees it — `open`, `upgrade`,
+    `current` or `locked` — and the SPA renders it rather than deriving it, so
+    a locked card and a 409 come from the same call. `requires` names the
+    level that has to be open first, and is null for every other action.
+
+    `fee` is what entering this level costs, and it is the same number the
+    ledger is debited when the move is made: the entry level's fee opens the
+    squad, and each level above charges its own in full to upgrade into it.
+    There is no "current" level's fee, because there is no move onto the level
+    already held.
     """
 
     level = serializers.IntegerField()
     name = serializers.CharField()
-    opening_fee = serializers.IntegerField()
     weekly_cost = serializers.IntegerField()
     season_cost = serializers.IntegerField()
-    change_fee = serializers.IntegerField(allow_null=True)
-    is_current = serializers.BooleanField()
+    fee = serializers.IntegerField()
+    action = serializers.ChoiceField(
+        choices=["open", "upgrade", "current", "locked"]
+    )
+    requires = serializers.CharField(allow_null=True)
 
 
 class DevelopmentSquadSerializer(serializers.Serializer):

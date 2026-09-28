@@ -37,13 +37,16 @@ from racing.models import SQUAD_SIZE, MarkerCrossing, Race, RaceSquadRider
 from racing.services import SquadError, set_squad, suggested_squad
 from riders.development_squad import (
     LEVELS,
+    CannotDowngrade,
+    LevelLocked,
     SameLevel,
     SquadAlreadyOpen,
     SquadNotOpen,
     UnknownLevel,
-    change_fee as squad_change_fee,
     change_level as change_squad_level,
     close_squad,
+    level_fee as squad_level_fee,
+    level_status as squad_level_status,
     open_squad,
     squad_for,
 )
@@ -991,12 +994,21 @@ def _squad_charge(team):
 
 class DevelopmentSquadView(APIView):
     """The caller's development squad: which level is open, and what each of
-    the three costs. GET only, and no team id in the URL — the team is always
-    the caller's own via team_for(), the same pattern as StaffView.
+    the three costs and offers. GET only, and no team id in the URL — the team
+    is always the caller's own via team_for(), the same pattern as StaffView.
 
-    A closed squad is `level: null` with every level carrying its full opening
-    fee as `change_fee`, not an error and not a 404: "you have no squad" is a
-    state this screen is built to show, not a missing resource.
+    A closed squad is `level: null` with every level still priced, not an
+    error and not a 404: "you have no squad" is a state this screen is built
+    to show, not a missing resource.
+
+    Each level carries `action` and `requires` — the server's own answer from
+    `riders.development_squad.level_status` — rather than leaving the SPA to
+    work out the ladder from `level` alone. That is the whole
+    reason this endpoint exists in this shape: the rule that gates a level is
+    a rule about the game, not about the screen, and deriving it twice is how
+    a padlock and a 409 end up disagreeing. `locked` is a first-class answer,
+    not the absence of one, and `requires` explains it, because a rung not yet
+    reached and one already climbed past need different words.
     """
 
     def get(self, request):
@@ -1006,22 +1018,29 @@ class DevelopmentSquadView(APIView):
 
         squad = squad_for(team)
         current_level = squad.level if squad is not None else None
-        levels = [
-            {
-                "level": terms.level,
-                "name": terms.name,
-                "opening_fee": terms.opening_fee,
-                "weekly_cost": terms.weekly_cost,
-                "season_cost": terms.weekly_cost * SEASON_WEEKS,
-                # Null at the current level: there is no move to price, and
-                # the SPA reads that null as the "Current" badge.
-                "change_fee": None
-                if current_level == terms.level
-                else squad_change_fee(current_level, terms.level),
-                "is_current": current_level == terms.level,
-            }
-            for _, terms in sorted(LEVELS.items())
-        ]
+        levels = []
+        for _, terms in sorted(LEVELS.items()):
+            status = squad_level_status(current_level, terms.level)
+            levels.append(
+                {
+                    "level": terms.level,
+                    "name": terms.name,
+                    "weekly_cost": terms.weekly_cost,
+                    "season_cost": terms.weekly_cost * SEASON_WEEKS,
+                    # What moving onto this level costs. The same figure
+                    # whether the squad is closed and this is the opening, or
+                    # open one rung below and this is the upgrade — so the
+                    # number on the card is the number that would be charged,
+                    # and reaching the top means paying every fee on the way.
+                    "fee": squad_level_fee(terms.level),
+                    "action": status.action,
+                    # Why a locked level is locked, and null for every other
+                    # action. Server-owned for the same reason the 409
+                    # details are: it is a statement about the game, and the
+                    # screen has no business re-deriving it.
+                    "requires": status.note,
+                }
+            )
 
         return Response(DevelopmentSquadSerializer({
             "level": current_level,
@@ -1031,11 +1050,13 @@ class DevelopmentSquadView(APIView):
 
 
 class OpenDevelopmentSquadView(APIView):
-    """Open the caller's development squad at the requested level, debiting
-    the opening fee.
+    """Open the caller's development squad at the entry level, debiting that
+    level's fee. Asking for any other level is a 409 `LevelLocked` from the
+    service: the ladder is climbed, and there is no door into the upper floors
+    however much the team can afford.
 
-    409, not 400, for "already open" and "cannot afford it": the request is
-    well-formed but the world's state refuses it — the same split
+    409, not 400, for "already open", "cannot afford it" and "locked": the
+    request is well-formed but the world's state refuses it — the same split
     HireTrainerView documents. An unknown level is a 400 from the serializer's
     ChoiceField, before this view runs.
     """
@@ -1055,16 +1076,26 @@ class OpenDevelopmentSquadView(APIView):
                 at=now(),
                 charge=_squad_charge(team),
             )
-        except (SquadAlreadyOpen, UnknownLevel, SquadInsufficientFunds) as exc:
+        except (
+            SquadAlreadyOpen,
+            LevelLocked,
+            UnknownLevel,
+            SquadInsufficientFunds,
+        ) as exc:
             return Response({"detail": str(exc)}, status=409)
 
         return Response(status=204)
 
 
 class ChangeDevelopmentSquadLevelView(APIView):
-    """Move the caller's open development squad to another level, debiting
-    the upgrade difference. A downgrade costs nothing and a change to the
-    level already held is a 409, both from the service."""
+    """Upgrade the caller's open development squad one level, debiting that
+    level's full fee.
+
+    Only the rung directly above the one held: skipping one is a 409
+    `LevelLocked`, anything lower a 409 `CannotDowngrade` (close the squad
+    instead), and the level already held a 409 `SameLevel` — all three from
+    the service, none of them special-cased here.
+    """
     def post(self, request):
         team = team_for(request.user)
         if team is None:
@@ -1079,7 +1110,14 @@ class ChangeDevelopmentSquadLevelView(APIView):
                 serializer.validated_data["level"],
                 charge=_squad_charge(team),
             )
-        except (SquadNotOpen, SameLevel, UnknownLevel, SquadInsufficientFunds) as exc:
+        except (
+            SquadNotOpen,
+            SameLevel,
+            LevelLocked,
+            CannotDowngrade,
+            UnknownLevel,
+            SquadInsufficientFunds,
+        ) as exc:
             return Response({"detail": str(exc)}, status=409)
 
         return Response(status=204)
