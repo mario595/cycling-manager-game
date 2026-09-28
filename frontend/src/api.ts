@@ -551,6 +551,10 @@ export interface RaceDetail {
   course: CourseSegment[]
   payout: RacePayoutEntry[]
   markers: RaceMarker[]
+  /** Whether the server holds a log worth replaying for this race. Always
+   * false while the race is unfinished, and false for a finished race
+   * recorded before replays existed. */
+  has_replay: boolean
 }
 
 export async function getRaceDetail(raceId: number): Promise<RaceDetail> {
@@ -559,6 +563,20 @@ export async function getRaceDetail(raceId: number): Promise<RaceDetail> {
     throw new Error(`race detail request failed: ${response.status}`)
   }
   return response.json()
+}
+
+/** The race's recorded log, as text. The server hands back the brotli
+ * compressed bytes verbatim or the decompressed body, depending on what the
+ * browser sent; both are a race log, so there is nothing to negotiate here.
+ * Replay is only for a finished race with a stored log, so a 404 is not
+ * "no replay" — it is a failure worth showing (the file vanished), which the
+ * caller does. */
+export async function getRaceLog(raceId: number): Promise<string> {
+  const response = await fetch(`/api/racing/races/${raceId}/log/`)
+  if (!response.ok) {
+    throw new Error(`race log request failed: ${response.status}`)
+  }
+  return response.text()
 }
 
 /** Same state vocabulary as Calendar/Position — see api/README.md. */

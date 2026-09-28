@@ -1,12 +1,17 @@
 import { memo } from 'react'
 import type { Pack, Rider } from '../types/race'
 import { isLeader, teamColor } from '../utils/teamColors'
+import { HIGHLIGHT_RING_GAP, HIGHLIGHT_RING_WIDTH } from './RiderMarker'
 
 interface PackMarkerProps {
   pack: Pack
   x: number
   y: number
   active?: boolean
+  /** How many of the pack's riders are the player's own; > 0 draws the
+   * own-team ring. */
+  highlightCount?: number
+  highlightColor?: string
   onClick?: () => void
   onHover?: (pack: Pack | null) => void
 }
@@ -58,7 +63,16 @@ function describeArc(radius: number, startAngle: number, endAngle: number): stri
   return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArc} 1 ${end.x} ${end.y}`
 }
 
-function PackMarker({ pack, x, y, active, onClick, onHover }: PackMarkerProps) {
+function PackMarker({
+  pack,
+  x,
+  y,
+  active,
+  highlightCount = 0,
+  highlightColor = '#0f172a',
+  onClick,
+  onHover,
+}: PackMarkerProps) {
   const riderCount = pack.riders.length
   const radius = Math.min(
     MAX_RADIUS,
@@ -100,6 +114,15 @@ function PackMarker({ pack, x, y, active, onClick, onHover }: PackMarkerProps) {
           strokeWidth={thickness}
         />
       ))}
+
+      {highlightCount > 0 && (
+        <circle
+          r={radius + HIGHLIGHT_RING_GAP}
+          fill="none"
+          stroke={highlightColor}
+          strokeWidth={HIGHLIGHT_RING_WIDTH}
+        />
+      )}
 
       {radius >= MIN_RADIUS_FOR_COUNT_TEXT && (
         <text

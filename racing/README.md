@@ -96,6 +96,13 @@ hurt, **Cloudflare R2** is the frugal target: 10 GB free and, unusually, zero
 egress fees — and egress is what actually costs money when players watch
 replays.
 
+One thing does change shape on R2: `GET /api/racing/races/<race_id>/log/`
+(`api/README.md`) currently streams the bytes Django reads out of storage. With
+a private bucket that becomes a **signed-URL redirect** — the same view, one
+fewer hop through this application, and a URL that expires. The endpoint's
+contract (authenticated, brotli when accepted, `404` when there is no log)
+does not change, so nothing in `race_player/` or `frontend/` has to know.
+
 ### The slimmed, compressed format (#88)
 
 Tracked as [#88](https://github.com/mario595/cycling-manager/issues/88). One
@@ -115,9 +122,11 @@ in `race_engine/README.md`; the short version:
   a `finished` flag changes — a finish is never invisible, only its exact
   instant is quantised. Default interval is 2 s.
 - **Compression:** written brotli (quality 5) by the engine through an
-  incremental compressor; the stored file keeps the `.jsonl.br` extension. A
-  future HTTP endpoint must serve it with `Content-Encoding: br` — the player
-  fetches the file by name and relies on the browser to decode it.
+  incremental compressor; the stored file keeps the `.jsonl.br` extension.
+  `GET /api/racing/races/<race_id>/log/` serves it: streamed from storage,
+  `Content-Encoding: br` when — and only when — the caller accepts `br`, and
+  decompressed otherwise (`api/README.md`). The player never sees a file name
+  and never links to `/media/`.
 
 ### Rejected: regenerating logs from a seed
 

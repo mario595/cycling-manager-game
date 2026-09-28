@@ -357,6 +357,7 @@ class RaceDetailSerializer(serializers.Serializer):
     course = CourseSegmentSerializer(many=True)
     payout = RacePayoutEntrySerializer(many=True)
     markers = RaceMarkerSerializer(many=True)
+    has_replay = serializers.BooleanField()
 
 
 class RaceResultTeamSerializer(serializers.Serializer):

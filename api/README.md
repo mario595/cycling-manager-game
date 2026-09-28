@@ -208,11 +208,45 @@ Since #29 each rider also carries `release_cost`
   (`{kind, name, distance}`). It also carries
   `payout` — the race's `{position, points, prize}` list for 1st through 10th,
   from `competitions/scoring.py`'s two tables — so the SPA can show the prize
-  list before the race has run. Readable by any
+  list before the race has run. It also carries `has_replay`: whether a
+  `RaceLog` row with a file exists for this race. It is a `boolean`, never
+  absent, and it is `false` for any race that has not finished as well as for
+  a finished one recorded before replays existed — the SPA decides between
+  "Watch race" and a note, and never has to infer it. Readable by any
   authenticated manager regardless of team — the contrast with `SquadView`
   below, which 403s a caller with no team. No status filter: a `scheduled`,
   `running`, `finished` or `failed` race all return `200`; the status is in
   the payload and the SPA decides what to draw.
+- `GET /api/racing/races/<race_id>/log/` — a finished race's recorded log,
+  as the newline-delimited JSON the race engine wrote (`RaceLogView`). The
+  body is **streamed from storage** in chunks, never read into memory whole:
+  a five-hour stage's log is tens of megabytes decompressed.
+  - **Compression is content negotiation, not a header of our own.** The
+    stored file is brotli (`*.jsonl.br`), so if — and only if — the request
+    accepts `br` (`br` in `Accept-Encoding` with `q=0` for `br` not
+    counted as acceptance), the stored bytes are streamed as they are, with
+    `Content-Encoding: br`. A client that does not accept `br` is served the
+    **decompressed** log instead, with no `Content-Encoding` at all. There is
+    no `?decompress=1` escape hatch and no third state: the client's own
+    header is the only input, so a proxy, a CDN and a browser all get an
+    answer they can decode.
+  - `Vary: Accept-Encoding` is always set, so a cache between the client and
+    Django cannot hand a brotli body to a client that cannot read one.
+  - `Content-Type: application/x-ndjson`, set **explicitly** rather than left
+    to Django's default for a streaming response. The parser on the other end
+    splits on newlines; the type says what it is, and an absent header is
+    exactly what would make a future caller treat it as `text/html`.
+  - `Cache-Control: private` — a race log is a manager's business, and a
+    shared cache must not hold one.
+  - A `404` in three cases, all "there is no replay for this race": the race
+    is not `FINISHED`, the race has no `RaceLog` row, or its row's file is
+    missing or empty in storage. Not a `403` and not a `500` — an unfinished
+    race has no log, and that is an ordinary state, not an error worth
+    showing a manager.
+  - `IsAuthenticated`, the project default, like every other view here.
+    `/media/` is **not** linked from this payload: a log is only ever fetched
+    through this endpoint, never by URL, so the log's storage name never
+    reaches the client.
 - `GET /api/racing/races/<race_id>/results/` — a finished race's finishing
   order plus each team's points and prize money from it (`RaceResultsSerializer`,
   `RaceResultsView`). A race that has not reached `FINISHED` is a `404`, not
