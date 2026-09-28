@@ -554,7 +554,7 @@ from `theme.ts`. There is no money on the riders card.
   - `test_sign_squad_rider_raises_not_available`
   - `test_released_squad_rider_is_signable`: after `close_squad`, sign succeeds.
 
-### W5 — `world/`: intake in the tick, and the exclusions proved end to end
+### W5 — `world/`: intake in the tick, and the exclusions proved end to end — done
 - **What changes:** the tick call, `TickRun.youth_intake_riders` and its
   migration.
 - **Tests** in `world/tests/test_tick.py`, beside the development squad cost

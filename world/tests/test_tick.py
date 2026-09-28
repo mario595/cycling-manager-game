@@ -16,7 +16,8 @@ from economy.models import (
 from economy.services import ensure_opening_balance, sign_offer
 from racing.models import Race, RaceResult
 from riders.development_squad import change_level
-from riders.models import DevelopmentSquad, Rider
+from riders.models import ENGINE_ATTRIBUTES, DevelopmentSquad, Rider
+from staff.services import set_focus
 from schedule.models import SEASON_WEEKS, Season, Week
 from staff.models import Trainer
 from staff.pricing import weekly_salary
@@ -403,6 +404,181 @@ def test_squad_cost_follows_the_level_held_at_the_boundary(db, team, riders):
         (week_one, -1_500, "Development squad — Regional"),
         (week_two, -3_500, "Development squad — National"),
     ]
+
+
+def test_tick_into_week_4_gives_open_squad_two_riders(db, team, riders):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_four = season.weeks.get(number=4)
+    open_squad(team, 1)
+    clock.set(week_four.starts_at + timedelta(hours=1))
+
+    run = tick()
+
+    assert run.youth_intake_riders == 2
+    squad = DevelopmentSquad.objects.get(team=team)
+    arrivals = Rider.objects.filter(development_squad=squad)
+    assert arrivals.count() == 2
+    for rider in arrivals:
+        assert rider.team_id is None
+        assert rider.intake_at == week_four.starts_at
+
+
+def test_tick_into_week_5_gives_nothing(db, team, riders):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    open_squad(team, 1)
+    clock.set(season.weeks.get(number=4).starts_at + timedelta(hours=1))
+    tick()
+
+    clock.set(season.weeks.get(number=5).starts_at + timedelta(hours=1))
+    run = tick()
+
+    assert run.youth_intake_riders == 0
+
+
+def test_catch_up_across_weeks_3_to_9_gives_two_batches_dated_to_their_weeks(db, team, riders):
+    # A single tick catching up weeks 4-9 crosses two intake weeks (4 and
+    # 8), so it must write two SEPARATE batches, each dated to its own
+    # week's starts_at — never one lump batch dated to whenever the tick
+    # happened to run.
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_three = season.weeks.get(number=3)
+    open_squad(team, 1)
+    clock.set(week_three.starts_at + timedelta(hours=1))
+    tick()
+
+    week_nine = season.weeks.get(number=9)
+    clock.set(week_nine.starts_at + timedelta(hours=1))
+    run = tick()
+
+    assert run.weeks_processed == 6  # weeks 4-9
+    assert run.youth_intake_riders == 4  # two batches: weeks 4 and 8
+    squad = DevelopmentSquad.objects.get(team=team)
+    week_four = season.weeks.get(number=4)
+    week_eight = season.weeks.get(number=8)
+    assert set(
+        Rider.objects.filter(development_squad=squad).values_list("intake_at", flat=True)
+    ) == {week_four.starts_at, week_eight.starts_at}
+    assert Rider.objects.filter(
+        development_squad=squad, intake_at=week_four.starts_at,
+    ).count() == 2
+    assert Rider.objects.filter(
+        development_squad=squad, intake_at=week_eight.starts_at,
+    ).count() == 2
+
+
+def test_tick_twice_does_not_duplicate_batch(db, team, riders):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_four = season.weeks.get(number=4)
+    open_squad(team, 1)
+    clock.set(week_four.starts_at + timedelta(hours=1))
+
+    first = tick()
+    same_moment = tick()
+
+    assert first.youth_intake_riders == 2
+    assert same_moment.youth_intake_riders == 0
+    squad = DevelopmentSquad.objects.get(team=team)
+    assert Rider.objects.filter(development_squad=squad).count() == 2
+
+
+def test_released_team_with_squad_still_receives_intake(db, riders):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    unmanaged = Team.objects.create(name="Unmanaged Team", code="UNM")
+    open_squad(unmanaged, 1)
+    clock.set(season.weeks.get(number=4).starts_at + timedelta(hours=1))
+
+    run = tick()
+
+    assert run.youth_intake_riders == 2
+    squad = DevelopmentSquad.objects.get(team=unmanaged)
+    assert Rider.objects.filter(development_squad=squad).count() == 2
+
+
+def test_squad_riders_draw_no_wages(db, team, riders):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_four = season.weeks.get(number=4)
+    open_squad(team, 1)
+    clock.set(week_four.starts_at + timedelta(hours=1))
+
+    tick()
+
+    roster_wage_bill = sum(r.weekly_salary for r in riders)
+    wage_entry = LedgerEntry.objects.get(
+        team=team, kind=LedgerEntry.Kind.WAGES, week=week_four,
+    )
+    assert wage_entry.amount == -roster_wage_bill
+
+
+def test_squad_riders_get_no_trainer_focus_but_still_grow(db, team, riders):
+    """A trainer with a focus is hired; the squad's own riders arrive at
+    week 4 and are asserted to have moved by week 6's boundary — from
+    growth alone, since a squad rider is never in
+    trainer.team.riders.all()."""
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    make_trainer(team, climb=90)
+    set_focus(team, "climb")
+    open_squad(team, 1)
+    clock.set(season.weeks.get(number=4).starts_at + timedelta(hours=1))
+    tick()
+
+    squad = DevelopmentSquad.objects.get(team=team)
+    before = {
+        r.pk: {attr: getattr(r, attr) for attr in ENGINE_ATTRIBUTES}
+        for r in Rider.objects.filter(development_squad=squad)
+    }
+
+    # Two more weekly boundaries of ordinary age-curve growth, with no race
+    # for any of them to have been trained by either.
+    clock.set(season.weeks.get(number=6).starts_at + timedelta(hours=1))
+    tick()
+
+    for rider in Rider.objects.filter(development_squad=squad):
+        moved = any(
+            getattr(rider, attr) != before[rider.pk][attr] for attr in ENGINE_ATTRIBUTES
+        )
+        debt_nonzero = any(v != 0.0 for v in rider.growth_debt.values())
+        # Growth is a small fraction of an attribute a week (WEEKLY_GROWTH_
+        # FRACTION), so two weeks may or may not cross a whole stored point;
+        # either way growth_debt must have accumulated something, proving
+        # the age curve ran on them.
+        assert moved or debt_nonzero
+
+
+def test_new_arrivals_first_grow_the_following_week(db, team, riders):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_four = season.weeks.get(number=4)
+    open_squad(team, 1)
+    clock.set(week_four.starts_at + timedelta(hours=1))
+    run = tick()
+
+    squad = DevelopmentSquad.objects.get(team=team)
+    arrivals = Rider.objects.filter(development_squad=squad)
+    # Arrived this same week — run_intake runs AFTER _apply_training_week in
+    # the loop body, so week 4's own growth pass has already happened
+    # without them; nothing has moved them yet.
+    assert run.youth_intake_riders == 2
+    for rider in arrivals:
+        assert rider.growth_debt == {}
+
+    clock.set(season.weeks.get(number=5).starts_at + timedelta(hours=1))
+    tick()
+
+    for rider in arrivals:
+        rider.refresh_from_db()
+        # The following week's boundary is the first growth pass to reach
+        # them: growth_debt has accumulated something, or a stored
+        # attribute already crossed a whole point.
+        assert rider.growth_debt != {} or any(
+            getattr(rider, attr) != 1 for attr in ("climb", "sprint", "flat", "resistance", "positioning")
+        )
 
 
 def test_week_one_has_no_preceding_week_and_only_decays(db, team, riders):

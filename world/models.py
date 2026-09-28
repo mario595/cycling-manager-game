@@ -107,6 +107,10 @@ class TickRun(models.Model):
             "three."
         ),
     )
+    youth_intake_riders = models.PositiveIntegerField(
+        default=0,
+        help_text="Riders generated into development squads by youth intake this tick (#33).",
+    )
     fanbase_entries = models.PositiveIntegerField(
         default=0,
         help_text="Fanbase change entries written this tick (#21).",
