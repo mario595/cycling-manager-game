@@ -240,7 +240,9 @@ export async function putSquad(raceId: number, riderIds: number[], leaderId: num
  * (#31). `release_cost` is what releasing them to the free agent pool
  * charges right now: 0 while the claim cooldown shields them, full
  * severance after it expires, and null when the payload is not the
- * caller's own roster (a free agent, say). */
+ * caller's own roster (a free agent, say). `final_season` is true while a
+ * season runs and this is the rider's last; they retire when it closes
+ * (#42). */
 export interface Rider {
   id: number
   name: string
@@ -258,6 +260,7 @@ export interface Rider {
   weekly_salary: number
   market_value: number
   release_cost: number | null
+  final_season: boolean
 }
 
 /** One rider's wage movement at a season close, whole credits. The keys map

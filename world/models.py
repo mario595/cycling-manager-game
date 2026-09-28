@@ -65,6 +65,11 @@ class TickRun(models.Model):
         default=0,
         help_text="How many riders had their age advanced this tick (#58).",
     )
+    riders_retired = models.PositiveIntegerField(
+        default=0,
+        help_text="Riders retired by age at a season close this tick (#42). Distinct "
+        "from `agents_retired` (free-agent expiry).",
+    )
     riders_trained = models.PositiveIntegerField(
         default=0,
         help_text="How many riders had a *displayed* attribute change from training "

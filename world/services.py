@@ -42,6 +42,7 @@ from riders.services import (
     apply_weekly_recovery,
     record_week_snapshots,
     reprice_all,
+    retire_due_riders,
     retire_riders,
     training_deltas,
 )
@@ -57,6 +58,7 @@ from transfers.pricing import market_value_for
 from transfers.services import (
     EXPIRY_VALUE_PERCENTILE,
     EXPIRY_WEEKS,
+    cancel_open_auctions,
     due_auctions,
     free_agents,
     resolve_auction,
@@ -422,9 +424,24 @@ def tick() -> TickRun:
     # evaluated against their new age this same tick.
     closed = [t for t in transitions if t.kind == SeasonTransition.Kind.CLOSED]
     riders_aged = 0
+    riders_retired = 0
     riders_repriced = 0
     salary_reviews = 0
     for transition in closed:
+        # The stamp is the closing season's FINAL WEEK's starts_at, not the
+        # season's ends_at: api's retired_payload resolves it through
+        # current_position(), whose ranges are half-open, so ends_at would
+        # resolve to the *next* season's week 1 when seasons abut (#42).
+        final_week = transition.season.weeks.order_by("-starts_at").first()
+        with transaction.atomic():
+            retired_ids = retire_due_riders(at=final_week.starts_at)
+            cancel_open_auctions(retired_ids, at=at)
+        riders_retired += len(retired_ids)
+        # Retiring BEFORE ageing is load-bearing: the other order would age a
+        # rider into the window and retire them in the same breath, without the
+        # season of warning the marker promises. It also keeps retirees out of
+        # the salary review for free, and freezes their age at the one the
+        # player last saw.
         riders_aged = advance_ages()
         # Repricing AFTER ageing: next season's wage must reflect the rider a
         # manager will actually have, age included (spec, *Ordering at the
@@ -551,6 +568,7 @@ def tick() -> TickRun:
         seasons_closed=sum(1 for t in transitions if t.kind == SeasonTransition.Kind.CLOSED),
         weeks_processed=len(weeks),
         riders_aged=riders_aged,
+        riders_retired=riders_retired,
         riders_trained=riders_trained,
         riders_repriced=riders_repriced,
         salary_reviews=salary_reviews,

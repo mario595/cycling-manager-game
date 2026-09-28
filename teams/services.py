@@ -78,9 +78,9 @@ def claim_team(user, *, name: str, code: str, roster_size: int = ROSTER_SIZE, at
         # below. A claim is a takeover, and what the last manager left behind
         # does not carry over — a new manager must open their own squad and
         # pay their own opening fee. Closing is a row delete, so there is
-        # nothing to refund or to void here (riders/README.md, *Opening a
-        # squad*). release_team is deliberately NOT symmetric (Design
-        # decision 9): releasing hands the team back as it stands, squad
+        # nothing to refund or to void here (riders/README.md, *Development
+        # squad*). release_team is deliberately NOT symmetric, per the spec's
+        # *Decisions taken*: releasing hands the team back as it stands, squad
         # included, so a manager who quits leaves the squad they paid for.
         close_squad(team)
 

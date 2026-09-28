@@ -27,6 +27,7 @@ const profile: RiderProfileData = {
   weekly_salary: 4200,
   market_value: 310_000,
   release_cost: null,
+  final_season: false,
   team: { id: 3, name: 'Profile Team', code: 'PFT' },
   current_week: { season: 1, week: 7 },
   retired: null,
@@ -105,6 +106,27 @@ describe('RiderProfile', () => {
     renderRiderProfile()
 
     expect(screen.getByText(/Retired · Season 1, Week 11/)).toBeInTheDocument()
+  })
+
+  it('tags a rider whose season is their last in the page heading', () => {
+    mockUseRiderProfile.mockReturnValue({
+      profile: { ...profile, age: 34, final_season: true },
+      loading: false,
+      notFound: false,
+      error: false,
+    })
+
+    renderRiderProfile()
+
+    expect(screen.getByText('LAST SEASON')).toBeInTheDocument()
+  })
+
+  it('does not tag a rider who has seasons left', () => {
+    mockUseRiderProfile.mockReturnValue({ profile, loading: false, notFound: false, error: false })
+
+    renderRiderProfile()
+
+    expect(screen.queryByText('LAST SEASON')).not.toBeInTheDocument()
   })
 
   it('shows a dash for a DNF row', () => {

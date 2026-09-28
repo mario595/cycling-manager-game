@@ -249,6 +249,7 @@ describe('Dashboard', () => {
         weekly_salary: 3_500,
         market_value: 120_000,
         release_cost: null,
+        final_season: false,
       },
     }
     mockUseAuctions.mockReturnValue({
@@ -294,6 +295,7 @@ describe('Dashboard', () => {
         weekly_salary: 2_800,
         market_value: 75_000,
         release_cost: null,
+        final_season: false,
       },
     }
     const bid: MyBidStatus = {
@@ -364,6 +366,7 @@ describe('Dashboard', () => {
         weekly_salary: 2_000,
         market_value: 30_000,
         release_cost: null,
+        final_season: false,
       },
     }
     mockUseAuctions.mockReturnValue({
@@ -403,6 +406,7 @@ describe('Dashboard', () => {
         weekly_salary: 1_700,
         market_value: 40_000,
         release_cost: null,
+        final_season: false,
       },
     }
     const bid: MyBidStatus = {

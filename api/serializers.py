@@ -4,9 +4,12 @@ from rest_framework import serializers
 
 from riders.display import to_display_scale
 from riders.models import ENGINE_ATTRIBUTES, DevelopmentSquad
+from riders.services import is_due_to_retire
+from schedule.services import current_position
 from staff.pricing import hire_fee, weekly_salary
 from transfers.pricing import market_value_for, signing_fee_for
 from transfers.services import release_cost_for
+from world.services import now
 
 
 class ClockSerializer(serializers.Serializer):
@@ -61,6 +64,20 @@ def _display_freshness(obj) -> int:
     return to_display_scale(obj.freshness)
 
 
+def _in_season(context: dict) -> bool:
+    """Whether a season is running now, computed once per response and
+    cached on the shared serializer context (#42).
+
+    The cache is the point: DRF gives every nested and `many` serializer the
+    root's context dict, so a thirty-rider roster pays for one lookup rather
+    than thirty. It also means a future view that forgets to pass the flag
+    through still gets it, unlike a hand-threaded argument.
+    """
+    if "in_season" not in context:
+        context["in_season"] = current_position(now()).state == "in_season"
+    return context["in_season"]
+
+
 class SquadRiderSerializer(serializers.Serializer):
     """One rider as the squad screen needs them: identity, speciality,
     age, the five engine attributes on the 0-10 display scale (never the
@@ -90,7 +107,9 @@ class RiderSerializer(serializers.Serializer):
     are the 0-10 display scale, never the stored 1-100 — see
     riders/display.py. Hidden traits (potential, peak age, decline rate,
     injury proneness, training affinity) and the recovery rate are
-    deliberately absent: the player must not see them."""
+    deliberately absent: the player must not see them. `final_season` is the
+    one visible consequence of the hidden retirement age (#42) — the age
+    itself is never shipped, only whether this is the rider's last season."""
 
     id = serializers.IntegerField()
     name = serializers.CharField()
@@ -103,6 +122,7 @@ class RiderSerializer(serializers.Serializer):
     weekly_salary = serializers.IntegerField()
     market_value = serializers.SerializerMethodField()
     release_cost = serializers.SerializerMethodField()
+    final_season = serializers.SerializerMethodField()
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -128,6 +148,15 @@ class RiderSerializer(serializers.Serializer):
         if team is None or weeks_opened is None:
             return None
         return release_cost_for(team, instance, weeks_opened=weeks_opened)
+
+    def get_final_season(self, instance) -> bool:
+        """Whether this rider retires when the running season closes (#42).
+
+        The marker is derived, not stored: it lasts exactly the one season
+        the rider retires in, so it disappears between seasons and returns
+        for whoever is still in the window when the next one opens.
+        """
+        return _in_season(self.context) and is_due_to_retire(instance)
 
 
 class SalaryChangeSerializer(serializers.Serializer):

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { listForAuction, releaseRider, type Rider, type SalaryReview } from '../api'
-import { Bar, Button, Card, CardHeader, Chip, ChipLabel, LabelBar, PageBody, PageHeading, StatTile } from '../components/primitives'
+import { Bar, Button, Card, CardHeader, Chip, ChipLabel, FinalSeasonTag, LabelBar, PageBody, PageHeading, StatTile } from '../components/primitives'
 import { formatMoney } from '../format'
 import { riderPath } from '../navigation'
 import { barColor, color, font } from '../theme'
@@ -282,6 +282,7 @@ function RiderCard({
             {rider.speciality.toUpperCase()} · {rider.age} yrs
           </div>
         </div>
+        {rider.final_season ? <FinalSeasonTag /> : null}
       </div>
 
       {/* rider[key] and rider.freshness are the 0-10 display scale (see
@@ -361,7 +362,19 @@ function RiderPanel({
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 14 }}>
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <div style={{ fontSize: 18, fontWeight: 600, letterSpacing: '-0.4px' }}>{rider.name}</div>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 7,
+              fontSize: 18,
+              fontWeight: 600,
+              letterSpacing: '-0.4px',
+            }}
+          >
+            {rider.name}
+            {rider.final_season ? <FinalSeasonTag /> : null}
+          </div>
           <div style={{ fontSize: 11, color: color.mutedStrong, fontFamily: font.mono }}>
             {rider.speciality} · {rider.age} yrs
           </div>

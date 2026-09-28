@@ -207,6 +207,18 @@ npm --prefix frontend run build && .venv/bin/python manage.py runserver
   rather than reimplemented per screen.
 - **`src/navigation.ts` is the single source of truth** for the sidebar and
   the router both. A nav item cannot exist without a route.
+- **A rider's status label is a `primitives.tsx` tag, not per-screen
+  markup.** `FinalSeasonTag` renders `LAST SEASON` from the API's
+  `final_season` boolean
+  ([#42](https://github.com/mario595/cycling-manager/issues/42)) and is used
+  in three places, all the ones where a manager decides whether to keep
+  paying a rider: the roster **card** and the roster **panel** (so it stays
+  visible after the rider is opened, where the release button lives), and
+  the **free-agent card** on Transfers, where it has to land before the
+  Sign button the buyer is about to press. The rider **profile** puts it in
+  the page heading's `aside` slot instead — the only header on the site
+  with room for it. The API ships the boolean and never the age behind it
+  (`api/README.md`), so the tag has nothing to render but the label itself.
 
 ## Testing
 

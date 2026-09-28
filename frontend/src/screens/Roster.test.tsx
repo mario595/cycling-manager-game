@@ -42,6 +42,7 @@ const riders: Rider[] = [
     weekly_salary: 3200,
     market_value: 40000,
     release_cost: 12000,
+    final_season: false,
   },
   {
     id: 2,
@@ -60,6 +61,7 @@ const riders: Rider[] = [
     weekly_salary: 900,
     market_value: 95000,
     release_cost: 3000,
+    final_season: false,
   },
 ]
 
@@ -136,6 +138,31 @@ describe('Roster', () => {
     renderRoster()
 
     expect(screen.getByText('$135,000')).toBeInTheDocument()
+  })
+
+  it('tags a rider in their final season on the card and in the panel', () => {
+    const veteran: Rider = { ...riders[0], id: 3, name: 'Vera Old', final_season: true }
+    mockUseRoster.mockReturnValue({
+      riders: [veteran, ...riders],
+      squadValue: 135_000,
+      salaryReview: null,
+      loading: false,
+      error: false,
+      refresh: vi.fn(),
+    })
+
+    renderRoster()
+
+    // One on the card, one beside the name in the panel once it is opened.
+    expect(screen.getAllByText('LAST SEASON')).toHaveLength(1)
+    fireEvent.click(screen.getByText('Vera Old'))
+    expect(screen.getAllByText('LAST SEASON')).toHaveLength(2)
+  })
+
+  it('does not tag a rider who is not in their final season', () => {
+    renderRoster()
+
+    expect(screen.queryByText('LAST SEASON')).not.toBeInTheDocument()
   })
 
   it('sorts by value when the Value chip is picked, differently from Salary', () => {
