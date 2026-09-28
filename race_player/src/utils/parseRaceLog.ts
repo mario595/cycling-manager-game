@@ -14,6 +14,7 @@ const KNOWN_VERSION = 1
 const FLAG_PULLING = 1
 const FLAG_SURGING = 2
 const FLAG_FINISHED = 4
+const FLAG_DNF = 8
 
 function decodeRider(headerRider: RaceHeaderRider, values: RaceRiderSample): Rider {
   const flags = values[4]
@@ -29,6 +30,7 @@ function decodeRider(headerRider: RaceHeaderRider, values: RaceRiderSample): Rid
     pulling: (flags & FLAG_PULLING) !== 0,
     surging: (flags & FLAG_SURGING) !== 0,
     finished: (flags & FLAG_FINISHED) !== 0,
+    dnf: (flags & FLAG_DNF) !== 0,
     finish_time: values[5],
   }
 }

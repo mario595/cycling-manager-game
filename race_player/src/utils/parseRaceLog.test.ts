@@ -51,6 +51,18 @@ describe('parseRaceLog', () => {
     expect(second.finished).toBe(false)
   })
 
+  it('decodes the dnf flag (bit 8)', () => {
+    const cut = [0, [
+      [100.0, 0.0, 40.0, 20.0, 8, null],
+      [120.0, 9.0, 80.0, 70.0, 4, 4000.0],
+    ]]
+    const race = parseRaceLog(fixture(HEADER, [cut]))
+    const [cutRider, finisher] = race.snapshots[0].riders
+    expect(cutRider.dnf).toBe(true)
+    expect(cutRider.finished).toBe(false)
+    expect(finisher.dnf).toBe(false)
+  })
+
   it('surfaces tickInterval alongside maxTicks and the header-wide fields', () => {
     const race = parseRaceLog(fixture())
     expect(race.tickInterval).toBe(2)

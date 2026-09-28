@@ -211,12 +211,16 @@ export function Button({
   variant = 'primary',
   onClick,
   disabled = false,
+  ariaLabel,
   style,
 }: {
   children: ReactNode
   variant?: 'primary' | 'secondary'
   onClick?: () => void
   disabled?: boolean
+  /** For a button whose text is a glyph, where the glyph alone is not a
+   * name a screen reader can use. */
+  ariaLabel?: string
   style?: CSSProperties
 }) {
   const primary = variant === 'primary'
@@ -225,6 +229,7 @@ export function Button({
       type="button"
       onClick={onClick}
       disabled={disabled}
+      aria-label={ariaLabel}
       className={disabled ? undefined : primary ? 'hover-dark' : 'hover-light'}
       style={{
         background: primary ? color.ink : color.canvas,

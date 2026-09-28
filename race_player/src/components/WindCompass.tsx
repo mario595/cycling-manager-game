@@ -46,8 +46,10 @@ function WindCompass({ wind }: WindCompassProps) {
 
   return (
     <div
-      className="flex flex-col items-center gap-1"
-      style={{ width: SIZE }}
+      // Inline styles, not Tailwind classes: the game's replay screen renders
+      // this same component, where a class name is a no-op (see
+      // race_player/README.md, *Integration Strategy*).
+      style={{ width: SIZE, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}
       role="img"
       aria-label={title}
     >
@@ -107,11 +109,11 @@ function WindCompass({ wind }: WindCompassProps) {
         </g>
       </svg>
 
-      <div className="flex flex-col items-center leading-tight">
-        <span className="text-sm font-semibold tabular-nums text-slate-700">
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1.25 }}>
+        <span style={{ fontSize: 14, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: '#334155' }}>
           {wind.speed.toFixed(1)} km/h
         </span>
-        <span className="text-xs text-slate-400">{label}</span>
+        <span style={{ fontSize: 12, color: '#94a3b8' }}>{label}</span>
       </div>
     </div>
   )

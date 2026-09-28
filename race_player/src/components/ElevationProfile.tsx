@@ -11,6 +11,12 @@ interface ElevationProfileProps {
   packs: Pack[]
   width?: number
   height?: number
+  /** The team id whose riders are the player's own, as the log spells it (a
+   * string). Null highlights nobody. */
+  highlightTeam?: string | null
+  /** Ring colour for the own-team highlight; pass a dark ink, since a team
+   * palette hue would not read as a ring. */
+  highlightColor?: string
   onSelectRider?: (id: string) => void
 }
 
@@ -21,6 +27,16 @@ interface ElevationProfileProps {
 // split back to individuals.
 const BLOB_SPLIT_SIZE = 3
 const BLOB_MERGE_SIZE = 1
+
+/** Is this rider one of "yours"? The log spells a rider's team as a string
+ * id, so the caller must stringify its own team id before comparing. */
+function isOwnRider(rider: Rider, highlightTeam: string | null): boolean {
+  return highlightTeam !== null && rider.team === highlightTeam
+}
+
+function ownRidersIn(riders: Rider[], highlightTeam: string | null): number {
+  return riders.filter((rider) => isOwnRider(rider, highlightTeam)).length
+}
 
 function useBlobHysteresis(packs: Pack[]): Map<string, boolean> {
   const stateRef = useRef<Map<string, boolean>>(new Map())
@@ -51,6 +67,8 @@ export default function ElevationProfile({
   packs,
   width = 900,
   height = 300,
+  highlightTeam = null,
+  highlightColor = '#0f172a',
   onSelectRider,
 }: ElevationProfileProps) {
   const [hoveredRider, setHoveredRider] = useState<Rider | null>(null)
@@ -104,6 +122,8 @@ export default function ElevationProfile({
                       x={scale.x(pt.x)}
                       y={scale.y(pt.y)}
                       active={hoveredPack === item.pack}
+                      highlightCount={ownRidersIn(item.pack.riders, highlightTeam)}
+                      highlightColor={highlightColor}
                       onClick={() => onSelectRider?.(item.pack.riders[0].id)}
                       onHover={(p) => setHoveredPack(p)}
                     />
@@ -117,6 +137,8 @@ export default function ElevationProfile({
                     x={scale.x(pt.x)}
                     y={scale.y(pt.y)}
                     active={item.rider.id === activeId}
+                    highlighted={isOwnRider(item.rider, highlightTeam)}
+                    highlightColor={highlightColor}
                     onClick={() => {
                       setSelectedId((cur) => (cur === item.rider.id ? null : item.rider.id))
                       onSelectRider?.(item.rider.id)
@@ -140,6 +162,7 @@ export default function ElevationProfile({
             {hoveredPack && !hoveredRider && (
               <PackTooltip
                 pack={hoveredPack}
+                highlightCount={ownRidersIn(hoveredPack.riders, highlightTeam)}
                 marginLeft={scale.margin.left}
                 marginTop={scale.margin.top}
               />
@@ -230,10 +253,12 @@ function RiderTooltip({
 
 function PackTooltip({
   pack,
+  highlightCount,
   marginLeft,
   marginTop,
 }: {
   pack: Pack
+  highlightCount: number
   marginLeft: number
   marginTop: number
 }) {
@@ -258,6 +283,7 @@ function PackTooltip({
   const subtitleY = (cursorY += lineHeight)
   const teamRowYs = teamRows.map(() => (cursorY += lineHeight))
   const leaderLineY = leaderLine ? (cursorY += lineHeight) : null
+  const ownLineY = highlightCount > 0 ? (cursorY += lineHeight) : null
   const height = cursorY + 10
 
   const allLines = [
@@ -287,6 +313,11 @@ function PackTooltip({
       {leaderLine && leaderLineY && (
         <text x={18} y={leaderLineY} fontSize={11} fill="#334155">
           {leaderLine}
+        </text>
+      )}
+      {highlightCount > 0 && ownLineY && (
+        <text x={18} y={ownLineY} fontSize={11} fontWeight={600} fill="#334155">
+          {`Your riders: ${highlightCount}`}
         </text>
       )}
     </TooltipBox>

@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta, timezone as dt_timezone
+from pathlib import Path
 
+import brotli
 import pytest
+from django.core.files.base import ContentFile
 from django.test import override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -15,6 +18,7 @@ from economy.models import STARTING_BALANCE, LedgerEntry, SalaryReviewReport
 from racing.models import (
     MarkerCrossing,
     Race,
+    RaceLog,
     RaceMarker,
     RaceResult,
     RaceSquad,
@@ -954,6 +958,161 @@ def test_race_detail_markers_empty_for_plain_course(db):
 
     assert response.status_code == 200
     assert response.data["markers"] == []
+
+
+#: One header line of a real log, brotli-compressed the way
+#: `racing.services.run_race` stores it — see racing/README.md, *Race logs*.
+LOG_BODY = b'{"v":1}\n'
+LOG_BYTES = brotli.compress(LOG_BODY)
+
+
+@pytest.fixture
+def logged_race(db, settings, tmp_path) -> Race:
+    """A finished race with a stored log. The media root is the test's own
+    temporary directory, so nothing is written into the repository."""
+    settings.MEDIA_ROOT = tmp_path
+    race = Race.objects.create(
+        name="Logged Race",
+        course=[{"length": 40000.0, "gradient": 0.0}],
+        status=Race.Status.FINISHED,
+    )
+    RaceLog.objects.create(race=race, file=ContentFile(LOG_BYTES, name="r.jsonl.br"))
+    return race
+
+
+@pytest.fixture
+def log_client(db) -> APIClient:
+    client = APIClient()
+    user = User.objects.create_user(email="log-viewer@example.com", password="s0meth1ng-good")
+    client.force_authenticate(user=user)
+    return client
+
+
+def test_race_log_served_brotli_when_accepted(logged_race, log_client):
+    response = log_client.get(
+        f"/api/racing/races/{logged_race.pk}/log/",
+        HTTP_ACCEPT_ENCODING="gzip, br",
+    )
+
+    assert response.status_code == 200
+    # Load-bearing: without an explicit content_type Django guesses from the
+    # .br name and labels the body application/x-brotli, which the browser
+    # hands straight to JSON.parse (D4).
+    assert response["Content-Type"].startswith("application/x-ndjson")
+    assert response["Content-Encoding"] == "br"
+    assert "Accept-Encoding" in response["Vary"]
+    assert b"".join(response.streaming_content) == LOG_BYTES
+
+
+def test_race_log_decompressed_when_br_not_accepted(logged_race, log_client):
+    response = log_client.get(
+        f"/api/racing/races/{logged_race.pk}/log/",
+        HTTP_ACCEPT_ENCODING="gzip",
+    )
+
+    assert response.status_code == 200
+    assert response["Content-Type"].startswith("application/x-ndjson")
+    assert not response.has_header("Content-Encoding")
+    assert response.content == LOG_BODY
+
+
+def test_race_log_br_with_q_zero_is_not_accepted(logged_race, log_client):
+    response = log_client.get(
+        f"/api/racing/races/{logged_race.pk}/log/",
+        HTTP_ACCEPT_ENCODING="br;q=0, gzip",
+    )
+
+    assert response.status_code == 200
+    assert not response.has_header("Content-Encoding")
+    assert response.content == LOG_BODY
+
+
+def test_race_log_br_with_q_zero_padded_zeroes_is_not_accepted(logged_race, log_client):
+    response = log_client.get(
+        f"/api/racing/races/{logged_race.pk}/log/",
+        HTTP_ACCEPT_ENCODING="br;q=0.00, gzip",
+    )
+
+    assert response.status_code == 200
+    assert not response.has_header("Content-Encoding")
+    assert response.content == LOG_BODY
+
+
+def test_race_log_br_with_low_but_positive_q_is_accepted(logged_race, log_client):
+    response = log_client.get(
+        f"/api/racing/races/{logged_race.pk}/log/",
+        HTTP_ACCEPT_ENCODING="br;q=0.5, gzip",
+    )
+
+    assert response.status_code == 200
+    assert response["Content-Encoding"] == "br"
+    assert b"".join(response.streaming_content) == LOG_BYTES
+
+
+def test_race_log_404_for_unfinished_race(db, settings, tmp_path, log_client):
+    settings.MEDIA_ROOT = tmp_path
+    race = Race.objects.create(
+        name="Unfinished Logged Race",
+        course=[{"length": 40000.0, "gradient": 0.0}],
+        status=Race.Status.SCHEDULED,
+    )
+    RaceLog.objects.create(race=race, file=ContentFile(LOG_BYTES, name="r.jsonl.br"))
+
+    response = log_client.get(f"/api/racing/races/{race.pk}/log/")
+
+    assert response.status_code == 404
+
+
+def test_race_log_404_without_log(db, log_client):
+    race = Race.objects.create(
+        name="Unlogged Race",
+        course=[{"length": 40000.0, "gradient": 0.0}],
+        status=Race.Status.FINISHED,
+    )
+
+    response = log_client.get(f"/api/racing/races/{race.pk}/log/")
+
+    assert response.status_code == 404
+
+
+def test_race_log_404_when_file_missing(logged_race, log_client):
+    log = RaceLog.objects.get(race=logged_race)
+    Path(log.file.path).unlink()
+
+    response = log_client.get(f"/api/racing/races/{logged_race.pk}/log/")
+
+    assert response.status_code == 404
+
+
+def test_race_log_requires_login(logged_race):
+    client = APIClient()
+
+    response = client.get(f"/api/racing/races/{logged_race.pk}/log/")
+
+    assert response.status_code == 403
+
+
+def test_race_detail_has_replay_false_without_log(db):
+    race = Race.objects.create(
+        name="No Replay Race",
+        course=[{"length": 40000.0, "gradient": 0.0}],
+        status=Race.Status.FINISHED,
+    )
+    client = APIClient()
+    user = User.objects.create_user(email="no-replay@example.com", password="s0meth1ng-good")
+    client.force_authenticate(user=user)
+
+    response = client.get(f"/api/racing/races/{race.pk}/")
+
+    assert response.status_code == 200
+    assert response.data["has_replay"] is False
+
+
+def test_race_detail_has_replay_true_with_log(logged_race, log_client):
+    response = log_client.get(f"/api/racing/races/{logged_race.pk}/")
+
+    assert response.status_code == 200
+    assert response.data["has_replay"] is True
 
 
 def test_race_results_include_first_three_per_marker(db):

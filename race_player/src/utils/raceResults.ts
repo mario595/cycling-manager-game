@@ -1,4 +1,5 @@
-import type { ParsedRace } from '../types/race'
+import type { ParsedRace, Rider } from '../types/race'
+import { formatFinishTime, formatGapTime } from './formatTime'
 
 // Same distance used by computePacks.ts to decide riders are in one pack —
 // reused here so "finished in the same group" matches what the pack view
@@ -8,6 +9,21 @@ const PACK_COHESION_DISTANCE = 60.0
 export interface RiderResult {
   finishTime: number | null
   gapSeconds: number | null
+}
+
+/** The Result cell for one rider at the displayed tick: '—' while racing,
+ * hh:mm:ss for the winner, '+0' / '+3m 14s' for the rest.
+ *
+ * `result` is precomputed over the whole race, so it holds a finish time
+ * even at ticks before this rider actually crosses the line. The gate is
+ * therefore the rider's own live `finished` flag. */
+export function resultLabel(rider: Rider, result: RiderResult | undefined): string {
+  if (!rider.finished || !result) return '—'
+  if (result.finishTime !== null) return formatFinishTime(result.finishTime)
+  if (result.gapSeconds !== null) {
+    return result.gapSeconds === 0 ? '+0' : `+${formatGapTime(result.gapSeconds)}`
+  }
+  return '—'
 }
 
 export function computeRaceResults(raceData: ParsedRace): Map<string, RiderResult> {

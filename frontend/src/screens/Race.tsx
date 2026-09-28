@@ -1,15 +1,14 @@
 import { useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 
-import type { CalendarRace, RaceDetail, RacePayoutEntry, RaceResultEntry, RaceResults, Squad, SquadRider } from '../api'
+import type { CalendarRace, RaceDetail, RacePayoutEntry, Squad, SquadRider } from '../api'
 import { CourseProfile } from '../components/CourseProfile'
+import { HiddenResults } from '../components/RaceResults'
 import { Button, Card, CardHeader, LabelBar, PageBody, PageHeading, StatTile } from '../components/primitives'
-import { riderPath } from '../navigation'
+import { replayPath } from '../navigation'
 import { raceStatusLabel } from '../raceStatus'
-import { formatGap, formatRaceTime } from '../raceTime'
 import { color, font } from '../theme'
 import { useRaceDetail } from '../useRaceDetail'
-import { useRaceResults } from '../useRaceResults'
 import { useSquad } from '../useSquad'
 import { formatMoney } from '../format'
 
@@ -27,11 +26,8 @@ export function Race() {
   const { raceId } = useParams<{ raceId: string }>()
   const id = Number(raceId)
 
+  const navigate = useNavigate()
   const { race, loading, error } = useRaceDetail(id)
-  const { results, loading: resultsLoading, error: resultsError } = useRaceResults(
-    id,
-    race?.status === 'finished',
-  )
   const { squad, save, saving, saveError } = useSquad(id)
 
   if (loading) return null
@@ -46,7 +42,13 @@ export function Race() {
     )
   }
 
-  const body = raceBody(race, { results, resultsLoading, resultsError, squad, save, saving, saveError })
+  const body = raceBody(race, {
+    onWatch: () => navigate(replayPath(id)),
+    squad,
+    save,
+    saving,
+    saveError,
+  })
 
   return (
     <PageBody gap={18} paddingTop={26}>
@@ -80,9 +82,7 @@ function metaLine(race: RaceDetail): string {
 function raceBody(
   race: RaceDetail,
   state: {
-    results: RaceResults | null
-    resultsLoading: boolean
-    resultsError: boolean
+    onWatch: () => void
     squad: Squad | null
     save: (riderIds: number[], leaderId: number) => Promise<void>
     saving: boolean
@@ -90,16 +90,24 @@ function raceBody(
   },
 ) {
   if (race.status === 'finished') {
-    if (state.resultsError) {
-      return <MessageCard text="Couldn't load this race's results." />
-    }
-    if (!state.results) return null
     return (
       <>
         <CourseProfile course={race.course} markers={race.markers} />
-        <RiderResultsTable results={state.results} payout={race.payout} />
-        <TeamPointsTable results={state.results} />
-        {state.results.markers.length > 0 ? <MarkerResultsCard results={state.results} /> : null}
+        <Card style={{ padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          {race.has_replay ? (
+            <>
+              <Button variant="primary" onClick={state.onWatch}>
+                Watch race
+              </Button>
+              <span style={{ fontSize: 12.5, color: color.muted }}>
+                See how it unfolded, tick by tick.
+              </span>
+            </>
+          ) : (
+            <span style={{ fontSize: 13.5, color: color.muted }}>No replay is available for this race.</span>
+          )}
+        </Card>
+        <HiddenResults race={race} />
       </>
     )
   }
@@ -129,136 +137,6 @@ function MessageCard({ text }: { text: string }) {
   return (
     <Card style={{ padding: '18px 20px' }}>
       <div style={{ fontSize: 13.5, color: color.muted }}>{text}</div>
-    </Card>
-  )
-}
-
-function RiderResultsTable({ results, payout }: { results: RaceResults; payout: RacePayoutEntry[] }) {
-  const winner = results.results.find((r) => r.finished)
-  const winnerTime = winner?.finish_time ?? null
-  const prizeByPosition = new Map(payout.map((p) => [p.position, p.prize]))
-
-  const timeCell = (entry: RaceResultEntry): string => {
-    if (!entry.finished || entry.finish_time === null || winnerTime === null) return 'DNF'
-    if (entry.position === winner?.position) return formatRaceTime(winnerTime)
-    return formatGap(entry.finish_time - winnerTime)
-  }
-
-  const prizeFor = (entry: RaceResultEntry): number => {
-    if (!entry.finished) return 0
-    return prizeByPosition.get(entry.position) ?? 0
-  }
-
-  return (
-    <Card>
-      <CardHeader title="Rider results" />
-      <div>
-        {results.results.map((entry) => (
-          <div
-            key={entry.rider.id}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              padding: '12px 20px',
-              borderBottom: `1px solid ${color.divider}`,
-            }}
-          >
-            <div style={{ width: 32, fontFamily: font.mono, fontSize: 13, color: color.mutedStrong }}>
-              {entry.finished ? entry.position : '—'}
-            </div>
-            <div style={{ flex: 1, fontSize: 14 }}>
-              <Link to={riderPath(entry.rider.id)} style={{ color: color.ink, textDecoration: 'none' }}>
-                {entry.rider.name}
-              </Link>
-              {entry.team ? (
-                <span style={{ marginLeft: 8, fontFamily: font.mono, fontSize: 11.5, color: color.muted }}>
-                  {entry.team.code}
-                </span>
-              ) : null}
-            </div>
-            <div style={{ width: 64, textAlign: 'right', fontFamily: font.mono, fontSize: 13.5, fontWeight: 600, whiteSpace: 'nowrap', color: color.positive }}>
-              {prizeFor(entry) > 0 ? formatMoney(prizeFor(entry)) : ''}
-            </div>
-            <div style={{ fontFamily: font.mono, fontSize: 14, fontWeight: 600 }}>{timeCell(entry)}</div>
-          </div>
-        ))}
-      </div>
-    </Card>
-  )
-}
-
-function TeamPointsTable({ results }: { results: RaceResults }) {
-  return (
-    <Card>
-      <CardHeader title="Team points" />
-      <div>
-        {results.points.map((entry) => (
-          <div
-            key={entry.team.id}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              padding: '12px 20px',
-              borderBottom: `1px solid ${color.divider}`,
-            }}
-          >
-            <div style={{ flex: 1, fontSize: 14 }}>
-              {entry.team.name}
-              <span style={{ marginLeft: 8, fontFamily: font.mono, fontSize: 11.5, color: color.muted }}>
-                {entry.team.code}
-              </span>
-            </div>
-            <div style={{ fontFamily: font.mono, fontSize: 14, fontWeight: 600 }}>{entry.points}</div>
-          </div>
-        ))}
-      </div>
-    </Card>
-  )
-}
-
-function MarkerResultsCard({ results }: { results: RaceResults }) {
-  return (
-    <Card>
-      <CardHeader title="Sprints and summits" />
-      <div>
-        {results.markers.map((marker) => (
-          <div
-            key={marker.id}
-            style={{
-              padding: '14px 20px',
-              borderBottom: `1px solid ${color.divider}`,
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>
-                {marker.kind === 'sprint' ? 'Sprint' : 'Mountain'} · {marker.name}
-              </div>
-              <div style={{ fontFamily: font.mono, fontSize: 11.5, color: color.mutedStrong, whiteSpace: 'nowrap' }}>
-                km {(marker.distance / 1000).toFixed(1)}
-              </div>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginTop: 10 }}>
-              {marker.crossings.map((crossing) => (
-                <div key={crossing.rider.id} style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 13.5 }}>
-                  <span style={{ width: 24, fontFamily: font.mono, fontSize: 12.5, color: color.mutedStrong }}>
-                    {crossing.position}
-                  </span>
-                  <Link to={riderPath(crossing.rider.id)} style={{ color: color.ink, textDecoration: 'none' }}>
-                    {crossing.rider.name}
-                  </Link>
-                  {crossing.team ? (
-                    <span style={{ fontFamily: font.mono, fontSize: 11, color: color.muted }}>
-                      {crossing.team.code}
-                    </span>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
     </Card>
   )
 }

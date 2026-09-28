@@ -15,7 +15,8 @@ all reading the real API. No screen renders invented data.
 | `/training` | Training | Built — set the weekly focus, see last week's moves, from the API, no fixture data |
 | `/calendar` | Calendar | Built — twelve weeks from the API, no fixture data |
 | `/transfers` | Transfers | Built — two tabs: the free-agent pool with each rider's signing fee and sign action, and live auctions with current price, minimum next bid, a live `dd hh mm ss` countdown to the deadline, a bid action and each auction's full bid history (bidding is not anonymous — collapsed by default, expandable), plus an outbid notice and the team's balance, from the API, no fixture data |
-| `/race/:raceId` | Race | Built — the full race screen: course profile (with any declared markers overlaid and listed) and squad before it runs, course profile and results after, plus a marker-results card once finished, all from the API, no fixture data |
+| `/race/:raceId` | Race | Built — the full race screen: course profile (with any declared markers overlaid and listed) and squad before it runs; after it, the same course profile, a **Watch race** button when the race has a replay (a muted note when it does not), and the results behind a **Show results** toggle, so opening a race never fetches the results. From the API, no fixture data |
+| `/race/:raceId/replay` | Replay | Built — a finished race's tick-by-tick replay: the game's own playback bar (step, play/pause, ×1–×50, seek, elapsed clock and wind read-out), the shared elevation profile with the player's own riders ringed, the field as it stood at the displayed tick (packs, gaps, leader, PULL/ATK, riders cut by the time limit under "Out of the race") and the same results toggle, all from the API, no fixture data |
 | `/riders/:riderId` | RiderProfile | Built — one rider's full profile: identity, freshness, salary and value, the five-axis radar and the attribute-history chart, a career strip and race history, from the API, no fixture data. The affiliation segment is the current team, `Retired · Season S, Week W`, or `Free agent`. |
 | `/league` | League | Built — season standings table from the API, no fixture data |
 | `/login`, `/register` | Login, Register | Built — real accounts, no fixture data |
@@ -26,11 +27,16 @@ all reading the real API. No screen renders invented data.
 an explicit `<Route>` in `App.tsx` rather than through `SCREENS` — that map
 generates one route per nav item by path, which has nowhere to put a
 `:raceId`. It is reached by clicking a race on the calendar or the next-race
-card on the dashboard. `/riders/:riderId` is the same shape, reached from the
+card on the dashboard. `/race/:raceId/replay` is registered next to it, for
+the same reason, and is reached only by that screen's **Watch race** button.
+`/riders/:riderId` is the same shape, reached from the
 Roster panel's "Full profile" link, a race result row, or a free-agent card
 — never a nav item, so it never appears in the sidebar either.
-`navigation.ts`'s `riderPath(id)` is the **one** way any of those callers
-builds the link; nothing constructs `/riders/${id}` by hand. `/login` and
+`navigation.ts` owns all three link builders — `riderPath(id)`,
+`racePath(id)` and `replayPath(id)` — and each is the **one** way its
+callers build the link; nothing constructs `/riders/${id}`,
+`/race/${id}` or `/race/${id}/replay` by hand. `titleForPath` names the two
+race screens (`Race` and `Replay`) in the mobile top bar. `/login` and
 `/register` are explicit routes for the same reason: neither is a nav item,
 so neither belongs in the sidebar.
 
@@ -183,7 +189,15 @@ npm --prefix frontend run build && .venv/bin/python manage.py runserver
   *Displaying game money*. It is shared by `Finances.tsx` and `Staff.tsx`
   rather than reimplemented per screen.
 - **`src/navigation.ts` is the single source of truth** for the sidebar and
-  the router both. A nav item cannot exist without a route.
+  the router both. A nav item cannot exist without a route, and it owns every
+  link builder — `riderPath`, `racePath`, `replayPath` — so no screen
+  assembles a path by hand.
+- **A screen that is not about the data does not fetch it.** A finished
+  race's results sit behind `components/RaceResults.tsx`'s `HiddenResults`,
+  which owns its own `useRaceResults` call and does not make it until the
+  player clicks **Show results**. The race screen and the replay screen both
+  reuse it, so opening either costs one request, not two. The same rule
+  gates the replay's own log behind `has_replay`.
 - **A rider's status label is a `primitives.tsx` tag, not per-screen
   markup.** `FinalSeasonTag` renders `LAST SEASON` from the API's
   `final_season` boolean
@@ -212,6 +226,13 @@ The four hooks outside the components are pure or near-pure, which is
 deliberate: `src/nextRace.ts` is tested as a function with no rendering,
 `src/setupTests.ts` stubs `window.matchMedia`, and screens mock their data
 hooks rather than the `api.ts` fetch layer.
+
+**`race_player` has no jsdom**, so anything of its that needs a DOM is tested
+from here, importing across the boundary exactly as the app does:
+`src/usePlayback.test.ts` (the shared playback hook, with fake timers) and
+`src/components/replay/Highlight.test.tsx` (the own-team ring on the shared
+profile). The maths stays in `race_player`'s own node-environment suite, and
+CI now runs both.
 
 ## Relationship to `design/`
 
@@ -243,11 +264,24 @@ so the SPA's calendar and the visualizer derive and draw a course
 identically. That cross-package import resolves `react` from
 `race_player/node_modules` unless held to the frontend copy, so
 `vite.config.ts` dedupes `react`/`react-dom`; `race_player` remains the
-source of the chart and the frontend only bundles it. Race playback (the
-tick-by-tick visualizer itself) is answered for now: deliberately not
-folded in — *Out of scope* of this feature, and the log-slimming work
-`racing/README.md` calls for comes first. What remains dropped from the
-mockup: the eight-rider
+source of the chart and the frontend only bundles it.
+
+**The replay screen** (`/race/:raceId/replay`) is that same arrangement taken
+further: `race_player`'s logic and SVG are imported directly —
+`parseRaceLog`, `computePacks`, `computeRaceResults`, `packGaps`,
+`resultLabel`, `formatDuration`, `usePlayback`/`PLAYBACK_SPEEDS`,
+`ElevationProfile`, `RiderMarker`, `PackMarker` and `WindCompass` — while
+every piece of chrome is the SPA's own (`components/replay/ReplayControls.tsx`,
+`ReplayRiderList.tsx`), because the standalone's chrome is antd and Tailwind
+and the SPA has neither. So a module the SPA imports must stay free of both:
+`WindCompass` is inline-styled for that reason. The full list of shared
+modules is in `race_player/README.md`, *Integration Strategy*.
+
+The replay has **no mockup** in `design/`, and that is deliberate rather than
+an omission. It follows the rule the Staff screen set: where a screen has no
+mockup, it borrows the composition of the screen it sits next to — here the
+race screen's cards, headings and `eyebrow`, with the game's own type and
+colours throughout. What remains dropped from the mockup: the eight-rider
 squads (the spec fixes four), per-rider course suitability (course-aware
 assessment is #45), other teams' entrants on an upcoming race,
 wind/temperature/tier/points display facts, and the discrete
