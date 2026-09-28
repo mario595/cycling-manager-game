@@ -188,12 +188,22 @@ def generate_rider(
     nationality: str | None = None,
     quality: int | None = None,
     age: int | None = None,
+    potential: int | None = None,
     rng: random.Random | None = None,
 ) -> Rider:
     """Build an unsaved, internally consistent Rider.
 
     `quality` is 1-100 and sets the overall level the five attributes are
     drawn around. All arguments are optional; anything omitted is rolled.
+
+    `potential`, when given, replaces the usual `_roll_potential` derivation
+    — used by youth intake (#33), where potential is chosen first from a
+    level's odds and quality derived from it. It is still floored at the
+    rider's own best rolled attribute, the same young-rider rule
+    `_roll_potential` enforces, so a rider can never start above their own
+    ceiling. Every existing caller passes nothing, so behaviour is
+    unchanged when omitted.
+
     Returns unsaved so callers can bulk_create.
     """
     rng = rng or random.Random()
@@ -206,7 +216,10 @@ def generate_rider(
 
     attributes = _roll_attributes(speciality, quality, rng)
     height_cm, weight_kg = _roll_build(speciality, rng)
-    potential = _roll_potential(quality, max(attributes.values()), age, peak_age, rng)
+    if potential is not None:
+        potential = _clamp(max(potential, max(attributes.values())), _MIN_ATTRIBUTE, _MAX_ATTRIBUTE)
+    else:
+        potential = _roll_potential(quality, max(attributes.values()), age, peak_age, rng)
 
     rider = Rider(
         name=_roll_name(nationality, rng),

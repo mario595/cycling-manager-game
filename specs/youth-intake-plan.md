@@ -504,7 +504,7 @@ from `theme.ts`. There is no money on the riders card.
 - **Test** in `riders/tests/test_pricing.py`: `test_age_multiplier_at_17_is_max_penalty`,
   which asserts it equals `1 - _AGE_PENALTY_MAX` exactly, not more.
 
-### W2 — `riders/generation.py` + `riders/youth_intake.py`: youth generation
+### W2 — `riders/generation.py` + `riders/youth_intake.py`: youth generation — done
 - **What changes:** the `potential=` argument on `generate_rider`. Add the new
   module's constants, `is_intake_week` and `generate_youth_rider`. `run_intake`
   is not in this item.
