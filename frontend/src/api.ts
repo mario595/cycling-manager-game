@@ -551,6 +551,10 @@ export interface RaceDetail {
   course: CourseSegment[]
   payout: RacePayoutEntry[]
   markers: RaceMarker[]
+  /** Whether the server holds a log worth replaying for this race. Always
+   * false while the race is unfinished, and false for a finished race
+   * recorded before replays existed. */
+  has_replay: boolean
 }
 
 export async function getRaceDetail(raceId: number): Promise<RaceDetail> {

@@ -706,7 +706,7 @@ See below. It is its own commit so the docs describe what landed.
 5. **W5.** The data path into the SPA. Commit. — **done**
 6. **W6.** The race-screen change is shippable on its own: the Watch button
    leads to a route added in W7, so land W6 and W7 in the same PR, as
-   planned. Commit.
+   planned. Commit. — **done**
 7. **W7.** Commit.
 8. **Verification** (below), then **W8**. Commit.
 

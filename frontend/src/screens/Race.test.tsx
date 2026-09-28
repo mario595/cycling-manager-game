@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -33,6 +33,7 @@ const upcomingRace: RaceDetail = {
     { position: 10, points: 1, prize: 1_000 },
   ],
   markers: [],
+  has_replay: false,
 }
 
 const finishedResults: RaceResults = {
@@ -123,6 +124,12 @@ function renderRace() {
   )
 }
 
+/** A finished race's tables are behind a reveal, so every test that wants
+ * them has to ask. */
+function revealResults() {
+  fireEvent.click(screen.getByRole('button', { name: 'Show results' }))
+}
+
 function noSquad() {
   mockUseSquad.mockReturnValue({
     squad: null,
@@ -184,11 +191,12 @@ describe('Race', () => {
     })
     mockUseRaceResults.mockReturnValue({ results: finishedResults, loading: false, error: false })
 
-    renderRace()
+    const { container } = renderRace()
+    revealResults()
 
     expect(screen.getByText('Winner Rider')).toBeInTheDocument()
     expect(screen.getByText('Zero Team')).toBeInTheDocument()
-    expect(screen.getByRole('img', { name: 'Elevation profile' })).toBeInTheDocument()
+    expect(container.querySelector('svg[aria-label="Elevation profile"]')).not.toBeNull()
     expect(screen.getByText('Team points')).toBeInTheDocument()
     // Nowhere else to see it: no prize list on a finished race, so the
     // winner's own row is the only $20,000 on the screen.
@@ -208,6 +216,7 @@ describe('Race', () => {
     mockUseRaceResults.mockReturnValue({ results: finishedResults, loading: false, error: false })
 
     renderRace()
+    revealResults()
 
     expect(screen.getByText('Winner Rider')).toHaveAttribute('href', '/riders/1')
     expect(screen.getByText('DNF Rider')).toHaveAttribute('href', '/riders/3')
@@ -222,6 +231,7 @@ describe('Race', () => {
     mockUseRaceResults.mockReturnValue({ results: finishedResults, loading: false, error: false })
 
     renderRace()
+    revealResults()
 
     // Two riders from the same team (1st: $20,000, 2nd: $15,000) each carry
     // their own prize on their row; without the prize list those are the
@@ -296,6 +306,7 @@ describe('Race', () => {
     mockUseRaceResults.mockReturnValue({ results: finishedResultsWithMarkers, loading: false, error: false })
 
     renderRace()
+    revealResults()
 
     expect(screen.getByText('Sprints and summits')).toBeInTheDocument()
     expect(screen.getByText('Sprint · Line One')).toBeInTheDocument()
@@ -316,7 +327,69 @@ describe('Race', () => {
     mockUseRaceResults.mockReturnValue({ results: finishedResults, loading: false, error: false })
 
     renderRace()
+    revealResults()
 
     expect(screen.queryByText('Sprints and summits')).toBeNull()
+  })
+
+  it('hides a finished race results until Show results is clicked', () => {
+    mockUseRaceDetail.mockReturnValue({
+      race: { ...upcomingRace, status: 'finished' },
+      loading: false,
+      error: false,
+    })
+    mockUseRaceResults.mockReturnValue({ results: finishedResults, loading: false, error: false })
+
+    renderRace()
+    expect(screen.queryByText('Winner Rider')).toBeNull()
+    // Nothing is asked for until the player asks to see it.
+    expect(mockUseRaceResults).toHaveBeenLastCalledWith(42, false)
+
+    revealResults()
+
+    expect(screen.getByText('Winner Rider')).toBeInTheDocument()
+    expect(mockUseRaceResults).toHaveBeenLastCalledWith(42, true)
+  })
+
+  it('hides the results again', () => {
+    mockUseRaceDetail.mockReturnValue({
+      race: { ...upcomingRace, status: 'finished' },
+      loading: false,
+      error: false,
+    })
+    mockUseRaceResults.mockReturnValue({ results: finishedResults, loading: false, error: false })
+
+    renderRace()
+    revealResults()
+    fireEvent.click(screen.getByRole('button', { name: 'Hide results' }))
+
+    expect(screen.queryByText('Winner Rider')).toBeNull()
+    expect(mockUseRaceResults).toHaveBeenLastCalledWith(42, false)
+  })
+
+  it('shows Watch race when a replay exists', () => {
+    mockUseRaceDetail.mockReturnValue({
+      race: { ...upcomingRace, status: 'finished', has_replay: true },
+      loading: false,
+      error: false,
+    })
+
+    renderRace()
+
+    expect(screen.getByRole('button', { name: 'Watch race' })).toBeInTheDocument()
+    expect(screen.queryByText('No replay is available for this race.')).toBeNull()
+  })
+
+  it('shows the no-replay note when there is no replay', () => {
+    mockUseRaceDetail.mockReturnValue({
+      race: { ...upcomingRace, status: 'finished', has_replay: false },
+      loading: false,
+      error: false,
+    })
+
+    renderRace()
+
+    expect(screen.getByText('No replay is available for this race.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Watch race' })).toBeNull()
   })
 })
