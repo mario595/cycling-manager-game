@@ -701,7 +701,7 @@ See below. It is its own commit so the docs describe what landed.
    land before anything consumes `dnf`/`packGaps`/`resultLabel`. Commit. —
    **done**
 3. **W3.** The hook and the SVG props. Standalone behaviour stays
-   observably the same. Commit.
+   observably the same. Commit. — **done**
 4. **W4.** Now that race_player has tests worth running. Commit.
 5. **W5.** The data path into the SPA. Commit.
 6. **W6.** The race-screen change is shippable on its own: the Watch button

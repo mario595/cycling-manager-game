@@ -7,6 +7,7 @@ import {
 } from '@ant-design/icons'
 import type { Wind } from '../types/race'
 import { formatDuration } from '../utils/formatTime'
+import { PLAYBACK_SPEEDS } from '../utils/usePlayback'
 import WindCompass from './WindCompass'
 
 // Re-exported for callers and tests that already reach for it here; the
@@ -14,14 +15,7 @@ import WindCompass from './WindCompass'
 // screen imports it from (it must not pull antd in).
 export { formatDuration }
 
-const SPEEDS = [
-  { label: 'x1', value: 1 },
-  { label: 'x2', value: 2 },
-  { label: 'x5', value: 5 },
-  { label: 'x10', value: 10 },
-  { label: 'x25', value: 25 },
-  { label: 'x50', value: 50 },
-]
+const SPEEDS = PLAYBACK_SPEEDS.map((value) => ({ label: `x${value}`, value }))
 
 interface PlaybackControlsProps {
   playing: boolean

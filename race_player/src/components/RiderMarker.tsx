@@ -7,6 +7,9 @@ interface RiderMarkerProps {
   x: number
   y: number
   active?: boolean
+  /** Draws the own-team ring outside the white stroke. */
+  highlighted?: boolean
+  highlightColor?: string
   onClick?: () => void
   onHover?: (rider: Rider | null) => void
 }
@@ -16,7 +19,20 @@ const RADIUS_SUPPORT = 5
 const RADIUS_LEADER_ACTIVE = 9
 const RADIUS_SUPPORT_ACTIVE = 7
 
-function RiderMarker({ rider, x, y, active, onClick, onHover }: RiderMarkerProps) {
+/** How far outside the marker the own-team ring sits. */
+export const HIGHLIGHT_RING_GAP = 3.5
+export const HIGHLIGHT_RING_WIDTH = 2
+
+function RiderMarker({
+  rider,
+  x,
+  y,
+  active,
+  highlighted,
+  highlightColor = '#0f172a',
+  onClick,
+  onHover,
+}: RiderMarkerProps) {
   const color = teamColor(rider.team)
   const leader = isLeader(rider)
   const radius = active
@@ -40,6 +56,14 @@ function RiderMarker({ rider, x, y, active, onClick, onHover }: RiderMarkerProps
     >
       <circle r={radius} fill={color} stroke="white" strokeWidth={1.5} />
       {leader && <circle r={radius * 0.35} fill="white" />}
+      {highlighted && (
+        <circle
+          r={radius + HIGHLIGHT_RING_GAP}
+          fill="none"
+          stroke={highlightColor}
+          strokeWidth={HIGHLIGHT_RING_WIDTH}
+        />
+      )}
       {active && (
         <circle r={radius + 4} fill="none" stroke={color} strokeWidth={1} opacity={0.5} />
       )}

@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import type { ParsedRace } from '../types/race'
 import ElevationProfile from './ElevationProfile'
 import PlaybackControls from './PlaybackControls'
 import RiderList from './RiderList'
 import { computePacks } from '../utils/computePacks'
 import { computeRaceResults } from '../utils/raceResults'
+import { usePlayback } from '../utils/usePlayback'
 
 interface RaceVizProps {
   raceData: ParsedRace
@@ -12,74 +13,14 @@ interface RaceVizProps {
 
 export default function RaceViz({ raceData }: RaceVizProps) {
   const { snapshots, profile, maxTicks, tickInterval } = raceData
-  const [tick, setTick] = useState(0)
-  const [playing, setPlaying] = useState(false)
-  const [speed, setSpeed] = useState(1)
+  const playback = usePlayback(maxTicks, tickInterval)
   const [selectedRider, setSelectedRider] = useState<string | null>(null)
 
-  const tickRef = useRef(tick)
-  tickRef.current = tick
-
-  const snapshot = snapshots[tick]
+  const snapshot = snapshots[playback.tick]
   const riders = snapshot?.riders ?? []
-
-  // Playback loop
-  useEffect(() => {
-    if (!playing) return
-    const interval = setInterval(() => {
-      setTick((t) => {
-        if (t >= maxTicks) {
-          setPlaying(false)
-          return t
-        }
-        return t + 1
-      })
-    }, (1000 * tickInterval) / speed)
-    return () => clearInterval(interval)
-  }, [playing, speed, maxTicks, tickInterval])
-
-  const handleTogglePlay = useCallback(() => {
-    if (tick >= maxTicks) setTick(0)
-    setPlaying((p) => !p)
-  }, [tick, maxTicks])
-
-  const handleTickChange = useCallback((t: number) => {
-    setTick(Math.max(0, Math.min(maxTicks, t)))
-  }, [maxTicks])
-
-  const handleStep = useCallback(
-    (dir: -1 | 1) => {
-      handleTickChange(tickRef.current + dir)
-    },
-    [handleTickChange],
-  )
 
   const handleSelectRider = useCallback((id: string) => {
     setSelectedRider(id)
-  }, [])
-
-  // Stable refs so the key listener never needs re-subscribing.
-  const stepRef = useRef(handleStep)
-  stepRef.current = handleStep
-  const togglePlayRef = useRef(handleTogglePlay)
-  togglePlayRef.current = handleTogglePlay
-
-  // Keyboard controls: ← / → step, Space toggles play/pause
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft') {
-        e.preventDefault()
-        stepRef.current(-1)
-      } else if (e.key === 'ArrowRight') {
-        e.preventDefault()
-        stepRef.current(1)
-      } else if (e.key === ' ') {
-        e.preventDefault()
-        togglePlayRef.current()
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
   }, [])
 
   const activeRider = useMemo(
@@ -101,15 +42,15 @@ export default function RaceViz({ raceData }: RaceVizProps) {
       <h1 className="text-xl font-semibold text-slate-800">Race Viewer</h1>
 
       <PlaybackControls
-        playing={playing}
-        onTogglePlay={handleTogglePlay}
-        tick={tick}
+        playing={playback.playing}
+        onTogglePlay={playback.togglePlay}
+        tick={playback.tick}
         maxTicks={maxTicks}
         tickInterval={tickInterval}
-        speed={speed}
-        onSpeedChange={setSpeed}
-        onStep={handleStep}
-        onSeek={handleTickChange}
+        speed={playback.speed}
+        onSpeedChange={playback.setSpeed}
+        onStep={playback.step}
+        onSeek={playback.seek}
         wind={snapshot?.wind}
       />
 
