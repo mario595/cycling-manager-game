@@ -387,7 +387,7 @@ In `racing/tests.py`, `test_loader_weights_match_race_marker_weights` asserts
 In `schedule/tests/test_load_season.py`,
 `test_load_season_stores_marker_weight` covers the file-to-row path.
 
-### W3 — `competitions/scoring.py`: the sprint tables
+### W3 — `competitions/scoring.py`: the sprint tables ✅
 Tests in `competitions/tests/test_scoring.py`:
 - `test_every_weight_has_exactly_five_scoring_places`
 - `test_sprint_points_decline_down_the_order` (non-increasing)
