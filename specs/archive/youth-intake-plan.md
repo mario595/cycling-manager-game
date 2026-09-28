@@ -1,6 +1,6 @@
 # Youth intake generation — Implementation Plan
 
-**Spec:** `specs/youth-intake.md` · **Issue:** #33 · **Status:** proposed
+**Spec:** `specs/archive/youth-intake.md` · **Issue:** #33 · **Status:** implemented
 **Apps touched:** `riders/`, `transfers/`, `teams/`, `world/`, `api/`, `frontend/`
 
 ## Context you need
@@ -592,7 +592,7 @@ from `theme.ts`. There is no money on the riders card.
 - **Tests:** as listed in the `frontend/` section. Then run
   `npm --prefix frontend test` and `npm --prefix frontend run build`.
 
-### W8 — Documentation
+### W8 — Documentation — done
 See *Documentation update*. Archive the spec and plan per `AGENTS.md`,
 *Closing a ticket*.
 

@@ -109,9 +109,12 @@ Since #29 each rider also carries `release_cost`
   rider remains available. The identity keys (`id` through `release_cost`)
   are inherited unchanged from `RiderSerializer` — `release_cost` serializes
   as `null` here, the same documented behaviour `FreeAgentSerializer` relies
-  on, since no team context is passed. Six keys are added: `team`
+  on, since no team context is passed. Seven keys are added: `team`
   (`id`/`name`/`code`, or `null` for a free agent — the rider's **current**
-  team, not who they raced for); `current_week` (`{season, week}`, or `null`
+  team, not who they raced for); `development_squad` (`id`/`name`/`code` of
+  the team whose squad this rider sits in, or `null` — set only for a
+  development squad rider (#33), whose `team` is always null; see
+  `riders/README.md`, *Youth intake*); `current_week` (`{season, week}`, or `null`
   before any season has ever been declared — `schedule.services.current_position`,
   with an
   off-season world reporting its just-finished season's last week);
@@ -373,6 +376,27 @@ Since #29 each rider also carries `release_cost`
   "Upgrade to National first" and "Climbed past. Close the squad to start
   over." are different sentences about the same `locked` action, and only the
   server knows which applies.
+
+  Since #33, the payload also carries `riders` and `intake`. `riders` is the
+  squad's own riders, strongest first (`riders.pricing.strength`), through a
+  dedicated `DevelopmentSquadRiderSerializer` — identity, speciality, age,
+  the five attributes on the 0-10 display scale, `arrived` (`{season,
+  week}`, resolved through `current_position(rider.intake_at)` the same way
+  `retired_payload` resolves `retired_at`), and `is_new`. **No
+  `weekly_salary`, `market_value`, `release_cost` or `final_season`** — none
+  of those apply to a rider who draws no wage and isn't in any market, and
+  they are deliberately not inherited from `RiderSerializer` (see
+  `riders/README.md`, *Youth intake*). `is_new` is true only for riders whose
+  `intake_at` equals the most recently opened intake week's `starts_at`
+  (`_latest_intake_at`) — after the next batch arrives, the previous one
+  stops being new even though it is still in the squad. `intake` is
+  `{every_weeks, batch_size, next}`, where `next` is `{season, week}` of the
+  first declared intake week after now, or `null` once none is declared
+  (`_next_intake`). Both keys resolve against `schedule.Week` rows, not a
+  reimplementation of `% INTAKE_INTERVAL_WEEKS` in SQL — the cadence rule
+  lives once, in `riders.youth_intake.is_intake_week`. `riders` is `[]` and
+  `intake` is `null` while the squad is closed — a closed squad has no
+  riders and nothing due.
 - `POST /api/development-squad/open/` (`OpenDevelopmentSquadView`) — open the
   squad at `{level}`, debiting that level's fee. `204`; `409` if a squad is
   already open, if `level` is not the entry level (`LevelLocked` — however rich
@@ -390,7 +414,9 @@ Since #29 each rider also carries `release_cost`
   would make a double-click look like a success. `POST` rather than `DELETE`
   for `FireTrainerView`'s reason and then some: the row really is deleted, but
   the opening fee already paid stays in the ledger, so nothing here is
-  destroyed.
+  destroyed. Since #33, closing also releases every rider then sitting in the
+  squad to the free-agent pool, calling `close_squad(team, at=now())` — see
+  `riders/README.md`, *Youth intake*.
 
   All four are `IsAuthenticated` by the project default — **no `AllowAny`** —
   and all four return `403` without a team, the same `team_for()` check every

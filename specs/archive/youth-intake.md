@@ -1,6 +1,6 @@
 # Youth intake generation
 
-**Status:** proposed
+**Status:** implemented
 **Domain(s):** `riders`
 **One-liner:** An open development squad periodically brings in young riders of wildly varying quality, who grow there and stay off the senior roster until a manager decides what to do with them.
 

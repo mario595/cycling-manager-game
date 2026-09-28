@@ -199,6 +199,16 @@ reads `now()` once, then finds and processes whatever is due, in six steps:
    wages, and filtering on management would make a squad free to hand to an AI
    team. See `economy/README.md`, *Development squad costs*, and
    `riders/README.md`, *Development squad*.
+   Directly after the development squad cost, still inside the per-week
+   loop: `if is_intake_week(week.number): youth_intake_riders +=
+   run_intake(at=week.starts_at)` (#33) — every open squad's next youth
+   batch, managed or not, dated to `week.starts_at` rather than `now()` so a
+   late tick's batch is still found by `run_intake`'s own idempotency check
+   and still reads as arriving in the week it belongs to. The count lands on
+   `TickRun.youth_intake_riders`. See `riders/README.md`, *Youth intake*, for
+   what a batch looks like and why intake runs here rather than earlier in
+   the loop (after growth, training and charges, so a rider's baseline
+   snapshot and first week of growth never land at the same instant).
    The same loop then settles the week's economy side (#21, #22):
    `economy.services.apply_weekly_fanbase(week, points_by_team=...)`
    adjusts every team's fanbase, `economy.services.pay_merchandise(week)`
