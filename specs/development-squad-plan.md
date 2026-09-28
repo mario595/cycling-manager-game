@@ -453,7 +453,7 @@ tests; grep `trainer_salary_entries`):
 - `test_tick_twice_does_not_double_charge`
 - `test_squad_opened_mid_week_first_charged_at_next_boundary`
 
-### W5 — `teams/`: claim closes the squad
+### W5 — `teams/`: claim closes the squad ✅
 **Tests** in `teams/tests/` beside the existing claim tests:
 - `test_claim_closes_development_squad`
 - `test_release_keeps_development_squad`
