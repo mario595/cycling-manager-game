@@ -588,7 +588,7 @@ from `theme.ts`. There is no money on the riders card.
     `racing.services.set_squad` with a squad rider raises `SquadError`. These
     already hold by D1, and the test pins it.
 
-### W7 — `frontend/`: squad screen riders and intake, rider profile
+### W7 — `frontend/`: squad screen riders and intake, rider profile — done
 - **Tests:** as listed in the `frontend/` section. Then run
   `npm --prefix frontend test` and `npm --prefix frontend run build`.
 
