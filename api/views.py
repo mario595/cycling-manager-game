@@ -20,6 +20,7 @@ from economy.services import (
     OfferNotAvailable,
     active_contract,
     balance_for,
+    charge_development_squad_fee,
     charge_trainer_fee,
     charge_transfer_fee,
     ensure_offer_round,
@@ -34,7 +35,24 @@ from economy.services import (
 from economy.sponsors import PROFILES_BY_KEY
 from racing.models import SQUAD_SIZE, MarkerCrossing, Race, RaceSquadRider
 from racing.services import SquadError, set_squad, suggested_squad
-from riders.models import ENGINE_ATTRIBUTES, Rider
+from riders.development_squad import (
+    LEVELS,
+    SameLevel,
+    SquadAlreadyOpen,
+    SquadNotOpen,
+    UnknownLevel,
+    change_fee as squad_change_fee,
+    change_level as change_squad_level,
+    close_squad,
+    open_squad,
+    squad_for,
+)
+# Aliased, not shadowed: staff.services.InsufficientFunds is imported
+# unaliased above, and the two are unrelated classes. Catching the wrong one
+# turns a 409 the player should see into a 500.
+from riders.development_squad import InsufficientFunds as SquadInsufficientFunds
+from riders.models import ENGINE_ATTRIBUTES, DevelopmentSquad, Rider
+from schedule.models import SEASON_WEEKS
 from schedule.services import current_position, weeks_opened_between
 from staff.pricing import hire_fee
 from staff.services import (
@@ -81,6 +99,8 @@ from .serializers import (
     CalendarSerializer,
     ClaimTeamSerializer,
     ClockSerializer,
+    DevelopmentSquadLevelChoiceSerializer,
+    DevelopmentSquadSerializer,
     FinancesSerializer,
     FreeAgentPoolSerializer,
     HireTrainerSerializer,
@@ -946,6 +966,142 @@ class FireTrainerView(APIView):
             fire_trainer(team)
         except NoTrainerHired as exc:
             return Response({"detail": str(exc)}, status=409)
+
+        return Response(status=204)
+
+
+def _squad_charge(team):
+    """The `charge` callback open_squad and change_level take, wired to the
+    ledger. api/ is allowed to import both economy/ and riders/, but the
+    functions themselves are not: riders/ may not import economy/ (AGENTS.md),
+    so the debit arrives by injection (riders/README.md, *Opening a squad*).
+
+    The balance check is here rather than in economy/ because refusing a
+    change is a view-level concern — the ledger is append-only and never
+    refuses anything.
+    """
+    def charge(amount, description):
+        if balance_for(team) < amount:
+            raise SquadInsufficientFunds("You cannot afford this.")
+        charge_development_squad_fee(
+            team, amount=-amount, at=now(), description=description,
+        )
+    return charge
+
+
+class DevelopmentSquadView(APIView):
+    """The caller's development squad: which level is open, and what each of
+    the three costs. GET only, and no team id in the URL — the team is always
+    the caller's own via team_for(), the same pattern as StaffView.
+
+    A closed squad is `level: null` with every level carrying its full opening
+    fee as `change_fee`, not an error and not a 404: "you have no squad" is a
+    state this screen is built to show, not a missing resource.
+    """
+
+    def get(self, request):
+        team = team_for(request.user)
+        if team is None:
+            return Response({"detail": "You do not manage a team."}, status=403)
+
+        squad = squad_for(team)
+        current_level = squad.level if squad is not None else None
+        levels = [
+            {
+                "level": terms.level,
+                "name": terms.name,
+                "opening_fee": terms.opening_fee,
+                "weekly_cost": terms.weekly_cost,
+                "season_cost": terms.weekly_cost * SEASON_WEEKS,
+                # Null at the current level: there is no move to price, and
+                # the SPA reads that null as the "Current" badge.
+                "change_fee": None
+                if current_level == terms.level
+                else squad_change_fee(current_level, terms.level),
+                "is_current": current_level == terms.level,
+            }
+            for _, terms in sorted(LEVELS.items())
+        ]
+
+        return Response(DevelopmentSquadSerializer({
+            "level": current_level,
+            "levels": levels,
+            "balance": balance_for(team),
+        }).data)
+
+
+class OpenDevelopmentSquadView(APIView):
+    """Open the caller's development squad at the requested level, debiting
+    the opening fee.
+
+    409, not 400, for "already open" and "cannot afford it": the request is
+    well-formed but the world's state refuses it — the same split
+    HireTrainerView documents. An unknown level is a 400 from the serializer's
+    ChoiceField, before this view runs.
+    """
+
+    def post(self, request):
+        team = team_for(request.user)
+        if team is None:
+            return Response({"detail": "You do not manage a team."}, status=403)
+
+        serializer = DevelopmentSquadLevelChoiceSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            open_squad(
+                team,
+                serializer.validated_data["level"],
+                at=now(),
+                charge=_squad_charge(team),
+            )
+        except (SquadAlreadyOpen, UnknownLevel, SquadInsufficientFunds) as exc:
+            return Response({"detail": str(exc)}, status=409)
+
+        return Response(status=204)
+
+
+class ChangeDevelopmentSquadLevelView(APIView):
+    """Move the caller's open development squad to another level, debiting
+    the upgrade difference. A downgrade costs nothing and a change to the
+    level already held is a 409, both from the service."""
+    def post(self, request):
+        team = team_for(request.user)
+        if team is None:
+            return Response({"detail": "You do not manage a team."}, status=403)
+
+        serializer = DevelopmentSquadLevelChoiceSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            change_squad_level(
+                team,
+                serializer.validated_data["level"],
+                charge=_squad_charge(team),
+            )
+        except (SquadNotOpen, SameLevel, UnknownLevel, SquadInsufficientFunds) as exc:
+            return Response({"detail": str(exc)}, status=409)
+
+        return Response(status=204)
+
+
+class CloseDevelopmentSquadView(APIView):
+    """Close the caller's development squad. POST, not DELETE — the same
+    reasoning FireTrainerView gives, and here literally so: the squad row is
+    deleted, but the opening fee already paid is in the ledger and stays there.
+
+    Closing an already-closed squad is a 409 rather than a silent 204, so the
+    SPA's post-close refresh is the only thing that reports success.
+    """
+    def post(self, request):
+        team = team_for(request.user)
+        if team is None:
+            return Response({"detail": "You do not manage a team."}, status=403)
+
+        if not close_squad(team):
+            return Response(
+                {"detail": "Your team has no development squad."}, status=409
+            )
 
         return Response(status=204)
 

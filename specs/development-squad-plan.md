@@ -458,7 +458,7 @@ tests; grep `trainer_salary_entries`):
 - `test_claim_closes_development_squad`
 - `test_release_keeps_development_squad`
 
-### W6 — `api/`: the four endpoints
+### W6 — `api/`: the four endpoints ✅
 **Tests** in `api/tests.py`, beside the staff tests, reusing their fixtures'
 shape:
 - `test_development_squad_requires_authentication`

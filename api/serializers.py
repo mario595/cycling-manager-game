@@ -3,7 +3,7 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from riders.display import to_display_scale
-from riders.models import ENGINE_ATTRIBUTES
+from riders.models import ENGINE_ATTRIBUTES, DevelopmentSquad
 from staff.pricing import hire_fee, weekly_salary
 from transfers.pricing import market_value_for, signing_fee_for
 from transfers.services import release_cost_for
@@ -653,3 +653,43 @@ class SponsorsSerializer(serializers.Serializer):
 
 class SignOfferSerializer(serializers.Serializer):
     offer_id = serializers.IntegerField()
+
+
+class DevelopmentSquadLevelSerializer(serializers.Serializer):
+    """One level as the screen needs to price it: what opening at it costs,
+    what running it costs, what that adds up to over a season, and what
+    moving there from where the team is now would cost.
+
+    `change_fee` is null for the level the squad is already at — there is no
+    such move — and that null is what the SPA turns into a "Current" badge
+    rather than a disabled button, so the distinction is carried by the data
+    and not re-derived in the frontend. When the squad is closed, every level
+    has a real change_fee, equal to its opening fee.
+    """
+
+    level = serializers.IntegerField()
+    name = serializers.CharField()
+    opening_fee = serializers.IntegerField()
+    weekly_cost = serializers.IntegerField()
+    season_cost = serializers.IntegerField()
+    change_fee = serializers.IntegerField(allow_null=True)
+    is_current = serializers.BooleanField()
+
+
+class DevelopmentSquadSerializer(serializers.Serializer):
+    """The Development squad screen's whole state: which level is open (null
+    when closed), every level with its prices, and the balance, so the SPA can
+    disable an action the team cannot afford without a second round trip —
+    the same both-keys-always-present shape StaffSerializer uses."""
+
+    level = serializers.IntegerField(allow_null=True)
+    levels = DevelopmentSquadLevelSerializer(many=True)
+    balance = serializers.IntegerField()
+
+
+class DevelopmentSquadLevelChoiceSerializer(serializers.Serializer):
+    """The POST body for opening or changing level. The ChoiceField makes an
+    unknown level a 400 before the view is reached, which is why the views
+    still guard with UnknownLevel rather than relying on it."""
+
+    level = serializers.ChoiceField(choices=DevelopmentSquad.Level.choices)
