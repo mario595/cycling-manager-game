@@ -5,9 +5,10 @@
 `Rider` — persisted riders mirroring the race engine's attributes, plus
 everything the engine does not know about: speciality, build, age, and a set
 of hidden traits. Generation (`generation.py`), the display mapping
-(`display.py`), the age curve (`services.py`), and the `reset_riders`
-management command. Not squads or race results (`racing/`), not the race
-simulation itself (`race_engine/`).
+(`display.py`), the age curve (`services.py`), the `reset_riders`
+management command, and a team's **development squad** — which level it runs
+at and what that costs (`development_squad.py`). Not race-day squads or
+results (`racing/`), not the race simulation itself (`race_engine/`).
 
 ## Visible vs hidden
 
@@ -396,6 +397,87 @@ rider is frozen: `apply_weekly_growth`, `apply_weekly_recovery`,
 `growth_debt`, freshness, age, and `weekly_salary` do not change. Expiry dates
 the stamp to the qualifying `week.starts_at`; age-driven retirement (#42) will
 use the same field.
+
+## Development squad
+
+A team can run a development squad at one of three levels. The whole
+facility lives here rather than in `transfers/`, which is where the *free-agent
+market* lives: the squad is a long-lived attribute of the team, not a
+transaction.
+
+`DevelopmentSquad` holds a one-to-one link to the team, the `level` it runs
+at, and `opened_at` (game time, informational). **That is all it stores.**
+
+**One row per open squad, and closing deletes it.** There is no `closed_at`
+flag and no `is_open`. A team with no row has no squad; a team with a row is
+running one. A flag would leave a second way for the same question to be
+answered — `squad.level is not None` on a row, or the absence of a row — and
+every reader would have to know which one to trust. Deleting also means
+closing is not an event that has to be written to the ledger or replayed;
+`close_squad` returns whether there was a squad to close, which is all a
+caller needs to know.
+
+**Prices are a table in `LEVELS`, never columns on the row.** A stored price
+could only ever drift from the table, which is the same reasoning
+`staff/pricing.py` gives for a trainer's fee and salary: derive it, never
+persist it. `LEVELS` maps level to `LevelTerms(level, name, opening_fee,
+weekly_cost)`, and `weekly_cost` / `change_fee` read it.
+
+**Both columns rise strictly with level, and a test enforces it.** This is
+load-bearing, not a balance note. `change_fee` prices an upgrade as the
+*difference* in opening fees, so a level that cost more to open but less to
+run would make upgrading cheaper than opening at the target level directly —
+a way to skip a fee. The numbers are tunable; the ordering is not.
+
+`change_fee(current, target)` is the single place the pricing rule lives:
+opening (current is `None`) costs the full opening fee, an upgrade costs the
+difference, a downgrade costs **zero** with no refund, and
+`target == current` raises `SameLevel`. `open_squad`, `change_level` and the
+API's per-level figure all go through it, so the screen can never quote a
+number the server would not charge.
+
+**The fee is debited by an injected `charge` callback, not here.** `riders/`
+may not import `economy/` (`AGENTS.md`: `riders -> core, teams`), so
+`open_squad` and `change_level` take `charge(amount, description)` and run it
+themselves — the same pattern `staff.services.hire_trainer` establishes. The
+callback runs **after** the state checks and **before** the row write, and the
+write sits in a nested savepoint. That order is the whole design: a callback
+that raises (`InsufficientFunds`) takes its ledger row down with the whole
+operation, and the savepoint means the `IntegrityError` path still leaves the
+enclosing transaction usable, so the caller sees `SquadAlreadyOpen` rather
+than a poisoned transaction. Without a callback the operation is free, which
+is what the domain-level tests use.
+
+**All three write operations take the `Team` row lock**, in one order:
+validate the level, lock, then check state and act. When the squad is closed
+there is no squad row to lock, so the team row is the only thing that
+serialises two concurrent "open" requests — and locking it for upgrade,
+downgrade and close too means there is one lock order rather than three.
+`select_for_update()` **without** `skip_locked`, unlike `claim_team`: the
+caller asked for this specific team, so a contended row should make the
+request wait, not behave as though the squad were not there. The
+`OneToOneField`'s unique index is the second line of defence behind that
+lock.
+
+A downgrade and a close are the same decision — spend less from now on, not a
+chance to recover past spending. Neither refunds anything, and neither writes
+to the ledger. A mid-week change is charged at the new rate from the next
+week boundary, with nothing prorated and nothing refunded for the half-week
+just gone; see `economy/README.md`, *Development squad costs*.
+
+Claiming a team closes its squad (`teams/README.md`, *Claiming a team*).
+Releasing one does not.
+
+**#33 will generate youth riders into the squad. Nothing populates it yet, and
+that is deliberate.** The spec's *Decisions taken* rules it out: ship "without
+any 'coming soon' messaging, even though the squad produces nothing until #33
+lands", because the game has no live players yet and a half-finished payoff
+does not need flagging. The corollary is the one worth stating in a README:
+**no screen may promise riders the code does not produce.** A subtitle
+saying a squad "develops young riders" would be a promise about behaviour that
+does not exist, made to a manager who would pay real money on the strength of
+it — and what a higher level will actually do to intake is #33's decision, not
+this one's. `DevelopmentSquad.test.tsx` pins the rule for both states.
 
 ## Generation
 

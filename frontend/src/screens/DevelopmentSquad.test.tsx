@@ -114,6 +114,29 @@ describe('DevelopmentSquad', () => {
     expect(screen.queryByRole('button', { name: 'Close squad' })).not.toBeInTheDocument()
   })
 
+  // The spec forbids this screen promising riders, and the first build broke
+  // it in both subtitles ("develop young riders between seasons", "a higher
+  // level develops riders faster") — neither of which is true yet, and a
+  // manager would pay real money on the strength of either. Pinned here
+  // because the rule is a spec decision nothing else in the code enforces.
+  it.each([
+    ['closed', closed, 'Closed. Opening a level pays its opening fee, then a weekly cost.'],
+    ['open', openAtNational, 'Running at National, charged its weekly cost every week.'],
+  ])('promises no riders while %s — only what is actually charged', (_state, payload, subtitle) => {
+    mockSquad(payload as SquadPayload)
+
+    renderScreen()
+
+    expect(screen.getByText(subtitle)).toBeInTheDocument()
+    const copy = document.body.textContent ?? ''
+    // Not /develop/ — the screen is called "Development squad". What must not
+    // appear is a claim that it produces riders, or a teaser for a feature
+    // that does not exist yet.
+    expect(copy).not.toMatch(/rider/i)
+    expect(copy).not.toMatch(/youth/i)
+    expect(copy).not.toMatch(/soon/i)
+  })
+
   it('prices each Open on the card itself, with no second copy of the fee', () => {
     renderScreen()
 

@@ -10,6 +10,7 @@ all reading the real API. No screen renders invented data.
 | `/` | Dashboard | Built — season, standings, next race and squad status, and a "My auctions" section listing riders the team is selling and auctions it has bid on — the same `AuctionCard` the Transfers screen uses, so a Dashboard listing can be bid on directly — from the API, no fixture data |
 | `/roster` | Roster | Built — filter, sort, rider detail panel, each rider's weekly salary, market value and release cost, a squad-value total, the same freshness bar as squad selection, the season-end salary review panel with the wage bill and each moved rider's old→new salary, and a "List for auction" action beside Release, from the API, no fixture data |
 | `/staff` | Staff | Built — hire/fire a trainer, with each trainer's fee and weekly salary, from the API, no fixture data |
+| `/development-squad` | DevelopmentSquad | Built — the three levels as cards, each with its opening fee, weekly cost and per-season cost, and one action worded by state (**Open** while closed, **Upgrade** at the difference, **Downgrade** free, a **Current** badge on the level held), plus a **Close squad** button while one is open, from the API, no fixture data. The screen prices nothing itself: the server sends each level's `change_fee` already resolved against where the team is now, and the client only decides the wording. An action costing more than the balance is disabled with a reason, as `Staff.tsx` does for an unaffordable trainer. **The subtitle says what is charged and nothing more** — no youth riders, no "coming soon", because #33 owns intake and what a higher level does to it is not decided yet. `DevelopmentSquad.test.tsx` pins that for both the closed and open states. |
 | `/sponsors` | Sponsors | Built — sign one of three sponsor offers, or see the signed contract, from the API, no fixture data |
 | `/finances` | Finances | Built — balance, weekly wage bill and ledger history from the API, no fixture data |
 | `/training` | Training | Built — set the weekly focus, see last week's moves, from the API, no fixture data |
@@ -94,7 +95,8 @@ double-invoke in development cannot fire it twice) so `me.lost_team` is
 for authenticated sessions, so any `POST`/`PUT` issued while logged in must
 carry `X-CSRFToken`, or it 403s — a case nothing hit before login existed,
 because every write used to run anonymously. `api.ts`'s `writeJson` (used by
-`register`, `login`, `logout`, and `putSquad`) handles this: `ensureCsrfToken`
+`register`, `login`, `logout`, `putSquad`, the trainer hire/fire pair and the
+three development squad writes) handles this: `ensureCsrfToken`
 reads the `csrftoken` cookie, fetching `/api/accounts/me/` first if it isn't
 set yet (that endpoint's `@ensure_csrf_cookie` guarantees it will be after).
 Anything that issues a write should go through `writeJson`, not a bare
@@ -105,8 +107,23 @@ Every sidebar item routes somewhere real, and an unknown path redirects to
 deliberate: the alternative (trying to render a non-existent screen) is a
 blank page that hides whether routing worked at all.
 
-Adding a screen is one line: write the component and register it in `SCREENS`
-in `src/App.tsx`.
+Adding a screen takes three edits: write the component, add its path to
+`SCREENS` in `src/App.tsx`, and add it to the right `NAV_SECTIONS` group in
+`src/navigation.ts`. The two maps hold different things and neither derives
+from the other, and forgetting either fails differently and quietly — a path
+in `SCREENS` but not in `NAV_SECTIONS` registers no route at all, so it falls
+through to the catch-all and lands on the dashboard, while a nav item with no
+`SCREENS` entry renders `undefined` and throws at runtime rather than at
+build. `navigation.ts`'s comment is explicit that only built screens go in
+the rail: a feature that does not exist yet is not hinted at.
+
+The Development squad screen (#32) is the one where placement was a decision
+rather than a formality — it sits after Staff in the TEAM group, beside the
+other things a manager sets up once, rather than near Finances, which is
+where the resulting cost shows up. It also needed a hook of its own and two
+new labels in `Finances.tsx`'s `KIND_LABELS`, the one part of the wiring
+that is *not* automatic: an unknown kind falls back to its raw string, so a
+forgotten label shows the player `development_squad_fee` verbatim.
 
 ## Where the data comes from
 
@@ -124,7 +141,13 @@ follow the discipline `useSeason.ts` established: a screen showing
 invented data mid-fetch is indistinguishable from a real one with a bug
 in it. `src/useMyBids.ts` is the one exception — its outbid notice is a
 courtesy, not the screen's main content, so it starts from an empty list
-and fails silently rather than blocking the page.
+and fails silently rather than blocking the page. `src/useDevelopmentSquad.ts`
+(#32) follows the same rule for a screen where a stale price would be
+actively misleading: it renders nothing while loading, and an error shows one
+line saying so rather than three levels at figures the server would not
+charge. It also exposes `refresh()`, so the screen re-fetches straight after
+an open, change or close instead of waiting up to 60 seconds for the next
+poll.
 
 ## How it is served
 

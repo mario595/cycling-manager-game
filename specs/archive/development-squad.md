@@ -1,6 +1,6 @@
 # Development squad
 
-**Status:** proposed
+**Status:** implemented
 **Domain(s):** `riders`, `economy`, `teams`
 **One-liner:** A team can pay to run a development squad — a paid facility that, once youth intake exists, is where young riders arrive and grow before joining the senior roster.
 

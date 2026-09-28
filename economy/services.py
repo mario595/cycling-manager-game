@@ -608,7 +608,7 @@ def charge_development_squad_fee(team, *, amount: int, at, description: str) -> 
     itself, per the custom-`at` convention used across this module. The caller
     also runs this inside its own transaction, so an InsufficientFunds raised
     after this call rolls the fee row back with the squad write it precedes
-    (riders/README.md, *Opening a squad*).
+    (riders/README.md, *Development squad*).
 
     No IntegrityError handling and no (team, week) constraint, unlike
     charge_development_squad_costs: a team may pay several fees in one week —

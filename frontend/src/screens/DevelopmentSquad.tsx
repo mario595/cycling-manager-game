@@ -89,9 +89,15 @@ export function DevelopmentSquad() {
         title="Development squad"
         titleSize={29}
         subtitle={
+          // Money, and nothing else. The spec is explicit that this screen
+          // must not promise riders or say "coming soon" (#33 owns youth
+          // intake, and a higher level's effect on it is #33's decision, not
+          // this one's). A subtitle that told a manager a squad develops
+          // riders faster would be a promise about behaviour that does not
+          // exist yet — and one they would pay real money for.
           isOpen
-            ? `Running at ${currentName}. Open a higher level to develop riders faster.`
-            : 'Open a development squad to develop young riders between seasons.'
+            ? `Running at ${currentName}, charged its weekly cost every week.`
+            : 'Closed. Opening a level pays its opening fee, then a weekly cost.'
         }
       />
 

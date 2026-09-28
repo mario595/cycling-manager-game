@@ -29,7 +29,7 @@ coming back to.
 | **Signing up** | [#50](https://github.com/mario595/cycling-manager/issues/50) accounts · [#46](https://github.com/mario595/cycling-manager/issues/46) claiming a team · [#62](https://github.com/mario595/cycling-manager/issues/62) losing a team · [#63](https://github.com/mario595/cycling-manager/issues/63) inactivity trigger |
 | **The competitive loop** | [#15](https://github.com/mario595/cycling-manager/issues/15) race points · [#12](https://github.com/mario595/cycling-manager/issues/12) standings |
 | **Transfers** | [#31](https://github.com/mario595/cycling-manager/issues/31) market value · [#29](https://github.com/mario595/cycling-manager/issues/29) free agents · [#28](https://github.com/mario595/cycling-manager/issues/28) auctions ✅ · [#30](https://github.com/mario595/cycling-manager/issues/30) AI teams trade ✅ |
-| **Riders as assets** | [#1](https://github.com/mario595/cycling-manager/issues/1)/[#57](https://github.com/mario595/cycling-manager/issues/57) attributes · [#95](https://github.com/mario595/cycling-manager/issues/95) attribute history · [#96](https://github.com/mario595/cycling-manager/issues/96) rider detail view  · [#58](https://github.com/mario595/cycling-manager/issues/58) growth and decline · [#59](https://github.com/mario595/cycling-manager/issues/59) freshness |
+| **Riders as assets** | [#1](https://github.com/mario595/cycling-manager/issues/1)/[#57](https://github.com/mario595/cycling-manager/issues/57) attributes · [#95](https://github.com/mario595/cycling-manager/issues/95) attribute history · [#96](https://github.com/mario595/cycling-manager/issues/96) rider detail view  · [#58](https://github.com/mario595/cycling-manager/issues/58) growth and decline · [#59](https://github.com/mario595/cycling-manager/issues/59) freshness · [#32](https://github.com/mario595/cycling-manager/issues/32) development squad ✅ |
 | **Staff and training** | [#35](https://github.com/mario595/cycling-manager/issues/35) trainers · [#36](https://github.com/mario595/cycling-manager/issues/36) weekly training focus |
 | **Money** | [#20](https://github.com/mario595/cycling-manager/issues/20) ledger · [#19](https://github.com/mario595/cycling-manager/issues/19) prize money · [#21](https://github.com/mario595/cycling-manager/issues/21) fanbase and merchandise · [#22](https://github.com/mario595/cycling-manager/issues/22) sponsorship · [#23](https://github.com/mario595/cycling-manager/issues/23) sponsor renewal · [#25](https://github.com/mario595/cycling-manager/issues/25) per-rider salaries · [#69](https://github.com/mario595/cycling-manager/issues/69) trainer fee and salary |
 | **Engine performance** | [#101](https://github.com/mario595/cycling-manager/issues/101) cached total_distance · [#102](https://github.com/mario595/cycling-manager/issues/102) death spiral bounded |
@@ -92,9 +92,16 @@ Riders decline ([#58](https://github.com/mario595/cycling-manager/issues/58)) an
 | Order | Issue | Blocked by |
 |---|---|---|
 | 5 | [#42](https://github.com/mario595/cycling-manager/issues/42) retirement | [#58](https://github.com/mario595/cycling-manager/issues/58) ✅ |
-| 6 | [#32](https://github.com/mario595/cycling-manager/issues/32) development squad | [#20](https://github.com/mario595/cycling-manager/issues/20) ✅ |
-| 7 | [#33](https://github.com/mario595/cycling-manager/issues/33) youth intake | [#32](https://github.com/mario595/cycling-manager/issues/32) |
+| 6 | [#32](https://github.com/mario595/cycling-manager/issues/32) development squad ✅ | [#20](https://github.com/mario595/cycling-manager/issues/20) ✅ |
+| 7 | [#33](https://github.com/mario595/cycling-manager/issues/33) youth intake | [#32](https://github.com/mario595/cycling-manager/issues/32) ✅ |
 | 8 | [#34](https://github.com/mario595/cycling-manager/issues/34) promote/retain/discard | [#33](https://github.com/mario595/cycling-manager/issues/33), [#29](https://github.com/mario595/cycling-manager/issues/29) ✅ |
+
+**[#32](https://github.com/mario595/cycling-manager/issues/32) shipped — a team can open, upgrade, downgrade and close a development
+squad, and the tick charges it weekly.** Nothing populates it yet, so it is a
+cost centre the player can choose to run and a screen showing three prices,
+and no copy anywhere promises riders. That is deliberate: #33 is the ticket
+that fills it, and the facility existing empty is what makes the next ticket
+a feature rather than a migration. `riders/README.md`, *Development squad*.
 
 **[#34](https://github.com/mario595/cycling-manager/issues/34) is the payoff of the hidden-attribute design** — triage is a judgement only
 because potential is hidden. It is also what gives the scout in
@@ -170,7 +177,7 @@ The chains that actually constrain order:
 
 #58 growth ✅ ──→ #42 retirement
 #29 agents ✅ ──→ #104 stop deleting raced riders
-#32 dev squad ──→ #33 intake ──→ #34 triage ──→ (#40 scout)
+#32 dev squad ✅ ──→ #33 intake ──→ #34 triage ──→ (#40 scout)
 
 #88 log slimming ✅ ──→ #94 watch a race
 

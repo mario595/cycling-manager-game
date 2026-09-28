@@ -28,7 +28,16 @@ A registered user with no team calls `claim_team(user, name=..., code=..., at=..
 4. Generates a fresh roster via `riders.generation.generate_roster()` and
    assigns it to the team, stamping each new rider's `joined_team_at = at`
    (`riders/README.md`, *Team membership stamps*).
-5. Writes a ledger `takeover` entry that brings the team's balance back to
+5. **Closes any development squad** the last manager left open —
+   `riders.development_squad.close_squad(team)`, imported at module scope
+   since `teams -> riders` is allowed and this module already imports
+   `riders.generation` and `riders.services` there (#32). A claim is a
+   takeover: the new manager must open their own squad and pay their own
+   opening fee rather than inherit one somebody else paid for. Closing deletes
+   the row and writes nothing to the ledger, so there is no fee to void and
+   nothing to refund — `riders/README.md`, *Development squad*. The step
+   sits after the roster write and before the lazy `economy` import below.
+6. Writes a ledger `takeover` entry that brings the team's balance back to
    `STARTING_BALANCE`, and a fanbase `takeover` row that brings its fanbase
    back to `STARTING_FANBASE` (#21) — `reset_to_starting_balance(team, at=...)`
    and `reset_fanbase(team, at=...)`, both imported **inside `claim_team`**
@@ -38,9 +47,9 @@ A registered user with no team calls `claim_team(user, name=..., code=..., at=..
    too*. The `at` (game time) is passed in by the caller — `api/`'s view and
    `seed_teams` supply `world.services.now()` — because `teams/` must not
    import `world/`.
-6. Voids any sponsorship contract in force and clears unsigned offers —
+7. Voids any sponsorship contract in force and clears unsigned offers —
    `economy.services.void_sponsorship(team, at=...)`, same lazy import as
-   step 5 (#22; see `economy/README.md`, *Sponsorship*). A new manager is
+   step 6 (#22; see `economy/README.md`, *Sponsorship*). A new manager is
    never handed a contract they never agreed to; the API generates them a
    fresh offer round on their first visit to the Sponsors screen.
 
@@ -82,11 +91,22 @@ it returns a managed team to the unmanaged pool. It is **not** claim's
 inverse, and deliberately so — it clears `Team.manager` and
 `Team.managed_since` and writes one `ManagerialSpell` (below), and touches
 **nothing else**: not the roster, not the ledger, not the fanbase, not the
-sponsorship. A released team must be indistinguishable from a team that was
-never managed, because #44's default squad selection has to pick it up
-exactly as it would any other unmanaged team. All of the *resetting* — fresh
-roster, balance, fanbase, voided sponsorship — happens on the *next* claim,
-the same as it always has; release does none of it.
+sponsorship, and not the development squad. A released team must be
+indistinguishable from a team that was never managed, because #44's default
+squad selection has to pick it up exactly as it would any other unmanaged
+team. All of the *resetting* — fresh roster, balance, fanbase, voided
+sponsorship, and closing any development squad — happens on the *next*
+claim, the same as it always has; release does none of it.
+
+Leaving the squad open is the visible consequence of that asymmetry, and it
+is deliberate — the spec's *Decisions taken* rules it out explicitly:
+"Closing a squad is not part of what happens when a team is released to the
+pool. Release already deliberately touches nothing but the manager link; a
+squad only closes when the next manager claims the team, alongside the
+roster and balance reset." A manager who quits leaves behind the squad they
+paid to open, and it keeps costing the team weekly until someone claims it.
+The alternative — closing it silently — takes a decision away from them, and
+leaves a released team's books explaining a cost nobody chose.
 
 Locks the row with `select_for_update()`, **without** `skip_locked` — the
 opposite of `claim_team`'s lock. `claim_team` is shopping for any free team

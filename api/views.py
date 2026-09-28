@@ -974,7 +974,7 @@ def _squad_charge(team):
     """The `charge` callback open_squad and change_level take, wired to the
     ledger. api/ is allowed to import both economy/ and riders/, but the
     functions themselves are not: riders/ may not import economy/ (AGENTS.md),
-    so the debit arrives by injection (riders/README.md, *Opening a squad*).
+    so the debit arrives by injection (riders/README.md, *Development squad*).
 
     The balance check is here rather than in economy/ because refusing a
     change is a view-level concern — the ledger is append-only and never

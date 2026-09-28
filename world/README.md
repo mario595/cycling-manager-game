@@ -157,6 +157,22 @@ reads `now()` once, then finds and processes whatever is due, in six steps:
    `TickRun.trainer_salary_entries`. An unstaffed team gets no row at all,
    unlike wages' `amount = 0` entry — see `economy/README.md`, *Trainer
    salaries run off the same loop*.
+   Directly after trainer salaries, the same loop charges every team with an
+   open **development squad** its weekly cost —
+   `economy.services.charge_development_squad_costs(week,
+   cost_by_team=...)`, where `cost_by_team` maps team pk to
+   `(weekly_cost, level_name)` and is built here from
+   `riders.development_squad.LEVELS` (#32). One `development_squad` row per
+   team with a squad per week, dated to `week.starts_at`, counted on
+   `TickRun.development_squad_entries`. A team with no squad gets no row, on
+   the same reasoning as the unstaffed team above. The map is built **once**
+   before the loop, like `salary_by_team`: no player action happens mid-tick,
+   so a squad's level cannot change between the weeks one tick crosses.
+   **Unmanaged teams are included deliberately** — a squad on a team nobody is
+   managing still costs the team money, exactly as its riders still draw
+   wages, and filtering on management would make a squad free to hand to an AI
+   team. See `economy/README.md`, *Development squad costs*, and
+   `riders/README.md`, *Development squad*.
    The same loop then settles the week's economy side (#21, #22):
    `economy.services.apply_weekly_fanbase(week, points_by_team=...)`
    adjusts every team's fanbase, `economy.services.pay_merchandise(week)`

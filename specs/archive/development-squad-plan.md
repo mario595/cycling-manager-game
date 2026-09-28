@@ -1,6 +1,6 @@
 # Development squad — Implementation Plan
 
-**Spec:** `specs/development-squad.md` · **Issue:** #32 · **Status:** proposed
+**Spec:** `specs/archive/development-squad.md` · **Issue:** #32 · **Status:** implemented
 **Apps touched:** `riders/`, `economy/`, `teams/`, `world/`, `api/`, `frontend/`
 
 ## Context you need
@@ -487,7 +487,7 @@ Add `'/development-squad'` to `BUILT_SCREENS` in `src/navigation.test.ts`.
 Its "every nav item has a screen" test fails until you do, which is the
 intended guard against the `App.tsx` mapping being forgotten.
 
-### W8 — Documentation
+### W8 — Documentation ✅
 See *Documentation update*. This is its own commit, along with archiving the
 spec and plan per `AGENTS.md`, *Closing a ticket*.
 

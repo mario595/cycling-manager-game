@@ -292,6 +292,47 @@ Since #29 each rider also carries `release_cost`
   trainer to the shared pool. `204` on success, `409` if the caller has no
   trainer to fire. `POST`, not `DELETE`: nothing is destroyed, the trainer
   survives in the pool.
+- `GET /api/development-squad/` (`DevelopmentSquadView`, #32) — the caller's
+  development squad as the whole screen's state: `level` (null while closed),
+  `balance`, and every level with its `level`, `name`, `opening_fee`,
+  `weekly_cost`, `season_cost` (the weekly cost times
+  `schedule.models.SEASON_WEEKS`, so the screen can show a season's total
+  without hardcoding how long a season is), `change_fee` and `is_current`.
+  `change_fee` is what moving to that level **from where the team is now**
+  would cost — the full opening fee while closed, the difference for an
+  upgrade, zero for a downgrade, and **`null` for the level already held**,
+  which is how the SPA knows to render a "Current" badge rather than a no-op
+  button. The server owns that rule and every caller reads it from here, so
+  the figure shown and the figure charged cannot drift. A closed squad is a
+  normal `200`, not a `404`: "you have no squad" is a state this screen
+  exists to show.
+- `POST /api/development-squad/open/` (`OpenDevelopmentSquadView`) — open the
+  squad at `{level}`, debiting the opening fee. `204`; `409` if a squad is
+  already open or the team cannot afford it; `400` for a level outside
+  `1..3`, from the serializer's `ChoiceField`, before the view runs.
+- `POST /api/development-squad/level/` (`ChangeDevelopmentSquadLevelView`) —
+  move the open squad to `{level}`. `204`; `409` if no squad is open, if the
+  team is already at that level, or if it cannot afford the upgrade. A
+  downgrade costs nothing and is never refused on affordability grounds.
+- `POST /api/development-squad/close/` (`CloseDevelopmentSquadView`) — close
+  the squad. `204`; `409` if none is open, rather than a silent `204` that
+  would make a double-click look like a success. `POST` rather than `DELETE`
+  for `FireTrainerView`'s reason and then some: the row really is deleted, but
+  the opening fee already paid stays in the ledger, so nothing here is
+  destroyed.
+
+  All four are `IsAuthenticated` by the project default — **no `AllowAny`** —
+  and all four return `403` without a team, the same `team_for()` check every
+  other team-scoped view makes. The three writes share a module-level
+  `_squad_charge(team)` helper that is the injected `charge` callback: the
+  balance check and the `economy.services.charge_development_squad_fee` write
+  happen **inside** the service's own transaction, so a refused open or
+  upgrade leaves neither a squad row nor a fee row. It raises
+  **`riders.development_squad.InsufficientFunds`**, which is aliased on import
+  as `SquadInsufficientFunds` because `staff.services.InsufficientFunds` —
+  a different, unrelated class already imported unaliased above — is in scope
+  in the same module; catching the wrong one turns a `409` the player should
+  see into a `500`.
 - `GET /api/accounts/me/` (`MeSerializer`, `MeView`) — whether anyone is
   logged in, their display name, their team (`id`/`name`/`code`, or
   `null`), and `lost_team` (#62). Lives here rather than in `accounts/`
