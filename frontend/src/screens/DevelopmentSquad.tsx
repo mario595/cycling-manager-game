@@ -4,7 +4,6 @@ import {
   changeDevelopmentSquadLevel,
   closeDevelopmentSquad,
   openDevelopmentSquad,
-  type DevelopmentSquadLevel,
 } from '../api'
 import { Button, Card, PageBody, PageHeading } from '../components/primitives'
 import { formatMoney } from '../format'
@@ -12,24 +11,30 @@ import { color, font } from '../theme'
 import { useAuth } from '../useAuth'
 import { useDevelopmentSquad } from '../useDevelopmentSquad'
 
-/** What the one action on a level card does, from the card's own data rather
- * than from comparing levels in the client. The server sends `is_current` and
- * a null `change_fee` only for the level already held, and prices every other
- * move exactly as it would charge it — so this decides the *wording*, never
- * the figure. */
-type ActionKind = 'open' | 'upgrade' | 'downgrade' | 'current'
-
-function actionFor(level: DevelopmentSquadLevel, squadIsOpen: boolean): ActionKind {
-  if (level.is_current) return 'current'
-  if (!squadIsOpen) return 'open'
-  return level.change_fee !== null && level.change_fee > 0 ? 'upgrade' : 'downgrade'
-}
-
-const ACTION_LABELS: Record<ActionKind, string> = {
-  open: 'Open',
-  upgrade: 'Upgrade',
-  downgrade: 'Downgrade',
-  current: 'Current',
+/** Inline SVG, as `AttributeRadar` and `AttributeHistoryChart` do — there is
+ * no icon library to reach for, and one padlock does not justify one. Takes
+ * `currentColor` from the surrounding text, so a locked card dims with
+ * everything else on it. */
+function Padlock({ size = 12 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      aria-hidden="true"
+      focusable="false"
+      style={{ flex: '0 0 auto' }}
+    >
+      <path
+        d="M4.75 7V5.25a3.25 3.25 0 0 1 6.5 0V7"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+      <rect x="3.25" y="7" width="9.5" height="6.75" rx="1.5" fill="currentColor" />
+    </svg>
+  )
 }
 
 export function DevelopmentSquad() {
@@ -67,7 +72,7 @@ export function DevelopmentSquad() {
   }
 
   const isOpen = squad.level !== null
-  const currentName = squad.levels.find((l) => l.is_current)?.name
+  const currentName = squad.levels.find((l) => l.action === 'current')?.name
 
   const run = async (action: () => Promise<void>, failureMessage: string) => {
     setPending(true)
@@ -97,7 +102,7 @@ export function DevelopmentSquad() {
           // exist yet — and one they would pay real money for.
           isOpen
             ? `Running at ${currentName}, charged its weekly cost every week.`
-            : 'Closed. Opening a level pays its opening fee, then a weekly cost.'
+            : 'Closed. A squad starts at Regional, and each level above costs more to reach and to run.'
         }
       />
 
@@ -115,13 +120,12 @@ export function DevelopmentSquad() {
         }}
       >
         {squad.levels.map((level) => {
-          const kind = actionFor(level, isOpen)
-          // A downgrade is priced at zero, so it is never unaffordable; the
-          // server would refuse it as a no-op anyway, which is why the current
-          // level has no button at all.
-          const fee = level.change_fee ?? 0
-          const affordable = fee <= squad.balance
-          const dimmed = kind === 'current'
+          const kind = level.action
+          // Only the two levels with a move can cost more than the balance.
+          // A locked level has no button at all, and the level already held
+          // has already been paid for.
+          const actionable = kind === 'open' || kind === 'upgrade'
+          const affordable = level.fee <= squad.balance
 
           return (
             <Card
@@ -131,7 +135,7 @@ export function DevelopmentSquad() {
                 display: 'flex',
                 flexDirection: 'column',
                 gap: 12,
-                opacity: dimmed ? 0.75 : 1,
+                opacity: kind === 'current' || kind === 'locked' ? 0.7 : 1,
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -184,7 +188,7 @@ export function DevelopmentSquad() {
                   >
                     CURRENT
                   </span>
-                ) : (
+                ) : actionable ? (
                   <Button
                     onClick={() =>
                       run(
@@ -194,48 +198,52 @@ export function DevelopmentSquad() {
                             : changeDevelopmentSquadLevel(level.level),
                         kind === 'open'
                           ? 'Could not open your development squad.'
-                          : 'Could not change your development squad level.',
+                          : 'Could not upgrade your development squad.',
                       )
                     }
                     disabled={!affordable || pending}
                     style={{ opacity: pending || !affordable ? 0.6 : 1 }}
                   >
-                    {ACTION_LABELS[kind]}
+                    {kind === 'open' ? 'Open' : 'Upgrade'}
                   </Button>
-                )}
+                ) : null}
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                <Figure label="Opening fee" value={formatMoney(level.opening_fee)} />
+                {/* The increment onto this level, which is also what the move
+                    would charge: level 1's fee opens the squad, and every
+                    level above is reached by paying its own in full. Labelled
+                    by the rung's place in the ladder rather than by what the
+                    team can do about it, so the three cards read as one price
+                    list and the climb is legible at a glance. */}
+                <Figure
+                  label={level.level === 1 ? 'Open fee' : 'Upgrade fee'}
+                  value={formatMoney(level.fee)}
+                />
                 <Figure label="Weekly cost" value={`${formatMoney(level.weekly_cost)}/week`} />
                 <Figure label="Per season" value={formatMoney(level.season_cost)} />
               </div>
 
-              {/* Neither while closed, where the move is an opening already
-                  priced in the "Opening fee" row above and printing it twice
-                  on one card is noise, nor for the level already held, where
-                  there is no move to price at all. */}
-              {isOpen && kind !== 'current' ? (
+              {kind === 'locked' ? (
+                // The server's own words for why, because there are two
+                // different reasons and only it knows which applies.
                 <div
                   style={{
                     borderTop: `1px solid ${color.dividerStrong}`,
                     paddingTop: 10,
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 10,
+                    gap: 7,
+                    color: color.mutedStrong,
+                    fontSize: 12,
                   }}
                 >
-                  <span style={{ fontSize: 12, color: color.mutedStrong }}>
-                    {kind === 'downgrade' ? 'Downgrading is free' : 'To move here'}
-                  </span>
-                  <span style={{ fontSize: 12, fontFamily: font.mono, fontWeight: 600 }}>
-                    {fee === 0 ? 'Free' : formatMoney(fee)}
-                  </span>
+                  <Padlock />
+                  <span>{level.requires}</span>
                 </div>
               ) : null}
 
-              {kind !== 'current' && !affordable ? (
+              {actionable && !affordable ? (
                 <div style={{ fontSize: 12, color: color.negative }}>
                   You cannot afford this.
                 </div>
@@ -248,8 +256,13 @@ export function DevelopmentSquad() {
       {isOpen ? (
         <Card style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ flex: 1, fontSize: 12.5, color: color.muted }}>
-            Closing stops the weekly cost. Nothing is refunded, and the opening fee stays in your
-            finances.
+            {/* Closing is the only way to spend less — there is no cheaper
+                level to step down to — and it is the reason a manager reaches
+                for it under pressure, so the cost of that has to be on the
+                card: nothing is refunded, and reopening starts at Regional
+                again. */}
+            Closing stops the weekly cost. Nothing is refunded, and reopening starts at
+            Regional again.
           </div>
           <Button
             onClick={() =>

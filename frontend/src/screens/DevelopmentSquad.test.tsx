@@ -20,38 +20,52 @@ const manager: Me = {
   lost_team: null,
 }
 
-const OPENING_FEES = { 1: 30_000, 2: 75_000, 3: 150_000 }
+const NAMES = { 1: 'Regional', 2: 'National', 3: 'Elite' }
+const FEES = { 1: 30_000, 2: 75_000, 3: 150_000 }
 const WEEKLY_COSTS = { 1: 1_500, 2: 3_500, 3: 6_000 }
 
-/** Closed: every level is an opening, priced at its full fee. */
-const closed: SquadPayload = {
-  level: null,
-  balance: 500_000,
-  levels: [1, 2, 3].map((level) => ({
-    level,
-    name: { 1: 'Regional', 2: 'National', 3: 'Elite' }[level]!,
-    opening_fee: OPENING_FEES[level as 1],
-    weekly_cost: WEEKLY_COSTS[level as 1],
-    season_cost: WEEKLY_COSTS[level as 1] * 12,
-    change_fee: OPENING_FEES[level as 1],
-    is_current: false,
-  })),
+/** Builds a payload the way the server sends it: a level's price is its own
+ * fee whatever state the team is in, and `action`/`requires` come from the
+ * ladder rule rather than being worked out here. */
+function payload(
+  current: number | null,
+  balance = 500_000,
+): SquadPayload {
+  return {
+    level: current,
+    balance,
+    levels: ([1, 2, 3] as const).map((level) => {
+      const lockedNote =
+        current === null
+          ? 'Open Regional first.'
+          : level < current
+            ? 'Climbed past. Close the squad to start over.'
+            : `Upgrade to ${NAMES[level - 1]} first.`
+      const action =
+        current === null
+          ? level === 1
+            ? 'open'
+            : 'locked'
+          : level === current
+            ? 'current'
+            : level === current + 1
+              ? 'upgrade'
+              : 'locked'
+      return {
+        level,
+        name: NAMES[level],
+        weekly_cost: WEEKLY_COSTS[level],
+        season_cost: WEEKLY_COSTS[level] * 12,
+        fee: FEES[level],
+        action,
+        requires: action === 'locked' ? lockedNote : null,
+      }
+    }),
+  }
 }
 
-/** Open at National: the current level has a null fee, the upgrade is priced
- * at the difference and the downgrade at zero — the server's figures, not the
- * client's arithmetic. */
-const openAtNational: SquadPayload = {
-  level: 2,
-  balance: 500_000,
-  levels: closed.levels.map((level) => {
-    if (level.level === 2) return { ...level, change_fee: null, is_current: true }
-    if (level.level === 3) {
-      return { ...level, change_fee: OPENING_FEES[3] - OPENING_FEES[2], is_current: false }
-    }
-    return { ...level, change_fee: 0, is_current: false }
-  }),
-}
+const closed = payload(null)
+const openAtNational = payload(2)
 
 function renderScreen() {
   return render(
@@ -59,15 +73,6 @@ function renderScreen() {
       <DevelopmentSquad />
     </MemoryRouter>,
   )
-}
-
-/** The per-card footer that names what a move there costs. Queried by its
- * label rather than by the amount, because a figure can legitimately appear
- * on two cards — Elite's upgrade fee happens to equal National's opening fee. */
-function moveCostRow(label: string): HTMLElement {
-  const row = screen.getByText(label).parentElement
-  if (!row) throw new Error(`no row for ${label}`)
-  return row
 }
 
 function mockSquad(squad: SquadPayload) {
@@ -107,10 +112,13 @@ describe('DevelopmentSquad', () => {
     expect(screen.getByText('$18,000')).toBeInTheDocument()
   })
 
-  it('offers Open on every card and no Close button while closed', () => {
+  it('offers Open only on the entry level, and no Close button, while closed', () => {
     renderScreen()
 
-    expect(screen.getAllByRole('button', { name: 'Open' })).toHaveLength(3)
+    // The two levels above are reached by upgrading, so there is no button to
+    // open them at.
+    expect(screen.getAllByRole('button', { name: 'Open' })).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: 'Upgrade' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Close squad' })).not.toBeInTheDocument()
   })
 
@@ -120,10 +128,14 @@ describe('DevelopmentSquad', () => {
   // manager would pay real money on the strength of either. Pinned here
   // because the rule is a spec decision nothing else in the code enforces.
   it.each([
-    ['closed', closed, 'Closed. Opening a level pays its opening fee, then a weekly cost.'],
+    [
+      'closed',
+      closed,
+      'Closed. A squad starts at Regional, and each level above costs more to reach and to run.',
+    ],
     ['open', openAtNational, 'Running at National, charged its weekly cost every week.'],
-  ])('promises no riders while %s — only what is actually charged', (_state, payload, subtitle) => {
-    mockSquad(payload as SquadPayload)
+  ])('promises no riders while %s — only what is actually charged', (_state, squad, subtitle) => {
+    mockSquad(squad as SquadPayload)
 
     renderScreen()
 
@@ -137,47 +149,75 @@ describe('DevelopmentSquad', () => {
     expect(copy).not.toMatch(/soon/i)
   })
 
-  it('prices each Open on the card itself, with no second copy of the fee', () => {
+  it('labels the fee by the rung it buys, not by what the team can do', () => {
+    mockSquad(openAtNational)
+
     renderScreen()
 
-    // While closed, every move is an opening, so the "Opening fee" row is the
-    // price. A separate per-move figure would print the same number twice.
-    expect(screen.queryByText('To move here')).not.toBeInTheDocument()
+    // Level 1 is the one that opens a squad; every level above is bought by
+    // upgrading into it, and each pays its own fee in full.
+    expect(screen.getByText('Open fee')).toBeInTheDocument()
+    expect(screen.getAllByText('Upgrade fee')).toHaveLength(2)
   })
 
-  it('wordens the actions by state when open at National', () => {
+  it('offers exactly one upgrade and no downgrade when open at National', () => {
     mockSquad(openAtNational)
 
     renderScreen()
 
     expect(screen.getByRole('button', { name: 'Upgrade' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Downgrade' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Downgrade' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Open' })).not.toBeInTheDocument()
     expect(screen.getByText('CURRENT')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Close squad' })).toBeInTheDocument()
   })
 
-  it('prices the upgrade at the difference and the downgrade as free', () => {
-    mockSquad(openAtNational)
+  it('shows a locked card the server’s reason, with a padlock', () => {
+    // At Regional, Elite is the level not yet reached, so the note says which
+    // rung unlocks it. The words come from the server — only it knows whether a
+    // lock is "not yet" or "climbed past".
+    mockSquad(payload(1))
 
     renderScreen()
 
-    // Straight from the payload: 150,000 - 75,000, not recomputed here.
-    expect(moveCostRow('To move here')).toHaveTextContent('$75,000')
-    expect(moveCostRow('Downgrading is free')).toHaveTextContent('Free')
+    expect(screen.getByText('Upgrade to National first.')).toBeInTheDocument()
+    // The padlock is an aria-hidden SVG: the note beside it is the accessible
+    // part, so the shape is decoration on top of real text.
+    expect(document.querySelectorAll('svg').length).toBeGreaterThanOrEqual(1)
   })
 
-  it('gives the current level no button at all', () => {
+  it('tells a team that has climbed past a level that closing is the only way back', () => {
     mockSquad(openAtNational)
 
     renderScreen()
 
-    // One action per card, and the current card's is a badge rather than a
-    // button — a no-op move is not something to offer.
+    // Regional is locked, but not because something above it is missing. It is
+    // behind the team, and there is no rung pointing down — so the advice is
+    // the drastic one, and it is the only path back.
+    expect(
+      screen.getByText('Climbed past. Close the squad to start over.'),
+    ).toBeInTheDocument()
+  })
+
+  it('tells a closed team which level to open first', () => {
+    renderScreen()
+
+    // Both locked cards say the same thing while there is no squad at all: the
+    // way in is the bottom rung, and there is no other door.
+    expect(screen.getAllByText('Open Regional first.')).toHaveLength(2)
+  })
+
+  it('has no button at all on a locked or current card', () => {
+    mockSquad(openAtNational)
+
+    renderScreen()
+
+    // One action per card at most, and the other two cards are not offering
+    // anything: a lock is not a disabled button, it is no button.
     const buttons = screen
       .getAllByRole('button')
       .filter((b) => ['Open', 'Upgrade', 'Downgrade'].includes(b.textContent ?? ''))
-    expect(buttons).toHaveLength(2)
+    expect(buttons).toHaveLength(1)
   })
 
   it('disables an action costing more than the balance, with a reason', () => {
@@ -185,21 +225,31 @@ describe('DevelopmentSquad', () => {
 
     renderScreen()
 
-    // Regional (30,000) is affordable; National and Elite are not.
-    const openButtons = screen.getAllByRole('button', { name: 'Open' })
-    expect(openButtons[0]).toBeEnabled()
-    expect(openButtons[1]).toBeDisabled()
-    expect(openButtons[2]).toBeDisabled()
-    expect(screen.getAllByText(/cannot afford/i)).toHaveLength(2)
+    // Regional (30,000) is affordable. The two above are locked, so they have
+    // no button to disable and nothing to warn about.
+    expect(screen.getByRole('button', { name: 'Open' })).toBeEnabled()
+    expect(screen.queryByText(/cannot afford/i)).not.toBeInTheDocument()
   })
 
-  it('never disables a free downgrade, however low the balance', () => {
-    mockSquad({ ...openAtNational, balance: 0 })
+  it('warns about an unaffordable upgrade without disabling the locked cards', () => {
+    mockSquad({ ...openAtNational, balance: 100_000 })
 
     renderScreen()
 
-    expect(screen.getByRole('button', { name: 'Downgrade' })).toBeEnabled()
+    // Elite's fee is 150,000 against 100,000 in the bank; Regional's lock is
+    // not a cost and must not be reported as one.
     expect(screen.getByRole('button', { name: 'Upgrade' })).toBeDisabled()
+    expect(screen.getAllByText(/cannot afford/i)).toHaveLength(1)
+  })
+
+  it('says closing is a one-way door, since it is the only way to spend less', () => {
+    mockSquad(openAtNational)
+
+    renderScreen()
+
+    // With no downgrade to fall back on, the cost of closing is the thing a
+    // manager has to weigh: nothing back, and the whole climb again.
+    expect(screen.getByText(/reopening starts at\s+Regional again/i)).toBeInTheDocument()
   })
 
   it('says so plainly when the manager has no team', () => {

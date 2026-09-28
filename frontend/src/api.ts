@@ -752,22 +752,28 @@ export async function signOffer(offerId: number): Promise<void> {
   return writeJson('/api/economy/sponsors/sign/', 'POST', { offer_id: offerId })
 }
 
-/** One development squad level, priced as the server sees it.
+/** One development squad level, as the server prices and gates it.
  *
- * `change_fee` is what moving to this level from where the team is now would
- * cost: the full opening fee when the squad is closed, the difference when it
- * is an upgrade, zero for a downgrade, and null for the level already held —
- * there is no such move, and the SPA reads that null as the "Current" badge
- * rather than a disabled button. The server owns the rule, so the figure
- * shown and the figure charged cannot drift. */
+ * `fee` is what moving onto this level costs — the same figure the ledger is
+ * debited, whether that move is the opening or an upgrade, and null-free so
+ * the screen never has to invent a price for a move it cannot make.
+ *
+ * `action` is the ladder rule as the server states it, and the SPA renders it
+ * rather than working it out: `open` on the entry level of a closed squad,
+ * `upgrade` on the single rung above the one held, `current` on the one held,
+ * `locked` on everything else. `requires` says what a locked level is waiting
+ * for, and is null for every other action. The two kinds of lock are different
+ * advice, which is why the note comes from the server too. */
+export type DevelopmentSquadAction = 'open' | 'upgrade' | 'current' | 'locked'
+
 export interface DevelopmentSquadLevel {
   level: number
   name: string
-  opening_fee: number
   weekly_cost: number
   season_cost: number
-  change_fee: number | null
-  is_current: boolean
+  fee: number
+  action: DevelopmentSquadAction
+  requires: string | null
 }
 
 /** The Development squad screen's whole state: `level` is null while the
