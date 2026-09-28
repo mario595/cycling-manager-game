@@ -431,7 +431,7 @@ decisions 5 and 6.
 - `test_close_when_closed_returns_false`
 - `test_reopen_after_close_charges_full_fee`
 
-### W3 — `economy/`: kinds, constraint, charge functions
+### W3 — `economy/`: kinds, constraint, charge functions ✅
 The model change, `0011_development_squad_kinds.py`, and both service
 functions.
 **Tests** in `economy/tests/test_development_squad_costs.py`:

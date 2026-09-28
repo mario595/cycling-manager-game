@@ -563,6 +563,67 @@ def charge_transfer_fee(team, *, amount: int, at, description: str) -> LedgerEnt
     )
 
 
+def charge_development_squad_costs(week, *, cost_by_team: dict[int, tuple[int, str]]) -> int:
+    """Debit every team in `cost_by_team` its development squad's weekly cost
+    for `week`. Returns entries written.
+
+    `cost_by_team` maps team pk to `(weekly_cost, level_name)` — the name as
+    well as the figure because it goes straight into the row's
+    `description` ("Development squad — National"), and a team is never
+    charged for a level it is not at. world/ (which may import both riders/ and
+    economy/) builds the map from open squads; economy/ never looks up
+    `riders.development_squad.LEVELS` itself, exactly as it takes a trainer's
+    salary from world/ rather than reading staff/ (AGENTS.md).
+
+    Same exactly-once shape as charge_trainer_salaries: one atomic() per
+    create so an IntegrityError on an already-charged team cannot poison the
+    loop. A team absent from the map gets no row — that is how a team with no
+    open squad is expressed.
+    """
+    written = 0
+    for team_id, (cost, level_name) in cost_by_team.items():
+        with transaction.atomic():
+            try:
+                LedgerEntry.objects.create(
+                    team_id=team_id,
+                    kind=LedgerEntry.Kind.DEVELOPMENT_SQUAD,
+                    amount=-cost,
+                    occurred_at=week.starts_at,
+                    week=week,
+                    description=f"Development squad — {level_name}",
+                )
+                written += 1
+            except IntegrityError:
+                continue          # already charged; correct outcome, not an error
+    return written
+
+
+def charge_development_squad_fee(team, *, amount: int, at, description: str) -> LedgerEntry:
+    """Debit `team` the one-off fee for opening, upgrading or reopening its
+    development squad. Returns the row.
+
+    `amount` is negative, `at` is game time, `description` names the level
+    and the move. The caller — api/'s squad views, via the `charge` callback
+    riders.development_squad.open_squad and change_level take — passes both
+    itself, per the custom-`at` convention used across this module. The caller
+    also runs this inside its own transaction, so an InsufficientFunds raised
+    after this call rolls the fee row back with the squad write it precedes
+    (riders/README.md, *Opening a squad*).
+
+    No IntegrityError handling and no (team, week) constraint, unlike
+    charge_development_squad_costs: a team may pay several fees in one week —
+    an upgrade on Monday, a close and reopen on Tuesday — and each is its own
+    row, which is the point of the append-only ledger.
+    """
+    return LedgerEntry.objects.create(
+        team=team,
+        kind=LedgerEntry.Kind.DEVELOPMENT_SQUAD_FEE,
+        amount=amount,
+        occurred_at=at,
+        description=description,
+    )
+
+
 def pay_transfer_income(team, *, amount: int, at, description: str) -> LedgerEntry:
     """Credit `team` income from a transfer-market sale. Returns the row.
 
