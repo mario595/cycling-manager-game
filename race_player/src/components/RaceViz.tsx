@@ -87,7 +87,13 @@ export default function RaceViz({ raceData }: RaceVizProps) {
     [riders, selectedRider],
   )
 
-  const packs = useMemo(() => computePacks(riders, profile), [riders, profile])
+  const packs = useMemo(
+    // A time-cut rider is out of the race, not one that stopped making
+    // progress: they leave the road and the packs, rather than freezing on
+    // it and being clustered with whoever rides past them.
+    () => computePacks(riders.filter((r) => !r.dnf), profile),
+    [riders, profile],
+  )
   const results = useMemo(() => computeRaceResults(raceData), [raceData])
 
   return (

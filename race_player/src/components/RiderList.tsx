@@ -5,7 +5,9 @@ import {
 } from '@ant-design/icons'
 import type { Pack, Rider } from '../types/race'
 import { isLeader, teamCode, teamColor, teamName } from '../utils/teamColors'
-import { formatFinishTime, formatGapTime } from '../utils/formatTime'
+import { formatGapTime } from '../utils/formatTime'
+import { packGaps } from '../utils/packGaps'
+import { resultLabel } from '../utils/raceResults'
 import type { RiderResult } from '../utils/raceResults'
 
 const COLUMN_COUNT = 8
@@ -58,18 +60,6 @@ function RiderStateIcons({ rider }: { rider: Rider }) {
   )
 }
 
-function ResultCell({ rider, result }: { rider: Rider; result?: RiderResult }) {
-  // `result` is precomputed over the whole race, so it holds a finish time
-  // even at ticks before this rider actually crosses the line. Gate on the
-  // rider's own live `finished` flag for the currently displayed tick.
-  if (!rider.finished || !result) return <>—</>
-  if (result.finishTime !== null) return <>{formatFinishTime(result.finishTime)}</>
-  if (result.gapSeconds !== null) {
-    return <>{result.gapSeconds === 0 ? '+0' : `+${formatGapTime(result.gapSeconds)}`}</>
-  }
-  return <>—</>
-}
-
 function RiderRow({
   rider,
   rank,
@@ -114,7 +104,7 @@ function RiderRow({
         {rider.finished ? '✓' : `${(rider.speed * 3.6).toFixed(0)} km/h`}
       </td>
       <td className="px-3 py-2 text-right tabular-nums text-slate-600">
-        <ResultCell rider={rider} result={result} />
+        {resultLabel(rider, result)}
       </td>
       <td className="px-3 py-2 w-40">
         <EnergyBar value={rider.stamina} label="S" />
@@ -127,22 +117,11 @@ function RiderRow({
 }
 
 export default function RiderList({ packs, teamCodes, teamNames, results, onSelectRider }: RiderListProps) {
-  const gaps = useMemo(() => {
-    const list: (string | null)[] = []
-    for (let i = 0; i < packs.length; i++) {
-      if (i === 0) {
-        list.push(null)
-        continue
-      }
-      const prev = packs[i - 1]
-      const cur = packs[i]
-      const prevBack = prev.riders[prev.riders.length - 1].pos
-      const gapM = Math.max(0, prevBack - cur.frontPos)
-      const gapT = cur.speed > 0 ? gapM / cur.speed : 0
-      list.push(`+${formatGapTime(gapT)} (${gapM.toFixed(0)}m)`)
-    }
-    return list
-  }, [packs])
+  const gaps = useMemo(
+    () => packGaps(packs).map((gap) =>
+      gap === null ? null : `+${formatGapTime(gap.seconds)} (${gap.meters.toFixed(0)}m)`),
+    [packs],
+  )
 
   let rank = 0
 

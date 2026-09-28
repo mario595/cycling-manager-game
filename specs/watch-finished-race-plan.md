@@ -698,7 +698,8 @@ See below. It is its own commit so the docs describe what landed.
 1. **W1.** The backend is independent and the easiest thing to prove.
    Commit. — **done**
 2. **W2.** This is pure logic with no UI change in the game yet. It must
-   land before anything consumes `dnf`/`packGaps`/`resultLabel`. Commit.
+   land before anything consumes `dnf`/`packGaps`/`resultLabel`. Commit. —
+   **done**
 3. **W3.** The hook and the SVG props. Standalone behaviour stays
    observably the same. Commit.
 4. **W4.** Now that race_player has tests worth running. Commit.

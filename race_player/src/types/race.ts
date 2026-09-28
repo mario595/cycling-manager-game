@@ -30,6 +30,9 @@ export interface Rider {
   pulling: boolean
   surging: boolean
   finished: boolean
+  /** Cut by the race engine's time limit (the broom wagon). Mutually
+   *  exclusive with `finished`. */
+  dnf: boolean
   finish_time: number | null
 }
 

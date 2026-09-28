@@ -6,7 +6,13 @@ import {
   StepForwardOutlined,
 } from '@ant-design/icons'
 import type { Wind } from '../types/race'
+import { formatDuration } from '../utils/formatTime'
 import WindCompass from './WindCompass'
+
+// Re-exported for callers and tests that already reach for it here; the
+// implementation moved to utils/formatTime.ts, where the game's replay
+// screen imports it from (it must not pull antd in).
+export { formatDuration }
 
 const SPEEDS = [
   { label: 'x1', value: 1 },
@@ -16,15 +22,6 @@ const SPEEDS = [
   { label: 'x25', value: 25 },
   { label: 'x50', value: 50 },
 ]
-
-// Takes race seconds. Callers convert from ticks via the header's tickInterval:
-// a tick is not a second (see the plan for #88).
-export function formatDuration(seconds: number): string {
-  const hours = Math.floor(seconds / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
-  const secs = seconds % 60
-  return `${hours}h ${minutes}m ${secs}s`
-}
 
 interface PlaybackControlsProps {
   playing: boolean
