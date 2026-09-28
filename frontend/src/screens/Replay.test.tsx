@@ -3,6 +3,9 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { parseRaceLog } from '../../../race_player/src/utils/parseRaceLog'
+import { computeRaceResults } from '../../../race_player/src/utils/raceResults'
+
+vi.mock('../../../race_player/src/utils/raceResults', { spy: true })
 
 import type { RaceDetail } from '../api'
 import { useAuth } from '../useAuth'
@@ -187,5 +190,19 @@ describe('Replay', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Play' }))
     expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument()
+  })
+
+  it('computes the finishing order once per loaded race, not per tick', () => {
+    // The whole-race results never change during playback, and deriving them
+    // per frame would make playing a race cost the square of its length — so
+    // stepping through ticks must not recompute them. Regression for a review
+    // finding: they used to sit in the per-snapshot `useMemo`.
+    vi.mocked(computeRaceResults).mockClear()
+
+    renderReplay()
+    fireEvent.click(screen.getByRole('button', { name: 'Step forward' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Step forward' }))
+
+    expect(vi.mocked(computeRaceResults)).toHaveBeenCalledTimes(1)
   })
 })

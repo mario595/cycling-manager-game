@@ -80,17 +80,23 @@ function ReplayView({
   const playback = usePlayback(parsed.maxTicks, parsed.tickInterval, { initialSpeed: 10 })
   const snapshot = parsed.snapshots[playback.tick]
 
-  const { out, packs, teamCodes, teamNames, results } = useMemo(() => {
+  // The finished order is a property of the whole race, not of a tick, so it
+  // is computed once per loaded log — `computeRaceResults` walks every
+  // sample × every rider, and re-deriving it per frame would make playing a
+  // race cost the square of its length. Same reason as `RaceViz`.
+  const results = useMemo(() => computeRaceResults(parsed), [parsed])
+
+  // Only what this tick actually shows is per-tick.
+  const { out, packs } = useMemo(() => {
     const riders = snapshot?.riders ?? []
-    const stillRacing = riders.filter((rider) => !rider.dnf)
     return {
       out: riders.filter((rider) => rider.dnf),
-      packs: computePacks(stillRacing, parsed.profile),
-      teamCodes: parsed.teamCodes,
-      teamNames: parsed.teamNames,
-      results: computeRaceResults(parsed),
+      packs: computePacks(
+        riders.filter((rider) => !rider.dnf),
+        parsed.profile,
+      ),
     }
-  }, [snapshot, parsed])
+  }, [snapshot, parsed.profile])
 
   return (
     <PageBody gap={18} paddingTop={26}>
@@ -125,8 +131,8 @@ function ReplayView({
       <ReplayRiderList
         packs={packs}
         out={out}
-        teamCodes={teamCodes}
-        teamNames={teamNames}
+        teamCodes={parsed.teamCodes}
+        teamNames={parsed.teamNames}
         results={results}
         highlightTeam={highlightTeam}
       />
