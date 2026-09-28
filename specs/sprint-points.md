@@ -73,8 +73,11 @@ sprinter has been winning intermediate sprints all year.
   standing of their own, with a jersey and a leader shown mid-race, is
   #18.
 - **Mountain points.** #17's twin ticket, tracked and scored completely
-  separately — never pooled with sprint points, on the same team total or
-  otherwise.
+  separately — never pooled with sprint points into one tally or one
+  classification. Both do add to the same season league total, the same way
+  finish points already do; "never pooled" is about the two staying
+  distinguishable, not about mountain points being worth nothing to a team's
+  season.
 - **Rebalancing the existing race-points table.** Sprint points are additive
   on top of what a race already pays for finishing position. A full pass
   over every points source (finish, sprint, eventually mountain and
