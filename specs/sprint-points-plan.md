@@ -429,7 +429,7 @@ Tests in `world/tests/test_tick.py`:
   `world.services.score_sprints` to raise; the race stays `FINISHED`,
   `RacePoints` exist, prizes are paid, and `tick.error` names sprint points.
 
-### W7 — `api/`: weight and points on race detail and results
+### W7 — `api/`: weight and points on race detail and results ✅
 Tests in `api/tests.py`:
 - `test_race_detail_sprint_marker_has_weight_and_points`
 - `test_race_detail_mountain_marker_has_null_weight_and_points`

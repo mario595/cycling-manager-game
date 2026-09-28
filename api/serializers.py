@@ -346,6 +346,8 @@ class RaceMarkerSerializer(serializers.Serializer):
     kind = serializers.CharField()
     name = serializers.CharField()
     distance = serializers.FloatField()
+    weight = serializers.CharField(allow_null=True)
+    points = serializers.ListField(child=serializers.IntegerField(), allow_null=True)
 
 
 class RaceDetailSerializer(serializers.Serializer):
@@ -382,6 +384,8 @@ class RaceResultEntrySerializer(serializers.Serializer):
 class RaceResultPointsEntrySerializer(serializers.Serializer):
     team = RaceResultTeamSerializer()
     position = serializers.IntegerField(allow_null=True)
+    finish_points = serializers.IntegerField()
+    sprint_points = serializers.IntegerField()
     points = serializers.IntegerField()
     prize = serializers.IntegerField()
 
@@ -396,6 +400,7 @@ class RaceMarkerCrossingSerializer(serializers.Serializer):
     position = serializers.IntegerField()
     rider = RaceResultRiderSerializer()
     team = RaceResultTeamSerializer(allow_null=True)
+    points = serializers.IntegerField(allow_null=True)
 
 
 class RaceMarkerResultSerializer(RaceMarkerSerializer):
