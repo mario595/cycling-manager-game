@@ -5,7 +5,8 @@ from unittest.mock import Mock, call
 
 import pytest
 
-from riders.models import Rider
+from riders.development_squad import close_squad
+from riders.models import DevelopmentSquad, Rider
 from teams.models import Team
 from transfers.models import Auction, Bid
 from transfers.pricing import min_increment_for, reserve_price_for, severance_fee_for
@@ -71,6 +72,50 @@ def test_free_agents_excludes_retired_riders(db):
 
     assert list(free_agents()) == [active]
     assert retired not in free_agents()
+
+
+def test_free_agents_excludes_squad_riders(db):
+    team = Team.objects.create(name="Team Alpha", code="ALP")
+    squad = DevelopmentSquad.objects.create(
+        team=team, level=1, opened_at=datetime(2027, 3, 1, tzinfo=dt_timezone.utc),
+    )
+    squad_rider = _rider(name="Youth One", team=None, development_squad=squad)
+    active = _rider(name="Active Rider", team=None)
+
+    assert list(free_agents()) == [active]
+    assert squad_rider not in free_agents()
+
+
+def test_sign_squad_rider_raises_not_available(db, claimed_at):
+    team = Team.objects.create(name="Team Alpha", code="ALP", managed_since=claimed_at)
+    other_team = Team.objects.create(name="Team Beta", code="BET")
+    squad = DevelopmentSquad.objects.create(
+        team=other_team, level=1, opened_at=claimed_at,
+    )
+    rider = _rider(name="Youth One", team=None, development_squad=squad)
+    charge = Mock()
+
+    with pytest.raises(RiderNotAvailable):
+        sign_free_agent(team, rider.pk, at=claimed_at, charge=charge)
+
+    rider.refresh_from_db()
+    charge.assert_not_called()
+    assert rider.team_id is None
+    assert rider.development_squad_id == squad.pk
+
+
+def test_released_squad_rider_is_signable(db, claimed_at):
+    team = Team.objects.create(name="Team Alpha", code="ALP", managed_since=claimed_at)
+    other_team = Team.objects.create(name="Team Beta", code="BET")
+    squad = DevelopmentSquad.objects.create(
+        team=other_team, level=1, opened_at=claimed_at,
+    )
+    rider = _rider(name="Youth One", team=None, development_squad=squad)
+
+    close_squad(other_team, at=claimed_at)
+    signed = sign_free_agent(team, rider.pk, at=claimed_at, charge=Mock())
+
+    assert signed.team_id == team.pk
 
 
 def test_signing_a_retired_rider_raises_not_available(db, claimed_at):

@@ -548,7 +548,7 @@ from `theme.ts`. There is no money on the riders card.
 - **Test** in `teams/tests/test_services.py` beside the claim tests:
   `test_claim_releases_squad_riders_as_free_agents`.
 
-### W4 — `transfers/services.py`: squad riders are not free agents
+### W4 — `transfers/services.py`: squad riders are not free agents — done
 - **Tests** in `transfers/tests/test_services.py`:
   - `test_free_agents_excludes_squad_riders`
   - `test_sign_squad_rider_raises_not_available`
