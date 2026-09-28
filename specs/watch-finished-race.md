@@ -112,11 +112,14 @@ bolted on.
 - "Show results" and "Watch race" are independent: a player can reveal
   results without ever opening the replay, or watch the whole replay
   without revealing results, or do both in either order.
-- The own-team highlight is based on which team currently owns the rider's
-  contract, not who managed the team on race day — a team claimed after
-  the race still sees its current riders highlighted in an old replay. A
-  race where the player's team did not field a squad shows no highlighted
-  riders at all, not an error.
+- The own-team highlight marks the riders who **raced for the player's
+  team in that race** — not the riders the team has under contract today,
+  and not whoever managed the team on race day. A rider sold since still
+  shows highlighted in the old replay (they rode for this team that day);
+  a rider signed since does not (they rode for someone else). A team
+  claimed after the race still sees its riders from that day highlighted.
+  A race where the player's team did not field a squad shows no
+  highlighted riders at all, not an error.
 - A rider who did not finish because of the time cut is visually distinct
   from both a still-racing rider and a rider who finished — the replay
   must not represent "pulled from the race" as if they simply stopped
@@ -141,6 +144,10 @@ bolted on.
 - The manager's own team is found via a highlight, not by switching every
   team to its jersey colours — cheapest fix for the thing a manager
   actually looks for when watching. **Decided in scoping.**
+- The highlight follows the team a rider **raced for** that day, not their
+  current contract — the same way the results table labels teams, and
+  the only reading consistent with the replay's own team colours.
+  **Decided while planning** (corrects an earlier wording in this spec).
 - The replay must visually match the rest of the game (typography, colour,
   controls) before this ships, rather than shipping with its current,
   separate look. **Decided in scoping.**
