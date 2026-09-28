@@ -403,7 +403,7 @@ from `theme.ts`, money through `formatMoney`.
 
 ## Work items
 
-### W1 — `riders/`: model, migration, pricing table
+### W1 — `riders/`: model, migration, pricing table ✅
 Add `DevelopmentSquad` plus `0013_developmentsquad.py`, and
 `riders/development_squad.py` with `LEVELS`, `weekly_cost` and `change_fee`
 only (no operations yet).

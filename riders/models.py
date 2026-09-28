@@ -237,6 +237,56 @@ class Rider(TimeStampedModel):
         return self.name
 
 
+class DevelopmentSquad(TimeStampedModel):
+    """A team's development squad, while it is open (#32).
+
+    One row per open squad and closing deletes it: a closed squad has no
+    level, and reopening does not remember the old one, so a row left behind
+    would carry state nobody may read. The ledger is the record of what was
+    paid. `team` is a OneToOneField so "one squad per team" is a database
+    constraint, the same argument `staff.Trainer.team` makes (staff/README.md,
+    *The one-slot rule*).
+
+    The level's prices are **not** stored — they are a fixed table in
+    development_squad.py's LEVELS, the same reasoning as staff/pricing.py: a
+    stored price could only drift from the table. `opened_at` is game time and
+    is informational; nothing reads it for pricing.
+    """
+
+    class Level(models.IntegerChoices):
+        REGIONAL = 1, "Regional"
+        NATIONAL = 2, "National"
+        ELITE = 3, "Elite"
+
+    team = models.OneToOneField(
+        "teams.Team",
+        on_delete=models.CASCADE,
+        related_name="development_squad",
+        help_text="One squad per team. Closed by deleting the row, not by a flag.",
+    )
+    level = models.PositiveSmallIntegerField(
+        choices=Level.choices,
+        help_text="Which of the three levels this squad runs at.",
+    )
+    opened_at = models.DateTimeField(
+        help_text=(
+            "Game time the squad was (last) opened. Informational — nothing "
+            "reads it for pricing."
+        ),
+    )
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(level__gte=1) & models.Q(level__lte=3),
+                name="development_squad_level_in_range",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.team} development squad — {self.get_level_display()}"
+
+
 class RiderAttributeSnapshot(TimeStampedModel):
     """One rider's five displayed (0-10) attributes at a point in time.
 
