@@ -2,16 +2,22 @@ from __future__ import annotations
 
 import random
 import statistics
+from datetime import datetime, timezone as dt_timezone
 
 from riders.development_squad import LEVELS
 from riders.generation import generate_rider
+from riders.models import DevelopmentSquad, Rider, RiderAttributeSnapshot
 from riders.pricing import strength
 from riders.youth_intake import (
     BAND_WEIGHTS,
     INTAKE_AGE_RANGE,
+    INTAKE_BATCH_SIZE,
     generate_youth_rider,
     is_intake_week,
+    run_intake,
 )
+
+AT = datetime(2027, 3, 1, tzinfo=dt_timezone.utc)
 
 
 def test_intake_weeks_are_4_8_12():
@@ -78,3 +84,50 @@ def test_elite_mean_potential_above_regional(db):
     elite = [generate_youth_rider(3, rng=rng).potential for _ in range(2000)]
 
     assert statistics.mean(elite) > statistics.mean(regional)
+
+
+def test_run_intake_adds_batch_to_every_open_squad(team):
+    DevelopmentSquad.objects.create(team=team, level=1, opened_at=AT)
+
+    created = run_intake(at=AT, rng=random.Random(6))
+
+    assert created == INTAKE_BATCH_SIZE
+    assert Rider.objects.filter(development_squad__team=team).count() == INTAKE_BATCH_SIZE
+
+
+def test_run_intake_riders_have_no_team_and_carry_intake_at(team):
+    squad = DevelopmentSquad.objects.create(team=team, level=1, opened_at=AT)
+
+    run_intake(at=AT, rng=random.Random(7))
+
+    for rider in Rider.objects.filter(development_squad=squad):
+        assert rider.team_id is None
+        assert rider.intake_at == AT
+
+
+def test_run_intake_skips_team_without_squad(team):
+    created = run_intake(at=AT, rng=random.Random(8))
+
+    assert created == 0
+
+
+def test_run_intake_twice_same_at_is_idempotent(team):
+    DevelopmentSquad.objects.create(team=team, level=1, opened_at=AT)
+
+    first = run_intake(at=AT, rng=random.Random(9))
+    second = run_intake(at=AT, rng=random.Random(10))
+
+    assert first == INTAKE_BATCH_SIZE
+    assert second == 0
+    assert Rider.objects.filter(development_squad__team=team).count() == INTAKE_BATCH_SIZE
+
+
+def test_run_intake_writes_baseline_snapshots(team):
+    squad = DevelopmentSquad.objects.create(team=team, level=1, opened_at=AT)
+
+    run_intake(at=AT, rng=random.Random(11))
+
+    riders = Rider.objects.filter(development_squad=squad)
+    assert riders.count() == INTAKE_BATCH_SIZE
+    for rider in riders:
+        assert RiderAttributeSnapshot.objects.filter(rider=rider, week=None).exists()

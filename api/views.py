@@ -1208,7 +1208,7 @@ class CloseDevelopmentSquadView(APIView):
         if team is None:
             return Response({"detail": "You do not manage a team."}, status=403)
 
-        if not close_squad(team):
+        if not close_squad(team, at=now()):
             return Response(
                 {"detail": "Your team has no development squad."}, status=409
             )

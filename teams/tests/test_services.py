@@ -291,6 +291,24 @@ def test_claim_closes_development_squad(db, user, team):
     assert not DevelopmentSquad.objects.filter(team=team).exists()
 
 
+def test_claim_releases_squad_riders_as_free_agents(db, user, team):
+    """Closing a squad on claim (#33) releases its riders, not just the row:
+    a rider left sitting in a claimed-over squad must land in the pool with
+    unattached_since stamped, the same as any other close."""
+    squad = DevelopmentSquad.objects.create(team=team, level=1, opened_at=AT)
+    youth = Rider.objects.create(
+        name="Youth One", development_squad=squad,
+        climb=20, sprint=20, flat=20, resistance=20, positioning=20,
+    )
+
+    claim_team(user, name="Mountain Goats", code="MGO", at=AT)
+    youth.refresh_from_db()
+
+    assert youth.team_id is None
+    assert youth.development_squad_id is None
+    assert youth.unattached_since == AT
+
+
 def test_claim_closes_the_squad_the_released_manager_bought(db, user, team, rider):
     """The squad only exists after a manager opened it, so the path a test
     with a bare DevelopmentSquad row skips: claim, open, release, claim."""

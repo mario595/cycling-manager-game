@@ -524,7 +524,7 @@ from `theme.ts`. There is no money on the riders card.
 - **Test** in `riders/tests/test_generation.py`:
   `test_potential_override_respected_and_floored_at_best_attribute`.
 
-### W3 — `riders/`: `run_intake`, `close_squad` releases riders, retirement clears squad; `teams/` and the close view pass `at`
+### W3 — `riders/`: `run_intake`, `close_squad` releases riders, retirement clears squad; `teams/` and the close view pass `at` — done
 - **What changes:**
   - `run_intake` as given.
   - `close_squad(team, *, at)`.

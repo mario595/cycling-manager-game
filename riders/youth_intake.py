@@ -14,7 +14,13 @@ from __future__ import annotations
 
 import random
 
+from django.db import transaction
+from teams.models import Team
+
+from .development_squad import squad_for
 from .generation import generate_rider
+from .models import DevelopmentSquad, Rider
+from .services import record_initial_snapshots
 
 INTAKE_INTERVAL_WEEKS = 4
 INTAKE_BATCH_SIZE = 2
@@ -68,3 +74,34 @@ def generate_youth_rider(level: int, *, rng: random.Random):
     quality = max(1, round(potential * rng.uniform(*YOUTH_QUALITY_FRACTION)))
     age = rng.randint(*INTAKE_AGE_RANGE)
     return generate_rider(quality=quality, age=age, potential=potential, rng=rng)
+
+
+def run_intake(*, at, rng: random.Random | None = None) -> int:
+    """Give every open development squad one batch of youth riders, dated
+    `at` (the intake week's starts_at). world/ decides which weeks; this
+    decides who.
+
+    Every open squad gets a batch, managed or not (plan Design decision 9):
+    a team released to the pool keeps its squad and keeps paying for it, so
+    it keeps receiving riders too.
+    """
+    rng = rng or random.Random()
+    created_total = 0
+    for team_id in list(DevelopmentSquad.objects.values_list("team_id", flat=True)):
+        with transaction.atomic():
+            # The same lock close_squad takes, so a close cannot delete the
+            # squad between our read and our insert (plan Design decision 7).
+            team = Team.objects.select_for_update().get(pk=team_id)
+            squad = squad_for(team)  # re-read BY TEAM under the lock
+            if squad is None:
+                continue  # closed since we listed it
+            if Rider.objects.filter(development_squad=squad, intake_at=at).exists():
+                continue  # second line of defence: this batch already ran
+            batch = [generate_youth_rider(squad.level, rng=rng) for _ in range(INTAKE_BATCH_SIZE)]
+            for rider in batch:
+                rider.development_squad = squad
+                rider.intake_at = at
+            created = Rider.objects.bulk_create(batch)
+            record_initial_snapshots(created)  # baseline for the attribute history
+            created_total += len(created)
+    return created_total
