@@ -34,6 +34,7 @@ const auction: AuctionListing = {
     weekly_salary: 3_500,
     market_value: 120_000,
     release_cost: null,
+    final_season: false,
   },
 }
 

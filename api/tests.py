@@ -631,6 +631,7 @@ def test_rider_list_response_has_no_hidden_traits(roster_rider, roster_client):
     for hidden_field in (
         "potential", "peak_age", "decline_rate",
         "injury_proneness", "training_affinity", "recovery_rate", "growth_debt",
+        "retirement_age",
     ):
         assert hidden_field not in rider_data
 
@@ -2501,9 +2502,11 @@ def test_rider_profile_has_no_hidden_traits(profile_client, profile_rider):
     assert set(response.data.keys()) == {
         "id", "name", "speciality", "nationality", "age", "height_cm", "weight_kg",
         "climb", "sprint", "flat", "resistance", "positioning",
-        "freshness", "weekly_salary", "market_value", "release_cost",
+        "freshness", "weekly_salary", "market_value", "release_cost", "final_season",
         "team", "current_week", "retired", "attribute_history", "races", "career",
     }
+    # The retirement age itself stays hidden; only the boolean consequence ships.
+    assert "retirement_age" not in response.data
 
 
 def test_rider_profile_identity_matches_roster_payload(profile_rider, profile_owner_client):
@@ -2633,6 +2636,102 @@ def test_rider_profile_current_week_in_off_and_no_season(profile_client, profile
 
     response = profile_client.get(f"/api/riders/{profile_rider.pk}/")
     assert response.data["current_week"] == {"season": 1, "week": SEASON_WEEKS}
+
+
+def test_roster_in_season_is_computed_once(
+    roster_team, roster_client, django_assert_max_num_queries,
+):
+    """The in-season check is cached on the shared serializer context, so a
+    roster costs the same number of queries whatever its size (#42)."""
+    for index in range(9):
+        Rider.objects.create(
+            name=f"Extra {index}", team=roster_team, speciality=Rider.Speciality.CLIMBER,
+            age=24, climb=40, sprint=40, flat=40, resistance=40, positioning=40,
+        )
+    _create_season_with_weeks(now() - timedelta(weeks=1))
+
+    with django_assert_max_num_queries(10):
+        response = roster_client.get("/api/riders/")
+    assert response.status_code == 200
+    assert len(response.data["riders"]) == 9
+
+    for index in range(9, 19):
+        Rider.objects.create(
+            name=f"Extra {index}", team=roster_team, speciality=Rider.Speciality.CLIMBER,
+            age=24, climb=40, sprint=40, flat=40, resistance=40, positioning=40,
+        )
+
+    with django_assert_max_num_queries(10):
+        response = roster_client.get("/api/riders/")
+    assert response.status_code == 200
+    assert len(response.data["riders"]) == 19
+
+
+def test_roster_marks_final_season_rider_in_season(roster_rider, roster_client):
+    _create_season_with_weeks(now() - timedelta(weeks=1))
+    roster_rider.age = 38
+    roster_rider.peak_age = 32
+    roster_rider.decline_rate = 1
+    roster_rider.save()
+
+    response = roster_client.get("/api/riders/")
+
+    assert response.data["riders"][0]["final_season"] is True
+
+
+def test_roster_does_not_mark_final_season_off_season(roster_rider, roster_client):
+    _create_season_with_weeks(now() - timedelta(weeks=13))
+    roster_rider.age = 38
+    roster_rider.peak_age = 32
+    roster_rider.decline_rate = 1
+    roster_rider.save()
+
+    response = roster_client.get("/api/riders/")
+
+    assert response.data["riders"][0]["final_season"] is False
+
+
+def test_rider_profile_carries_final_season(profile_client, profile_rider):
+    _create_season_with_weeks(now() - timedelta(weeks=1))
+    profile_rider.age = 38
+    profile_rider.peak_age = 32
+    profile_rider.decline_rate = 1
+    profile_rider.save()
+
+    response = profile_client.get(f"/api/riders/{profile_rider.pk}/")
+
+    assert response.data["final_season"] is True
+
+
+def test_retired_rider_profile_final_season_false(profile_client, profile_rider):
+    """A rider who has already retired is never tagged, whatever their age —
+    the marker means "still to happen"."""
+    _create_season_with_weeks(now() - timedelta(weeks=1))
+    profile_rider.age = 38
+    profile_rider.peak_age = 32
+    profile_rider.decline_rate = 1
+    profile_rider.team = None
+    profile_rider.retired_at = datetime(2027, 3, 1, tzinfo=dt_timezone.utc)
+    profile_rider.save()
+
+    response = profile_client.get(f"/api/riders/{profile_rider.pk}/")
+
+    assert response.data["final_season"] is False
+
+
+def test_free_agents_carry_final_season(market_client, market_team):
+    _create_season_with_weeks(now() - timedelta(weeks=1))
+    marked = _market_rider(
+        name="Marked Free", age=38, peak_age=32, decline_rate=1,
+    )
+    _market_rider(name="Young Free", age=24, peak_age=32, decline_rate=1)
+
+    response = market_client.get("/api/transfers/free-agents/")
+
+    by_name = {r["name"]: r for r in response.data["riders"]}
+    assert by_name["Marked Free"]["final_season"] is True
+    assert by_name["Young Free"]["final_season"] is False
+    assert by_name["Marked Free"]["id"] == marked.pk
 
 
 def test_rider_profile_query_count_is_constant(

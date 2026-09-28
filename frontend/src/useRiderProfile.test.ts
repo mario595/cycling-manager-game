@@ -29,6 +29,7 @@ function makeProfile(overrides: Partial<RiderProfile> = {}): RiderProfile {
     weekly_salary: 4200,
     market_value: 310000,
     release_cost: null,
+    final_season: false,
     team: { id: 1, name: 'Team', code: 'TEA' },
     current_week: { season: 1, week: 7 },
     retired: null,

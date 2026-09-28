@@ -68,9 +68,28 @@ Since #29 each rider also carries `release_cost`
   `context["team"]`/`context["weeks_opened"]` and degrades to `null`
   when a payload is built without a team in scope (free agents), so a
   future second call site fails a test rather than 500ing in production.
-  The weeks are counted by `_cooldown_weeks_opened` in `api/views.py`
-  (0 for a never-claimed team) — the caller counts, never `transfers/`.
-  A third top-level key, `salary_review`, carries the team's most recent
+   The weeks are counted by `_cooldown_weeks_opened` in `api/views.py`
+   (0 for a never-claimed team) — the caller counts, never `transfers/`.
+   Every rider payload at every call site also carries **`final_season`**:
+   `true` only while a season is open *and* the rider is active *and* past
+   their hidden retirement age, i.e. the one season left where they can
+   still race for the team
+   ([#42](https://github.com/mario595/cycling-manager/issues/42); see
+   `riders/README.md`, *Retiring by age*). It is a `SerializerMethodField`
+   reading `riders.services.is_due_to_retire`, so the age behind it — and
+   the `peak_age`/`decline_rate` it is derived from — is never shipped.
+   The "is a season open" half is `_in_season`, a per-request check cached
+   on the serializer's `context`, because a roster is dozens of riders
+   sharing one world position: reading it per rider would put a constant
+   extra query set on every payload, and `context` is the only place
+   already per-request. It is deliberately **not** a model field or a
+   `week__`-join: a boolean that changes on a clock tick, not on a save,
+   cannot be cached on the row, and the season is not in the queryset.
+   `True` is not shipped off-season either — between seasons the tag would
+   name a season that is over, and the next one is decided by ageing that
+   has not run yet.
+   A third top-level key, `salary_review`, carries the team's most recent
+
   season-end salary review or `null` when there isn't one (#26).
   `economy.services.latest_salary_review` picks the newest by
   `season__starts_at`, and the payload is `{season_number, payroll_before,
@@ -123,10 +142,13 @@ Since #29 each rider also carries `release_cost`
 - `GET /api/transfers/free-agents/` (`FreeAgentPoolSerializer`,
   `FreeAgentsView`) — the whole transfer market in one payload:
   `{riders: [...], balance}`. `riders` is the active free-agent pool, every
-  active rider with no team, ordered by name, each carrying `signing_fee`
-  (`transfers.pricing.signing_fee_for`, exact credits) and — inherited
-  from `RiderSerializer` — all the roster fields; a free agent's
-  `release_cost` serializes as `null` (it is on nobody's roster).
+   active rider with no team, ordered by name, each carrying `signing_fee`
+   (`transfers.pricing.signing_fee_for`, exact credits) and — inherited
+   from `RiderSerializer` — all the roster fields, `final_season` included,
+   so a buyer sees a rider's last season **before** paying the signing fee
+   rather than after; a free agent's
+   `release_cost` serializes as `null` (it is on nobody's roster).
+
   `balance` (`economy.services.balance_for`) rides alongside so the SPA
   can disable the Sign it cannot afford, the same both-keys shape
   `StaffView` uses. A caller with no team gets a 403, like `RiderListView`.

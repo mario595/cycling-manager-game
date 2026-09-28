@@ -14,7 +14,7 @@ from django.db.models import F, Value
 from django.db.models.functions import Greatest
 
 from .display import to_display_scale
-from .generation import SPECIALITY_PROFILES
+from .generation import PEAK_AGE_RANGE, SPECIALITY_PROFILES
 from .models import ENGINE_ATTRIBUTES, Rider, RiderAttributeSnapshot
 from .pricing import SALARY_REVIEW_THRESHOLD, weekly_salary_for
 
@@ -83,6 +83,12 @@ RECOVERY_MAX = 20
 #: results without making the rider a non-participant. Multiplier is
 #: linear in freshness between FRESHNESS_FLOOR and FRESHNESS_MAX.
 PENALTY_AT_FLOOR = 0.80
+
+#: The age band every rider retires inside, 33 to 38 (MIN + SPAN). No rider
+#: leaves the game young, and everyone eventually does; where in the band is
+#: the rider's own business, derived from their traits. See retirement_age.
+RETIREMENT_AGE_MIN = 33
+RETIREMENT_AGE_SPAN = 5
 
 
 def mark_team_change(riders: Iterable[Rider], *, team_now, at) -> None:
@@ -275,11 +281,58 @@ def apply_weekly_growth(
     return records
 
 
+def retirement_age(rider: Rider) -> int:
+    """The age this rider retires at — derived, never stored.
+
+    A pure function of the two immutable hidden traits set at generation
+    (`peak_age` and `decline_rate`), so it is stable for a rider's whole
+    life and needs no backfill for existing rows. A late peaker and a slow
+    decliner play on; a fast decliner goes sooner — the weighting (3 for
+    peak age, 2 for decline rate) makes peak age the bigger driver, so a
+    player watching many careers can learn "late bloomers last". The result
+    never leaves the RETIREMENT_AGE_MIN..MIN+SPAN band, whichever extreme
+    the traits take (see riders/README.md, *Retiring by age*).
+    """
+    low, high = PEAK_AGE_RANGE
+    peak_share = min(1.0, max(0.0, (rider.peak_age - low) / (high - low)))
+    staying_power = (100 - rider.decline_rate) / 99
+    return RETIREMENT_AGE_MIN + round(3 * peak_share + 2 * staying_power)
+
+
+def is_due_to_retire(rider: Rider) -> bool:
+    """Whether this rider has reached their retirement age.
+
+    False for a retired rider whatever their age, which is what lets the
+    API mark riders without ever tagging one who is already gone.
+    """
+    return rider.retired_at is None and rider.age >= retirement_age(rider)
+
+
+def retire_due_riders(*, at) -> list[int]:
+    """Retire every active rider whose age has reached their retirement
+    age, as of `at` (game time). Clears the team and stamps retired_at in
+    one UPDATE so retired_rider_has_no_team holds row by row. Returns the
+    ids actually retired. Pure with respect to seasons: world decides when."""
+    due = [
+        rider.pk
+        for rider in Rider.objects.active().only("id", "age", "peak_age", "decline_rate")
+        if rider.age >= retirement_age(rider)
+    ]
+    if due:
+        Rider.objects.filter(pk__in=due, retired_at__isnull=True).update(
+            team=None, retired_at=at,
+        )
+    return due
+
+
 def advance_ages() -> int:
     """Advance every rider's age by one, capped at the model's maximum.
 
-    A rider at the cap holds there; automatic age-driven retirement (#42)
-    is still future work. One UPDATE statement via F(), not a per-row loop.
+    A rider at the cap holds there. The world retires riders at a season
+    close *before* calling this, so a rider leaves the game at the age the
+    player last saw rather than ageing into and out of it in one step —
+    see retire_due_riders above. One UPDATE statement via F(), not a
+    per-row loop.
     """
     return Rider.objects.active().filter(age__lt=40).update(age=F("age") + 1)
 

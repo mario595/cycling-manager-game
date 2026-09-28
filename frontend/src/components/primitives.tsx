@@ -291,6 +291,30 @@ export function Chip({
   )
 }
 
+/** The pill that marks a rider who retires when the running season closes
+ * (#42). Deliberately carries no reason and no date: the player is told
+ * *that* it is coming and nothing about *why* this rider and not another —
+ * the retirement age is a hidden trait's consequence, not a number. */
+export function FinalSeasonTag() {
+  return (
+    <span
+      title="Retires when this season ends"
+      style={{
+        fontSize: 10.5,
+        letterSpacing: '1px',
+        fontFamily: font.mono,
+        color: color.accentInk,
+        background: color.accentWash,
+        borderRadius: 6,
+        padding: '2px 7px',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      LAST SEASON
+    </span>
+  )
+}
+
 /** The standard content wrapper: page padding and max width. */
 export function PageBody({
   children,

@@ -105,7 +105,12 @@ _MAX_STARTING_ATTRIBUTE = 74
 
 _ATTRIBUTE_SPREAD = 12  # +/- roll applied to each weighted attribute
 _AGE_RANGE = (18, 36)
-_PEAK_AGE_RANGE = (24, 32)
+
+#: Public because services.retirement_age derives the age a rider retires at
+#: from it (#42). Copying the tuple instead of importing it would let the
+#: retirement window drift away from what generation actually produces.
+PEAK_AGE_RANGE = (24, 32)
+
 _BUILD_SPREAD_CM = 6
 _BUILD_SPREAD_KG = 5
 
@@ -197,7 +202,7 @@ def generate_rider(
     nationality = nationality or rng.choice(list(Rider.Nationality.values))
     quality = quality if quality is not None else _roll_quality(rng)
     age = age if age is not None else rng.randint(*_AGE_RANGE)
-    peak_age = rng.randint(*_PEAK_AGE_RANGE)
+    peak_age = rng.randint(*PEAK_AGE_RANGE)
 
     attributes = _roll_attributes(speciality, quality, rng)
     height_cm, weight_kg = _roll_build(speciality, rng)
