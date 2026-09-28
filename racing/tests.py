@@ -1011,6 +1011,12 @@ def test_create_race_without_weight_gives_standard(db):
     assert race.markers.get().weight == RaceMarker.Weight.STANDARD
 
 
+def test_loader_weights_match_race_marker_weights():
+    from schedule.loaders import MARKER_WEIGHTS
+
+    assert set(MARKER_WEIGHTS) == set(RaceMarker.Weight.values)
+
+
 def test_simulate_race_records_every_crossing_in_order(running_race, four_riders):
     marker = RaceMarker.objects.create(
         race=running_race, kind=RaceMarker.Kind.SPRINT, name="Mid-line", distance=250.0

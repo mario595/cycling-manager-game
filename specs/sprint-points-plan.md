@@ -374,7 +374,7 @@ Tests in `racing/tests.py`:
 - `test_create_race_stores_marker_weight`
 - `test_create_race_without_weight_gives_standard`
 
-### W2 — `schedule/loaders.py`: parse `weight`
+### W2 — `schedule/loaders.py`: parse `weight` ✅
 Implement as above.
 Tests in `schedule/tests/test_loaders.py`:
 - `test_sprint_marker_weight_is_parsed`

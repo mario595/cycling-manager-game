@@ -172,3 +172,22 @@ def test_load_season_creates_race_markers(db, tmp_path):
         ("sprint", "First", 4000.0),
         ("mountain", "Top", 9000.0),
     ]
+
+
+def test_load_season_stores_marker_weight(db, tmp_path):
+    path = write_season_file(
+        tmp_path,
+        races=[
+            race_entry(
+                course=[{"length": 10000.0, "gradient": 0.0}],
+                markers=[
+                    {"kind": "sprint", "name": "Big One", "distance": 4000, "weight": "major"},
+                ],
+            )
+        ],
+    )
+
+    call_command("load_season", path)
+
+    race = Week.objects.get(season__number=1, number=1).races.get()
+    assert race.markers.get().weight == "major"
