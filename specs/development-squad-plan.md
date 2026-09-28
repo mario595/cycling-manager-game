@@ -442,7 +442,7 @@ functions.
 - `test_kind_accepts_21_char_value` (a `full_clean()` on a
   `development_squad_fee` row passes, which proves the `max_length` bump)
 
-### W4 — `world/`: charge squads in the tick
+### W4 — `world/`: charge squads in the tick ✅
 `squad_cost_by_team`, the call inside the loop, `TickRun.development_squad_entries`
 and its migration.
 **Tests** in `world/tests/` (put them beside the existing trainer-salary tick

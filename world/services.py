@@ -21,6 +21,7 @@ from django.utils.module_loading import import_string
 from competitions.services import points_by_team, prizes_by_team, score_race
 from economy.services import (
     apply_weekly_fanbase,
+    charge_development_squad_costs,
     charge_trainer_salaries,
     charge_transfer_fee,
     charge_weekly_wages,
@@ -33,7 +34,8 @@ from economy.services import (
 )
 from racing.models import Race, RaceResult
 from racing.services import riders_who_raced, riders_who_started, simulate_race
-from riders.models import Rider
+from riders.development_squad import LEVELS, weekly_cost
+from riders.models import DevelopmentSquad, Rider
 from riders.services import (
     advance_ages,
     apply_weekly_growth,
@@ -446,6 +448,7 @@ def tick() -> TickRun:
     fanbase_entries = 0
     sponsorship_entries = 0
     trainer_salary_entries = 0
+    development_squad_entries = 0
     teams_released = 0
     agents_expired = 0
     agents_retired = 0
@@ -459,12 +462,26 @@ def tick() -> TickRun:
         trainer.team_id: weekly_salary(trainer)
         for trainer in Trainer.objects.filter(team__isnull=False)
     }
+    # Same reasoning, and the same shape: a squad's level does not move
+    # between the weeks one tick crosses (no player action happens mid-tick),
+    # so one map serves every week, and economy/ takes the cost and the level
+    # name from here rather than looking up LEVELS itself — it may not import
+    # riders/ for the price, only for nothing. Deliberately every open squad,
+    # managed or not: an unmanaged team still runs the squad it was given, and
+    # its cost is real, the same way its riders still draw wages.
+    squad_cost_by_team = {
+        squad.team_id: (weekly_cost(squad.level), LEVELS[squad.level].name)
+        for squad in DevelopmentSquad.objects.all()
+    }
     for transition in weeks:            # per week, NOT weeks=len(weeks)
         week = transition.week
         riders_trained += _apply_training_week(week)
         wage_entries += charge_weekly_wages(week)
         trainer_salary_entries += charge_trainer_salaries(
             week, salary_by_team=salary_by_team,
+        )
+        development_squad_entries += charge_development_squad_costs(
+            week, cost_by_team=squad_cost_by_team,
         )
 
         # Fanbase reads the week that just COMPLETED, not the one opening:
@@ -542,6 +559,7 @@ def tick() -> TickRun:
         fanbase_entries=fanbase_entries,
         sponsorship_entries=sponsorship_entries,
         trainer_salary_entries=trainer_salary_entries,
+        development_squad_entries=development_squad_entries,
         teams_released=teams_released,
         agents_expired=agents_expired,
         agents_retired=agents_retired,

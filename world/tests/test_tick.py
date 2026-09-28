@@ -15,7 +15,7 @@ from economy.models import (
 )
 from economy.services import ensure_opening_balance, sign_offer
 from racing.models import Race, RaceResult
-from riders.models import Rider
+from riders.models import DevelopmentSquad, Rider
 from schedule.models import SEASON_WEEKS, Season, Week
 from staff.models import Trainer
 from staff.pricing import weekly_salary
@@ -264,6 +264,138 @@ def test_tick_twice_charges_once(db, team, riders):
     rows = LedgerEntry.objects.filter(team=team, kind=LedgerEntry.Kind.TRAINER_SALARY)
     assert rows.count() == 3
     assert rows.values("week_id").distinct().count() == 3
+
+
+def open_squad(team, level):
+    return DevelopmentSquad.objects.create(team=team, level=level, opened_at=now())
+
+
+def test_tick_charges_open_squad_each_crossed_week(db, team, riders):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_three = season.weeks.get(number=3)
+    open_squad(team, 2)
+    clock.set(week_three.starts_at + timedelta(hours=1))
+
+    run = tick()
+
+    assert run.weeks_processed == 3
+    assert run.development_squad_entries == 3
+    entries = LedgerEntry.objects.filter(
+        team=team, kind=LedgerEntry.Kind.DEVELOPMENT_SQUAD,
+    ).order_by("week__number")
+    assert entries.count() == 3
+    assert set(entries.values_list("amount", flat=True)) == {-3_500}
+    assert set(entries.values_list("week_id", flat=True)) == {
+        season.weeks.get(number=n).pk for n in (1, 2, 3)
+    }
+    assert set(entries.values_list("occurred_at", flat=True)) == {
+        season.weeks.get(number=n).starts_at for n in (1, 2, 3)
+    }
+    assert entries.first().description == "Development squad — National"
+
+
+def test_tick_charges_unmanaged_team_with_squad(db, riders):
+    """An unmanaged team still runs the squad it was given, and its cost is
+    real — the same argument that has its riders drawing wages and its trainer
+    drawing a salary. Leaving them out would make a squad a free thing to hand
+    to a team nobody is managing. Asserted against a managed team in the same
+    tick, so the test fails if the map ever starts filtering on management."""
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    managed = managed_seller("SQX")
+    unmanaged = Team.objects.create(name="SQY AI Team", code="SQY")
+    open_squad(managed, 1)
+    open_squad(unmanaged, 3)
+    clock.set(season.weeks.get(number=1).starts_at + timedelta(hours=1))
+
+    run = tick()
+
+    assert run.development_squad_entries == 2
+    charged = {
+        entry.team_id: entry.amount
+        for entry in LedgerEntry.objects.filter(kind=LedgerEntry.Kind.DEVELOPMENT_SQUAD)
+    }
+    assert charged == {managed.pk: -1_500, unmanaged.pk: -6_000}
+
+
+def test_tick_twice_does_not_double_charge_squad(db, team, riders):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    open_squad(team, 3)
+    clock.set(season.weeks.get(number=2).starts_at + timedelta(hours=1))
+
+    first = tick()
+    # Re-running the same tick, same clock: the (team, week) constraint has to
+    # swallow the whole thing, not just the first duplicate.
+    same_moment = tick()
+    clock.set(season.weeks.get(number=3).starts_at + timedelta(hours=1))
+    second = tick()
+
+    assert first.development_squad_entries == 2
+    assert same_moment.development_squad_entries == 0
+    assert second.development_squad_entries == 1
+    rows = LedgerEntry.objects.filter(team=team, kind=LedgerEntry.Kind.DEVELOPMENT_SQUAD)
+    assert rows.count() == 3
+    assert rows.values("week_id").distinct().count() == 3
+
+
+def test_squad_opened_mid_week_first_charged_at_next_boundary(db, team, riders):
+    """Design decision 7: no pro-rating, and no charge at the moment of
+    opening. The tick only processes boundaries it has not seen, so a squad
+    opened during week one is first charged when week two opens — and never
+    for the week it opened in, which the opening fee is said to cover."""
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_one, week_two = season.weeks.get(number=1), season.weeks.get(number=2)
+    clock.set(week_one.starts_at + timedelta(hours=1))
+    tick()                                   # week one's boundary, no squad yet
+    assert not LedgerEntry.objects.filter(kind=LedgerEntry.Kind.DEVELOPMENT_SQUAD).exists()
+
+    clock.set(week_one.starts_at + timedelta(days=3))
+    open_squad(team, 2)                     # mid-week, after the boundary
+    clock.set(week_two.starts_at + timedelta(hours=1))
+
+    run = tick()
+
+    assert run.development_squad_entries == 1
+    entry = LedgerEntry.objects.get(team=team, kind=LedgerEntry.Kind.DEVELOPMENT_SQUAD)
+    assert entry.week == week_two
+    assert entry.occurred_at == week_two.starts_at
+
+
+def test_no_squad_row_for_team_without_one(db, team, riders):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    clock.set(season.weeks.get(number=1).starts_at + timedelta(hours=1))
+
+    run = tick()
+
+    assert run.development_squad_entries == 0
+    assert not LedgerEntry.objects.filter(kind=LedgerEntry.Kind.DEVELOPMENT_SQUAD).exists()
+
+
+def test_squad_cost_follows_the_level_held_at_the_boundary(db, team, riders):
+    """A mid-week downgrade is charged at the lower rate from the next
+    boundary, with nothing prorated or refunded for the half-week just gone."""
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_one, week_two = season.weeks.get(number=1), season.weeks.get(number=2)
+    squad = open_squad(team, 3)
+    clock.set(week_one.starts_at + timedelta(hours=1))
+    tick()
+
+    clock.set(week_one.starts_at + timedelta(days=3))
+    squad.level = 1
+    squad.save(update_fields=["level"])
+    clock.set(week_two.starts_at + timedelta(hours=1))
+    tick()
+
+    entry = LedgerEntry.objects.get(
+        team=team, kind=LedgerEntry.Kind.DEVELOPMENT_SQUAD, week=week_two,
+    )
+    assert entry.amount == -1_500
+    assert entry.description == "Development squad — Regional"
 
 
 def test_week_one_has_no_preceding_week_and_only_decays(db, team, riders):

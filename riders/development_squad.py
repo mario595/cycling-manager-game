@@ -174,6 +174,12 @@ def change_level(team, level: int, *, charge=None) -> DevelopmentSquad:
     waiting for a week boundary — the weekly cost simply switches rate from
     the next boundary (world/README.md, *How a tick works*). `charge` works
     exactly as it does in `open_squad`, and a downgrade never calls it.
+
+    Note this makes a mid-week change backdated in the player's favour for
+    the week already under way: the new level is charged at the next boundary,
+    not for the half-week just gone, and nothing is prorated. That is the
+    spec's own trade (plan, Design decision 7), and it matches how a trainer
+    hired mid-week is treated.
     """
     terms = LEVELS.get(level)
     if terms is None:

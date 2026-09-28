@@ -163,13 +163,14 @@ class LedgerEntry(TimeStampedModel):
             ),
             # The weekly squad cost's exactly-once rule, and the only reason
             # DEVELOPMENT_SQUAD is its own kind rather than sharing
-            # TRAINER_SALARY's. It does double duty: it makes re-running a
-            # tick harmless, and it makes "opened mid-week, first charged at
-            # the next boundary" true by construction — a squad open at any
-            # point in week N is charged in week N+1 and not in week N, so
-            # there is nothing to reconcile. The one-off fee deliberately has
-            # no such constraint: a team may open, upgrade and reopen across a
-            # season, and each of those is its own row.
+            # TRAINER_SALARY's. It does one job: re-running a tick writes
+            # nothing, so a crash or a second call cannot double-charge a
+            # week. It is not what makes "opened mid-week pays at the next
+            # boundary" true — that falls out of the tick only processing the
+            # boundaries since the last one, the same as wages (Design
+            # decision 7). The one-off fee deliberately has no such
+            # constraint: a team may open, upgrade and reopen across a season,
+            # and each of those is its own row.
             models.UniqueConstraint(
                 fields=["team", "week"],
                 condition=models.Q(kind="development_squad"),
