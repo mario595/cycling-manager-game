@@ -396,7 +396,7 @@ Tests in `competitions/tests/test_scoring.py`:
 - `test_sprint_position_outside_table_scores_zero`
 - `test_sprint_table_keys_match_marker_weights` (against `RaceMarker.Weight.values`)
 
-### W4 — `competitions/`: `MarkerPoints` model, migration 0002, admin, `score_sprints`
+### W4 — `competitions/`: `MarkerPoints` model, migration 0002, admin, `score_sprints` ✅
 New file `competitions/tests/test_sprints.py`. Add a `make_crossing` fixture to
 `competitions/tests/conftest.py`.
 - `test_top_five_at_a_sprint_score_by_weight`

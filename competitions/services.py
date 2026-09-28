@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 from django.db.models import Sum
-from racing.models import Race, RaceResult
+from racing.models import MarkerCrossing, Race, RaceMarker, RaceResult
 from schedule.models import Season, Week
 
-from .models import RacePoints
-from .scoring import POINTS_BY_POSITION, points_for, prize_for
+from .models import MarkerPoints, RacePoints
+from .scoring import (
+    POINTS_BY_POSITION,
+    SPRINT_PLACES,
+    points_for,
+    prize_for,
+    sprint_points_for,
+)
 
 
 def score_race(race: Race) -> list[RacePoints]:
@@ -44,6 +50,48 @@ def score_race(race: Race) -> list[RacePoints]:
         if points_for(position) > 0
     ]
     return RacePoints.objects.bulk_create(to_create, ignore_conflicts=True)
+
+
+def score_sprints(race: Race) -> list[MarkerPoints]:
+    """Award sprint points for one finished race: per sprint marker, each
+    team's best-placed rider among the top SPRINT_PLACES crossings.
+    Idempotent: a race already scored returns its existing rows.
+
+    Raises ValueError if the race is not FINISHED.
+    """
+    if race.status != Race.Status.FINISHED:
+        raise ValueError(f"{race} is not finished; nothing to score")
+
+    existing = list(MarkerPoints.objects.filter(marker__race=race))
+    if existing:
+        return existing
+
+    to_create = []
+    for marker in race.markers.filter(kind=RaceMarker.Kind.SPRINT):
+        # Cut to the top SPRINT_PLACES crossings FIRST, then keep each
+        # team's best among them — not the reverse. Walking down the
+        # crossing order until five distinct teams have scored would let a
+        # 6th-place rider score when a teammate already took two of the
+        # top five, which is exactly the double-scoring the best-rider rule
+        # exists to prevent.
+        crossings = (
+            MarkerCrossing.objects
+            .filter(marker=marker, position__lte=SPRINT_PLACES)
+            .order_by("position")
+            .values_list("rider_id", "rider__team_id", "position")
+        )
+        best: dict[int, tuple[int, int]] = {}
+        for rider_id, team_id, position in crossings:
+            if team_id is None or team_id in best:
+                continue
+            best[team_id] = (rider_id, position)
+        to_create += [
+            MarkerPoints(marker=marker, team_id=team_id, rider_id=rider_id,
+                         position=position,
+                         points=sprint_points_for(marker.weight, position))
+            for team_id, (rider_id, position) in best.items()
+        ]
+    return MarkerPoints.objects.bulk_create(to_create, ignore_conflicts=True)
 
 
 def prizes_by_team(race: Race) -> dict[int, list[tuple[int, int]]]:
