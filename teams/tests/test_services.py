@@ -18,7 +18,8 @@ from economy.services import (
     sign_offer,
 )
 from racing.models import Race, RaceResult
-from riders.models import Rider
+from riders.development_squad import open_squad
+from riders.models import DevelopmentSquad, Rider
 from schedule.models import Season
 from teams.models import ManagerialSpell, Team
 from teams.services import ROSTER_SIZE, NoTeamAvailable, claim_team, release_team
@@ -277,3 +278,40 @@ def test_released_team_can_be_claimed_again(db, user, team):
     assert reclaimed.name == "New Herd"
     assert balance_for(reclaimed) == STARTING_BALANCE
     assert fanbase_for(reclaimed) == STARTING_FANBASE
+
+
+def test_claim_closes_development_squad(db, user, team):
+    """A claim is a takeover: the last manager's squad is not handed to the
+    new one, who must open their own and pay their own fee. The row is
+    deleted, so there is no fee to void and nothing to refund."""
+    DevelopmentSquad.objects.create(team=team, level=3, opened_at=AT)
+
+    claim_team(user, name="Mountain Goats", code="MGO", at=AT)
+
+    assert not DevelopmentSquad.objects.filter(team=team).exists()
+
+
+def test_claim_closes_the_squad_the_released_manager_bought(db, user, team, rider):
+    """The squad only exists after a manager opened it, so the path a test
+    with a bare DevelopmentSquad row skips: claim, open, release, claim."""
+    claim_team(user, name="Mountain Goats", code="MGO", at=AT)
+    open_squad(team, 1, at=AT)
+    other_user = User.objects.create_user(email="c@d.com", password="x", display_name="C")
+    release_team(team, reason=ManagerialSpell.Reason.ADMIN, at=AT)
+
+    claim_team(other_user, name="New Herd", code="NHD", at=AT)
+
+    assert not DevelopmentSquad.objects.filter(team=team).exists()
+
+
+def test_release_keeps_development_squad(db, user, team):
+    """Release is deliberately not claim's inverse (Design decision 9): a
+    manager who quits leaves the team as it stands, squad included, and the
+    claim that eventually follows is what clears it. Tested against a managed
+    team, since an unmanaged one cannot have opened one."""
+    claim_team(user, name="Mountain Goats", code="MGO", at=AT)
+    open_squad(team, 1, at=AT)
+
+    release_team(team, reason=ManagerialSpell.Reason.ADMIN, at=AT)
+
+    assert DevelopmentSquad.objects.filter(team=team, level=1).exists()

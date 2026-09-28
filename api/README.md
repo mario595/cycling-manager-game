@@ -208,11 +208,45 @@ Since #29 each rider also carries `release_cost`
   (`{kind, name, distance}`). It also carries
   `payout` — the race's `{position, points, prize}` list for 1st through 10th,
   from `competitions/scoring.py`'s two tables — so the SPA can show the prize
-  list before the race has run. Readable by any
+  list before the race has run. It also carries `has_replay`: whether a
+  `RaceLog` row with a file exists for this race. It is a `boolean`, never
+  absent, and it is `false` for any race that has not finished as well as for
+  a finished one recorded before replays existed — the SPA decides between
+  "Watch race" and a note, and never has to infer it. Readable by any
   authenticated manager regardless of team — the contrast with `SquadView`
   below, which 403s a caller with no team. No status filter: a `scheduled`,
   `running`, `finished` or `failed` race all return `200`; the status is in
   the payload and the SPA decides what to draw.
+- `GET /api/racing/races/<race_id>/log/` — a finished race's recorded log,
+  as the newline-delimited JSON the race engine wrote (`RaceLogView`). The
+  body is **streamed from storage** in chunks, never read into memory whole:
+  a five-hour stage's log is tens of megabytes decompressed.
+  - **Compression is content negotiation, not a header of our own.** The
+    stored file is brotli (`*.jsonl.br`), so if — and only if — the request
+    accepts `br` (`br` in `Accept-Encoding` with `q=0` for `br` not
+    counted as acceptance), the stored bytes are streamed as they are, with
+    `Content-Encoding: br`. A client that does not accept `br` is served the
+    **decompressed** log instead, with no `Content-Encoding` at all. There is
+    no `?decompress=1` escape hatch and no third state: the client's own
+    header is the only input, so a proxy, a CDN and a browser all get an
+    answer they can decode.
+  - `Vary: Accept-Encoding` is always set, so a cache between the client and
+    Django cannot hand a brotli body to a client that cannot read one.
+  - `Content-Type: application/x-ndjson`, set **explicitly** rather than left
+    to Django's default for a streaming response. The parser on the other end
+    splits on newlines; the type says what it is, and an absent header is
+    exactly what would make a future caller treat it as `text/html`.
+  - `Cache-Control: private` — a race log is a manager's business, and a
+    shared cache must not hold one.
+  - A `404` in three cases, all "there is no replay for this race": the race
+    is not `FINISHED`, the race has no `RaceLog` row, or its row's file is
+    missing or empty in storage. Not a `403` and not a `500` — an unfinished
+    race has no log, and that is an ordinary state, not an error worth
+    showing a manager.
+  - `IsAuthenticated`, the project default, like every other view here.
+    `/media/` is **not** linked from this payload: a log is only ever fetched
+    through this endpoint, never by URL, so the log's storage name never
+    reaches the client.
 - `GET /api/racing/races/<race_id>/results/` — a finished race's finishing
   order plus each team's points and prize money from it (`RaceResultsSerializer`,
   `RaceResultsView`). A race that has not reached `FINISHED` is a `404`, not
@@ -314,6 +348,62 @@ Since #29 each rider also carries `release_cost`
   trainer to the shared pool. `204` on success, `409` if the caller has no
   trainer to fire. `POST`, not `DELETE`: nothing is destroyed, the trainer
   survives in the pool.
+- `GET /api/development-squad/` (`DevelopmentSquadView`, #32) — the caller's
+  development squad as the whole screen's state: `level` (null while closed),
+  `balance`, and every level with its `level`, `name`, `weekly_cost`,
+  `season_cost` (the weekly cost times
+  `schedule.models.SEASON_WEEKS`, so the screen can show a season's total
+  without hardcoding how long a season is), `fee`, `action` and `requires`.
+  `fee` is what moving to that level **from where the team is now** would
+  cost, and the ladder makes that a property of the level rather than of the
+  move: opening (at the entry level) and upgrading both charge the target's
+  own `opening_fee`, so the panel quotes 150,000 for Elite and the ledger is
+  debited 150,000. `action` is the server's own `level_status` answer —
+  `open`, `upgrade`, `current`, or `locked` — and `requires` is that answer's
+  reason, non-null for every `locked` level. A closed squad is
+  a normal `200`, not a `404`: "you have no squad" is a state this screen
+  exists to show.
+
+  The server owns that rule and every caller reads it from here, so the figure
+  shown, the figure charged and the padlock drawn cannot drift. `action` is
+  sent verbatim rather than as the parts it came from (`is_current`, a
+  per-level affordability flag): the rule that gates a level is a rule about
+  the game, not about the screen, and deriving it twice is how a padlock and a
+  409 come to disagree. The two lock reasons are the reason for `requires` —
+  "Upgrade to National first" and "Climbed past. Close the squad to start
+  over." are different sentences about the same `locked` action, and only the
+  server knows which applies.
+- `POST /api/development-squad/open/` (`OpenDevelopmentSquadView`) — open the
+  squad at `{level}`, debiting that level's fee. `204`; `409` if a squad is
+  already open, if `level` is not the entry level (`LevelLocked` — however rich
+  the team is, a squad is opened at the bottom), or the team cannot afford it;
+  `400` for a level outside `1..3`, from the serializer's `ChoiceField`, before
+  the view runs.
+- `POST /api/development-squad/level/` (`ChangeDevelopmentSquadLevelView`) —
+  move the open squad to `{level}`, which must be the level directly above the
+  one held. `204`; `409` if no squad is open, if the team is already at that
+  level, if `level` skips a rung (`LevelLocked`), if `level` is below the one
+  held (`CannotDowngrade` — there is no way back down, and the refusal says so
+  rather than reading as an arbitrary error), or if the team cannot afford it.
+- `POST /api/development-squad/close/` (`CloseDevelopmentSquadView`) — close
+  the squad. `204`; `409` if none is open, rather than a silent `204` that
+  would make a double-click look like a success. `POST` rather than `DELETE`
+  for `FireTrainerView`'s reason and then some: the row really is deleted, but
+  the opening fee already paid stays in the ledger, so nothing here is
+  destroyed.
+
+  All four are `IsAuthenticated` by the project default — **no `AllowAny`** —
+  and all four return `403` without a team, the same `team_for()` check every
+  other team-scoped view makes. The three writes share a module-level
+  `_squad_charge(team)` helper that is the injected `charge` callback: the
+  balance check and the `economy.services.charge_development_squad_fee` write
+  happen **inside** the service's own transaction, so a refused open or
+  upgrade leaves neither a squad row nor a fee row. It raises
+  **`riders.development_squad.InsufficientFunds`**, which is aliased on import
+  as `SquadInsufficientFunds` because `staff.services.InsufficientFunds` —
+  a different, unrelated class already imported unaliased above — is in scope
+  in the same module; catching the wrong one turns a `409` the player should
+  see into a `500`.
 - `GET /api/accounts/me/` (`MeSerializer`, `MeView`) — whether anyone is
   logged in, their display name, their team (`id`/`name`/`code`, or
   `null`), and `lost_team` (#62). Lives here rather than in `accounts/`

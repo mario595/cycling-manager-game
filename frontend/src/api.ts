@@ -551,6 +551,10 @@ export interface RaceDetail {
   course: CourseSegment[]
   payout: RacePayoutEntry[]
   markers: RaceMarker[]
+  /** Whether the server holds a log worth replaying for this race. Always
+   * false while the race is unfinished, and false for a finished race
+   * recorded before replays existed. */
+  has_replay: boolean
 }
 
 export async function getRaceDetail(raceId: number): Promise<RaceDetail> {
@@ -559,6 +563,20 @@ export async function getRaceDetail(raceId: number): Promise<RaceDetail> {
     throw new Error(`race detail request failed: ${response.status}`)
   }
   return response.json()
+}
+
+/** The race's recorded log, as text. The server hands back the brotli
+ * compressed bytes verbatim or the decompressed body, depending on what the
+ * browser sent; both are a race log, so there is nothing to negotiate here.
+ * Replay is only for a finished race with a stored log, so a 404 is not
+ * "no replay" — it is a failure worth showing (the file vanished), which the
+ * caller does. */
+export async function getRaceLog(raceId: number): Promise<string> {
+  const response = await fetch(`/api/racing/races/${raceId}/log/`)
+  if (!response.ok) {
+    throw new Error(`race log request failed: ${response.status}`)
+  }
+  return response.text()
 }
 
 /** Same state vocabulary as Calendar/Position — see api/README.md. */
@@ -663,10 +681,10 @@ export async function setTrainingFocus(attribute: string): Promise<void> {
 
 /** One ledger entry as the Finances screen needs it. `kind` is the machine
  * name (starting_balance/wages/takeover/prize_money/merchandise/
- * sponsorship/trainer_fee/trainer_salary/transfer_fee); the screen renders
- * the label. `rider_count` is set on wage entries only — null elsewhere.
- * `balance_after` is computed server-side: the running balance just after
- * this entry. */
+ * sponsorship/trainer_fee/trainer_salary/transfer_fee/development_squad/
+ * development_squad_fee); the screen renders the label. `rider_count` is set
+ * on wage entries only — null elsewhere. `balance_after` is computed
+ * server-side: the running balance just after this entry. */
 export interface LedgerEntry {
   id: number
   kind:
@@ -679,6 +697,8 @@ export interface LedgerEntry {
     | 'trainer_fee'
     | 'trainer_salary'
     | 'transfer_fee'
+    | 'development_squad'
+    | 'development_squad_fee'
   description: string
   amount: number
   occurred_at: string | null
@@ -748,4 +768,61 @@ export async function getSponsors(): Promise<Sponsors> {
 
 export async function signOffer(offerId: number): Promise<void> {
   return writeJson('/api/economy/sponsors/sign/', 'POST', { offer_id: offerId })
+}
+
+/** One development squad level, as the server prices and gates it.
+ *
+ * `fee` is what moving onto this level costs — the same figure the ledger is
+ * debited, whether that move is the opening or an upgrade, and null-free so
+ * the screen never has to invent a price for a move it cannot make.
+ *
+ * `action` is the ladder rule as the server states it, and the SPA renders it
+ * rather than working it out: `open` on the entry level of a closed squad,
+ * `upgrade` on the single rung above the one held, `current` on the one held,
+ * `locked` on everything else. `requires` says what a locked level is waiting
+ * for, and is null for every other action. The two kinds of lock are different
+ * advice, which is why the note comes from the server too. */
+export type DevelopmentSquadAction = 'open' | 'upgrade' | 'current' | 'locked'
+
+export interface DevelopmentSquadLevel {
+  level: number
+  name: string
+  weekly_cost: number
+  season_cost: number
+  fee: number
+  action: DevelopmentSquadAction
+  requires: string | null
+}
+
+/** The Development squad screen's whole state: `level` is null while the
+ * squad is closed (not an error — a state the screen exists to show), and
+ * `balance` is here so an action the team cannot afford can be disabled
+ * without a second round trip. */
+export interface DevelopmentSquad {
+  level: number | null
+  levels: DevelopmentSquadLevel[]
+  balance: number
+}
+
+export async function getDevelopmentSquad(): Promise<DevelopmentSquad> {
+  const response = await fetch('/api/development-squad/')
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new Error(body?.detail ?? `development squad request failed: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function openDevelopmentSquad(level: number): Promise<void> {
+  return writeJson('/api/development-squad/open/', 'POST', { level })
+}
+
+export async function changeDevelopmentSquadLevel(level: number): Promise<void> {
+  return writeJson('/api/development-squad/level/', 'POST', { level })
+}
+
+/** POST, not DELETE: closing deletes the squad row, but the opening fee
+ * already paid stays in the ledger, so nothing here is destroyed. */
+export async function closeDevelopmentSquad(): Promise<void> {
+  return writeJson('/api/development-squad/close/', 'POST')
 }

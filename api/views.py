@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import brotli
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Prefetch, Sum
-from django.http import Http404
+from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.decorators import method_decorator
@@ -20,6 +21,7 @@ from economy.services import (
     OfferNotAvailable,
     active_contract,
     balance_for,
+    charge_development_squad_fee,
     charge_trainer_fee,
     charge_transfer_fee,
     ensure_offer_round,
@@ -32,9 +34,29 @@ from economy.services import (
     sign_offer,
 )
 from economy.sponsors import PROFILES_BY_KEY
-from racing.models import SQUAD_SIZE, MarkerCrossing, Race, RaceSquadRider
+from racing.models import SQUAD_SIZE, MarkerCrossing, Race, RaceLog, RaceSquadRider
 from racing.services import SquadError, set_squad, suggested_squad
-from riders.models import ENGINE_ATTRIBUTES, Rider
+from riders.development_squad import (
+    LEVELS,
+    CannotDowngrade,
+    LevelLocked,
+    SameLevel,
+    SquadAlreadyOpen,
+    SquadNotOpen,
+    UnknownLevel,
+    change_level as change_squad_level,
+    close_squad,
+    level_fee as squad_level_fee,
+    level_status as squad_level_status,
+    open_squad,
+    squad_for,
+)
+# Aliased, not shadowed: staff.services.InsufficientFunds is imported
+# unaliased above, and the two are unrelated classes. Catching the wrong one
+# turns a 409 the player should see into a 500.
+from riders.development_squad import InsufficientFunds as SquadInsufficientFunds
+from riders.models import ENGINE_ATTRIBUTES, DevelopmentSquad, Rider
+from schedule.models import SEASON_WEEKS
 from schedule.services import current_position, weeks_opened_between
 from staff.pricing import hire_fee
 from staff.services import (
@@ -81,6 +103,8 @@ from .serializers import (
     CalendarSerializer,
     ClaimTeamSerializer,
     ClockSerializer,
+    DevelopmentSquadLevelChoiceSerializer,
+    DevelopmentSquadSerializer,
     FinancesSerializer,
     FreeAgentPoolSerializer,
     HireTrainerSerializer,
@@ -719,8 +743,79 @@ class RaceDetailView(APIView):
                 }
                 for m in race.markers.all()  # model ordering: distance, pk
             ],
+            # Whether the SPA can offer a Watch race. A row with a file is
+            # enough: stat'ing the file here would be a network round trip
+            # per detail view once logs move to object storage, and a log
+            # that has gone missing surfaces on the replay screen itself
+            # (D5).
+            "has_replay": RaceLog.objects.filter(race=race).exclude(file="").exists(),
         }
         return Response(RaceDetailSerializer(payload).data)
+
+
+def _accepts_brotli(header: str) -> bool:
+    """Does this request's Accept-Encoding offer brotli? Browsers only
+    advertise it on a secure context, so a plain-HTTP deploy or an odd client
+    gets the decompressed body instead (D4). A token refused with `q=0` — in
+    any equivalent spelling, trailing zeroes included — is not offered."""
+    for token in header.split(","):
+        parts = [p.strip() for p in token.split(";")]
+        if parts[0] != "br":
+            continue
+        for param in parts[1:]:
+            if param.startswith("q="):
+                try:
+                    if float(param[2:]) <= 0:
+                        return False
+                except ValueError:
+                    # An unreadable q-value is not a refusal; treat the token
+                    # as offered rather than guessing what the client meant.
+                    pass
+        return True
+    return False
+
+
+class RaceLogView(APIView):
+    """A finished race's stored tick-by-tick log, for the replay screen.
+
+    Streamed from storage rather than linked as media: `/media` is only
+    served under DEBUG, bypasses auth, and cannot send `Content-Encoding` —
+    without which the browser hands the player raw brotli bytes and
+    `parseRaceLog` throws on line 1. A 0.75 MB body through the app server
+    is fine at this scale, and IsAuthenticated is the project default
+    (D3). When logs move to object storage this view becomes a redirect to a
+    signed URL — a change to this one view.
+    """
+
+    def get(self, request, race_id: int):
+        race = get_object_or_404(Race, pk=race_id)
+        if race.status != Race.Status.FINISHED:
+            raise Http404("race has not finished")
+
+        log = RaceLog.objects.filter(race=race).exclude(file="").first()
+        if log is None:
+            raise Http404("race has no log")
+        try:
+            handle = log.file.open("rb")
+        except FileNotFoundError:
+            raise Http404("log file missing")
+
+        if _accepts_brotli(request.META.get("HTTP_ACCEPT_ENCODING", "")):
+            # content_type explicit: Django would otherwise guess from the
+            # .br filename and label this application/x-brotli.
+            response = FileResponse(handle, content_type="application/x-ndjson")
+            response["Content-Encoding"] = "br"
+        else:
+            with handle:
+                body = brotli.decompress(handle.read())
+            response = HttpResponse(body, content_type="application/x-ndjson")
+        # The same URL answers two different bodies, and the log is immutable
+        # once written, so a day in the player's own cache is safe; `private`
+        # keeps it out of shared caches, which must not hold a response to an
+        # authenticated request.
+        response["Vary"] = "Accept-Encoding"
+        response["Cache-Control"] = "private, max-age=86400"
+        return response
 
 
 def _result_row(result, team) -> dict:
@@ -946,6 +1041,177 @@ class FireTrainerView(APIView):
             fire_trainer(team)
         except NoTrainerHired as exc:
             return Response({"detail": str(exc)}, status=409)
+
+        return Response(status=204)
+
+
+def _squad_charge(team):
+    """The `charge` callback open_squad and change_level take, wired to the
+    ledger. api/ is allowed to import both economy/ and riders/, but the
+    functions themselves are not: riders/ may not import economy/ (AGENTS.md),
+    so the debit arrives by injection (riders/README.md, *Development squad*).
+
+    The balance check is here rather than in economy/ because refusing a
+    change is a view-level concern — the ledger is append-only and never
+    refuses anything.
+    """
+    def charge(amount, description):
+        if balance_for(team) < amount:
+            raise SquadInsufficientFunds("You cannot afford this.")
+        charge_development_squad_fee(
+            team, amount=-amount, at=now(), description=description,
+        )
+    return charge
+
+
+class DevelopmentSquadView(APIView):
+    """The caller's development squad: which level is open, and what each of
+    the three costs and offers. GET only, and no team id in the URL — the team
+    is always the caller's own via team_for(), the same pattern as StaffView.
+
+    A closed squad is `level: null` with every level still priced, not an
+    error and not a 404: "you have no squad" is a state this screen is built
+    to show, not a missing resource.
+
+    Each level carries `action` and `requires` — the server's own answer from
+    `riders.development_squad.level_status` — rather than leaving the SPA to
+    work out the ladder from `level` alone. That is the whole
+    reason this endpoint exists in this shape: the rule that gates a level is
+    a rule about the game, not about the screen, and deriving it twice is how
+    a padlock and a 409 end up disagreeing. `locked` is a first-class answer,
+    not the absence of one, and `requires` explains it, because a rung not yet
+    reached and one already climbed past need different words.
+    """
+
+    def get(self, request):
+        team = team_for(request.user)
+        if team is None:
+            return Response({"detail": "You do not manage a team."}, status=403)
+
+        squad = squad_for(team)
+        current_level = squad.level if squad is not None else None
+        levels = []
+        for _, terms in sorted(LEVELS.items()):
+            status = squad_level_status(current_level, terms.level)
+            levels.append(
+                {
+                    "level": terms.level,
+                    "name": terms.name,
+                    "weekly_cost": terms.weekly_cost,
+                    "season_cost": terms.weekly_cost * SEASON_WEEKS,
+                    # What moving onto this level costs. The same figure
+                    # whether the squad is closed and this is the opening, or
+                    # open one rung below and this is the upgrade — so the
+                    # number on the card is the number that would be charged,
+                    # and reaching the top means paying every fee on the way.
+                    "fee": squad_level_fee(terms.level),
+                    "action": status.action,
+                    # Why a locked level is locked, and null for every other
+                    # action. Server-owned for the same reason the 409
+                    # details are: it is a statement about the game, and the
+                    # screen has no business re-deriving it.
+                    "requires": status.note,
+                }
+            )
+
+        return Response(DevelopmentSquadSerializer({
+            "level": current_level,
+            "levels": levels,
+            "balance": balance_for(team),
+        }).data)
+
+
+class OpenDevelopmentSquadView(APIView):
+    """Open the caller's development squad at the entry level, debiting that
+    level's fee. Asking for any other level is a 409 `LevelLocked` from the
+    service: the ladder is climbed, and there is no door into the upper floors
+    however much the team can afford.
+
+    409, not 400, for "already open", "cannot afford it" and "locked": the
+    request is well-formed but the world's state refuses it — the same split
+    HireTrainerView documents. An unknown level is a 400 from the serializer's
+    ChoiceField, before this view runs.
+    """
+
+    def post(self, request):
+        team = team_for(request.user)
+        if team is None:
+            return Response({"detail": "You do not manage a team."}, status=403)
+
+        serializer = DevelopmentSquadLevelChoiceSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            open_squad(
+                team,
+                serializer.validated_data["level"],
+                at=now(),
+                charge=_squad_charge(team),
+            )
+        except (
+            SquadAlreadyOpen,
+            LevelLocked,
+            UnknownLevel,
+            SquadInsufficientFunds,
+        ) as exc:
+            return Response({"detail": str(exc)}, status=409)
+
+        return Response(status=204)
+
+
+class ChangeDevelopmentSquadLevelView(APIView):
+    """Upgrade the caller's open development squad one level, debiting that
+    level's full fee.
+
+    Only the rung directly above the one held: skipping one is a 409
+    `LevelLocked`, anything lower a 409 `CannotDowngrade` (close the squad
+    instead), and the level already held a 409 `SameLevel` — all three from
+    the service, none of them special-cased here.
+    """
+    def post(self, request):
+        team = team_for(request.user)
+        if team is None:
+            return Response({"detail": "You do not manage a team."}, status=403)
+
+        serializer = DevelopmentSquadLevelChoiceSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            change_squad_level(
+                team,
+                serializer.validated_data["level"],
+                charge=_squad_charge(team),
+            )
+        except (
+            SquadNotOpen,
+            SameLevel,
+            LevelLocked,
+            CannotDowngrade,
+            UnknownLevel,
+            SquadInsufficientFunds,
+        ) as exc:
+            return Response({"detail": str(exc)}, status=409)
+
+        return Response(status=204)
+
+
+class CloseDevelopmentSquadView(APIView):
+    """Close the caller's development squad. POST, not DELETE — the same
+    reasoning FireTrainerView gives, and here literally so: the squad row is
+    deleted, but the opening fee already paid is in the ledger and stays there.
+
+    Closing an already-closed squad is a 409 rather than a silent 204, so the
+    SPA's post-close refresh is the only thing that reports success.
+    """
+    def post(self, request):
+        team = team_for(request.user)
+        if team is None:
+            return Response({"detail": "You do not manage a team."}, status=403)
+
+        if not close_squad(team):
+            return Response(
+                {"detail": "Your team has no development squad."}, status=409
+            )
 
         return Response(status=204)
 

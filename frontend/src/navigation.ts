@@ -29,6 +29,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { path: '/roster', name: 'Roster' },
       { path: '/staff', name: 'Staff' },
+      { path: '/development-squad', name: 'Development squad' },
       { path: '/sponsors', name: 'Sponsors' },
       { path: '/finances', name: 'Finances' },
     ],
@@ -53,6 +54,8 @@ export const NAV_ITEMS: NavItem[] = NAV_SECTIONS.flatMap((s) => s.items)
 /** The screen title shown in the mobile top bar. */
 export function titleForPath(path: string): string {
   if (path.startsWith('/riders/')) return 'Rider'
+  if (path.startsWith('/race/') && path.endsWith('/replay')) return 'Replay'
+  if (path.startsWith('/race/')) return 'Race'
   return NAV_ITEMS.find((i) => i.path === path)?.name ?? 'Dashboard'
 }
 
@@ -61,4 +64,15 @@ export function titleForPath(path: string): string {
  * rather than building the path by hand. */
 export function riderPath(id: number): string {
   return `/riders/${id}`
+}
+
+/** The one way to build a link to a race's page. Replay is deliberately not
+ * a nav item: it is reached from a race, not from the sidebar. */
+export function racePath(id: number): string {
+  return `/race/${id}`
+}
+
+/** The one way to build a link to a race's replay. */
+export function replayPath(id: number): string {
+  return `/race/${id}/replay`
 }

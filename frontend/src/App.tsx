@@ -5,11 +5,13 @@ import { NAV_ITEMS } from './navigation'
 import { Calendar } from './screens/Calendar'
 import { ClaimTeam } from './screens/ClaimTeam'
 import { Dashboard } from './screens/Dashboard'
+import { DevelopmentSquad } from './screens/DevelopmentSquad'
 import { Finances } from './screens/Finances'
 import { League } from './screens/League'
 import { Login } from './screens/Login'
 import { Race } from './screens/Race'
 import { Register } from './screens/Register'
+import { Replay } from './screens/Replay'
 import { RiderProfile } from './screens/RiderProfile'
 import { Roster } from './screens/Roster'
 import { Sponsors } from './screens/Sponsors'
@@ -29,6 +31,7 @@ const SCREENS: Record<string, React.ComponentType> = {
   '/roster': Roster,
   '/training': Training,
   '/staff': Staff,
+  '/development-squad': DevelopmentSquad,
   '/sponsors': Sponsors,
   '/finances': Finances,
   '/calendar': Calendar,
@@ -54,6 +57,9 @@ export function App() {
             {/* Parameterised, so it doesn't fit the path -> component map
                 above — reached only by clicking a race on the calendar. */}
             <Route path="/race/:raceId" element={<Race />} />
+            {/* The replay of one of those races: its own screen, for the
+                same reason the race is its own. */}
+            <Route path="/race/:raceId/replay" element={<Replay />} />
             {/* Parameterised, same reason /race/:raceId is — reached from
                 the Roster panel, a race result row or a free-agent card. */}
             <Route path="/riders/:riderId" element={<RiderProfile />} />

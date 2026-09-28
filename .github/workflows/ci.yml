@@ -39,6 +39,11 @@ jobs:
       - run: npm ci
         working-directory: race_player
 
+      # The frontend imports race_player's logic and SVG directly, so the
+      # logic it shares has its tests where it lives.
+      - run: npm run test
+        working-directory: race_player
+
       - run: npm ci
         working-directory: frontend
 

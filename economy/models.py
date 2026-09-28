@@ -71,6 +71,14 @@ class LedgerEntry(TimeStampedModel):
         TRAINER_SALARY = "trainer_salary", "Trainer salary"
         TRAINER_FEE = "trainer_fee", "Trainer hire fee"
         TRANSFER_FEE = "transfer_fee", "Transfer fee"
+        # Two kinds, not one: the weekly cost recurs and so needs the
+        # (team, week) unique constraint that keeps a re-tick from charging
+        # twice, while the one-off opening or upgrade fee does not and must
+        # not be swept up by it. "development_squad" is the weekly one, and
+        # its 17 characters and the 21-character fee name are why `kind` is
+        # max_length=32 below (Design decision 10).
+        DEVELOPMENT_SQUAD = "development_squad", "Development squad"
+        DEVELOPMENT_SQUAD_FEE = "development_squad_fee", "Development squad fee"
 
     team = models.ForeignKey(
         "teams.Team",
@@ -78,7 +86,13 @@ class LedgerEntry(TimeStampedModel):
         related_name="ledger_entries",
         help_text="Deleting a team deletes its financial history; it has no meaning without the team.",
     )
-    kind = models.CharField(max_length=20, choices=Kind.choices)
+    # max_length=32, not 20: `development_squad_fee` is 21 characters, so
+    # the old limit was one short of the names now in use. It was never a real
+    # constraint — every earlier value fitted well inside it — just a round
+    # number that had not yet met a name that did not. Widened in
+    # economy/migrations/0011_development_squad_kinds.py along with the kinds
+    # that need it (Design decision 10).
+    kind = models.CharField(max_length=32, choices=Kind.choices)
     amount = models.BigIntegerField(
         help_text="Signed credits. Negative is expenditure. Never Positive*, never Decimal — see economy/README.md.",
     )
@@ -146,6 +160,21 @@ class LedgerEntry(TimeStampedModel):
                 fields=["team", "week"],
                 condition=models.Q(kind="trainer_salary"),
                 name="one_trainer_salary_per_team_per_week",
+            ),
+            # The weekly squad cost's exactly-once rule, and the only reason
+            # DEVELOPMENT_SQUAD is its own kind rather than sharing
+            # TRAINER_SALARY's. It does one job: re-running a tick writes
+            # nothing, so a crash or a second call cannot double-charge a
+            # week. It is not what makes "opened mid-week pays at the next
+            # boundary" true — that falls out of the tick only processing the
+            # boundaries since the last one, the same as wages (Design
+            # decision 7). The one-off fee deliberately has no such
+            # constraint: a team may open, upgrade and reopen across a season,
+            # and each of those is its own row.
+            models.UniqueConstraint(
+                fields=["team", "week"],
+                condition=models.Q(kind="development_squad"),
+                name="one_development_squad_cost_per_team_per_week",
             ),
         ]
         indexes = [

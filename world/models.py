@@ -99,6 +99,14 @@ class TickRun(models.Model):
         default=0,
         help_text="Ledger trainer salary entries written this tick (#69).",
     )
+    development_squad_entries = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Ledger development squad cost entries written this tick (#32). One "
+            "per team per crossed week, so a tick catching up three weeks writes "
+            "three."
+        ),
+    )
     fanbase_entries = models.PositiveIntegerField(
         default=0,
         help_text="Fanbase change entries written this tick (#21).",

@@ -71,11 +71,16 @@ time display and the playback rate derive from `tickInterval`.
   - `energy`, `stamina` (0-100)
   - flags bitmask — `1` pulling, `2` surging, `4` finished, `8` DNF (cut by
     the race engine's time limit, the broom wagon — see
-    `race_engine/README.md`, *Simulation tick*). Bit `8` is currently
-    ignored by this player: a DNF rider simply freezes where they were cut,
-    with no separate rendering, the same as any other rider who stops
-    updating; giving it its own treatment (rendering, legend entry) is
-    [#94](https://github.com/mario595/cycling-manager/issues/94)'s to do.
+    `race_engine/README.md`, *Simulation tick*). Bit `8` decodes to
+    `Rider.dnf` and is honoured, not ignored: a host splits a snapshot's
+    riders into **racing** (`!dnf`) and **out** (`dnf`), and only the racing
+    ones go into `computePacks`. A cut rider therefore leaves the profile and
+    the pack list instead of freezing on it — under a broom wagon a large
+    share of the field can go at once, and a trail of stationary markers
+    would bury the live race. Both hosts then list them separately: the game
+    under "Out of the race" with `DNF` in the result column (see
+    `frontend/README.md`), the standalone simply omits them, which is
+    acceptable for a dev tool. `dnf` is mutually exclusive with `finished`.
     `pulling` is set
     only for the rider setting the pace at the front of a pack; there is no
     separate "drafting" flag (shelter degree in a pack is continuous, not a
@@ -160,10 +165,21 @@ visualizer always agree on how a course looks.
 ### 2. Playback Controls
 - **Start/Pause:** Toggle button to start/stop the simulation.
 - **Keyboard:** `←` steps back, `→` steps forward, `Space` toggles play/pause.
+  Handled by `utils/usePlayback.ts`, and only for events aimed at the page:
+  a `keydown` whose target is an `INPUT`, `TEXTAREA`, `SELECT` or `BUTTON`, or
+  is content-editable, is left alone, so `Space` on the game's focused
+  Play button presses that button once and nothing else.
 - **Speed Selector:** Options for x1, x2, x5, x10, x25, x50 playback speeds.
 - **Seek Slider:** Native `<input type="range">` (not antd `Slider`, see known issue below) spanning `0..maxTicks`; scrubs to any tick regardless of play state.
 - **Elapsed/Total Display:** Race seconds (tick index × `tickInterval`) formatted as `Hh Mm Ss / Hh Mm Ss` (always the full `Hh Mm Ss` shape — even `0h 2m 4s` — since the digits are fixed-width tabular, not units that get dropped). A ~4 h race reads as ~4 h, not ~2 h — the display runs on the header's `tickInterval`, not on sample count. The raw `tick x / y` counters stay beside it for debugging.
-- **Logic:** `useEffect` with `setInterval` advances ticks based on selected speed.
+- **Logic:** `utils/usePlayback.ts` — a hook holding tick, play state and
+  speed, with an `interval` advancing one tick per `tickInterval / speed`. It
+  takes the default speed from its host (`{ initialSpeed }`): ×1 here, ×10 in
+  the game, where a five-hour stage at ×1 is five hours. The speed list itself
+  is `PLAYBACK_SPEEDS` in the same module, so both hosts offer the same six
+  speeds. Toggling play at the last tick restarts from 0; `seek` and `step`
+  clamp to `[0, maxTicks]`. `RaceViz` consumes it, and so does the game's
+  replay screen — the standalone's behaviour is unchanged.
 
 ### 3. Rider Leaderboard (Packs)
 - **Pack Grouping:** Riders are grouped into packs mirroring the race engine's cohesion algorithm: BFS connected components over riders within `PACK_COHESION_DISTANCE (60m)` on draft-allowed terrain (gradient ≤ 5%). A single rider is its own pack. Finished riders are included (frozen at their finish `pos`), so they naturally separate into their own pack as the field behind them keeps moving.
@@ -172,7 +188,18 @@ visualizer always agree on how a course looks.
   (`course_length`) — ties are broken by `finish_time` ascending
   (`comparePosition()` in `computePacks.ts`) so the actual first-across-the-
   line rider ranks #1, not whoever happens first in the source array.
-- **Gap Dividers:** Time gap displayed between adjacent packs (front-to-rear distance / trailing pack speed), formatted as `+Xm Ys (Zm)` — minutes/seconds with the raw meter gap in parentheses.
+- **Gap Dividers:** Time gap displayed between adjacent packs, formatted as
+  `+Xm Ys (Zm)` — minutes/seconds with the raw meter gap in parentheses. The
+  numbers come from `utils/packGaps.ts`, which measures from the **rear** of
+  the pack ahead to the **front** of the pack behind (a leading pack has no
+  gap, hence the leading `null`) and divides by the trailing pack's speed.
+  Shared with the game's replay screen, which formats the same two numbers
+  differently — a separator row rather than a table row.
+- **Result column:** `utils/raceResults.ts`'s `resultLabel()` — `—` while a
+  rider is still racing, `hh:mm:ss` for the winner, `+0` for a rider in the
+  winner's group, `+Xm Ys` otherwise. The results are precomputed over the
+  whole race, so the gate is the rider's own live `finished` flag rather than
+  the presence of a result.
 - **Columns:** Rank, Team, Name, Km, Speed, Result, Energy/Stamina bars.
 - **Finished Riders:** Stay in the list (not removed) with a ✅ prefix on their name; speed cell shows `✓` instead of km/h.
 - **Leader Highlight:** Visual distinction for the current race leader (highest `pos`).
@@ -247,6 +274,11 @@ visualizer always agree on how a course looks.
   pair, so there are no stale predating-wind files to defend against.)
 - **Memoised** (`memo(WindCompass)`, matching `RiderMarker`/`PackMarker`) —
   it re-renders every tick.
+- **Inline styles, not Tailwind** — the one deliberate exception to the
+  Tailwind rule below, because the game's replay screen renders this same
+  component and the SPA has no Tailwind build: a class name would be a silent
+  no-op there. Anything the SPA imports must be styled this way. Colours are
+  the slate literals the classes resolved to (`#334155`, `#94a3b8`).
 - Explicitly **not built**: animated particle streaks, a per-segment wind
   overlay on the elevation profile (wind is a property of time, not course
   position, in this model — painting it on the distance axis would imply a
@@ -262,7 +294,7 @@ race-player/
 │   └── *.jsonl.br               # Brotli-compressed race data files (any number)
 ├── src/
 │   ├── components/
-│   │   ├── RaceViz.tsx         # Main container: playback loop, keyboard, pack computation
+│   │   ├── RaceViz.tsx         # Main container: pack computation, selection, layout (playback is usePlayback's)
 │   │   ├── CourseChart.tsx     # SHARED elevation chart: segments, % labels, km markers, axes
 │   │   ├── ElevationProfile.tsx# CourseChart + rider markers/blobs/tooltips via the overlay prop
 │   │   ├── RiderMarker.tsx     # Custom SVG circle marker (memoized), team colour + leader shape
@@ -280,8 +312,11 @@ race-player/
 │   │   ├── computePacks.ts     # BFS pack cohesion mirroring race_engine logic
 │   │   ├── gradientColors.ts   # Maps gradient % to color pairs
 │   │   ├── teamColors.ts       # 12-colour team palette, teamColor()/teamCode()/isLeader() helpers
-│   │   ├── raceResults.ts      # Winner finish time + gap-to-winner per rider, group-finish detection
-│   │   ├── formatTime.ts       # formatGapTime (+3m 14s) / formatFinishTime (hh:mm:ss)
+│   │   ├── raceResults.ts      # Winner finish time + gap-to-winner per rider, group-finish detection, resultLabel()
+│   │   ├── packGaps.ts         # Gap from each pack to the one ahead (null for the leader) — SHARED
+│   │   ├── formatTime.ts       # formatGapTime (+3m 14s) / formatFinishTime (hh:mm:ss) / formatDuration
+│   │   ├── usePlayback.ts      # SHARED tick/play/speed hook, PLAYBACK_SPEEDS, keyboard with an
+│   │   │                       #   interactive-target guard — imported by the frontend
 │   │   ├── wind.ts             # windColor()/windLabel()/arrowLength()/unwrapAngle() (wind.test.ts)
 │   │   └── useProfileScale.ts  # Linear SVG scale with fixed margins (profileScale + hook)
 │   ├── App.tsx                 # Sidebar + dynamic file fetch (the only glue point)
@@ -328,24 +363,57 @@ App.tsx
 - Serve via `vite dev` (HMR + `/api/races` middleware) or `serve_viewer.py` (static build + `/api/races` handler).
 - Fetch any `.jsonl.br` from `public/` via the file explorer sidebar.
 
-**The elevation chart is already integrated.** The frontend SPA's
-`CourseProfile.tsx` imports `CourseChart.tsx` and `utils/profile.ts`
-directly from this package's source (via a relative path out of
-`frontend/src/`), which Vite bundles into the Django-served SPA. The
-frontend dedupes `react`/`react-dom` in its `vite.config.ts` so the shared
-chart resolves to the SPA's React copy rather than this package's.
+### The game's replay screen (built)
 
-### Future (Django Integration)
-- **Method A (iframe):** Embed the built React app in a Django template.
-- **Method B (NPM):** Extract the visualizer as an npm package and import it into the main Django+React frontend.
-- **Method C (Web Component):** Build the React app as a Web Component for direct embedding.
+The game does not embed this app. It imports the **logic and the SVG
+directly from this package's source**, through a relative path out of
+`frontend/src/`, and the SPA builds and serves it — no iframe, no web
+component, no second copy of the code to keep in step. The two hosts share
+the drawing and the maths and nothing else: every piece of chrome is the
+host's own, because the standalone's chrome is antd and Tailwind and the
+game's is neither.
 
-The primary integration point is the `RaceViz` component, which accepts a `raceData: ParsedRace` prop. Switching from local file to API data only requires modifying the data fetching logic in `App.tsx`.
+**Exactly what the SPA imports** (each a direct relative import, none through
+an index or a package boundary):
+
+| Module | Used for |
+|---|---|
+| `utils/profile.ts` (`computeProfile`) | the course profile on the calendar and race screens |
+| `components/CourseChart.tsx` | the elevation chart itself |
+| `components/ElevationProfile.tsx` | chart + rider markers + pack blobs + tooltips |
+| `components/RiderMarker.tsx`, `components/PackMarker.tsx` | the markers, incl. the own-team ring |
+| `components/WindCompass.tsx` | the wind read-out in the game's playback bar |
+| `utils/parseRaceLog.ts` | parsing a log fetched over HTTP |
+| `utils/computePacks.ts` | pack grouping at the displayed tick |
+| `utils/raceResults.ts` (`computeRaceResults`, `resultLabel`) | the result column |
+| `utils/packGaps.ts` | the gap between packs |
+| `utils/formatTime.ts` (`formatDuration`) | the elapsed clock |
+| `utils/usePlayback.ts` (`usePlayback`, `PLAYBACK_SPEEDS`) | playback state and the six speeds |
+
+Not imported, and not to be: `App.tsx`, `FileExplorer.tsx`, `RaceViz.tsx`,
+`RiderList.tsx` and `PlaybackControls.tsx` — each is chrome for the standalone
+alone, and the game has its own (`frontend/src/components/replay/`).
+
+**The rule this creates: a module the SPA imports must stay free of antd and
+of Tailwind.** The SPA has neither, and an import chain that pulled antd in
+would ship the whole library to every manager. `WindCompass` is therefore
+inline-styled, and any new shared module follows it. The frontend dedupes
+`react`/`react-dom` in its `vite.config.ts` so shared components resolve to
+the SPA's React copy rather than this package's, and CI installs this
+package's `node_modules` before the SPA's build so its types resolve.
+
+**Tests live where the code does.** This package's own vitest suite (node
+environment) covers the parsing, pack, gap and result maths. Anything needing
+a DOM — `usePlayback`, the markers' highlight rendering — is tested from
+`frontend/src/`, which has jsdom, importing across the boundary exactly as the
+app does. CI runs both suites.
 
 ## Development Guidelines
 
 1. **Modularity:** Keep components decoupled. Data flows down from `App.tsx`.
 2. **Performance:** Use `React.memo` for expensive renders (e.g. `RiderMarker`).
 3. **Type Safety:** Define all data structures in `types/race.ts` and use them throughout.
-4. **Styling:** Tailwind for layout; antd for complex UI elements.
+4. **Styling:** Tailwind for layout; antd for complex UI elements. The
+   exception is anything the SPA imports (see *Integration Strategy*), which
+   must be inline-styled and antd-free.
 5. **KNOWN ISSUE:** Antd v6 `Slider` has a bug: its `Portal` component has a `useEffect` with no dependency array that causes "Maximum update depth exceeded" when dragging. Do **not** re-add the Slider until antd is patched/upgraded. The playback seek control uses a plain native `<input type="range">` instead — see `PlaybackControls.tsx`.

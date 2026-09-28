@@ -10,12 +10,14 @@ all reading the real API. No screen renders invented data.
 | `/` | Dashboard | Built — season, standings, next race and squad status, and a "My auctions" section listing riders the team is selling and auctions it has bid on — the same `AuctionCard` the Transfers screen uses, so a Dashboard listing can be bid on directly — from the API, no fixture data |
 | `/roster` | Roster | Built — filter, sort, rider detail panel, each rider's weekly salary, market value and release cost, a squad-value total, the same freshness bar as squad selection, the season-end salary review panel with the wage bill and each moved rider's old→new salary, and a "List for auction" action beside Release, from the API, no fixture data |
 | `/staff` | Staff | Built — hire/fire a trainer, with each trainer's fee and weekly salary, from the API, no fixture data |
+| `/development-squad` | DevelopmentSquad | Built — the three levels as cards, each with its weekly cost and per-season cost, and one action worded by state: **Open** on the entry level while closed, **Upgrade** on the rung above the level held, a **Current** badge on the level held, and everything else a **padlock** and no button, plus a **Close squad** button while one is open. From the API, no fixture data. The screen derives **no** ladder of its own: the server sends each level's `action` and `requires` and the client only decides the wording, which is the only way a padlock and a 409 can be kept from disagreeing. A locked card explains itself — "Upgrade to National first" for a rung not yet reached, "Climbed past. Close the squad to start over." for one already passed, since with no downgrade the way back is to close. An action costing more than the balance is disabled with a reason, as `Staff.tsx` does for an unaffordable trainer; a locked card is never reported as unaffordable, because a lock is not a price. The fee row is labelled by the rung it buys — "Open fee" on level 1, "Upgrade fee" above — and closing's confirmation states that costs stop for good and a reopened squad starts at Regional, because that is the only way left to spend less and a manager picks it under pressure. **The subtitle says what is charged and nothing more** — no youth riders, no "coming soon", because #33 owns intake and what a higher level does to it is not decided yet. `DevelopmentSquad.test.tsx` pins that for both the closed and open states. |
 | `/sponsors` | Sponsors | Built — sign one of three sponsor offers, or see the signed contract, from the API, no fixture data |
 | `/finances` | Finances | Built — balance, weekly wage bill and ledger history from the API, no fixture data |
 | `/training` | Training | Built — set the weekly focus, see last week's moves, from the API, no fixture data |
 | `/calendar` | Calendar | Built — twelve weeks from the API, no fixture data |
 | `/transfers` | Transfers | Built — two tabs: the free-agent pool with each rider's signing fee and sign action, and live auctions with current price, minimum next bid, a live `dd hh mm ss` countdown to the deadline, a bid action and each auction's full bid history (bidding is not anonymous — collapsed by default, expandable), plus an outbid notice and the team's balance, from the API, no fixture data |
-| `/race/:raceId` | Race | Built — the full race screen: course profile (with any declared markers overlaid and listed) and squad before it runs, course profile and results after, plus a marker-results card once finished, all from the API, no fixture data |
+| `/race/:raceId` | Race | Built — the full race screen: course profile (with any declared markers overlaid and listed) and squad before it runs; after it, the same course profile, a **Watch race** button when the race has a replay (a muted note when it does not), and the results behind a **Show results** toggle, so opening a race never fetches the results. From the API, no fixture data |
+| `/race/:raceId/replay` | Replay | Built — a finished race's tick-by-tick replay: the game's own playback bar (step, play/pause, ×1–×50, seek, elapsed clock and wind read-out), the shared elevation profile with the player's own riders ringed, the field as it stood at the displayed tick (packs, gaps, leader, PULL/ATK, riders cut by the time limit under "Out of the race") and the same results toggle, all from the API, no fixture data |
 | `/riders/:riderId` | RiderProfile | Built — one rider's full profile: identity, freshness, salary and value, the five-axis radar and the attribute-history chart, a career strip and race history, from the API, no fixture data. The affiliation segment is the current team, `Retired · Season S, Week W`, or `Free agent`. |
 | `/league` | League | Built — season standings table from the API, no fixture data |
 | `/login`, `/register` | Login, Register | Built — real accounts, no fixture data |
@@ -26,11 +28,16 @@ all reading the real API. No screen renders invented data.
 an explicit `<Route>` in `App.tsx` rather than through `SCREENS` — that map
 generates one route per nav item by path, which has nowhere to put a
 `:raceId`. It is reached by clicking a race on the calendar or the next-race
-card on the dashboard. `/riders/:riderId` is the same shape, reached from the
+card on the dashboard. `/race/:raceId/replay` is registered next to it, for
+the same reason, and is reached only by that screen's **Watch race** button.
+`/riders/:riderId` is the same shape, reached from the
 Roster panel's "Full profile" link, a race result row, or a free-agent card
 — never a nav item, so it never appears in the sidebar either.
-`navigation.ts`'s `riderPath(id)` is the **one** way any of those callers
-builds the link; nothing constructs `/riders/${id}` by hand. `/login` and
+`navigation.ts` owns all three link builders — `riderPath(id)`,
+`racePath(id)` and `replayPath(id)` — and each is the **one** way its
+callers build the link; nothing constructs `/riders/${id}`,
+`/race/${id}` or `/race/${id}/replay` by hand. `titleForPath` names the two
+race screens (`Race` and `Replay`) in the mobile top bar. `/login` and
 `/register` are explicit routes for the same reason: neither is a nav item,
 so neither belongs in the sidebar.
 
@@ -94,7 +101,8 @@ double-invoke in development cannot fire it twice) so `me.lost_team` is
 for authenticated sessions, so any `POST`/`PUT` issued while logged in must
 carry `X-CSRFToken`, or it 403s — a case nothing hit before login existed,
 because every write used to run anonymously. `api.ts`'s `writeJson` (used by
-`register`, `login`, `logout`, and `putSquad`) handles this: `ensureCsrfToken`
+`register`, `login`, `logout`, `putSquad`, the trainer hire/fire pair and the
+three development squad writes) handles this: `ensureCsrfToken`
 reads the `csrftoken` cookie, fetching `/api/accounts/me/` first if it isn't
 set yet (that endpoint's `@ensure_csrf_cookie` guarantees it will be after).
 Anything that issues a write should go through `writeJson`, not a bare
@@ -105,8 +113,23 @@ Every sidebar item routes somewhere real, and an unknown path redirects to
 deliberate: the alternative (trying to render a non-existent screen) is a
 blank page that hides whether routing worked at all.
 
-Adding a screen is one line: write the component and register it in `SCREENS`
-in `src/App.tsx`.
+Adding a screen takes three edits: write the component, add its path to
+`SCREENS` in `src/App.tsx`, and add it to the right `NAV_SECTIONS` group in
+`src/navigation.ts`. The two maps hold different things and neither derives
+from the other, and forgetting either fails differently and quietly — a path
+in `SCREENS` but not in `NAV_SECTIONS` registers no route at all, so it falls
+through to the catch-all and lands on the dashboard, while a nav item with no
+`SCREENS` entry renders `undefined` and throws at runtime rather than at
+build. `navigation.ts`'s comment is explicit that only built screens go in
+the rail: a feature that does not exist yet is not hinted at.
+
+The Development squad screen (#32) is the one where placement was a decision
+rather than a formality — it sits after Staff in the TEAM group, beside the
+other things a manager sets up once, rather than near Finances, which is
+where the resulting cost shows up. It also needed a hook of its own and two
+new labels in `Finances.tsx`'s `KIND_LABELS`, the one part of the wiring
+that is *not* automatic: an unknown kind falls back to its raw string, so a
+forgotten label shows the player `development_squad_fee` verbatim.
 
 ## Where the data comes from
 
@@ -124,7 +147,13 @@ follow the discipline `useSeason.ts` established: a screen showing
 invented data mid-fetch is indistinguishable from a real one with a bug
 in it. `src/useMyBids.ts` is the one exception — its outbid notice is a
 courtesy, not the screen's main content, so it starts from an empty list
-and fails silently rather than blocking the page.
+and fails silently rather than blocking the page. `src/useDevelopmentSquad.ts`
+(#32) follows the same rule for a screen where a stale price would be
+actively misleading: it renders nothing while loading, and an error shows one
+line saying so rather than three levels at figures the server would not
+charge. It also exposes `refresh()`, so the screen re-fetches straight after
+an open, change or close instead of waiting up to 60 seconds for the next
+poll.
 
 ## How it is served
 
@@ -183,7 +212,15 @@ npm --prefix frontend run build && .venv/bin/python manage.py runserver
   *Displaying game money*. It is shared by `Finances.tsx` and `Staff.tsx`
   rather than reimplemented per screen.
 - **`src/navigation.ts` is the single source of truth** for the sidebar and
-  the router both. A nav item cannot exist without a route.
+  the router both. A nav item cannot exist without a route, and it owns every
+  link builder — `riderPath`, `racePath`, `replayPath` — so no screen
+  assembles a path by hand.
+- **A screen that is not about the data does not fetch it.** A finished
+  race's results sit behind `components/RaceResults.tsx`'s `HiddenResults`,
+  which owns its own `useRaceResults` call and does not make it until the
+  player clicks **Show results**. The race screen and the replay screen both
+  reuse it, so opening either costs one request, not two. The same rule
+  gates the replay's own log behind `has_replay`.
 - **A rider's status label is a `primitives.tsx` tag, not per-screen
   markup.** `FinalSeasonTag` renders `LAST SEASON` from the API's
   `final_season` boolean
@@ -212,6 +249,13 @@ The four hooks outside the components are pure or near-pure, which is
 deliberate: `src/nextRace.ts` is tested as a function with no rendering,
 `src/setupTests.ts` stubs `window.matchMedia`, and screens mock their data
 hooks rather than the `api.ts` fetch layer.
+
+**`race_player` has no jsdom**, so anything of its that needs a DOM is tested
+from here, importing across the boundary exactly as the app does:
+`src/usePlayback.test.ts` (the shared playback hook, with fake timers) and
+`src/components/replay/Highlight.test.tsx` (the own-team ring on the shared
+profile). The maths stays in `race_player`'s own node-environment suite, and
+CI now runs both.
 
 ## Relationship to `design/`
 
@@ -243,11 +287,24 @@ so the SPA's calendar and the visualizer derive and draw a course
 identically. That cross-package import resolves `react` from
 `race_player/node_modules` unless held to the frontend copy, so
 `vite.config.ts` dedupes `react`/`react-dom`; `race_player` remains the
-source of the chart and the frontend only bundles it. Race playback (the
-tick-by-tick visualizer itself) is answered for now: deliberately not
-folded in — *Out of scope* of this feature, and the log-slimming work
-`racing/README.md` calls for comes first. What remains dropped from the
-mockup: the eight-rider
+source of the chart and the frontend only bundles it.
+
+**The replay screen** (`/race/:raceId/replay`) is that same arrangement taken
+further: `race_player`'s logic and SVG are imported directly —
+`parseRaceLog`, `computePacks`, `computeRaceResults`, `packGaps`,
+`resultLabel`, `formatDuration`, `usePlayback`/`PLAYBACK_SPEEDS`,
+`ElevationProfile`, `RiderMarker`, `PackMarker` and `WindCompass` — while
+every piece of chrome is the SPA's own (`components/replay/ReplayControls.tsx`,
+`ReplayRiderList.tsx`), because the standalone's chrome is antd and Tailwind
+and the SPA has neither. So a module the SPA imports must stay free of both:
+`WindCompass` is inline-styled for that reason. The full list of shared
+modules is in `race_player/README.md`, *Integration Strategy*.
+
+The replay has **no mockup** in `design/`, and that is deliberate rather than
+an omission. It follows the rule the Staff screen set: where a screen has no
+mockup, it borrows the composition of the screen it sits next to — here the
+race screen's cards, headings and `eyebrow`, with the game's own type and
+colours throughout. What remains dropped from the mockup: the eight-rider
 squads (the spec fixes four), per-rider course suitability (course-aware
 assessment is #45), other teams' entrants on an upcoming race,
 wind/temperature/tier/points display facts, and the discrete
