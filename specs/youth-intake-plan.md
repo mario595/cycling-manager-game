@@ -572,7 +572,7 @@ from `theme.ts`. There is no money on the riders card.
     attributes moved by growth alone, with no training delta applied
   - `test_new_arrivals_first_grow_the_following_week` (D8)
 
-### W6 — `api/`: squad riders and intake on the squad endpoint; profile shows the squad
+### W6 — `api/`: squad riders and intake on the squad endpoint; profile shows the squad — done
 - **Tests** in `api/tests.py`, beside `test_development_squad_closed_payload`:
   - `test_development_squad_payload_lists_riders_without_salary_or_value`,
     asserting those keys are **absent**
