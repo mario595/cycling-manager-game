@@ -1,6 +1,6 @@
 # Sprint points — Implementation Plan
 
-**Spec:** `specs/sprint-points.md` · **Issue:** #16 · **Status:** proposed
+**Spec:** `specs/sprint-points.md` · **Issue:** #16 · **Status:** implemented
 **Apps touched:** `racing/`, `schedule/`, `competitions/`, `world/`, `api/`, `frontend/`, `seasons/` (example data)
 
 ## Context you need
@@ -459,7 +459,7 @@ with the loader's parse function and asserts three things: a `major` marker
 exists, a `minor` marker exists, and a sprint marker sits at its race's
 course length.
 
-### W10 — Docs, then archive spec and plan (see *Documentation update*).
+### W10 — Docs, then archive spec and plan (see *Documentation update*). ✅
 
 ## Execution order
 

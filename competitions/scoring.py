@@ -32,7 +32,7 @@ SPRINT_PLACES = 5
 
 #: Sprint points by marker weight, then crossing position (1-indexed).
 #: Positions beyond SPRINT_PLACES score nothing. Frozen per marker at award
-#: time — see specs/sprint-points.md. Keys match RaceMarker.Weight.
+#: time — see specs/archive/sprint-points.md. Keys match RaceMarker.Weight.
 SPRINT_POINTS_BY_WEIGHT: dict[str, dict[int, int]] = {
     "minor":    {1: 4,  2: 3, 3: 2, 4: 1, 5: 1},
     "standard": {1: 6,  2: 4, 3: 3, 4: 2, 5: 1},

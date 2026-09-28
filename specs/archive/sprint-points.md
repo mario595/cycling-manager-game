@@ -1,6 +1,6 @@
 # Sprint points
 
-**Status:** proposed
+**Status:** implemented
 **Domain(s):** `racing`, `competitions`, `frontend`
 **One-liner:** The first riders across a sprint marker score points that count toward their team's league total.
 
