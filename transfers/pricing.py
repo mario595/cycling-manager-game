@@ -32,7 +32,7 @@ _HORIZON_AT_MAX_AGE = 0.15
 #: The model's own age validators (riders/models.py) — duplicated here so
 #: this module stays self-contained arithmetic, same reasoning as
 #: riders/pricing.py's own _MIN_AGE/_MAX_AGE.
-_MIN_AGE = 18
+_MIN_AGE = 17
 _MAX_AGE = 40
 
 

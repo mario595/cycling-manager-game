@@ -490,7 +490,7 @@ from `theme.ts`. There is no money on the riders card.
 
 ## Work items
 
-### W1 — `riders/`: model fields, constraints, age floor, migration; pricing floors
+### W1 — `riders/`: model fields, constraints, age floor, migration; pricing floors — done
 - **What changes:**
   - Add `development_squad`, `intake_at`, the `age` validator, both constraints
     and `0014_youth_intake.py`.

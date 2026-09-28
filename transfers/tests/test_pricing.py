@@ -116,7 +116,7 @@ def test_no_hidden_trait_is_read():
 
 
 def test_career_horizon_is_flat_at_and_below_peak():
-    assert career_horizon(18) == career_horizon(23) == 1.0
+    assert career_horizon(17) == career_horizon(18) == career_horizon(23) == 1.0
 
 
 def test_signing_fee_is_60_percent_of_value():
@@ -140,7 +140,7 @@ def test_severance_fee_is_30_percent_of_value():
 
 
 def test_career_horizon_never_exceeds_its_bounds():
-    for age in range(18, 41):
+    for age in range(17, 41):
         assert 0.15 <= career_horizon(age) <= 1.0
 
 
