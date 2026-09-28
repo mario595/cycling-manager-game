@@ -15,6 +15,7 @@ from economy.models import (
 )
 from economy.services import ensure_opening_balance, sign_offer
 from racing.models import Race, RaceResult
+from riders.development_squad import change_level
 from riders.models import DevelopmentSquad, Rider
 from schedule.models import SEASON_WEEKS, Season, Week
 from staff.models import Trainer
@@ -376,26 +377,32 @@ def test_no_squad_row_for_team_without_one(db, team, riders):
 
 
 def test_squad_cost_follows_the_level_held_at_the_boundary(db, team, riders):
-    """A mid-week downgrade is charged at the lower rate from the next
-    boundary, with nothing prorated or refunded for the half-week just gone."""
+    """A mid-week upgrade is charged at the higher rate from the next
+    boundary, with nothing prorated or refunded for the half-week just gone.
+
+    Upwards is the only direction the ladder allows, and that is why the test
+    does it this way: there is no downgrade to step down to, so while a squad
+    is open its rate only ever rises.
+    """
     clock: MockClock = get_clock()
     season = make_season_with_weeks(1, now())
     week_one, week_two = season.weeks.get(number=1), season.weeks.get(number=2)
-    squad = open_squad(team, 3)
+    open_squad(team, 1)
     clock.set(week_one.starts_at + timedelta(hours=1))
     tick()
 
     clock.set(week_one.starts_at + timedelta(days=3))
-    squad.level = 1
-    squad.save(update_fields=["level"])
+    change_level(team, 2, charge=lambda *_args, **_kwargs: None)
     clock.set(week_two.starts_at + timedelta(hours=1))
     tick()
 
-    entry = LedgerEntry.objects.get(
-        team=team, kind=LedgerEntry.Kind.DEVELOPMENT_SQUAD, week=week_two,
-    )
-    assert entry.amount == -1_500
-    assert entry.description == "Development squad — Regional"
+    weekly = LedgerEntry.objects.filter(
+        team=team, kind=LedgerEntry.Kind.DEVELOPMENT_SQUAD,
+    ).order_by("week__number")
+    assert [(e.week, e.amount, e.description) for e in weekly] == [
+        (week_one, -1_500, "Development squad — Regional"),
+        (week_two, -3_500, "Development squad — National"),
+    ]
 
 
 def test_week_one_has_no_preceding_week_and_only_decays(db, team, riders):

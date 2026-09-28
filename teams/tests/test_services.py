@@ -295,7 +295,7 @@ def test_claim_closes_the_squad_the_released_manager_bought(db, user, team, ride
     """The squad only exists after a manager opened it, so the path a test
     with a bare DevelopmentSquad row skips: claim, open, release, claim."""
     claim_team(user, name="Mountain Goats", code="MGO", at=AT)
-    open_squad(team, 2, at=AT)
+    open_squad(team, 1, at=AT)
     other_user = User.objects.create_user(email="c@d.com", password="x", display_name="C")
     release_team(team, reason=ManagerialSpell.Reason.ADMIN, at=AT)
 
@@ -310,8 +310,8 @@ def test_release_keeps_development_squad(db, user, team):
     claim that eventually follows is what clears it. Tested against a managed
     team, since an unmanaged one cannot have opened one."""
     claim_team(user, name="Mountain Goats", code="MGO", at=AT)
-    open_squad(team, 2, at=AT)
+    open_squad(team, 1, at=AT)
 
     release_team(team, reason=ManagerialSpell.Reason.ADMIN, at=AT)
 
-    assert DevelopmentSquad.objects.filter(team=team, level=2).exists()
+    assert DevelopmentSquad.objects.filter(team=team, level=1).exists()
