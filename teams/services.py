@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from django.db import transaction
 
+from riders.development_squad import close_squad
 from riders.generation import generate_roster
 from riders.models import Rider
 from riders.services import mark_team_change, record_initial_snapshots
@@ -72,6 +73,16 @@ def claim_team(user, *, name: str, code: str, roster_size: int = ROSTER_SIZE, at
         new_roster = Rider.objects.bulk_create(generate_roster(roster_size, team=team))
         mark_team_change(new_roster, team_now=team, at=at)
         record_initial_snapshots(new_roster)
+
+        # After the new roster is written, before the lazy economy import
+        # below. A claim is a takeover, and what the last manager left behind
+        # does not carry over — a new manager must open their own squad and
+        # pay their own opening fee. Closing is a row delete, so there is
+        # nothing to refund or to void here (riders/README.md, *Development
+        # squad*). release_team is deliberately NOT symmetric, per the spec's
+        # *Decisions taken*: releasing hands the team back as it stands, squad
+        # included, so a manager who quits leaves the squad they paid for.
+        close_squad(team)
 
         # Imported here, not at module scope: teams/ must not import
         # economy/ at import time (AGENTS.md's dependency direction). Same

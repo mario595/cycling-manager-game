@@ -5,6 +5,7 @@ import { NAV_ITEMS } from './navigation'
 import { Calendar } from './screens/Calendar'
 import { ClaimTeam } from './screens/ClaimTeam'
 import { Dashboard } from './screens/Dashboard'
+import { DevelopmentSquad } from './screens/DevelopmentSquad'
 import { Finances } from './screens/Finances'
 import { League } from './screens/League'
 import { Login } from './screens/Login'
@@ -30,6 +31,7 @@ const SCREENS: Record<string, React.ComponentType> = {
   '/roster': Roster,
   '/training': Training,
   '/staff': Staff,
+  '/development-squad': DevelopmentSquad,
   '/sponsors': Sponsors,
   '/finances': Finances,
   '/calendar': Calendar,

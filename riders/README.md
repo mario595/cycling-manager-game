@@ -5,9 +5,10 @@
 `Rider` — persisted riders mirroring the race engine's attributes, plus
 everything the engine does not know about: speciality, build, age, and a set
 of hidden traits. Generation (`generation.py`), the display mapping
-(`display.py`), the age curve (`services.py`), and the `reset_riders`
-management command. Not squads or race results (`racing/`), not the race
-simulation itself (`race_engine/`).
+(`display.py`), the age curve (`services.py`), the `reset_riders`
+management command, and a team's **development squad** — which level it runs
+at and what that costs (`development_squad.py`). Not race-day squads or
+results (`racing/`), not the race simulation itself (`race_engine/`).
 
 ## Visible vs hidden
 
@@ -452,6 +453,112 @@ retire pass both run **before** `advance_ages()` at that close, which is what
 gives the rider their full season of warning: the reverse order would age
 them into the window and retire them in the same tick. See `world/README.md`,
 *How a tick works*.
+
+## Development squad
+
+A team can run a development squad at one of three levels, and the levels form
+a ladder it climbs one rung at a time. The whole
+facility lives here rather than in `transfers/`, which is where the *free-agent
+market* lives: the squad is a long-lived attribute of the team, not a
+transaction.
+
+`DevelopmentSquad` holds a one-to-one link to the team, the `level` it runs
+at, and `opened_at` (game time, informational). **That is all it stores.**
+
+**One row per open squad, and closing deletes it.** There is no `closed_at`
+flag and no `is_open`. A team with no row has no squad; a team with a row is
+running one. A flag would leave a second way for the same question to be
+answered — `squad.level is not None` on a row, or the absence of a row — and
+every reader would have to know which one to trust. Deleting also means
+closing is not an event that has to be written to the ledger or replayed;
+`close_squad` returns whether there was a squad to close, which is all a
+caller needs to know.
+
+**Prices are a table in `LEVELS`, never columns on the row.** A stored price
+could only ever drift from the table, which is the same reasoning
+`staff/pricing.py` gives for a trainer's fee and salary: derive it, never
+persist it. `LEVELS` maps level to `LevelTerms(level, name, opening_fee,
+weekly_cost)`, and `weekly_cost` / `level_fee` read it.
+
+**The squad is a ladder, climbed one rung at a time, with no way back down.**
+A squad opens at `ENTRY_LEVEL` (`min(LEVELS)`, derived so adding a level
+cannot leave it stale) and is upgraded to the level directly above the one
+held. Opening above the entry level raises `LevelLocked` however rich the team
+is, skipping a rung raises it too, and any level below the one held raises
+`CannotDowngrade` — there is no way to spend less except closing the squad,
+which forgets the level, so a reopened squad starts at the bottom again.
+
+**A level's fee is what reaching it costs, in every state.** `level_fee(level)`
+is the only pricing function there is: opening (at the entry level) and
+upgrading into any level both charge the target's own `opening_fee`, so the
+figure the panel quotes is the figure the ledger is debited, and reaching Elite
+costs 30,000 + 75,000 + 150,000 = 255,000 rather than its fee alone. There is
+no per-move arithmetic to disagree with, and no discount for a team that
+climbed here before.
+
+**Both columns rise strictly with level, and a test enforces it.** Load-bearing,
+though not for the reason it first was. It is no longer about an upgrade
+undercutting a direct opening — there is no way to open above the entry level,
+so that side door is shut structurally. It is that the top of the ladder has to
+be the most expensive thing to reach *and* to run, or a player would
+rationally stop short of it, or climb to save money. The numbers are tunable;
+the ordering is not.
+
+`level_status(current, target)` is the single place the ladder rule lives,
+returning a `LevelStatus(action, note)`. `open_squad`, `change_level` and the
+API's per-level `action` all go through it, so a padlock the screen draws and a
+refusal the service raises cannot disagree. It returns the `note` alongside
+the action because a locked level has **two** reasons and they need different
+words: a rung not yet reached ("Upgrade to National first") and one already
+climbed past ("Climbed past. Close the squad to start over."), since with no
+downgrade the only way back is to close. `change_level` distinguishes its two
+exceptions by comparing levels rather than asking `LevelStatus`, because
+`note` is copy for the screen while an exception type is a promise to a caller
+about *why*.
+
+**The fee is debited by an injected `charge` callback, not here.** `riders/`
+may not import `economy/` (`AGENTS.md`: `riders -> core, teams`), so
+`open_squad` and `change_level` take `charge(amount, description)` and run it
+themselves — the same pattern `staff.services.hire_trainer` establishes. The
+callback runs **after** the state checks and **before** the row write, and the
+write sits in a nested savepoint. That order is the whole design: a callback
+that raises (`InsufficientFunds`) takes its ledger row down with the whole
+operation, and the savepoint means the `IntegrityError` path still leaves the
+enclosing transaction usable, so the caller sees `SquadAlreadyOpen` rather
+than a poisoned transaction. Without a callback the operation is free, which
+is what the domain-level tests use.
+
+**All three write operations take the `Team` row lock**, in one order:
+validate the level, lock, then check state and act. When the squad is closed
+there is no squad row to lock, so the team row is the only thing that
+serialises two concurrent "open" requests — and locking it for upgrade and
+close too means there is one lock order rather than two.
+`select_for_update()` **without** `skip_locked`, unlike `claim_team`: the
+caller asked for this specific team, so a contended row should make the
+request wait, not behave as though the squad were not there. The
+`OneToOneField`'s unique index is the second line of defence behind that
+lock.
+
+Closing writes nothing to the ledger and refunds nothing, and it is the only
+way to reduce the weekly cost — which is what makes it a drastic measure
+rather than a cheaper setting, and why reopening has to start from the bottom
+again. A mid-week change is charged at the new rate from the next
+week boundary, with nothing prorated and nothing refunded for the half-week
+just gone; see `economy/README.md`, *Development squad costs*.
+
+Claiming a team closes its squad (`teams/README.md`, *Claiming a team*).
+Releasing one does not.
+
+**#33 will generate youth riders into the squad. Nothing populates it yet, and
+that is deliberate.** The spec's *Decisions taken* rules it out: ship "without
+any 'coming soon' messaging, even though the squad produces nothing until #33
+lands", because the game has no live players yet and a half-finished payoff
+does not need flagging. The corollary is the one worth stating in a README:
+**no screen may promise riders the code does not produce.** A subtitle
+saying a squad "develops young riders" would be a promise about behaviour that
+does not exist, made to a manager who would pay real money on the strength of
+it — and what a higher level will actually do to intake is #33's decision, not
+this one's. `DevelopmentSquad.test.tsx` pins the rule for both states.
 
 ## Generation
 

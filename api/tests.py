@@ -24,8 +24,9 @@ from racing.models import (
     RaceSquad,
     RaceSquadRider,
 )
+from riders.development_squad import LEVELS, open_squad
 from riders.display import to_display_scale
-from riders.models import DISPLAY_MAX, Rider, RiderAttributeSnapshot
+from riders.models import DISPLAY_MAX, DevelopmentSquad, Rider, RiderAttributeSnapshot
 from schedule.models import SEASON_WEEKS, Season, Week
 from staff.models import Trainer, TrainingWeekReport
 from staff.pricing import hire_fee, weekly_salary
@@ -2915,3 +2916,346 @@ def test_rider_profile_query_count_is_constant(
     with django_assert_max_num_queries(10):
         response = profile_client.get(f"/api/riders/{profile_rider.pk}/")
     assert response.status_code == 200
+
+
+# --- Development squad (#32) -------------------------------------------------
+
+
+@pytest.fixture
+def dev_squad_manager(db) -> User:
+    """Named apart from the race-squad-selection `squad_*` fixtures above:
+    this is a development squad, a different feature with a different
+    vocabulary, and reusing those names would shadow them."""
+    return User.objects.create_user(
+        email="dev-squad-manager@example.com", password="s0meth1ng-good",
+    )
+
+
+@pytest.fixture
+def dev_squad_team(db, dev_squad_manager) -> Team:
+    team = Team.objects.create(name="Youth Team", code="YTH", manager=dev_squad_manager)
+    # Funded, since almost every squad move costs something. The too-poor case
+    # that must be refused is its own test, which lowers this balance.
+    make_ledger_entry(team, "starting_balance", STARTING_BALANCE, now(), "Starting balance")
+    return team
+
+
+@pytest.fixture
+def dev_squad_client(dev_squad_team) -> APIClient:
+    """Depends on the team fixture, not just the user: a manager with no team
+    is 403 on every one of these endpoints, which would make the client
+    useless in a test that does not also ask for the team."""
+    client = APIClient()
+    client.force_authenticate(user=dev_squad_team.manager)
+    return client
+
+
+def _open_squad(team, level) -> None:
+    """Put a squad row at `level` directly, for the tests that need a squad
+    somewhere up the ladder.
+
+    Not `open_squad`, which only opens at the entry level and charges a fee for
+    it: these tests are about the *API* over a state that already exists, and
+    they have their own tests for the fee an opening actually debits. The row
+    is what a squad is, and the ladder is a rule about reaching one.
+    """
+    DevelopmentSquad.objects.create(team=team, level=level, opened_at=now())
+
+
+def test_development_squad_requires_authentication(db):
+    client = APIClient()
+
+    assert client.get("/api/development-squad/").status_code == 403
+    assert client.post("/api/development-squad/open/", {"level": 1}).status_code == 403
+    assert client.post("/api/development-squad/level/", {"level": 1}).status_code == 403
+    assert client.post("/api/development-squad/close/").status_code == 403
+
+
+def test_development_squad_without_team_is_403(db):
+    manager_without_a_team = User.objects.create_user(
+        email="no-team-squad@example.com", password="s0meth1ng-good",
+    )
+    client = APIClient()
+    client.force_authenticate(user=manager_without_a_team)
+
+    assert client.get("/api/development-squad/").status_code == 403
+    assert client.post("/api/development-squad/open/", {"level": 1}).status_code == 403
+    assert client.post("/api/development-squad/level/", {"level": 1}).status_code == 403
+    assert client.post("/api/development-squad/close/").status_code == 403
+
+
+def test_development_squad_closed_payload(dev_squad_client, dev_squad_team):
+    response = dev_squad_client.get("/api/development-squad/")
+
+    assert response.status_code == 200
+    assert response.data["level"] is None
+    assert response.data["balance"] == STARTING_BALANCE
+    assert [level["level"] for level in response.data["levels"]] == [1, 2, 3]
+    assert [level["name"] for level in response.data["levels"]] == [
+        "Regional", "National", "Elite",
+    ]
+    # Closed: only the entry level can be opened, and the rest are locked with
+    # the level they are waiting for. The fee is each level's own, in every
+    # state — the card shows what moving onto it would cost.
+    assert [level["action"] for level in response.data["levels"]] == [
+        "open", "locked", "locked",
+    ]
+    assert [level["requires"] for level in response.data["levels"]] == [
+        None, "Open Regional first.", "Open Regional first.",
+    ]
+    assert [level["fee"] for level in response.data["levels"]] == [
+        LEVELS[1].opening_fee, LEVELS[2].opening_fee, LEVELS[3].opening_fee,
+    ]
+    for level in response.data["levels"]:
+        terms = LEVELS[level["level"]]
+        assert level["weekly_cost"] == terms.weekly_cost
+        assert level["season_cost"] == terms.weekly_cost * SEASON_WEEKS
+    assert not DevelopmentSquad.objects.filter(team=dev_squad_team).exists()
+
+
+def test_every_level_is_priced_from_the_table(dev_squad_client):
+    """The extra behind test_development_squad_closed_payload: whatever the
+    state, no level's figures are ever anything but the table's."""
+    response = dev_squad_client.get("/api/development-squad/")
+
+    for level in response.data["levels"]:
+        terms = LEVELS[level["level"]]
+        assert level["fee"] == terms.opening_fee
+        assert level["weekly_cost"] == terms.weekly_cost
+        assert level["season_cost"] == terms.weekly_cost * SEASON_WEEKS
+
+
+@pytest.mark.parametrize("current", [1, 2, 3])
+def test_open_payload_unlocks_only_the_next_level_up(dev_squad_client, dev_squad_team, current):
+    _open_squad(dev_squad_team, current)
+
+    response = dev_squad_client.get("/api/development-squad/")
+
+    assert response.data["level"] == current
+    by_level = {level["level"]: level for level in response.data["levels"]}
+    assert by_level[current]["action"] == "current"
+    assert by_level[current]["requires"] is None
+    above = by_level.get(current + 1)
+    if above is None:
+        assert {level["action"] for level in by_level.values()} == {"current", "locked"}
+    else:
+        assert above["action"] == "upgrade"
+        assert above["requires"] is None
+    # Everything else is locked and says what it is waiting for, and no level
+    # anywhere is a downgrade — there is no such move to offer.
+    for level_number, level in by_level.items():
+        if level_number in (current, current + 1):
+            continue
+        assert level["action"] == "locked"
+        assert level["requires"]
+    assert all(level["action"] != "downgrade" for level in by_level.values())
+
+
+@pytest.mark.parametrize(
+    "current,locked,note",
+    [
+        (2, 1, "Climbed past. Close the squad to start over."),
+        (3, 1, "Climbed past. Close the squad to start over."),
+        (1, 3, "Upgrade to National first."),
+    ],
+)
+def test_open_payload_distinguishes_climbed_past_from_not_yet_reached(
+    dev_squad_client, dev_squad_team, current, locked, note,
+):
+    """The two kinds of lock are different advice — one is a step forward, the
+    other means the only way back is to close — and the screen can only tell
+    them apart if the server says which."""
+    _open_squad(dev_squad_team, current)
+
+    by_level = {
+        level["level"]: level
+        for level in dev_squad_client.get("/api/development-squad/").data["levels"]
+    }
+
+    assert by_level[locked]["action"] == "locked"
+    assert by_level[locked]["requires"] == note
+
+
+def test_open_debits_fee(dev_squad_client, dev_squad_team):
+    response = dev_squad_client.post("/api/development-squad/open/", {"level": 1})
+
+    assert response.status_code == 204
+    assert DevelopmentSquad.objects.filter(team=dev_squad_team, level=1).exists()
+    follow_up = dev_squad_client.get("/api/development-squad/")
+    assert follow_up.data["balance"] == STARTING_BALANCE - LEVELS[1].opening_fee
+    entry = LedgerEntry.objects.get(team=dev_squad_team, kind="development_squad_fee")
+    assert entry.amount == -LEVELS[1].opening_fee
+    assert entry.description == "Opened development squad — Regional"
+
+
+@pytest.mark.parametrize("level", [2, 3])
+def test_open_above_the_entry_level_is_409(dev_squad_client, dev_squad_team, level):
+    """The ladder is climbed, not entered at any height — however rich the
+    team is, there is no door straight into the upper floors."""
+    response = dev_squad_client.post("/api/development-squad/open/", {"level": level})
+
+    assert response.status_code == 409
+    assert not DevelopmentSquad.objects.filter(team=dev_squad_team).exists()
+    assert not LedgerEntry.objects.filter(
+        team=dev_squad_team, kind="development_squad_fee",
+    ).exists()
+
+
+def test_open_squad_refused_when_balance_too_low(dev_squad_client, dev_squad_team):
+    LedgerEntry.objects.filter(team=dev_squad_team).update(amount=100)
+
+    response = dev_squad_client.post("/api/development-squad/open/", {"level": 1})
+
+    assert response.status_code == 409
+    assert not DevelopmentSquad.objects.filter(team=dev_squad_team).exists()
+    # The refusal must leave no fee behind, or a player too poor to open a
+    # squad is charged for having tried.
+    assert not LedgerEntry.objects.filter(
+        team=dev_squad_team, kind="development_squad_fee",
+    ).exists()
+
+
+def test_open_squad_when_already_open_returns_409(dev_squad_client, dev_squad_team):
+    _open_squad(dev_squad_team, 1)
+    fees_before = LedgerEntry.objects.filter(
+        team=dev_squad_team, kind="development_squad_fee",
+    ).count()
+
+    response = dev_squad_client.post("/api/development-squad/open/", {"level": 1})
+
+    assert response.status_code == 409
+    assert DevelopmentSquad.objects.get(team=dev_squad_team).level == 1
+    assert LedgerEntry.objects.filter(
+        team=dev_squad_team, kind="development_squad_fee",
+    ).count() == fees_before
+
+
+def test_open_invalid_level_is_400(dev_squad_client):
+    response = dev_squad_client.post("/api/development-squad/open/", {"level": 4})
+
+    assert response.status_code == 400
+    assert "level" in response.data
+
+
+def test_upgrade_debits_the_target_levels_own_fee(dev_squad_client, dev_squad_team):
+    _open_squad(dev_squad_team, 1)
+    balance_before = dev_squad_client.get("/api/development-squad/").data["balance"]
+
+    response = dev_squad_client.post("/api/development-squad/level/", {"level": 2})
+
+    assert response.status_code == 204
+    assert DevelopmentSquad.objects.get(team=dev_squad_team).level == 2
+    # The target level's full fee, not a difference against Regional, so the
+    # quoted figure and the debited one are the same number.
+    expected = LEVELS[2].opening_fee
+    assert dev_squad_client.get("/api/development-squad/").data["balance"] == (
+        balance_before - expected
+    )
+    entry = LedgerEntry.objects.get(team=dev_squad_team, kind="development_squad_fee")
+    assert entry.amount == -expected
+    assert entry.description == "Upgraded development squad to National"
+
+
+def test_upgrade_skipping_a_level_is_409(dev_squad_client, dev_squad_team):
+    _open_squad(dev_squad_team, 1)
+
+    response = dev_squad_client.post("/api/development-squad/level/", {"level": 3})
+
+    assert response.status_code == 409
+    assert DevelopmentSquad.objects.get(team=dev_squad_team).level == 1
+    assert not LedgerEntry.objects.filter(
+        team=dev_squad_team, kind="development_squad_fee",
+    ).exists()
+
+
+@pytest.mark.parametrize("target", [1, 2])
+def test_downgrade_is_409(dev_squad_client, dev_squad_team, target):
+    _open_squad(dev_squad_team, 3)
+    balance_before = dev_squad_client.get("/api/development-squad/").data["balance"]
+
+    response = dev_squad_client.post("/api/development-squad/level/", {"level": target})
+
+    assert response.status_code == 409
+    assert DevelopmentSquad.objects.get(team=dev_squad_team).level == 3
+    assert dev_squad_client.get("/api/development-squad/").data["balance"] == balance_before
+
+
+def test_change_level_refused_when_balance_too_low(dev_squad_client, dev_squad_team):
+    _open_squad(dev_squad_team, 1)
+    # Enough to be open, nowhere near enough to upgrade.
+    LedgerEntry.objects.filter(team=dev_squad_team).update(amount=LEVELS[1].opening_fee + 1_000)
+
+    response = dev_squad_client.post("/api/development-squad/level/", {"level": 2})
+
+    assert response.status_code == 409
+    assert DevelopmentSquad.objects.get(team=dev_squad_team).level == 1
+    assert not LedgerEntry.objects.filter(
+        team=dev_squad_team, kind="development_squad_fee",
+    ).exists()
+
+
+def test_change_level_when_closed_returns_409(dev_squad_client):
+    response = dev_squad_client.post("/api/development-squad/level/", {"level": 2})
+
+    assert response.status_code == 409
+
+
+def test_change_level_to_the_same_level_returns_409(dev_squad_client, dev_squad_team):
+    _open_squad(dev_squad_team, 2)
+
+    response = dev_squad_client.post("/api/development-squad/level/", {"level": 2})
+
+    assert response.status_code == 409
+    assert DevelopmentSquad.objects.get(team=dev_squad_team).level == 2
+
+
+def test_close_squad_succeeds_and_refunds_nothing(dev_squad_client, dev_squad_team):
+    _open_squad(dev_squad_team, 2)
+    balance_before = dev_squad_client.get("/api/development-squad/").data["balance"]
+    fees_before = LedgerEntry.objects.filter(
+        team=dev_squad_team, kind="development_squad_fee",
+    ).count()
+
+    response = dev_squad_client.post("/api/development-squad/close/")
+
+    assert response.status_code == 204
+    assert not DevelopmentSquad.objects.filter(team=dev_squad_team).exists()
+    follow_up = dev_squad_client.get("/api/development-squad/")
+    assert follow_up.data["level"] is None
+    assert follow_up.data["balance"] == balance_before
+    assert LedgerEntry.objects.filter(
+        team=dev_squad_team, kind="development_squad_fee",
+    ).count() == fees_before
+
+
+def test_close_then_close_again_is_409(dev_squad_client):
+    response = dev_squad_client.post("/api/development-squad/close/")
+
+    assert response.status_code == 409
+    assert "detail" in response.data
+
+
+def test_reopening_after_close_starts_from_the_bottom(dev_squad_client, dev_squad_team):
+    """A team that shut down an Elite squad to stop the weekly cost and later
+    recovers opens at Regional again, for the full fee — the same position and
+    the same price as a team that never had one."""
+    _open_squad(dev_squad_team, 3)
+    dev_squad_client.post("/api/development-squad/close/")
+
+    response = dev_squad_client.post("/api/development-squad/open/", {"level": 1})
+
+    assert response.status_code == 204
+    entry = LedgerEntry.objects.get(team=dev_squad_team, kind="development_squad_fee")
+    assert entry.amount == -LEVELS[1].opening_fee
+
+
+def test_reopening_above_the_entry_level_is_409(dev_squad_client, dev_squad_team):
+    """Closing forgets the level rather than resuming it, so there is no way
+    back to the top except paying every fee on the ladder again."""
+    _open_squad(dev_squad_team, 3)
+    dev_squad_client.post("/api/development-squad/close/")
+
+    response = dev_squad_client.post("/api/development-squad/open/", {"level": 3})
+
+    assert response.status_code == 409
+    assert not DevelopmentSquad.objects.filter(team=dev_squad_team).exists()

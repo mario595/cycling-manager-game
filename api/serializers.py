@@ -3,7 +3,7 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from riders.display import to_display_scale
-from riders.models import ENGINE_ATTRIBUTES
+from riders.models import ENGINE_ATTRIBUTES, DevelopmentSquad
 from riders.services import is_due_to_retire
 from schedule.services import current_position
 from staff.pricing import hire_fee, weekly_salary
@@ -683,3 +683,50 @@ class SponsorsSerializer(serializers.Serializer):
 
 class SignOfferSerializer(serializers.Serializer):
     offer_id = serializers.IntegerField()
+
+
+class DevelopmentSquadLevelSerializer(serializers.Serializer):
+    """One level as the screen needs to show it: what moving onto it costs,
+    what running it costs, what that adds up to over a season, and what the
+    team can do about it right now.
+
+    `action` is the ladder rule as the server sees it — `open`, `upgrade`,
+    `current` or `locked` — and the SPA renders it rather than deriving it, so
+    a locked card and a 409 come from the same call. `requires` names the
+    level that has to be open first, and is null for every other action.
+
+    `fee` is what entering this level costs, and it is the same number the
+    ledger is debited when the move is made: the entry level's fee opens the
+    squad, and each level above charges its own in full to upgrade into it.
+    There is no "current" level's fee, because there is no move onto the level
+    already held.
+    """
+
+    level = serializers.IntegerField()
+    name = serializers.CharField()
+    weekly_cost = serializers.IntegerField()
+    season_cost = serializers.IntegerField()
+    fee = serializers.IntegerField()
+    action = serializers.ChoiceField(
+        choices=["open", "upgrade", "current", "locked"]
+    )
+    requires = serializers.CharField(allow_null=True)
+
+
+class DevelopmentSquadSerializer(serializers.Serializer):
+    """The Development squad screen's whole state: which level is open (null
+    when closed), every level with its prices, and the balance, so the SPA can
+    disable an action the team cannot afford without a second round trip —
+    the same both-keys-always-present shape StaffSerializer uses."""
+
+    level = serializers.IntegerField(allow_null=True)
+    levels = DevelopmentSquadLevelSerializer(many=True)
+    balance = serializers.IntegerField()
+
+
+class DevelopmentSquadLevelChoiceSerializer(serializers.Serializer):
+    """The POST body for opening or changing level. The ChoiceField makes an
+    unknown level a 400 before the view is reached, which is why the views
+    still guard with UnknownLevel rather than relying on it."""
+
+    level = serializers.ChoiceField(choices=DevelopmentSquad.Level.choices)

@@ -4,7 +4,17 @@ import { NAV_ITEMS, NAV_SECTIONS, racePath, replayPath, riderPath, titleForPath 
 
 // The paths App.tsx maps to a real component. Every nav item must point at
 // one of these — a nav item without a screen would open the catch-all.
-const BUILT_SCREENS = new Set(['/', '/roster', '/staff', '/sponsors', '/finances', '/calendar', '/league', '/transfers'])
+const BUILT_SCREENS = new Set([
+  '/',
+  '/roster',
+  '/staff',
+  '/development-squad',
+  '/sponsors',
+  '/finances',
+  '/calendar',
+  '/league',
+  '/transfers',
+])
 
 describe('navigation', () => {
   it('every nav item has a screen', () => {

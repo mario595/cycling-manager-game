@@ -19,7 +19,9 @@ side — a won auction pays the seller and debits the buyer, both
 `transfer_fee` rows (see *Free-agent fees* below). It also
 owns the entries that give a team its starting money, the `takeover` row that
 resets a claimed team's balance, and the `prize_money` rows a finished race
-pays out (#19).
+pays out (#19). A development squad (#32) adds two more: the recurring
+`development_squad` weekly cost and the one-off `development_squad_fee` for
+opening or upgrading (see *Development squad costs* below).
 
 `FanbaseEntry` — the append-only history every team's fanbase is derived
 from, on the same discipline as the ledger (`#21`; see *Fanbase is derived
@@ -220,6 +222,64 @@ fee is the mirror image: `charge_trainer_fee(team, amount=..., at=...,
 description=...)` writes a single negative row at the moment of hiring, with
 `week` left null and **no** `(team, week)` constraint — a team may legitimately
 pay several fees in a season, and a test asserts that.
+
+## Development squad costs
+
+Two kinds, and **one kind covers both opening and upgrading**
+(`development_squad_fee`), the mirror of the transfer market's single
+`transfer_fee` (Design decision 10 in
+`specs/archive/development-squad-plan.md`). Opening, upgrading and reopening
+are the same shape of transaction — money out, no week attached, named by
+`description` ("Opened development squad — Regional" vs "Upgraded development
+squad to Elite") — so a second kind would be a distinction with nothing behind
+it. It is also all the fee transactions there are: with no downgrade, a *close*
+is the only remaining move, and it writes nothing at all.
+
+Every one of those fees is the target level's own price, charged in full
+(`riders/README.md`, *Development squad*), so climbing to Elite debits three
+rows totalling 255,000 rather than one. The ledger is where the shape of that
+climb is visible afterwards, which is the point of the fee-per-rung rule: three
+rows in the finances history read as a ladder, where one would not.
+
+The recurring weekly cost is a **separate** kind, `development_squad`, and the
+split is not tidiness. That row needs the `(team, week)` partial unique
+constraint that makes a re-tick harmless, and a one-off fee must not be swept
+up by it — a team can upgrade on Monday and reopen on Tuesday, and both are
+real rows the player paid for. Sharing `trainer_salary`'s constraint would
+have silently dropped the second one.
+
+`charge_development_squad_costs(week, cost_by_team=...)` runs inside the same
+per-week transition loop as wages and trainer salaries, immediately after
+them, and `charge_development_squad_fee(team, *, amount, at, description)`
+writes a single negative row with `week` null, exactly the shape
+`charge_trainer_fee` uses. `cost_by_team` is **injected**, and
+`economy/` never looks up `riders.development_squad.LEVELS` for itself: it
+maps team pk to `(weekly_cost, level_name)`, with the name because it goes
+straight into the row's `description`, and `world/` — which may import both —
+builds it. `economy/` may import `riders/` (`AGENTS.md`), but a dict keeps the
+function trivially testable and identical in shape to its neighbour.
+
+**The weekly cost is charged at the boundary, at the level the squad holds
+when the tick processes that boundary** (Design decision 7) — dated to the
+week's `starts_at`, never `now()`. Nothing is prorated and nothing is charged
+at the moment of opening. A squad opened mid-week is therefore first charged
+at the *next* boundary: the opening fee covers the remainder of the opening
+week. This is not a special case invented for squads; it is how wages and
+trainer salaries already behave, and a mid-week change to a level is charged
+at the new rate from the following boundary. Note the consequence honestly:
+if a tick has not run for several weeks, a squad opened during the gap is
+charged for every week in it, including the one it was only part-way through.
+The alternative — prorating — would mean a differently-dated row for the same
+week, which the `(team, week)` constraint would then reject at the boundary.
+
+**`kind` was widened from `max_length=20` to `32`.** `development_squad_fee`
+is 21 characters, so the old limit was one short of a name actually in use.
+The old value was never a real constraint — every earlier value fitted well
+inside it — just a round number that had not yet met a name that did not.
+Postgres enforces the column, not Django's `max_length`, so without the
+`AlterField` in `0011_development_squad_kinds.py` the very first squad fee
+would have failed at the database. A test asserts the widest name still
+validates.
 
 ## Free-agent fees
 
