@@ -519,7 +519,7 @@ In `world/tests/test_tick.py`:
   sprint points and prizes still land, and `tick.error` names mountain
   points.
 
-### W7 — `api/`: category and mountain points on race detail and results
+### W7 — `api/`: category and mountain points on race detail and results ✅
 In `api/tests.py`:
 - `test_race_detail_mountain_marker_has_category_and_points`
 - `test_race_detail_sprint_marker_has_null_category`
