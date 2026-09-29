@@ -172,3 +172,60 @@ def test_load_season_creates_race_markers(db, tmp_path):
         ("sprint", "First", 4000.0),
         ("mountain", "Top", 9000.0),
     ]
+
+
+def stage_race_entry(**overrides):
+    data = {
+        "name": "Alpine Tour",
+        "week": 6,
+        "start_day": "monday",
+        "time": "14:00",
+        "stages": [
+            {"course": [SEGMENT]},
+            {"course": [SEGMENT]},
+            {"course": [SEGMENT]},
+        ],
+    }
+    data.update(overrides)
+    return data
+
+
+def test_load_season_creates_stage_races(db, tmp_path):
+    from racing.models import StageRace
+
+    path = write_season_file(tmp_path, stage_races=[stage_race_entry()])
+
+    call_command("load_season", path)
+
+    stage_race = StageRace.objects.get(name="Alpine Tour")
+    week_six = Week.objects.get(season__number=1, number=6)
+    assert stage_race.week == week_six
+    stages = list(stage_race.stages.order_by("stage_number"))
+    assert [s.stage_number for s in stages] == [1, 2, 3]
+    assert [s.name for s in stages] == [
+        "Alpine Tour — Stage 1", "Alpine Tour — Stage 2", "Alpine Tour — Stage 3",
+    ]
+    from datetime import timedelta
+    assert stages[1].starts_at == stages[0].starts_at + timedelta(days=1)
+
+
+def test_replace_deletes_stage_races(db, tmp_path):
+    from racing.models import StageRace
+
+    path = write_season_file(tmp_path, stage_races=[stage_race_entry()])
+    call_command("load_season", path)
+    assert StageRace.objects.count() == 1
+
+    replacement = write_season_file(tmp_path, stage_races=[])
+    call_command("load_season", replacement, "--replace")
+
+    assert StageRace.objects.count() == 0
+
+
+def test_example_season_file_loads(db):
+    call_command("load_season", "seasons/season-1.example.json")
+
+    from racing.models import StageRace
+
+    assert Season.objects.filter(number=1).exists()
+    assert StageRace.objects.exists()

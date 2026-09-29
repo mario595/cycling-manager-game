@@ -676,7 +676,7 @@ tick, clock past the last stage: carried squads correct, GC settled),
 `test_failed_final_stage_still_settles_gc`,
 `test_gc_not_settled_until_last_stage`.
 
-### W8 — `schedule/`: declaring stage races
+### W8 — `schedule/`: declaring stage races — done
 Loader, `load_season` changes, the example season file.
 Tests: `schedule/tests/test_loaders.py` —
 `test_stage_race_parsed_onto_consecutive_days`,

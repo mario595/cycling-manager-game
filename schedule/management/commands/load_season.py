@@ -6,7 +6,7 @@ from datetime import timedelta
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from schedule.loaders import SeasonFileError, create_races, parse_season_file
+from schedule.loaders import SeasonFileError, create_races, create_stage_races, parse_season_file
 from schedule.models import SEASON_WEEKS, Season, Week
 
 
@@ -29,8 +29,8 @@ class Command(BaseCommand):
         # (models.py, services.py, loaders.py) must never import racing/ or
         # world/ (AGENTS.md). This management command is an entry point,
         # like world/'s own — see schedule/README.md.
-        from racing.models import Race
-        from racing.services import create_race
+        from racing.models import Race, StageRace
+        from racing.services import create_race, create_stage_race
         from world.services import now
 
         path = options["path"]
@@ -88,11 +88,15 @@ class Command(BaseCommand):
 
         with transaction.atomic():
             if existing is not None:
-                # Race.week is PROTECT, so the season's races must go before
-                # the season itself — see schedule/README.md, *Declaring a
-                # season*. Safe only because the not-yet-started check above
-                # already refused any season whose races could be simulated.
+                # Race.week and StageRace.week are both PROTECT, so the
+                # season's races and stage races must go before the season
+                # itself — see schedule/README.md, *Declaring a season*.
+                # Races first: Race.stage_race is also PROTECT, so a stage
+                # race cannot be deleted while its own stages still exist.
+                # Safe only because the not-yet-started check above already
+                # refused any season whose races could be simulated.
                 Race.objects.filter(week__season=existing).delete()
+                StageRace.objects.filter(week__season=existing).delete()
                 existing.delete()
             season = Season.objects.create(number=number, starts_at=starts_at, ends_at=ends_at)
             weeks = []
@@ -108,6 +112,10 @@ class Command(BaseCommand):
                 )
             Week.objects.bulk_create(weeks)
             races = create_races(season, declaration.races, create_race=create_race)
+            stage_races = create_stage_races(
+                season, declaration.stage_races,
+                create_race=create_race, create_stage_race=create_stage_race,
+            )
 
         self.stdout.write(f"season {season.number}: {season.starts_at} to {season.ends_at}")
         for week in weeks:
@@ -123,3 +131,14 @@ class Command(BaseCommand):
             )
         if races:
             self.stdout.write(f"{len(races)} race(s) declared")
+
+        for stage_race in stage_races:
+            stages = list(stage_race.stages.order_by("stage_number"))
+            total_km = sum(sum(s["length"] for s in stage.course) for stage in stages) / 1000
+            day_span = f"{stages[0].starts_at.strftime('%a')}–{stages[-1].starts_at.strftime('%a')}"
+            self.stdout.write(
+                f"  week {stage_race.week.number} {day_span} — {stage_race.name} "
+                f"({len(stages)} stages, {total_km:.1f} km)"
+            )
+        if stage_races:
+            self.stdout.write(f"{len(stage_races)} stage race(s) declared")
