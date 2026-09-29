@@ -205,8 +205,9 @@ riders who crossed each one (`MarkerCrossing`) — see
   training attribute, the API, the frontend, the engine adapter) depend on
   that shape, and changing it to carry markers would break all of them.
 - **D2 — `MarkerCrossing` is a row, not a log event.** The log is the race
-  player's input and nothing else reads it; the queries #16/#17/#18 need
-  database rows, the same reason `RaceResult` is a table and not a log line.
+  player's input and nothing else reads it; the marker-points and
+  classification queries need database rows, the same reason `RaceResult` is a
+  table and not a log line.
   The engine's log format does not change in this ticket — no header key, no
   version bump. Markers are deliberately **not** in the JSONL (see
   `race_engine/README.md`, *JSONL output format*).
@@ -236,16 +237,26 @@ for a finish-line marker, per D5).
 **`RaceMarker.weight`** (`minor` / `standard` / `major`, default `standard`)
 is the weight/category column D1 anticipated, added by #16 (`specs/archive/sprint-points.md`).
 It scales what a sprint marker's crossings score — see `competitions/README.md`,
-*Sprint points* — and is **inert on a mountain marker**: #17 decides what a
-mountain marker's weight means, and the season loader (`schedule/README.md`)
-rejects a `weight` key on one so authors cannot write data #17 would have to
-reinterpret. The engine never sees it: weight does not change how a marker is
-contested, only what a crossing is later worth.
+*Marker points* — and is **inert on a mountain marker**: the season loader
+(`schedule/README.md`) rejects a `weight` key on one, so the two vocabularies
+cannot be confused. The engine never sees it: weight does not change how a
+marker is contested, only what a crossing is later worth.
+
+**`RaceMarker.category`** (`hc` / `cat1` / `cat2` / `cat3`, default `cat2`)
+is the mirror of that: it scales what a **mountain** marker's crossings score,
+is **inert on a sprint marker**, and is rejected by the loader on one. A
+separate field rather than more `weight` values, because a season file written
+today with `weight` on a climb would have to be reinterpreted the day climbs
+started scoring — and because `AddField(default="cat2")` gives every existing
+mountain row the middle of the scale in one step, with no data migration
+(`specs/archive/mountain-points.md`, D1). The engine never sees it either: a
+category changes what a crossing is worth, not how the climb is ridden.
 
 **Races with markers are born through `racing.services.create_race`, not
 `Race.objects.create`.** `create_race` opens one transaction, creates the
 `Race` then one `RaceMarker` per entry (`markers=[{"kind", "name",
-"distance", "weight"?}, ...]`), each `create()` so `save()` → `clean()` runs.
+"distance", "weight"?, "category"?}, ...]`), each `create()` so `save()` →
+`clean()` runs.
 `load_season` injects it in place of the plain `Race.objects.create` it wired
 before (`schedule/README.md`, *What `schedule/` may import*) — `schedule/`
 still imports nothing from `racing/`, it just receives a callable that

@@ -42,11 +42,11 @@ class RacePoints(TimeStampedModel):
 
 
 class MarkerPoints(TimeStampedModel):
-    """One team's points award for one sprint marker.
+    """One team's points award for one sprint or mountain marker.
 
     Frozen at the moment the race is scored — see
-    competitions/services.py, score_sprints, and competitions/README.md,
-    *Sprint points*. Not recalculated if the points table changes later.
+    competitions/services.py, _score_markers, and competitions/README.md,
+    *Marker points*. Not recalculated if the points table changes later.
 
     `rider` is SET_NULL rather than CASCADE: the points a team scored are
     the record, and must survive a rider being deleted even though raced

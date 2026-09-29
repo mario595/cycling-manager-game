@@ -1,6 +1,6 @@
 # Mountain points — Implementation Plan
 
-**Spec:** `specs/mountain-points.md` · **Issue:** #17 · **Status:** proposed
+**Spec:** `specs/mountain-points.md` · **Issue:** #17 · **Status:** implemented
 **Apps touched:** `racing/`, `schedule/`, `competitions/`, `world/`, `api/`, `frontend/`, `seasons/` (example data)
 
 ## Context you need
@@ -553,7 +553,7 @@ Add
 that a `cat1` marker exists, and that a mountain marker sits at its race's
 course length. Put it next to #16's example-season test.
 
-### W10 — Docs, then archive the spec and plan (see *Documentation update*).
+### W10 — Docs, then archive the spec and plan (see *Documentation update*). ✅
 
 ## Execution order
 
