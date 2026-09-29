@@ -667,7 +667,7 @@ Tests in `economy/tests/test_services.py`: `test_pay_gc_prizes_idempotent`,
 (**the D8 collision test** — must fail if `pay_gc_prizes` reuses
 `prize_money`), and the existing `pay_race_prizes` tests unchanged and green.
 
-### W7 — `world/services.py`: settle the GC
+### W7 — `world/services.py`: settle the GC — done
 `_execute` restructure and `_settle_stage_race`.
 Tests in `world/tests/test_tick.py`: `test_tick_runs_stage_race_and_settles_gc`
 (mock clock across all stages: GC `RacePoints` and `gc_prize_money` rows

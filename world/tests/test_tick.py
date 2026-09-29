@@ -14,7 +14,9 @@ from economy.models import (
     SponsorOffer,
 )
 from economy.services import ensure_opening_balance, sign_offer
-from racing.models import Race, RaceResult
+from competitions.models import RacePoints
+from racing.models import Race, RaceResult, RaceSquad, RaceSquadRider, StageRace
+from racing.services import simulate_race as _real_simulate_race
 from riders.development_squad import change_level
 from riders.models import DevelopmentSquad, Rider
 from schedule.models import SEASON_WEEKS, Season, Week
@@ -185,6 +187,120 @@ def test_prize_failure_does_not_fail_the_race(db, team, riders, monkeypatch):
     assert run.races_finished == 1
     assert run.prize_entries == 0
     assert "prizes exploded" in run.error
+
+
+def make_stage_race(team, riders, *, week, stage_count: int) -> StageRace:
+    """A stage race with `stage_count` SCHEDULED stages on consecutive
+    days of `week`, with `team`'s squad chosen once, for stage 1 — the
+    shape ensure_squads carries forward to every later stage."""
+    stage_race = StageRace.objects.create(name="Alpine Tour", week=week)
+    stages = []
+    for n in range(1, stage_count + 1):
+        stage = Race.objects.create(
+            name=f"Alpine Tour — Stage {n}",
+            course=[{"length": 500.0, "gradient": 0.0}],
+            starts_at=week.starts_at + timedelta(days=n - 1, hours=1),
+            week=week,
+            stage_race=stage_race,
+            stage_number=n,
+            status=Race.Status.SCHEDULED,
+        )
+        stages.append(stage)
+    squad = RaceSquad.objects.create(race=stages[0], team=team)
+    RaceSquadRider.objects.bulk_create([
+        RaceSquadRider(squad=squad, rider=r, is_leader=(i == 0))
+        for i, r in enumerate(riders)
+    ])
+    return stage_race
+
+
+def test_tick_runs_stage_race_and_settles_gc(db, team, riders):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week = season.weeks.get(number=1)
+    stage_race = make_stage_race(team, riders, week=week, stage_count=3)
+    last_stage = stage_race.stages.get(stage_number=3)
+    clock.set(last_stage.starts_at + timedelta(hours=1))
+
+    tick()
+
+    assert stage_race.stages.filter(status=Race.Status.FINISHED).count() == 3
+    # Only one team raced, so GC points (best rider per team) award it a
+    # single row, but GC prize money (every placed rider) can pay the same
+    # team more than once — its other three riders placed too.
+    gc_points = RacePoints.objects.filter(race=last_stage, kind=RacePoints.Kind.GC)
+    assert gc_points.count() == 1
+    assert gc_points.first().team_id == team.pk
+    gc_prizes = LedgerEntry.objects.filter(
+        team=team, race=last_stage, kind=LedgerEntry.Kind.GC_PRIZE_MONEY,
+    )
+    assert gc_prizes.exists()
+    assert all(row.amount > 0 for row in gc_prizes)
+
+    # Stage points/prizes still exist on every stage, unaffected by the GC.
+    for stage in stage_race.stages.all():
+        assert RacePoints.objects.filter(race=stage, kind=RacePoints.Kind.RACE).exists()
+
+
+def test_catch_up_tick_runs_all_stages_in_order(db, team, riders):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week = season.weeks.get(number=1)
+    stage_race = make_stage_race(team, riders, week=week, stage_count=3)
+    last_stage = stage_race.stages.get(stage_number=3)
+    # Jump straight past every stage in one move — a single tick must claim
+    # and simulate all three, in order, in one call.
+    clock.set(last_stage.starts_at + timedelta(hours=1))
+
+    run = tick()
+
+    assert run.races_finished == 3
+    for stage in stage_race.stages.order_by("stage_number"):
+        assert stage.status == Race.Status.FINISHED
+        squad = RaceSquad.objects.get(race=stage, team=team)
+        assert set(squad.members.values_list("rider_id", flat=True)) == {r.pk for r in riders}
+    gc_rows = RacePoints.objects.filter(race=last_stage, kind=RacePoints.Kind.GC)
+    assert gc_rows.count() == 1
+
+
+def test_failed_final_stage_still_settles_gc(db, team, riders, monkeypatch):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week = season.weeks.get(number=1)
+    stage_race = make_stage_race(team, riders, week=week, stage_count=2)
+    last_stage = stage_race.stages.get(stage_number=2)
+    clock.set(last_stage.starts_at + timedelta(hours=1))
+
+    def _fail_last_stage(race, *, game_time):
+        if race.stage_number == 2:
+            raise RuntimeError("engine blew up")
+        return _real_simulate_race(race, game_time=game_time)
+
+    monkeypatch.setattr("world.services.simulate_race", _fail_last_stage)
+
+    tick()
+
+    last_stage.refresh_from_db()
+    assert last_stage.status == Race.Status.FAILED
+    # is_complete() only needs every stage FINISHED or FAILED, with at
+    # least one FINISHED — stage 1 ran fine, so the GC still settles over it.
+    gc_rows = RacePoints.objects.filter(race=last_stage, kind=RacePoints.Kind.GC)
+    assert gc_rows.count() == 1
+
+
+def test_gc_not_settled_until_last_stage(db, team, riders):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week = season.weeks.get(number=1)
+    stage_race = make_stage_race(team, riders, week=week, stage_count=3)
+    stage1 = stage_race.stages.get(stage_number=1)
+    clock.set(stage1.starts_at + timedelta(hours=1))
+
+    tick()
+
+    stage1.refresh_from_db()
+    assert stage1.status == Race.Status.FINISHED
+    assert RacePoints.objects.filter(kind=RacePoints.Kind.GC).count() == 0
 
 
 def make_trainer(team, **overrides):
