@@ -36,6 +36,7 @@ function makeProfile(overrides: Partial<RiderProfile> = {}): RiderProfile {
     attribute_history: [],
     races: [],
     career: { starts: 0, wins: 0, podiums: 0, top_tens: 0, dnfs: 0 },
+    development_squad: null,
     ...overrides,
   }
 }

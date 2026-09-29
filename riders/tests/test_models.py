@@ -6,7 +6,7 @@ import pytest
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 
-from riders.models import Rider, RiderAttributeSnapshot
+from riders.models import DevelopmentSquad, Rider, RiderAttributeSnapshot
 from schedule.models import Season, Week
 
 
@@ -110,3 +110,52 @@ def test_retired_rider_cannot_have_a_team(rider):
     with pytest.raises(IntegrityError):
         with transaction.atomic():
             rider.save()
+
+
+def test_rider_cannot_be_on_roster_and_in_squad(rider, team):
+    squad = DevelopmentSquad.objects.create(
+        team=team, level=DevelopmentSquad.Level.REGIONAL,
+        opened_at=datetime(2027, 3, 1, tzinfo=dt_timezone.utc),
+    )
+    rider.development_squad = squad
+
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            rider.save()
+
+
+def test_retired_rider_cannot_be_in_squad(rider, team):
+    squad = DevelopmentSquad.objects.create(
+        team=team, level=DevelopmentSquad.Level.REGIONAL,
+        opened_at=datetime(2027, 3, 1, tzinfo=dt_timezone.utc),
+    )
+    rider.team = None
+    rider.development_squad = squad
+    rider.retired_at = datetime(2027, 3, 1, tzinfo=dt_timezone.utc)
+
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            rider.save()
+
+
+def test_age_17_is_valid(rider):
+    rider.age = 17
+    # training_affinity isn't set by the `rider` fixture (blank=False, but
+    # unrelated to this test's concern), so exclude it here the same way a
+    # partial full_clean() is used elsewhere for a single field's validity.
+    rider.full_clean(exclude=["training_affinity"])
+
+
+def test_squad_delete_nulls_rider_link(rider, team):
+    squad = DevelopmentSquad.objects.create(
+        team=team, level=DevelopmentSquad.Level.REGIONAL,
+        opened_at=datetime(2027, 3, 1, tzinfo=dt_timezone.utc),
+    )
+    rider.team = None
+    rider.development_squad = squad
+    rider.save()
+
+    squad.delete()
+    rider.refresh_from_db()
+
+    assert rider.development_squad_id is None

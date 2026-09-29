@@ -82,7 +82,8 @@ def claim_team(user, *, name: str, code: str, roster_size: int = ROSTER_SIZE, at
         # squad*). release_team is deliberately NOT symmetric, per the spec's
         # *Decisions taken*: releasing hands the team back as it stands, squad
         # included, so a manager who quits leaves the squad they paid for.
-        close_squad(team)
+        # Its riders, if any, are released to the free-agent pool (#33).
+        close_squad(team, at=at)
 
         # Imported here, not at module scope: teams/ must not import
         # economy/ at import time (AGENTS.md's dependency direction). Same

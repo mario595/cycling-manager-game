@@ -39,6 +39,21 @@ def test_generation_is_deterministic():
         assert getattr(first, attribute) == getattr(second, attribute)
 
 
+def test_potential_override_respected_and_floored_at_best_attribute():
+    rng = random.Random(3)
+    # A high quality with a low potential override forces the floor: the
+    # rider's own rolled best attribute must win, the same young-rider rule
+    # _roll_potential enforces without an override.
+    rider = generate_rider(quality=90, age=17, potential=10, rng=rng)
+
+    best_attribute = max(getattr(rider, name) for name in ENGINE_ATTRIBUTES)
+    assert rider.potential == best_attribute
+
+    # An override comfortably above every rolled attribute is honoured as-is.
+    rider = generate_rider(quality=20, age=17, potential=80, rng=rng)
+    assert rider.potential == 80
+
+
 def test_generated_rider_is_priced_by_pricing_module():
     rider = generate_rider(rng=random.Random(3))
 

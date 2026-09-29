@@ -24,9 +24,11 @@ from racing.models import (
     RaceSquad,
     RaceSquadRider,
 )
-from riders.development_squad import LEVELS, open_squad
+from racing.services import SquadError, set_squad
+from riders.development_squad import LEVELS, close_squad, open_squad
 from riders.display import to_display_scale
 from riders.models import DISPLAY_MAX, DevelopmentSquad, Rider, RiderAttributeSnapshot
+from riders.youth_intake import run_intake
 from schedule.models import SEASON_WEEKS, Season, Week
 from staff.models import Trainer, TrainingWeekReport
 from staff.pricing import hire_fee, weekly_salary
@@ -2854,6 +2856,7 @@ def test_rider_profile_has_no_hidden_traits(profile_client, profile_rider):
         "climb", "sprint", "flat", "resistance", "positioning",
         "freshness", "weekly_salary", "market_value", "release_cost", "final_season",
         "team", "current_week", "retired", "attribute_history", "races", "career",
+        "development_squad",
     }
     # The retirement age itself stays hidden; only the boolean consequence ships.
     assert "retirement_age" not in response.data
@@ -3201,6 +3204,155 @@ def test_development_squad_closed_payload(dev_squad_client, dev_squad_team):
         assert level["weekly_cost"] == terms.weekly_cost
         assert level["season_cost"] == terms.weekly_cost * SEASON_WEEKS
     assert not DevelopmentSquad.objects.filter(team=dev_squad_team).exists()
+
+
+def test_development_squad_payload_lists_riders_without_salary_or_value(dev_squad_client, dev_squad_team):
+    _open_squad(dev_squad_team, 1)
+    run_intake(at=now())
+
+    response = dev_squad_client.get("/api/development-squad/")
+
+    assert response.status_code == 200
+    assert len(response.data["riders"]) == 2
+    rider_payload = response.data["riders"][0]
+    for absent_key in ("weekly_salary", "market_value", "release_cost", "final_season"):
+        assert absent_key not in rider_payload
+    for present_key in ("id", "name", "speciality", "nationality", "age", "arrived", "is_new"):
+        assert present_key in rider_payload
+    for attribute in ("climb", "sprint", "flat", "resistance", "positioning"):
+        assert attribute in rider_payload
+    assert response.data["intake"]["every_weeks"] == 4
+    assert response.data["intake"]["batch_size"] == 2
+
+
+@override_settings(GAME_CLOCK_CLASS="world.clocks.MockClock")
+def test_development_squad_marks_only_latest_batch_new(dev_squad_client, dev_squad_team):
+    world_services._clock = None
+    try:
+        import world.models as world_models
+        from world.clocks import MockClock
+        from world.services import get_clock
+
+        world_models.GameClock.load()
+        clock: MockClock = get_clock()
+        season_start = datetime(2027, 3, 1, 0, 0, tzinfo=dt_timezone.utc)
+        clock.set(season_start)
+        season = Season.objects.create(number=1, starts_at=season_start)
+        for n in range(1, 9):
+            week_start = season_start + timedelta(weeks=n - 1)
+            Week.objects.create(
+                season=season, number=n, starts_at=week_start,
+                ends_at=week_start + timedelta(weeks=1),
+            )
+        _open_squad(dev_squad_team, 1)
+        week_four_start = season.weeks.get(number=4).starts_at
+        week_eight_start = season.weeks.get(number=8).starts_at
+        run_intake(at=week_four_start)
+        run_intake(at=week_eight_start)
+        clock.set(week_eight_start + timedelta(hours=1))
+
+        response = dev_squad_client.get("/api/development-squad/")
+
+        assert len(response.data["riders"]) == 4
+        is_new_by_arrival = {}
+        for rider in response.data["riders"]:
+            is_new_by_arrival.setdefault(tuple(rider["arrived"].values()), []).append(rider["is_new"])
+        assert all(is_new_by_arrival[(1, 8)])
+        assert not any(is_new_by_arrival[(1, 4)])
+    finally:
+        world_services._clock = None
+
+
+@override_settings(GAME_CLOCK_CLASS="world.clocks.MockClock")
+def test_development_squad_intake_next_week(dev_squad_client, dev_squad_team):
+    world_services._clock = None
+    try:
+        import world.models as world_models
+        from world.clocks import MockClock
+        from world.services import get_clock
+
+        world_models.GameClock.load()
+        clock: MockClock = get_clock()
+        season_start = datetime(2027, 3, 1, 0, 0, tzinfo=dt_timezone.utc)
+        clock.set(season_start)
+        season = Season.objects.create(number=1, starts_at=season_start)
+        for n in range(1, SEASON_WEEKS + 1):
+            week_start = season_start + timedelta(weeks=n - 1)
+            Week.objects.create(
+                season=season, number=n, starts_at=week_start,
+                ends_at=week_start + timedelta(weeks=1),
+            )
+        _open_squad(dev_squad_team, 1)
+
+        response = dev_squad_client.get("/api/development-squad/")
+        assert response.data["intake"]["next"] == {"season": 1, "week": 4}
+
+        # After the season's last intake week (12), nothing further is declared.
+        clock.set(season.weeks.get(number=12).starts_at + timedelta(hours=1))
+        response = dev_squad_client.get("/api/development-squad/")
+        assert response.data["intake"]["next"] is None
+    finally:
+        world_services._clock = None
+
+
+def test_development_squad_closed_has_no_riders(dev_squad_client, dev_squad_team):
+    response = dev_squad_client.get("/api/development-squad/")
+
+    assert response.data["riders"] == []
+    assert response.data["intake"] is None
+
+
+def test_close_endpoint_releases_riders_to_free_agent_list(dev_squad_client, dev_squad_team):
+    _open_squad(dev_squad_team, 1)
+    run_intake(at=now())
+    market_client = APIClient()
+    market_manager = User.objects.create_user(
+        email="squad-close-buyer@example.com", password="s0meth1ng-good",
+    )
+    market_team = Team.objects.create(name="Buyer Team", code="BUY", manager=market_manager)
+    market_client.force_authenticate(user=market_manager)
+
+    response = dev_squad_client.post("/api/development-squad/close/")
+
+    assert response.status_code == 204
+    pool = market_client.get("/api/transfers/free-agents/")
+    assert len(pool.data["riders"]) == 2
+
+
+def test_rider_profile_shows_development_squad_team(dev_squad_client, dev_squad_team):
+    _open_squad(dev_squad_team, 1)
+    run_intake(at=now())
+    rider = Rider.objects.filter(development_squad__team=dev_squad_team).first()
+
+    response = dev_squad_client.get(f"/api/riders/{rider.pk}/")
+
+    assert response.status_code == 200
+    assert response.data["development_squad"] == {
+        "id": dev_squad_team.pk, "name": dev_squad_team.name, "code": dev_squad_team.code,
+    }
+
+
+def test_squad_rider_cannot_be_listed_released_or_raced(dev_squad_client, dev_squad_team):
+    _open_squad(dev_squad_team, 1)
+    run_intake(at=now())
+    rider = Rider.objects.filter(development_squad__team=dev_squad_team).first()
+
+    list_response = dev_squad_client.post(
+        "/api/transfers/auctions/list/", {"rider_id": rider.pk},
+    )
+    assert list_response.status_code == 409
+
+    release_response = dev_squad_client.post(
+        "/api/transfers/riders/release/", {"rider_id": rider.pk},
+    )
+    assert release_response.status_code == 409
+
+    race = Race.objects.create(
+        name="Squad Test Race",
+        course=[{"length": 40000.0, "gradient": 0.0}],
+    )
+    with pytest.raises(SquadError):
+        set_squad(race, dev_squad_team, [rider.pk], rider.pk)
 
 
 def test_every_level_is_priced_from_the_table(dev_squad_client):

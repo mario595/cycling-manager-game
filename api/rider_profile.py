@@ -43,6 +43,10 @@ def rider_profile(rider: Rider, *, at: datetime) -> dict:
         "attribute_history": attribute_history(rider),
         "races": races,
         "career": career_totals(races),
+        "development_squad": (
+            _team_payload(rider.development_squad.team)
+            if rider.development_squad_id else None
+        ),
     }
 
 

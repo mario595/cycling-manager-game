@@ -106,8 +106,11 @@ class SelfBid(TransferError):
 
 
 def free_agents() -> QuerySet[Rider]:
-    """Every active rider with no team — retired riders are never in the pool."""
-    return Rider.objects.active().filter(team__isnull=True).order_by("name")
+    """Every active rider with no team — retired riders and development
+    squad riders (#33) are never in it."""
+    return Rider.objects.active().filter(
+        team__isnull=True, development_squad__isnull=True,
+    ).order_by("name")
 
 
 def release_cost_for(team, rider: Rider, *, weeks_opened: int) -> int:
@@ -170,6 +173,9 @@ def sign_free_agent(team, rider_id: int, *, at, charge=None) -> Rider:
 
         if rider.retired_at is not None:
             raise RiderNotAvailable("That rider has retired.")
+
+        if rider.development_squad_id is not None:
+            raise RiderNotAvailable("That rider is not available.")
 
         # Roster-cap COUNT under the RIDER's lock, not the team's — an
         # accepted narrowing race (Design decision 8): two concurrent
