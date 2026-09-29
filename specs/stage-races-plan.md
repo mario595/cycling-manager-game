@@ -709,7 +709,7 @@ finish_time`, `renders final GC with points and prizes`;
 `screens/Finances.test.tsx` — `labels gc prize money`. Run `npm test` and
 `npm run build` (type errors in the `KIND_LABELS` record show up there).
 
-### W11 — documentation
+### W11 — documentation — done
 See *Documentation update*. Its own commit.
 
 ## Execution order

@@ -88,10 +88,10 @@ manage.py load_season seasons/season-1.example.json --replace
 ```
 
 The file is JSON: `number` (int, starting at 1), `starts_at` (ISO 8601,
-must resolve to a Monday 00:00:00 UTC), and an optional `races` list. The
-command creates the `Season`, its twelve `Week` rows and any declared races
-in one transaction — a malformed race anywhere in the file creates none of
-it, season included.
+must resolve to a Monday 00:00:00 UTC), and optional `races` and
+`stage_races` lists. The command creates the `Season`, its twelve `Week`
+rows and any declared races and stage races in one transaction — a
+malformed entry anywhere in the file creates none of it, season included.
 
 A season that has already started (`starts_at <= now()`) can never be
 touched again — `load_season` refuses outright, with no `--replace`
@@ -154,6 +154,51 @@ prompt for declaring a season — see `specs/archive/season.md`'s *Out of scope*
 season, and is exactly what the first season shipped with before this
 feature existed.
 
+### The `stage_races` list
+
+```json
+{
+  "stage_races": [
+    {
+      "name": "Alpine Tour",
+      "week": 6,
+      "start_day": "monday",
+      "time": "14:00",
+      "stages": [
+        { "course": [{ "length": 130000, "gradient": 0.0 }] },
+        { "name": "Mountain Stage", "course": [{ "length": 90000, "gradient": 4.0 }] },
+        { "course": [{ "length": 140000, "gradient": 0.0 }], "time": "13:00" }
+      ]
+    }
+  ]
+}
+```
+
+| Key | Required | Notes |
+|---|---|---|
+| `name` | yes | Non-empty, at most 120 characters (`StageRace.name`'s limit). |
+| `week` | yes | 1 to `SEASON_WEEKS` (12), same as a race's `week`. |
+| `start_day` | yes | Lowercase `monday`…`sunday` — the first stage's day. |
+| `time` | yes | `HH:MM`, the default for every stage; a stage's own `time` overrides it. |
+| `stages` | yes | 2 to 7 objects, one per stage, in order. Each takes `course` (required, same shape as a race's), and the optional `name`, `time`, `wind`, `seed`, `markers` a race entry takes — everything except `week`/`day`, which the stage race supplies. |
+
+A stage race's stages land on `start_day`, `start_day + 1`, … in order, and
+must not run past Sunday (`start_day` plus `len(stages) - 1` days ≤ 6) — see
+`specs/archive/stage-races.md`, *Rules and edge cases*: a stage race is
+always inside one calendar week. Each stage's `(week, day)` is checked
+against the **same** one-race-per-day pool a one-day race's `(week, day)`
+is, so a stage clashing with an ordinary race — or with another stage
+race's stage — names both in the error, exactly like two one-day races
+would (see *One race per day*, below).
+
+A stage's `Race.name` is generated, never taken verbatim from the file:
+`"<tour> — Stage <n>"`, or `"<tour> — Stage <n>: <stage name>"` when the
+stage entry gives one. There is no way to set a stage's full name directly
+— the numbering is part of the identity the calendar and results screens
+read.
+
+`stage_races` may be empty or absent, like `races`.
+
 ## Placing a race
 
 A race entry says where it sits in season-relative terms — `(week, day,
@@ -181,11 +226,15 @@ more than one, which it cannot today.
 ## One race per day
 
 Spec: at most one race per calendar **day** (not per week — a Saturday and
-Sunday race in the same week are both allowed). Two layers enforce it:
+Sunday race in the same week are both allowed). This holds across both
+kinds of entry a season file declares — a one-day race and a stage race's
+stage compete for the same day exactly like two one-day races would. Two
+layers enforce it:
 
 - **The loader** rejects a duplicate `(week, day)` pair while parsing the
-  file, naming both races in the error — this is the message an admin
-  actually sees.
+  file — races and every stage of every stage race all feed the same
+  `(week, day)` pool — naming both entries in the error, this is the
+  message an admin actually sees.
 - **`racing.models.Race`** carries a `UniqueConstraint` on
   `(week, race_day)`, where `race_day` is a `DateField` set in `save()`
   from `starts_at`. This is what makes the rule true at the database level,
@@ -224,15 +273,20 @@ still less than the one import that would violate the dependency direction.
 
 ## Replacing a season with races
 
-`--replace` on a not-yet-started season deletes it. `Race.week` is
-`on_delete=PROTECT` (`racing/README.md`), so once a season has races,
-deleting the `Season` directly raises `ProtectedError` — the command
-therefore deletes the season's races first:
+`--replace` on a not-yet-started season deletes it. `Race.week` and
+`StageRace.week` are both `on_delete=PROTECT` (`racing/README.md`), so once
+a season has races or stage races, deleting the `Season` directly raises
+`ProtectedError` — the command therefore deletes races before stage races
+before the season:
 
 ```python
 Race.objects.filter(week__season=existing).delete()
+StageRace.objects.filter(week__season=existing).delete()
 existing.delete()
 ```
+
+Races first, deliberately: `Race.stage_race` is *also* `PROTECT`, so a
+`StageRace` cannot be deleted while any of its own stages still exist.
 
 This is safe only because the not-yet-started check has already run: no
 race being deleted here can have been simulated, because nothing in an
@@ -267,6 +321,9 @@ never at module scope and never in `schedule/loaders.py` or
   imports `racing/` at all. That injection is not ceremony:
   it is what keeps `schedule/loaders.py`'s tests running with no database
   and no import of `racing/`.
+- `racing.models.StageRace`, and `racing.services.create_stage_race`, the
+  same injected-callable shape for `schedule.loaders.create_stage_races()`
+  — see `racing/README.md`, *Stage races*.
 
 **`apps.get_model("racing", "Race")` is not an acceptable substitute** for
 either of the above inside library code — it is an import in disguise that

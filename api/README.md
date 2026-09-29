@@ -27,8 +27,12 @@ DRF routers and serializers that aggregate other apps' data for the SPA.
   shorter list and never `null`, so an empty week is visible as one rather
   than looking like missing data. Outside `in_season`, `weeks` is `[]`.
   `status` on a race is `Race.status` verbatim (including `failed`);
-  mapping it to player-facing words is the SPA's job. See
-  `schedule/README.md`, *The race calendar*.
+  mapping it to player-facing words is the SPA's job. Each race also
+  carries `stage_race` — `null` for a one-day race, else `{id, name,
+  stage_number, stage_count}` — so the SPA can fold consecutive stages of
+  one tour into a single calendar entry without a second request. See
+  `schedule/README.md`, *The race calendar*, and `racing/README.md`,
+  *Stage races*.
 - `GET`/`PUT /api/racing/races/<race_id>/squad/` — the **caller's own**
   team's squad for one race (`SquadSerializer`, `SquadWriteSerializer`,
   `SquadView`). No team id in the URL: the team is always
@@ -45,6 +49,15 @@ DRF routers and serializers that aggregate other apps' data for the SPA.
   carries `freshness` on that same 0-10 display scale; the hidden
   `recovery_rate` behind it never appears in this or any other payload — see
   `riders/README.md`, *Freshness*.
+
+  **A stage race's later stages are different.** `stage_race` on the
+  payload is `null` or `{name, stage_number}`. For `stage_number > 1`,
+  `editable` is always `false`, `GET` returns `racing.services.
+  carried_squad` (never `suggested_squad` — that falls back through
+  `previous_squad`'s "most recent race raced", which is the wrong rule for
+  a squad that is always stage 1's, carried forward) rather than a fresh
+  suggestion, and `PUT` is always a 400 — `set_squad` refuses any stage
+  past the first outright. See `racing/README.md`, *Stage races*.
 - `GET /api/riders/` — the **caller's own** team's roster
   (`RosterSerializer`, `RiderListView`): `{riders: [...], squad_value}`.
   Same `team_for()` pattern as the squad endpoint: no team id in the URL, a
@@ -217,6 +230,14 @@ Since #29 each rider also carries `release_cost`
   below, which 403s a caller with no team. No status filter: a `scheduled`,
   `running`, `finished` or `failed` race all return `200`; the status is in
   the payload and the SPA decides what to draw.
+
+  **A stage of a stage race carries two more fields.** `payout` reads the
+  reduced stage table instead of the one-day table; `gc_payout` is `[]` for
+  a one-day race, else the (bigger) GC table — the award for the whole tour,
+  paid once on the final stage. `stage_race` is `null` or `{id, name,
+  stage_number, stage_count, stages}`, where `stages` lists every stage of
+  the tour (`{id, stage_number, starts_at, status}`) so the race screen can
+  draw a strip linking between them. See `racing/README.md`, *Stage races*.
 - `GET /api/racing/races/<race_id>/log/` — a finished race's recorded log,
   as the newline-delimited JSON the race engine wrote (`RaceLogView`). The
   body is **streamed from storage** in chunks, never read into memory whole:
@@ -275,6 +296,29 @@ Since #29 each rider also carries `release_cost`
   crossed with. The full crossing order stays in the database for #16/#17;
   a 64-rider field over ten markers is 640 rows this screen never draws.
   `markers` is `[]` for a race with none.
+
+  Each `results` row also carries `group_time` — the finish time shared by
+  every rider who crossed with no meaningful gap to the rider ahead, null
+  for a non-finisher, written for every race (one-day included) but only
+  ever read by the `gc` block below; a one-day race's own gap display still
+  reads `finish_time`. `race` itself carries `stage_race` (`null` or
+  `{id, name, stage_number, stage_count}`). `points` is filtered to
+  `RacePoints.kind == RACE` — a completed tour's final stage also carries
+  its `kind == GC` award, and that belongs in `gc`, not in the stage's own
+  team-points table.
+
+  `gc` is `null` for a one-day race. For a stage race's stage it is
+  `{after_stage, final, standings, points}`:
+  `racing.services.general_classification(stage_race,
+  through_stage=race.stage_number)` as of *this* stage, `final` true once
+  the whole tour has completed and this is its last stage, `standings` one
+  row per eligible rider (`{position, rider, team, gc_time, gap}`, `gap` is
+  seconds behind the leader, `0` for the leader), and `points` — the frozen
+  GC award, `[]` until `final` — each team's best-placed GC rider's
+  `{team, position, points, prize}`, prize summed from that team's
+  `gc_prize_money` ledger entries for the final stage, the same pattern
+  `prize` above uses for `prize_money`. See `racing/README.md`, *Stage
+  races*.
 - `GET /api/competitions/standings/` — the current season's points table
   (`StandingsSerializer`, `StandingsView`, serializing
   `competitions.services.standings`). Same `state` vocabulary as

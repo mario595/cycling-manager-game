@@ -193,6 +193,24 @@ an interrupted payout completes on the next attempt and a re-run is a no-op.
 Each placement is written in its own `transaction.atomic()` with the
 `IntegrityError` caught and passed, the same idiom as `charge_weekly_wages`.
 
+### General classification prize money
+
+`pay_gc_prizes(final_stage_id, *, stage_race_name, at, prizes_by_team)` is
+`pay_race_prizes`'s twin for a stage race's general classification — both
+now share a private `_pay_prizes` writer, parameterised on `kind`. It is
+written under `LedgerEntry.Kind.GC_PRIZE_MONEY`, **not** `PRIZE_MONEY`, and
+that separation is load-bearing rather than tidiness: a stage race's final
+stage can owe a team both its own stage prize and a GC prize at the exact
+same `(team, race, position)` (a rider who wins the last stage and leads
+the GC, say). Sharing `PRIZE_MONEY`'s constraint would make the second
+write collide with the first's `(team, race, position)` row and silently
+no-op — exactly the "already paid" outcome the constraint is supposed to
+mean, except nothing was actually paid twice. `race` on a `gc_prize_money`
+row is the stage race's **final stage**, not a row of its own kind; `world.
+services._settle_stage_race` calls this once, the moment the whole stage
+race completes. See `racing/README.md`, *Stage races*, and `competitions/
+README.md`, *Stage races*.
+
 ## Trainer salaries run off the same loop
 
 `world.services.tick()` calls `economy.services.charge_trainer_salaries(week,

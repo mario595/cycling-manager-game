@@ -171,6 +171,7 @@ once an hour so a race scheduled for a given hour starts near that hour. See
 | `RaceSquadRider` | One rider's membership in a squad, and whether they lead it. |
 | `RaceMarker` | One named point on a race's course — see *Markers and crossings*, below. |
 | `MarkerCrossing` | One rider's recorded crossing of one marker. |
+| `StageRace` | A named run of 2-7 consecutive-day races sharing one squad and a general classification — see *Stage races*, below. |
 
 `Race.course` is stored in the same `{length, gradient}` shape the engine's
 config parser already accepts, so an existing `race_engine/configs/*.json`
@@ -373,7 +374,12 @@ what the manager actually picked.
 `riders/`) deducted from their stored `freshness`, floored at
 `FRESHNESS_FLOOR` — the counterpart to the penalty above (see `riders/README.
 md`, *Freshness*). Auto-picked and saved squads cost the same; resting is
-what recovers the ground, once per week in `world/`.
+what recovers the ground, once per week in `world/`. A stage costs
+`STAGE_FRESHNESS_COST` (10) instead — see *Stage races*, below.
+
+**Every race — one-day or a stage — also writes `RaceResult.group_time` for
+each finisher.** See *Stage races*, below, for what it is and why it is
+written unconditionally.
 
 ## Squads
 
@@ -416,6 +422,15 @@ The Django admin can save a squad that breaks this rule; that is accepted,
 and it is why the *simulation* validates again independently (see below),
 rather than trusting whatever is in the database.
 
+**The one exception: a stage race's later stages.** `set_squad` refuses any
+stage past the first outright — a stage race's squad is chosen once, for
+stage 1 (see *Stage races*, below). From stage 2 on, `ensure_squads` writes
+the squad by a **different** path, `_carry_squads`, which deliberately
+bypasses `_write_squad`'s exactly-four check: a carried squad may hold fewer
+than four riders, or none, once riders have been cut or abandoned in earlier
+stages. Do not relax `_write_squad` itself to allow this — that check still
+protects every manager write, one-day race or stage 1 alike.
+
 **A team with no squad still starts.** `ensure_squads(race)`, called at the
 top of `simulate_race`, writes an auto-picked squad (`is_auto_picked=True`)
 for every team that does not already have one for this race — a manager who
@@ -442,3 +457,106 @@ A rider has no leadership of their own — `Rider` carries no `role` field —
 so `to_engine_rider`'s `role` argument is required, not defaulted, and
 `simulate_race` passes `"leader"` or `"support"` from the squad row for
 every rider it converts. See `specs/leadership-is-per-race.md`.
+
+## Stage races
+
+A stage race (`StageRace`) is a named run of 2-7 ordinary races on
+consecutive calendar days, entirely inside one `schedule.Week` — see
+`specs/archive/stage-races.md` for the player-facing feature. Each stage is
+just a `Race` row with `stage_race` and `stage_number` set; a one-day race
+has both null, and is not internally modelled as a stage race of length one.
+
+**`StageRace` stores nothing derivable from its stages.** No status, no
+stage count, no GC. `is_complete()` (every stage `FINISHED` or `FAILED`,
+with at least one actually `FINISHED`) and `final_stage()` (highest
+`stage_number`) both read the `Race` rows in `stages` fresh — the same
+"derived, not stored" principle `schedule/README.md` uses for the current
+season/week. The only frozen stage-race facts are the GC award rows
+themselves (`competitions.models.RacePoints(kind=gc)`, a
+`gc_prize_money` ledger entry), frozen at award time like every other
+scoring row in this app.
+
+### The squad is chosen once, for stage 1
+
+`set_squad` refuses outright for `stage_number > 1` — see *Squads*, above.
+From stage 2 on, `ensure_squads` calls `_carry_squads` instead of
+auto-picking: for each team's **stage-1** squad, it keeps only the members
+`riders_still_in(stage_race, stage_number)` says are still in the race, and
+writes that (possibly short, possibly empty) set as the stage's own
+`RaceSquad`/`RaceSquadRider` rows, preserving `is_leader` and
+`is_auto_picked` from stage 1. A team with nobody left simply gets no squad
+row for that stage — it scores nothing, the same as a whole squad not
+finishing today.
+
+**"Still in the race" (`riders_still_in`)**: a rider from the stage-1 squad
+who has a non-null `finish_time` in *every* earlier `FINISHED` stage. A
+`FAILED` stage neither removes anyone nor counts as "earlier" — it produced
+no results, so there is nothing to have missed. `racing.services.
+carried_squad(race, team)` is the read-only twin of the same rule, used by
+the squad API to show a later stage before it has actually run; both share
+`riders_still_in` rather than re-deriving D4 twice.
+
+If the stored leader is among those dropped, `_effective_leader_ids`
+(above) promotes the lowest-pk remaining member **for that stage's engine
+call only** — the stage-1 `is_leader` row is never rewritten, exactly the
+way it already handles a leader sold or released mid-race.
+
+### Same group, same time — `RaceResult.group_time`
+
+Written for **every** finisher of **every** race, one-day included — the
+same field, unconditionally, so `simulate_race` has no stage-shaped branch
+here; only a stage race's general classification ever reads it.
+`racing.services.group_times(finish_times)` chains consecutive finishers:
+a new group starts whenever the gap to the *previous* finisher exceeds
+`GROUP_GAP_SECONDS` (1.0), so a bunch strung out over several small gaps is
+still one group. `1.0` rather than a strict `<1` because the engine ticks
+at whole seconds — a stricter threshold would only ever group riders who
+cross in literally the same tick, which is exactly the fraction-of-a-second
+sprint gap the feature exists to remove. `finish_time` and `RaceResult.
+position` are **never** touched by this — a stage's points and prize money
+still come from strict finishing order, unchanged.
+
+### The general classification is a read, not a table
+
+`racing.services.general_classification(stage_race, *, through_stage=None)`
+computes the GC fresh from stage results every time it is asked, never
+stored. A rider is eligible iff they have a non-null `finish_time` in every
+`FINISHED` stage up to `through_stage` (every `FINISHED` stage if
+`through_stage` is `None`); their GC time is the sum of those stages'
+`group_time` (every finisher has one, by construction above). Ordered by GC
+time ascending, then by the sum of their stage positions ascending (the
+spec's tiebreak — better individual stage placings — for the genuine edge
+case of two riders finishing with an identical GC time), then by rider id
+for determinism. Each entry's team comes from the **stage-1** squad, never
+`Rider.team`: a rider cannot change team mid-tour (see *still in the race*,
+above), and the squad is the durable per-race record `racing/README.md`
+already treats it as (see *Squads*).
+
+### Scoring and paying the GC
+
+Stages score and pay from `competitions.scoring`'s reduced
+`STAGE_POINTS_BY_POSITION`/`STAGE_PRIZE_BY_POSITION` tables — roughly half
+the one-day tables — via the same `score_race`/`prizes_by_team` functions,
+switched on `race.stage_race_id`. The GC itself is scored and paid **once**,
+by `competitions.services.score_general_classification`/`gc_prizes_by_team`,
+called from `world.services._settle_stage_race` the moment
+`stage_race.is_complete()` — see `world/README.md`, *How a tick works*. GC
+points land as a `RacePoints` row on the stage race's **final stage**, with
+`kind=RacePoints.Kind.GC` rather than `RACE` — the same race can carry both
+a stage's own points and the tour's GC points, so `kind` is what tells them
+apart; `score_race`'s idempotency check and any reader building a stage's
+own results must filter on `kind=RACE`, never assume every row on a race is
+one. GC prize money lands as an `economy.LedgerEntry` with its own
+`kind=gc_prize_money`, never `prize_money` — the final stage's own stage
+prize and its GC prize can land on the exact same `(team, race, position)`,
+and sharing a kind would let one payout collide with, and silently drop,
+the other (`economy/README.md`).
+
+### Declaring one
+
+A season file's top-level `stage_races` list (`schedule/README.md`,
+*Declaring a season*) is the only way one is created; `racing.services.
+create_stage_race` and `racing.services.create_race` (with `stage_race`/
+`stage_number` passed straight through) are the injected callables the
+loader uses, the same indirection `create_races` already relies on to keep
+`schedule/` free of any import from `racing/`.
