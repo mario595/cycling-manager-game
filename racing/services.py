@@ -279,12 +279,12 @@ def set_squad(race: Race, team: Team, rider_ids: list[int], leader_id: int) -> R
 def create_race(*, markers: Iterable[dict] = (), **fields) -> Race:
     """Create a race and its markers in one transaction.
 
-    `markers` entries are `{"kind", "name", "distance"}` dicts, as the
-    season loader produces them. Each `save()` runs `RaceMarker.clean()`, so
-    an invalid marker fails the whole creation. `schedule/`'s loader injects
-    this in place of `Race.objects.create` — D10: markers are authored in the
-    same declaration as the race, and the loader still imports nothing from
-    `racing/`.
+    `markers` entries are `{"kind", "name", "distance", "weight"?}` dicts, as
+    the season loader produces them. Each `save()` runs `RaceMarker.clean()`,
+    so an invalid marker fails the whole creation. `schedule/`'s loader
+    injects this in place of `Race.objects.create` — D10: markers are
+    authored in the same declaration as the race, and the loader still
+    imports nothing from `racing/`.
     """
     with transaction.atomic():
         race = Race.objects.create(**fields)
@@ -294,6 +294,7 @@ def create_race(*, markers: Iterable[dict] = (), **fields) -> Race:
                 kind=marker["kind"],
                 name=marker["name"],
                 distance=marker["distance"],
+                weight=marker.get("weight", RaceMarker.Weight.STANDARD),
             )
     return race
 

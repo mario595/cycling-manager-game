@@ -1,15 +1,28 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 
 import {
   changeDevelopmentSquadLevel,
   closeDevelopmentSquad,
   openDevelopmentSquad,
+  type DevelopmentSquadRider,
 } from '../api'
-import { Button, Card, PageBody, PageHeading } from '../components/primitives'
+import { Button, Card, CardHeader, LabelBar, PageBody, PageHeading } from '../components/primitives'
 import { formatMoney } from '../format'
+import { riderPath } from '../navigation'
 import { color, font } from '../theme'
 import { useAuth } from '../useAuth'
 import { useDevelopmentSquad } from '../useDevelopmentSquad'
+
+type AttrKey = 'climb' | 'sprint' | 'flat' | 'resistance' | 'positioning'
+
+const ATTR_KEYS: { key: AttrKey; label: string }[] = [
+  { key: 'climb', label: 'CLM' },
+  { key: 'sprint', label: 'SPR' },
+  { key: 'flat', label: 'FLT' },
+  { key: 'resistance', label: 'RES' },
+  { key: 'positioning', label: 'POS' },
+]
 
 /** Inline SVG, as `AttributeRadar` and `AttributeHistoryChart` do — there is
  * no icon library to reach for, and one padlock does not justify one. Takes
@@ -73,6 +86,7 @@ export function DevelopmentSquad() {
 
   const isOpen = squad.level !== null
   const currentName = squad.levels.find((l) => l.action === 'current')?.name
+  const intake = squad.intake
 
   const run = async (action: () => Promise<void>, failureMessage: string) => {
     setPending(true)
@@ -94,14 +108,13 @@ export function DevelopmentSquad() {
         title="Development squad"
         titleSize={29}
         subtitle={
-          // Money, and nothing else. The spec is explicit that this screen
-          // must not promise riders or say "coming soon" (#33 owns youth
-          // intake, and a higher level's effect on it is #33's decision, not
-          // this one's). A subtitle that told a manager a squad develops
-          // riders faster would be a promise about behaviour that does not
-          // exist yet — and one they would pay real money for.
-          isOpen
-            ? `Running at ${currentName}, charged its weekly cost every week.`
+          // #33 is built: the open subtitle now states the cadence and
+          // that a higher level improves the odds — but stays qualitative,
+          // never a percentage and never a promise about a single batch
+          // (riders/README.md, *Youth intake*). Closed keeps its money-only
+          // wording, since a closed squad produces nothing.
+          isOpen && intake
+            ? `Running at ${currentName}. ${intake.batch_size} young riders arrive every ${intake.every_weeks} weeks; a higher level improves the odds of a promising one.`
             : 'Closed. A squad starts at Regional, and each level above costs more to reach and to run.'
         }
       />
@@ -109,6 +122,16 @@ export function DevelopmentSquad() {
       {actionError ? (
         <Card style={{ padding: '12px 16px', borderColor: '#D9534F' }}>
           <div style={{ fontSize: 13, color: '#D9534F' }}>{actionError}</div>
+        </Card>
+      ) : null}
+
+      {isOpen && intake ? (
+        <Card style={{ padding: '12px 16px' }}>
+          <div style={{ fontSize: 13, color: color.ink }}>
+            {intake.next
+              ? `Next intake: Season ${intake.next.season}, Week ${intake.next.week}`
+              : 'No intake scheduled'}
+          </div>
         </Card>
       ) : null}
 
@@ -252,6 +275,95 @@ export function DevelopmentSquad() {
           )
         })}
       </div>
+
+      {isOpen ? (
+        <Card style={{ padding: '15px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <CardHeader title="Squad riders" />
+          {squad.riders.length === 0 ? (
+            <div style={{ fontSize: 12.5, color: color.muted }}>
+              No riders yet — the first intake arrives
+              {intake?.next
+                ? ` Season ${intake.next.season}, Week ${intake.next.week}.`
+                : ' once one is scheduled.'}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {squad.riders.map((rider: DevelopmentSquadRider) => (
+                <div
+                  key={rider.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    paddingBottom: 10,
+                    borderBottom: `1px solid ${color.divider}`,
+                  }}
+                >
+                  <div style={{ flex: '0 0 160px', minWidth: 0 }}>
+                    <Link
+                      to={riderPath(rider.id)}
+                      style={{
+                        fontSize: 13.5,
+                        fontWeight: 600,
+                        letterSpacing: '-0.2px',
+                        color: color.ink,
+                        textDecoration: 'none',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        display: 'block',
+                      }}
+                    >
+                      {rider.name}
+                    </Link>
+                    <div style={{ fontSize: 11, color: color.mutedStrong, fontFamily: font.mono }}>
+                      {rider.speciality.toUpperCase()} · {rider.age} yrs
+                    </div>
+                  </div>
+                  <div style={{ flex: '1 1 auto', display: 'flex', gap: 10, minWidth: 0 }}>
+                    {ATTR_KEYS.map(({ key, label }) => (
+                      <div key={key} style={{ flex: 1, minWidth: 0 }}>
+                        <LabelBar label={label} value={rider[key]} />
+                      </div>
+                    ))}
+                  </div>
+                  <div
+                    style={{
+                      flex: '0 0 auto',
+                      fontSize: 11,
+                      color: color.mutedStrong,
+                      fontFamily: font.mono,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                    }}
+                  >
+                    Arrived S{rider.arrived.season} W{rider.arrived.week}
+                    {rider.is_new ? (
+                      // Same treatment as the CURRENT badge above — a span,
+                      // not the Chip primitive, since there's nothing to
+                      // toggle here either.
+                      <span
+                        style={{
+                          padding: '4px 8px',
+                          borderRadius: 8,
+                          fontSize: 10,
+                          fontFamily: font.mono,
+                          letterSpacing: '0.6px',
+                          border: `1px solid ${color.borderButton}`,
+                          color: color.mutedStrong,
+                        }}
+                      >
+                        NEW
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      ) : null}
 
       {isOpen ? (
         <Card style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>

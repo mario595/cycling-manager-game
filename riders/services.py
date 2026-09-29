@@ -316,9 +316,16 @@ def is_due_to_retire(rider: Rider) -> bool:
 
 def retire_due_riders(*, at) -> list[int]:
     """Retire every active rider whose age has reached their retirement
-    age, as of `at` (game time). Clears the team and stamps retired_at in
-    one UPDATE so retired_rider_has_no_team holds row by row. Returns the
-    ids actually retired. Pure with respect to seasons: world decides when."""
+    age, as of `at` (game time). Clears the team and development_squad and
+    stamps retired_at in one UPDATE so retired_rider_has_no_team and
+    retired_rider_not_in_squad both hold row by row. Returns the ids
+    actually retired. Pure with respect to seasons: world decides when.
+
+    Clearing development_squad here is a backstop for #34 (no squad rider
+    can reach the retirement window under this ticket alone), not a path
+    exercised today — without it a future promotion bug would turn into a
+    crashed season close instead of an IntegrityError at the point it
+    actually happened."""
     due = [
         rider.pk
         for rider in Rider.objects.active().only("id", "age", "peak_age", "decline_rate")
@@ -326,7 +333,7 @@ def retire_due_riders(*, at) -> list[int]:
     ]
     if due:
         Rider.objects.filter(pk__in=due, retired_at__isnull=True).update(
-            team=None, retired_at=at,
+            team=None, development_squad=None, retired_at=at,
         )
     return due
 

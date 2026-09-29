@@ -15,6 +15,12 @@ const KIND_LABEL: Record<RaceMarker['kind'], string> = {
   mountain: 'Mountain',
 }
 
+const WEIGHT_LABEL: Record<NonNullable<RaceMarker['weight']>, string> = {
+  minor: 'Minor',
+  standard: 'Standard',
+  major: 'Major',
+}
+
 /** The course as the shared elevation chart — the same derivation and drawing
  * code as the race_player visualizer, imported directly from its source so
  * the calendar and the visualizer can never drift apart. No rider markers
@@ -72,6 +78,9 @@ export function CourseProfile({
           {markers.map((m) => (
             <div key={m.id} style={{ fontSize: 12.5, fontFamily: font.mono, color: color.muted }}>
               {KIND_LABEL[m.kind]} · {m.name} · km {(m.distance / 1000).toFixed(1)}
+              {m.weight !== null && m.points !== null ? (
+                <> · {WEIGHT_LABEL[m.weight]} · {m.points[0]} pts to the winner</>
+              ) : null}
             </div>
           ))}
         </div>

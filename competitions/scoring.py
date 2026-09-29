@@ -79,3 +79,22 @@ GC_PRIZE_BY_POSITION: dict[int, int] = {
 def gc_prize_for(position: int) -> int:
     """What a GC finishing position pays. Zero outside the table."""
     return GC_PRIZE_BY_POSITION.get(position, 0)
+
+
+#: How many crossing positions at a sprint marker score.
+SPRINT_PLACES = 5
+
+#: Sprint points by marker weight, then crossing position (1-indexed).
+#: Positions beyond SPRINT_PLACES score nothing. Frozen per marker at award
+#: time — see specs/archive/sprint-points.md. Keys match RaceMarker.Weight.
+SPRINT_POINTS_BY_WEIGHT: dict[str, dict[int, int]] = {
+    "minor":    {1: 4,  2: 3, 3: 2, 4: 1, 5: 1},
+    "standard": {1: 6,  2: 4, 3: 3, 4: 2, 5: 1},
+    "major":    {1: 10, 2: 7, 3: 5, 4: 3, 5: 2},
+}
+
+
+def sprint_points_for(weight: str, position: int) -> int:
+    """What a crossing position at a sprint of this weight is worth. Zero
+    outside the table."""
+    return SPRINT_POINTS_BY_WEIGHT.get(weight, {}).get(position, 0)

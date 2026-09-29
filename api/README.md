@@ -122,9 +122,12 @@ Since #29 each rider also carries `release_cost`
   rider remains available. The identity keys (`id` through `release_cost`)
   are inherited unchanged from `RiderSerializer` — `release_cost` serializes
   as `null` here, the same documented behaviour `FreeAgentSerializer` relies
-  on, since no team context is passed. Six keys are added: `team`
+  on, since no team context is passed. Seven keys are added: `team`
   (`id`/`name`/`code`, or `null` for a free agent — the rider's **current**
-  team, not who they raced for); `current_week` (`{season, week}`, or `null`
+  team, not who they raced for); `development_squad` (`id`/`name`/`code` of
+  the team whose squad this rider sits in, or `null` — set only for a
+  development squad rider (#33), whose `team` is always null; see
+  `riders/README.md`, *Youth intake*); `current_week` (`{season, week}`, or `null`
   before any season has ever been declared — `schedule.services.current_position`,
   with an
   off-season world reporting its just-finished season's last week);
@@ -218,7 +221,7 @@ Since #29 each rider also carries `release_cost`
   (`RaceDetailSerializer`, `RaceDetailView`): id, name, status, starts_at,
   distance and the raw `{length, gradient}` course segments. It also carries
   `markers`, the race's `RaceMarker` rows in course order
-  (`{kind, name, distance}`). It also carries
+  (`{kind, name, distance, weight, points}` — see below). It also carries
   `payout` — the race's `{position, points, prize}` list for 1st through 10th,
   from `competitions/scoring.py`'s two tables — so the SPA can show the prize
   list before the race has run. It also carries `has_replay`: whether a
@@ -274,12 +277,16 @@ Since #29 each rider also carries `release_cost`
   a `200` with an empty list — "no results yet" and "no such race" would
   otherwise look the same to the SPA. `points` carries one row per team that
   started, scoring teams first ordered by position and then the rest by
-  name, with `position: null`, `points: 0` and `prize: 0` for a team that
-  scored nothing — the starter set comes from `RaceSquad`, not from which
-  teams recorded a result (see `racing/README.md`, *Squads*). `prize` is the
-  team's total winnings, summed from its `prize_money` ledger entries for the
-  race, so the results page and the ledger cannot disagree. `IsAuthenticated`,
-  the project default.
+  sprint points then name, with `position: null` and `prize: 0` for a team
+  that scored no finish points — the starter set comes from `RaceSquad`, not
+  from which teams recorded a result (see `racing/README.md`, *Squads*).
+  Each row's `points` is `finish_points + sprint_points`: `finish_points`
+  is what `RacePoints` awarded (0 if none), `sprint_points` is the team's
+  season sprint `MarkerPoints` for this race (0 if none) — a team can be
+  in the "unplaced" group by finish and still carry a nonzero `points` from
+  sprints alone. `prize` is the team's total winnings, summed from its
+  `prize_money` ledger entries for the race, so the results page and the
+  ledger cannot disagree. `IsAuthenticated`, the project default.
 
   Each row's own `team` (in `results`, alongside `rider`) is the team that
   rider **raced for**, from `RaceSquadRider` — not `rider.team`, which is
@@ -289,23 +296,36 @@ Since #29 each rider also carries `release_cost`
   always agree about which team ran a given race.
 
   The payload also carries `markers`, one entry per `RaceMarker` in course
-  order, each with `crossings` — the first `MARKER_PLACES_SHOWN` (**3**)
-  riders across that marker, `{position, rider, team, crossed_at}`. `team`
-  here is again the team raced for (the same `team_by_rider` map the
-  results rows use), so a rider released since still shows the team they
-  crossed with. The full crossing order stays in the database for #16/#17;
-  a 64-rider field over ten markers is 640 rows this screen never draws.
-  `markers` is `[]` for a race with none.
+  order, each with `crossings` — the first `MARKER_PLACES_SHOWN` (**5**,
+  raised from 3 to match `SPRINT_PLACES` so every scoring position is
+  visible — #16) riders across that marker, `{position, rider, team,
+  points}`. `team` here is again the team raced for (the same
+  `team_by_rider` map the results rows use), so a rider released since
+  still shows the team they crossed with. `points` is what that crossing
+  scored — `null` for a mountain crossing, and `null` for a sprint
+  crossing whose teammate already took the team's one scoring row at that
+  marker (`competitions/README.md`, *Sprint points*). The full crossing
+  order stays in the database for #17; a 64-rider field over ten markers
+  is 640 rows this screen never draws. `markers` is `[]` for a race with
+  none.
+
+  A marker entry itself (both here and on race detail above) carries
+  `weight` and `points`: for a sprint marker, `weight` is its
+  `minor`/`standard`/`major` tier and `points` is that tier's award by
+  crossing position, `[1st, 2nd, 3rd, 4th, 5th]` — e.g. `[6, 4, 3, 2, 1]`
+  for `standard`. Both are `null` for a mountain marker; #17 decides what
+  one is worth.
 
   Each `results` row also carries `group_time` — the finish time shared by
   every rider who crossed with no meaningful gap to the rider ahead, null
   for a non-finisher, written for every race (one-day included) but only
   ever read by the `gc` block below; a one-day race's own gap display still
   reads `finish_time`. `race` itself carries `stage_race` (`null` or
-  `{id, name, stage_number, stage_count}`). `points` is filtered to
-  `RacePoints.kind == RACE` — a completed tour's final stage also carries
-  its `kind == GC` award, and that belongs in `gc`, not in the stage's own
-  team-points table.
+  `{id, name, stage_number, stage_count}`). `points` (the team-points list,
+  not a crossing's `points` above) is filtered to `RacePoints.kind ==
+  RACE` — a completed tour's final stage also carries its `kind == GC`
+  award, and that belongs in `gc`, not in the stage's own team-points
+  table.
 
   `gc` is `null` for a one-day race. For a stage race's stage it is
   `{after_stage, final, standings, points}`:
@@ -417,6 +437,27 @@ Since #29 each rider also carries `release_cost`
   "Upgrade to National first" and "Climbed past. Close the squad to start
   over." are different sentences about the same `locked` action, and only the
   server knows which applies.
+
+  Since #33, the payload also carries `riders` and `intake`. `riders` is the
+  squad's own riders, strongest first (`riders.pricing.strength`), through a
+  dedicated `DevelopmentSquadRiderSerializer` — identity, speciality, age,
+  the five attributes on the 0-10 display scale, `arrived` (`{season,
+  week}`, resolved through `current_position(rider.intake_at)` the same way
+  `retired_payload` resolves `retired_at`), and `is_new`. **No
+  `weekly_salary`, `market_value`, `release_cost` or `final_season`** — none
+  of those apply to a rider who draws no wage and isn't in any market, and
+  they are deliberately not inherited from `RiderSerializer` (see
+  `riders/README.md`, *Youth intake*). `is_new` is true only for riders whose
+  `intake_at` equals the most recently opened intake week's `starts_at`
+  (`_latest_intake_at`) — after the next batch arrives, the previous one
+  stops being new even though it is still in the squad. `intake` is
+  `{every_weeks, batch_size, next}`, where `next` is `{season, week}` of the
+  first declared intake week after now, or `null` once none is declared
+  (`_next_intake`). Both keys resolve against `schedule.Week` rows, not a
+  reimplementation of `% INTAKE_INTERVAL_WEEKS` in SQL — the cadence rule
+  lives once, in `riders.youth_intake.is_intake_week`. `riders` is `[]` and
+  `intake` is `null` while the squad is closed — a closed squad has no
+  riders and nothing due.
 - `POST /api/development-squad/open/` (`OpenDevelopmentSquadView`) — open the
   squad at `{level}`, debiting that level's fee. `204`; `409` if a squad is
   already open, if `level` is not the entry level (`LevelLocked` — however rich
@@ -434,7 +475,9 @@ Since #29 each rider also carries `release_cost`
   would make a double-click look like a success. `POST` rather than `DELETE`
   for `FireTrainerView`'s reason and then some: the row really is deleted, but
   the opening fee already paid stays in the ledger, so nothing here is
-  destroyed.
+  destroyed. Since #33, closing also releases every rider then sitting in the
+  squad to the free-agent pool, calling `close_squad(team, at=now())` — see
+  `riders/README.md`, *Youth intake*.
 
   All four are `IsAuthenticated` by the project default — **no `AllowAny`** —
   and all four return `403` without a team, the same `team_for()` check every

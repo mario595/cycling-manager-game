@@ -234,17 +234,26 @@ repeat. Crossings carry the marker, the rider, a `position` (1 for the first
 rider across) and the interpolated `crossed_at` (race seconds — `finish_time`
 for a finish-line marker, per D5).
 
+**`RaceMarker.weight`** (`minor` / `standard` / `major`, default `standard`)
+is the weight/category column D1 anticipated, added by #16 (`specs/archive/sprint-points.md`).
+It scales what a sprint marker's crossings score — see `competitions/README.md`,
+*Sprint points* — and is **inert on a mountain marker**: #17 decides what a
+mountain marker's weight means, and the season loader (`schedule/README.md`)
+rejects a `weight` key on one so authors cannot write data #17 would have to
+reinterpret. The engine never sees it: weight does not change how a marker is
+contested, only what a crossing is later worth.
+
 **Races with markers are born through `racing.services.create_race`, not
 `Race.objects.create`.** `create_race` opens one transaction, creates the
 `Race` then one `RaceMarker` per entry (`markers=[{"kind", "name",
-"distance"}, ...]`), each `create()` so `save()` → `clean()` runs. `load_season`
-injects it in place of the plain `Race.objects.create` it wired before
-(`schedule/README.md`, *What `schedule/` may import*) — `schedule/` still
-imports nothing from `racing/`, it just receives a callable that happens to be
-`create_race`. A race created without markers gets an empty `markers` list and
-behaves exactly as before; the crossing writer records nothing, and the
-engine's contest rule and crossing detection are both guarded off when a
-course has no markers (D7 in the plan).
+"distance", "weight"?}, ...]`), each `create()` so `save()` → `clean()` runs.
+`load_season` injects it in place of the plain `Race.objects.create` it wired
+before (`schedule/README.md`, *What `schedule/` may import*) — `schedule/`
+still imports nothing from `racing/`, it just receives a callable that
+happens to be `create_race`. A race created without markers gets an empty
+`markers` list and behaves exactly as before; the crossing writer records
+nothing, and the engine's contest rule and crossing detection are both
+guarded off when a course has no markers (D7 in the plan).
 
 ## The weekly-training readers
 

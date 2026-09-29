@@ -1,17 +1,20 @@
 from __future__ import annotations
 
 from django.db.models import Sum
-from racing.models import Race, RaceResult, StageRace
+from racing.models import MarkerCrossing, Race, RaceMarker, RaceResult, StageRace
 from racing.services import general_classification
 from schedule.models import Season, Week
+from teams.models import Team
 
-from .models import RacePoints
+from .models import MarkerPoints, RacePoints
 from .scoring import (
     POINTS_BY_POSITION,
+    SPRINT_PLACES,
     gc_points_for,
     gc_prize_for,
     points_for,
     prize_for,
+    sprint_points_for,
     stage_points_for,
     stage_prize_for,
 )
@@ -62,6 +65,48 @@ def score_race(race: Race) -> list[RacePoints]:
         if points_for_position(position) > 0
     ]
     return RacePoints.objects.bulk_create(to_create, ignore_conflicts=True)
+
+
+def score_sprints(race: Race) -> list[MarkerPoints]:
+    """Award sprint points for one finished race: per sprint marker, each
+    team's best-placed rider among the top SPRINT_PLACES crossings.
+    Idempotent: a race already scored returns its existing rows.
+
+    Raises ValueError if the race is not FINISHED.
+    """
+    if race.status != Race.Status.FINISHED:
+        raise ValueError(f"{race} is not finished; nothing to score")
+
+    existing = list(MarkerPoints.objects.filter(marker__race=race))
+    if existing:
+        return existing
+
+    to_create = []
+    for marker in race.markers.filter(kind=RaceMarker.Kind.SPRINT):
+        # Cut to the top SPRINT_PLACES crossings FIRST, then keep each
+        # team's best among them — not the reverse. Walking down the
+        # crossing order until five distinct teams have scored would let a
+        # 6th-place rider score when a teammate already took two of the
+        # top five, which is exactly the double-scoring the best-rider rule
+        # exists to prevent.
+        crossings = (
+            MarkerCrossing.objects
+            .filter(marker=marker, position__lte=SPRINT_PLACES)
+            .order_by("position")
+            .values_list("rider_id", "rider__team_id", "position")
+        )
+        best: dict[int, tuple[int, int]] = {}
+        for rider_id, team_id, position in crossings:
+            if team_id is None or team_id in best:
+                continue
+            best[team_id] = (rider_id, position)
+        to_create += [
+            MarkerPoints(marker=marker, team_id=team_id, rider_id=rider_id,
+                         position=position,
+                         points=sprint_points_for(marker.weight, position))
+            for team_id, (rider_id, position) in best.items()
+        ]
+    return MarkerPoints.objects.bulk_create(to_create, ignore_conflicts=True)
 
 
 def prizes_by_team(race: Race) -> dict[int, list[tuple[int, int]]]:
@@ -175,21 +220,35 @@ def _countback_key(entry: dict) -> tuple:
 
 
 def points_by_team(week: Week) -> dict[int, int]:
-    """Total race points each team scored in `week`. Teams that scored
-    nothing are absent from the mapping — callers treat a missing key as 0.
+    """Total points each team scored in `week` — finish points plus sprint
+    points. Teams that scored nothing are absent from the mapping —
+    callers treat a missing key as 0.
 
     Read by world.services.tick() and handed to economy's fanbase
     adjustment: economy/ may not import competitions/ (AGENTS.md), so the
     caller does the join. Same shape as score_race being called from
     world/ rather than from racing/.
     """
-    rows = (
+    totals: dict[int, int] = {}
+    finish_rows = (
         RacePoints.objects
         .filter(race__week=week)
         .values("team_id")
         .annotate(total=Sum("points"))
     )
-    return {row["team_id"]: row["total"] for row in rows}
+    for row in finish_rows:
+        totals[row["team_id"]] = totals.get(row["team_id"], 0) + row["total"]
+
+    sprint_rows = (
+        MarkerPoints.objects
+        .filter(marker__race__week=week, marker__kind=RaceMarker.Kind.SPRINT)
+        .values("team_id")
+        .annotate(total=Sum("points"))
+    )
+    for row in sprint_rows:
+        totals[row["team_id"]] = totals.get(row["team_id"], 0) + row["total"]
+
+    return totals
 
 
 def standings(season: Season) -> list[dict]:
@@ -197,9 +256,13 @@ def standings(season: Season) -> list[dict]:
 
     Ordered by total points descending, then by most 1st places, then most
     2nd places, and so on down the scoring positions. A team with no points
-    sorts last.
+    sorts last. Countback counts finish positions only — a sprint win is
+    not a "1st place" for tie-breaking, so a team that only ever scored via
+    sprints sorts last among equal point totals.
 
-    Each entry: {"team": Team, "points": int, "positions": {pos: count}}.
+    Each entry: {"team": Team, "points": int, "sprint_points": int,
+    "positions": {pos: count}}. `points` is the combined total; the
+    countback key ignores sprint_points entirely.
     """
     rows = (
         RacePoints.objects
@@ -210,9 +273,27 @@ def standings(season: Season) -> list[dict]:
     by_team: dict[int, dict] = {}
     for row in rows:
         entry = by_team.setdefault(row.team_id, {
-            "team": row.team, "points": 0, "positions": {},
+            "team": row.team, "points": 0, "sprint_points": 0, "positions": {},
         })
         entry["points"] += row.points
         entry["positions"][row.position] = entry["positions"].get(row.position, 0) + 1
+
+    sprint_rows = list(
+        MarkerPoints.objects
+        .filter(marker__race__week__season=season, marker__kind=RaceMarker.Kind.SPRINT)
+        .values("team_id")
+        .annotate(total=Sum("points"))
+    )
+    missing_team_ids = [
+        row["team_id"] for row in sprint_rows if row["team_id"] not in by_team
+    ]
+    teams_by_id = Team.objects.in_bulk(missing_team_ids)
+    for row in sprint_rows:
+        entry = by_team.setdefault(row["team_id"], {
+            "team": teams_by_id.get(row["team_id"]), "points": 0,
+            "sprint_points": 0, "positions": {},
+        })
+        entry["points"] += row["total"]
+        entry["sprint_points"] += row["total"]
 
     return sorted(by_team.values(), key=_countback_key)

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone as dt_timezone
 
-from competitions.services import score_general_classification, score_race, standings
-from racing.models import Race, RaceResult, StageRace
+from competitions.services import score_general_classification, score_race, score_sprints, standings
+from racing.models import Race, RaceMarker, RaceResult, StageRace
 from schedule.models import SEASON_WEEKS, Season, Week
 
 
@@ -116,6 +116,71 @@ def test_races_outside_a_season_are_excluded(db, make_team, make_rider, make_res
     table = standings(season)
 
     assert table[0]["points"] == 20  # only the in-season race counted
+
+
+def test_standings_include_sprint_points_in_total(db, make_team, make_rider, make_result, make_marker, make_crossing):
+    season = make_season()
+    team = make_team("ALP")
+
+    race = make_race_in_week(season, 1, "Race One")
+    make_result(race, make_rider("Finisher", team), position=3)
+    score_race(race)
+
+    marker = make_marker(race, weight=RaceMarker.Weight.STANDARD)
+    sprinter = make_rider("Sprinter", team)
+    make_crossing(marker, sprinter, position=1)
+    score_sprints(race)
+
+    table = standings(season)
+
+    assert table[0]["points"] == 12 + 6
+    assert table[0]["sprint_points"] == 6
+
+
+def test_team_with_only_sprint_points_appears_in_standings(db, make_team, make_rider, make_marker, make_crossing):
+    season = make_season()
+    team = make_team("ALP")
+
+    race = make_race_in_week(season, 1, "Race One")
+    marker = make_marker(race)
+    make_crossing(marker, make_rider("Sprinter", team), position=1)
+    score_sprints(race)
+
+    table = standings(season)
+    by_team = {e["team"].pk: e for e in table}
+
+    assert by_team[team.pk]["points"] == 6
+    assert by_team[team.pk]["sprint_points"] == 6
+    assert by_team[team.pk]["positions"] == {}
+
+
+def test_sprint_points_do_not_count_in_countback(db, make_team, make_rider, make_result, make_marker, make_crossing):
+    """A finish 1st (20 points) and a sprint-only team that racked up the
+    same total via sprint wins must not tie on countback — sprint wins are
+    not '1st places' for tie-breaking."""
+    season = make_season()
+    finisher_team = make_team("FIN")
+    sprinter_team = make_team("SPR")
+
+    race1 = make_race_in_week(season, 1, "Race One")
+    make_result(race1, make_rider("Winner", finisher_team), position=1)
+    score_race(race1)
+
+    race2 = make_race_in_week(season, 2, "Race Two")
+    marker1 = make_marker(race2, name="Sprint A", weight=RaceMarker.Weight.MAJOR)
+    make_crossing(marker1, make_rider("Sprinter A", sprinter_team), position=1)
+    race3 = make_race_in_week(season, 3, "Race Three")
+    marker2 = make_marker(race3, name="Sprint B", weight=RaceMarker.Weight.MAJOR)
+    make_crossing(marker2, make_rider("Sprinter B", sprinter_team), position=1)
+    score_sprints(race2)
+    score_sprints(race3)
+
+    table = standings(season)
+    by_team = {e["team"].pk: e for e in table}
+
+    assert by_team[finisher_team.pk]["points"] == 20
+    assert by_team[sprinter_team.pk]["points"] == 20
+    assert table[0]["team"].pk == finisher_team.pk
 
 
 def test_table_resets_between_seasons(db, make_team, make_rider, make_result):

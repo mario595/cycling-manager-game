@@ -486,6 +486,10 @@ export interface RiderProfile extends Rider {
   attribute_history: AttributeSnapshot[]
   races: RiderRace[]
   career: Career
+  /** The owning team while this rider sits in that team's development
+   * squad (#33), or null. Set only for a squad rider — never alongside
+   * `team`, which is null for one. */
+  development_squad: RaceResultTeam | null
 }
 
 /** Thrown by getRiderProfile on a 404 — the rider no longer exists because
@@ -522,6 +526,8 @@ export interface RaceResultEntry {
 export interface RaceResultPointsEntry {
   team: RaceResultTeam
   position: number | null
+  finish_points: number
+  sprint_points: number
   points: number
   prize: number
 }
@@ -531,12 +537,19 @@ export interface RaceMarker {
   kind: 'sprint' | 'mountain'
   name: string
   distance: number
+  /** Null for a mountain marker — #17 decides what one is worth. */
+  weight: 'minor' | 'standard' | 'major' | null
+  /** Points by crossing position (1st, 2nd, ...), or null for a mountain marker. */
+  points: number[] | null
 }
 
 export interface RaceMarkerCrossing {
   position: number
   rider: { id: number; name: string }
   team: RaceResultTeam | null
+  /** Null for a mountain crossing, or a sprint crossing whose teammate
+   * already scored the team's one row at this marker. */
+  points: number | null
 }
 
 export interface RaceMarkerResult extends RaceMarker {
@@ -871,14 +884,45 @@ export interface DevelopmentSquadLevel {
   requires: string | null
 }
 
+/** One development squad rider (#33), the same identity and attribute
+ * shape a roster rider shows, minus everything that names a price: no
+ * weekly_salary, market_value, release_cost or final_season, since none of
+ * them apply to a rider who draws no wage and isn't in any market. */
+export interface DevelopmentSquadRider {
+  id: number
+  name: string
+  speciality: string
+  nationality: string
+  age: number
+  climb: number
+  sprint: number
+  flat: number
+  resistance: number
+  positioning: number
+  arrived: { season: number | null; week: number | null }
+  is_new: boolean
+}
+
+/** How often a squad's riders arrive, and when the next batch is due — the
+ * screen's own words for the cadence, never a percentage. `next` is null
+ * once no further intake week is declared in the calendar. */
+export interface DevelopmentSquadIntake {
+  every_weeks: number
+  batch_size: number
+  next: { season: number; week: number } | null
+}
+
 /** The Development squad screen's whole state: `level` is null while the
  * squad is closed (not an error — a state the screen exists to show), and
  * `balance` is here so an action the team cannot afford can be disabled
- * without a second round trip. */
+ * without a second round trip. `riders` and `intake` are empty/null while
+ * closed — a closed squad has no riders and nothing due (#33). */
 export interface DevelopmentSquad {
   level: number | null
   levels: DevelopmentSquadLevel[]
   balance: number
+  riders: DevelopmentSquadRider[]
+  intake: DevelopmentSquadIntake | null
 }
 
 export async function getDevelopmentSquad(): Promise<DevelopmentSquad> {

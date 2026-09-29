@@ -203,8 +203,8 @@ def test_parses_markers_on_a_race():
     decl = parse_season_file({**BASE, "races": [marked_race()]})
 
     assert decl.races[0].markers == [
-        {"kind": "sprint", "name": "First", "distance": 2000.0},
-        {"kind": "mountain", "name": "Top", "distance": 9000.5},
+        {"kind": "sprint", "name": "First", "distance": 2000.0, "weight": "standard"},
+        {"kind": "mountain", "name": "Top", "distance": 9000.5, "weight": "standard"},
     ]
 
 
@@ -242,8 +242,40 @@ def test_unknown_marker_key_is_warned_and_ignored():
         {"kind": "sprint", "name": "N", "distance": 2000, "points": 10},
     ])]})
 
-    assert decl.races[0].markers == [{"kind": "sprint", "name": "N", "distance": 2000.0}]
+    assert decl.races[0].markers == [
+        {"kind": "sprint", "name": "N", "distance": 2000.0, "weight": "standard"},
+    ]
     assert any("ignoring unknown" in w and "points" in w for w in decl.warnings)
+
+
+def test_sprint_marker_weight_is_parsed():
+    decl = parse_season_file({**BASE, "races": [marked_race(markers=[
+        {"kind": "sprint", "name": "N", "distance": 2000, "weight": "major"},
+    ])]})
+
+    assert decl.races[0].markers[0]["weight"] == "major"
+
+
+def test_missing_weight_defaults_to_standard():
+    decl = parse_season_file({**BASE, "races": [marked_race(markers=[
+        {"kind": "sprint", "name": "N", "distance": 2000},
+    ])]})
+
+    assert decl.races[0].markers[0]["weight"] == "standard"
+
+
+def test_rejects_unknown_weight():
+    with pytest.raises(SeasonFileError, match=r"races\[0\]\.markers\[0\]\.weight"):
+        parse_season_file({**BASE, "races": [marked_race(markers=[
+            {"kind": "sprint", "name": "N", "distance": 2000, "weight": "huge"},
+        ])]})
+
+
+def test_rejects_weight_on_mountain_marker():
+    with pytest.raises(SeasonFileError, match=r"races\[0\]\.markers\[0\]\.weight"):
+        parse_season_file({**BASE, "races": [marked_race(markers=[
+            {"kind": "mountain", "name": "N", "distance": 2000, "weight": "standard"},
+        ])]})
 
 
 def test_create_races_passes_markers_to_the_creator(season):

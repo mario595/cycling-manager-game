@@ -17,6 +17,10 @@ holds which level a team runs at and nothing else.
 `riders/` may not import `economy/` (AGENTS.md), so the operations here take
 an injected `charge` callback rather than writing the fee themselves — the
 pattern `staff.services.hire_trainer` establishes.
+
+Closing releases every rider then sitting in the squad as a free agent
+(#33) — see `close_squad`'s own docstring for why the release must happen
+before the row is deleted.
 """
 
 from __future__ import annotations
@@ -27,7 +31,8 @@ from typing import Literal
 from django.db import IntegrityError, transaction
 from teams.models import Team
 
-from .models import DevelopmentSquad
+from .models import DevelopmentSquad, Rider
+from .services import mark_team_change
 
 
 @dataclass(frozen=True)
@@ -311,9 +316,10 @@ def change_level(team, level: int, *, charge=None) -> DevelopmentSquad:
     return squad
 
 
-def close_squad(team) -> bool:
-    """Close `team`'s development squad if it has one. Returns whether there
-    was one to close.
+def close_squad(team, *, at) -> bool:
+    """Close `team`'s development squad if it has one, releasing every
+    rider then in it as a free agent. Returns whether there was one to
+    close.
 
     The row is deleted rather than flagged, and nothing is refunded or
     written to the ledger. Closing is the only way to reduce the weekly cost,
@@ -321,10 +327,26 @@ def close_squad(team) -> bool:
     starts the climb from the bottom, which is what makes it a credible last
     resort for a team that cannot afford to run one rather than a cheaper
     rung to step down to.
+
+    Riders are released **before** the row is deleted (#33's plan, Design
+    decision 6) — every squad rider is stamped `unattached_since = at` via
+    the existing `mark_team_change`, then has `development_squad` cleared,
+    and only then is the squad row deleted. Deleting first would let
+    `development_squad`'s SET_NULL unlink them silently with no stamp, and a
+    rider with a null `unattached_since` is never treated as long-unattached
+    by the free-agent pool's expiry rule — it would sit in the market
+    forever. `at` is game time, required so this stamp is never skipped.
+
     `teams.services.claim_team` calls this and ignores the return; the API
     turns False into a 409.
     """
     with transaction.atomic():
         _lock_team(team)
-        deleted, _ = DevelopmentSquad.objects.filter(team=team).delete()
-    return deleted > 0
+        squad = squad_for(team)
+        if squad is None:
+            return False
+        riders = list(Rider.objects.filter(development_squad=squad))
+        mark_team_change(riders, team_now=None, at=at)
+        Rider.objects.filter(pk__in=[r.pk for r in riders]).update(development_squad=None)
+        squad.delete()
+    return True

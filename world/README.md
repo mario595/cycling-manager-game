@@ -199,6 +199,16 @@ reads `now()` once, then finds and processes whatever is due, in six steps:
    wages, and filtering on management would make a squad free to hand to an AI
    team. See `economy/README.md`, *Development squad costs*, and
    `riders/README.md`, *Development squad*.
+   Directly after the development squad cost, still inside the per-week
+   loop: `if is_intake_week(week.number): youth_intake_riders +=
+   run_intake(at=week.starts_at)` (#33) — every open squad's next youth
+   batch, managed or not, dated to `week.starts_at` rather than `now()` so a
+   late tick's batch is still found by `run_intake`'s own idempotency check
+   and still reads as arriving in the week it belongs to. The count lands on
+   `TickRun.youth_intake_riders`. See `riders/README.md`, *Youth intake*, for
+   what a batch looks like and why intake runs here rather than earlier in
+   the loop (after growth, training and charges, so a rider's baseline
+   snapshot and first week of growth never land at the same instant).
    The same loop then settles the week's economy side (#21, #22):
    `economy.services.apply_weekly_fanbase(week, points_by_team=...)`
    adjusts every team's fanbase, `economy.services.pay_merchandise(week)`
@@ -300,6 +310,7 @@ count of teams released lands on `TickRun.teams_released`.
    (`world/migrations/0015`). See *The AI market (#30)*.
 5. **Execute** — outside any transaction: simulate each claimed race,
    record its result, then score it (`competitions.services.score_race`),
+   then score its sprint markers (`competitions.services.score_sprints`),
    then pay its prize money (`economy.services.pay_race_prizes`). If the
    race belongs to a stage race (`race.stage_race_id`),
    `world.services._settle_stage_race` runs next, on **every** race in the
@@ -316,12 +327,12 @@ count of teams released lands on `TickRun.teams_released`.
 
    **Running on the failure path too is deliberate.** A race that raises
    during simulation still gets `FAILED`, not `FINISHED`, and the normal
-   `else`-branch scoring/payout is skipped for it — but `_settle_stage_race`
-   is called unconditionally after that branch, not inside it, because
-   `is_complete()` only needs every stage `FINISHED` **or** `FAILED`, with
-   at least one actually `FINISHED`: a tour whose last stage failed to run
-   should still settle the GC over whatever stages did complete, rather
-   than leave it stuck forever.
+   sprint-scoring/prize-payout step is skipped for it — but
+   `_settle_stage_race` is called unconditionally after that step, not
+   inside it, because `is_complete()` only needs every stage `FINISHED`
+   **or** `FAILED`, with at least one actually `FINISHED`: a tour whose
+   last stage failed to run should still settle the GC over whatever
+   stages did complete, rather than leave it stuck forever.
 
    **Stage order inside one tick is load-bearing.** Stages of one tour sit
    on consecutive calendar days, `_claim` orders the rows it locks by
@@ -350,8 +361,18 @@ that simulates but fails to score is treated as a broken race: the
 existing per-race `try`/`except` in `_execute` marks it `FAILED` and
 records the traceback, without stopping the rest of the tick.
 
-**Prize money is paid in a second, separate try block, and a payout
-failure does not fail the race.** After `score_race`, the tick computes
+**Sprint points are scored in their own try block, between finish scoring
+and the prize payout, and a sprint-scoring failure does not fail the race
+either.** `score_sprints(race)` writes `competitions.MarkerPoints` for
+each sprint marker's top crossings — see `competitions/README.md`,
+*Sprint points*. Same reasoning as the prize block below: a race that
+simulated and finish-scored is a real result, so a sprint-scoring bug must
+not retroactively mark it `FAILED`. The failure is recorded on `tick.error`
+(`"race {id} sprint points: ..."`) and the tick carries on to pay prizes
+regardless.
+
+**Prize money is paid in a third, separate try block, and a payout
+failure does not fail the race.** After scoring, the tick computes
 `competitions.services.prizes_by_team(race)` and hands it to
 `economy.services.pay_race_prizes`. It is deliberately *not* inside the
 simulate-and-score block: a race that simulated and scored successfully is

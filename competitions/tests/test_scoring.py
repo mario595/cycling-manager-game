@@ -1,16 +1,20 @@
 from __future__ import annotations
 
+from racing.models import RaceMarker
+
 from competitions.scoring import (
     GC_POINTS_BY_POSITION,
     GC_PRIZE_BY_POSITION,
     POINTS_BY_POSITION,
     PRIZE_BY_POSITION,
+    SPRINT_POINTS_BY_WEIGHT,
     STAGE_POINTS_BY_POSITION,
     STAGE_PRIZE_BY_POSITION,
     gc_points_for,
     gc_prize_for,
     points_for,
     prize_for,
+    sprint_points_for,
     stage_points_for,
     stage_prize_for,
 )
@@ -100,3 +104,35 @@ def test_gc_tables_pay_double_the_one_day_table():
         assert GC_POINTS_BY_POSITION[position] == 2 * POINTS_BY_POSITION[position]
     for position in GC_PRIZE_BY_POSITION:
         assert GC_PRIZE_BY_POSITION[position] == 2 * PRIZE_BY_POSITION[position]
+
+
+def test_every_weight_has_exactly_five_scoring_places():
+    for weight, table in SPRINT_POINTS_BY_WEIGHT.items():
+        assert set(table) == {1, 2, 3, 4, 5}, weight
+
+
+def test_sprint_points_decline_down_the_order():
+    for weight, table in SPRINT_POINTS_BY_WEIGHT.items():
+        values = [table[p] for p in sorted(table)]
+        assert values == sorted(values, reverse=True), weight
+
+
+def test_heavier_weights_never_pay_less():
+    for position in range(1, 6):
+        minor = sprint_points_for("minor", position)
+        standard = sprint_points_for("standard", position)
+        major = sprint_points_for("major", position)
+        assert minor <= standard <= major
+
+
+def test_major_sprint_win_is_at_most_half_a_race_win():
+    assert sprint_points_for("major", 1) <= points_for(1) / 2
+
+
+def test_sprint_position_outside_table_scores_zero():
+    assert sprint_points_for("standard", 6) == 0
+    assert sprint_points_for("standard", 50) == 0
+
+
+def test_sprint_table_keys_match_marker_weights():
+    assert set(SPRINT_POINTS_BY_WEIGHT) == set(RaceMarker.Weight.values)

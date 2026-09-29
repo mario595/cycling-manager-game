@@ -53,6 +53,7 @@ const profile: RiderProfileData = {
     },
   ],
   career: { starts: 2, wins: 0, podiums: 0, top_tens: 1, dnfs: 1 },
+  development_squad: null,
 }
 
 function renderRiderProfile() {
@@ -106,6 +107,25 @@ describe('RiderProfile', () => {
     renderRiderProfile()
 
     expect(screen.getByText(/Retired · Season 1, Week 11/)).toBeInTheDocument()
+  })
+
+  it("shows a development squad rider's squad and no salary figure", () => {
+    mockUseRiderProfile.mockReturnValue({
+      profile: {
+        ...profile,
+        team: null,
+        development_squad: { id: 9, name: 'Youth Team', code: 'YTH' },
+      },
+      loading: false,
+      notFound: false,
+      error: false,
+    })
+
+    renderRiderProfile()
+
+    expect(screen.getByText(/Youth Team · Development squad/)).toBeInTheDocument()
+    expect(screen.getByText('Paid by squad')).toBeInTheDocument()
+    expect(screen.queryByText('$4,200')).not.toBeInTheDocument()
   })
 
   it('tags a rider whose season is their last in the page heading', () => {

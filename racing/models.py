@@ -325,11 +325,20 @@ class RaceMarker(models.Model):
         SPRINT = "sprint", "Sprint"
         MOUNTAIN = "mountain", "Mountain"
 
+    class Weight(models.TextChoices):
+        MINOR = "minor", "Minor"
+        STANDARD = "standard", "Standard"
+        MAJOR = "major", "Major"
+
     race = models.ForeignKey(Race, on_delete=models.CASCADE, related_name="markers")
     kind = models.CharField(max_length=10, choices=Kind.choices)
     name = models.CharField(max_length=100)
     distance = models.FloatField(
         help_text="Meters from the start, same unit as Race.course lengths.",
+    )
+    weight = models.CharField(
+        max_length=10, choices=Weight.choices, default=Weight.STANDARD,
+        help_text="How much a sprint marker is worth. Inert on mountain markers (#17 decides theirs).",
     )
 
     class Meta:

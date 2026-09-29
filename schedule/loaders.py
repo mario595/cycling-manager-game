@@ -33,9 +33,13 @@ _VALID_WIND_BANDS = {"calm", "light", "moderate", "strong"}
 
 _KNOWN_KEYS = {"number", "starts_at", "races", "stage_races"}
 _KNOWN_RACE_KEYS = {"week", "day", "time", "name", "course", "wind", "seed", "markers"}
-_KNOWN_MARKER_KEYS = {"kind", "name", "distance"}
+_KNOWN_MARKER_KEYS = {"kind", "name", "distance", "weight"}
 _KNOWN_STAGE_RACE_KEYS = {"name", "week", "start_day", "time", "stages"}
 _KNOWN_STAGE_KEYS = {"name", "time", "course", "wind", "seed", "markers"}
+
+#: Duplicated from racing.RaceMarker.Weight — this module may not import
+#: racing/. racing/tests.py checks the two stay in sync.
+MARKER_WEIGHTS = ("minor", "standard", "major")
 
 #: A stage race is 2-7 consecutive days, always inside one calendar week —
 #: see specs/archive/stage-races.md, Rules and edge cases.
@@ -275,7 +279,16 @@ def _parse_markers(
             raise SeasonFileError(
                 f"{at}.distance must be in (0, {course_length}] meters, got {distance}"
             )
-        markers.append({"kind": kind, "name": name, "distance": distance})
+        weight = entry.get("weight")
+        if weight is not None and kind == "mountain":
+            raise SeasonFileError(f"{at}.weight is only allowed on sprint markers")
+        if weight is None:
+            weight = "standard"
+        elif weight not in MARKER_WEIGHTS:
+            raise SeasonFileError(
+                f"{at}.weight must be one of {', '.join(MARKER_WEIGHTS)}, got {weight!r}"
+            )
+        markers.append({"kind": kind, "name": name, "distance": distance, "weight": weight})
     return markers
 
 

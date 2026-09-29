@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone as dt_timezone
 import pytest
 
 from riders.generation import SPECIALITY_PROFILES, generate_rider
-from riders.models import ENGINE_ATTRIBUTES, Rider, RiderAttributeSnapshot
+from riders.models import ENGINE_ATTRIBUTES, DevelopmentSquad, Rider, RiderAttributeSnapshot
 from riders.pricing import weekly_salary_for
 from riders.services import (
     FRESHNESS_FLOOR,
@@ -758,6 +758,28 @@ def test_retire_due_riders_leaves_unattached_since_untouched(db):
     rider.refresh_from_db()
     assert rider.retired_at == at
     assert rider.unattached_since == released
+
+
+def test_retire_due_riders_clears_development_squad(db):
+    """No squad rider can reach the retirement window under this ticket
+    alone (they arrive at 17-19), but this backstop is what turns #34's
+    eventual promotion bug into an IntegrityError instead of a crashed
+    season close (plan Design decision 16)."""
+    team = Team.objects.create(name="Team Alpha", code="ALP")
+    at = datetime(2027, 3, 8, tzinfo=dt_timezone.utc)
+    squad = DevelopmentSquad.objects.create(team=team, level=1, opened_at=at)
+    rider = Rider.objects.create(
+        name="Veteran", team=None, development_squad=squad,
+        age=40, peak_age=32, decline_rate=1,
+        climb=40, sprint=40, flat=40, resistance=40, positioning=40,
+    )
+
+    retired = retire_due_riders(at=at)
+
+    rider.refresh_from_db()
+    assert retired == [rider.pk]
+    assert rider.retired_at == at
+    assert rider.development_squad_id is None
 
 
 def test_retired_rider_does_not_grow_or_decline(db):

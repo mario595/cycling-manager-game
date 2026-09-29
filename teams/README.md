@@ -29,14 +29,17 @@ A registered user with no team calls `claim_team(user, name=..., code=..., at=..
    assigns it to the team, stamping each new rider's `joined_team_at = at`
    (`riders/README.md`, *Team membership stamps*).
 5. **Closes any development squad** the last manager left open —
-   `riders.development_squad.close_squad(team)`, imported at module scope
-   since `teams -> riders` is allowed and this module already imports
+   `riders.development_squad.close_squad(team, at=at)`, imported at module
+   scope since `teams -> riders` is allowed and this module already imports
    `riders.generation` and `riders.services` there (#32). A claim is a
    takeover: the new manager must open their own squad and pay their own
    opening fee rather than inherit one somebody else paid for. Closing deletes
    the row and writes nothing to the ledger, so there is no fee to void and
-   nothing to refund — `riders/README.md`, *Development squad*. The step
-   sits after the roster write and before the lazy `economy` import below.
+   nothing to refund — `riders/README.md`, *Development squad*. Since #33,
+   closing also releases every rider then sitting in the squad to the
+   free-agent pool, stamped `unattached_since = at` on the way out — see
+   `riders/README.md`, *Youth intake*. The step sits after the roster write
+   and before the lazy `economy` import below.
 6. Writes a ledger `takeover` entry that brings the team's balance back to
    `STARTING_BALANCE`, and a fanbase `takeover` row that brings its fanbase
    back to `STARTING_FANBASE` (#21) — `reset_to_starting_balance(team, at=...)`

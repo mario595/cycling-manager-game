@@ -369,6 +369,8 @@ class RaceMarkerSerializer(serializers.Serializer):
     kind = serializers.CharField()
     name = serializers.CharField()
     distance = serializers.FloatField()
+    weight = serializers.CharField(allow_null=True)
+    points = serializers.ListField(child=serializers.IntegerField(), allow_null=True)
 
 
 class RaceDetailStageSerializer(serializers.Serializer):
@@ -426,6 +428,8 @@ class RaceResultEntrySerializer(serializers.Serializer):
 class RaceResultPointsEntrySerializer(serializers.Serializer):
     team = RaceResultTeamSerializer()
     position = serializers.IntegerField(allow_null=True)
+    finish_points = serializers.IntegerField()
+    sprint_points = serializers.IntegerField()
     points = serializers.IntegerField()
     prize = serializers.IntegerField()
 
@@ -441,6 +445,7 @@ class RaceMarkerCrossingSerializer(serializers.Serializer):
     position = serializers.IntegerField()
     rider = RaceResultRiderSerializer()
     team = RaceResultTeamSerializer(allow_null=True)
+    points = serializers.IntegerField(allow_null=True)
 
 
 class RaceMarkerResultSerializer(RaceMarkerSerializer):
@@ -549,10 +554,19 @@ class RiderProfileSerializer(RiderSerializer):
     attribute_history = serializers.SerializerMethodField()
     races = serializers.SerializerMethodField()
     career = serializers.SerializerMethodField()
+    development_squad = serializers.SerializerMethodField()
 
     def get_team(self, instance) -> dict | None:
         team = self.context["profile"]["team"]
         return RaceResultTeamSerializer(team).data if team is not None else None
+
+    def get_development_squad(self, instance) -> dict | None:
+        """The owning team's {id, name, code} while this rider sits in that
+        team's development squad (#33), or null — the same shape get_team
+        uses, since a squad rider's profile names the team by way of the
+        squad, not a direct roster link."""
+        squad_team = self.context["profile"]["development_squad"]
+        return RaceResultTeamSerializer(squad_team).data if squad_team is not None else None
 
     def get_current_week(self, instance) -> dict | None:
         current_week = self.context["profile"]["current_week"]
@@ -758,6 +772,57 @@ class SignOfferSerializer(serializers.Serializer):
     offer_id = serializers.IntegerField()
 
 
+class DevelopmentSquadRiderSerializer(serializers.Serializer):
+    """One development squad rider as the squad screen shows them: identity,
+    speciality, age, the five attributes on the 0-10 display scale, when
+    they arrived and whether they are from the latest batch (#33).
+
+    Deliberately **not** a RiderSerializer subclass, unlike
+    RiderProfileSerializer above — subclassing would inherit weekly_salary,
+    market_value, release_cost and final_season, none of which apply to a
+    rider who draws no wage and isn't in any market (riders/README.md,
+    *Youth intake*)."""
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    speciality = serializers.CharField(source="get_speciality_display")
+    nationality = serializers.CharField(source="get_nationality_display")
+    age = serializers.IntegerField()
+    arrived = serializers.SerializerMethodField()
+    is_new = serializers.SerializerMethodField()
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data.update(_display_scale_attributes(instance))
+        return data
+
+    def get_arrived(self, instance) -> dict:
+        position = current_position(instance.intake_at)
+        if position.state == "no_season":
+            return {"season": None, "week": None}
+        if position.state == "off_season":
+            return {"season": position.season.number, "week": None}
+        return {"season": position.season.number, "week": position.week.number}
+
+    def get_is_new(self, instance) -> bool:
+        latest_intake_at = self.context.get("latest_intake_at")
+        return latest_intake_at is not None and instance.intake_at == latest_intake_at
+
+
+class DevelopmentSquadIntakeSerializer(serializers.Serializer):
+    """How often a squad's riders arrive, and when the next batch is due —
+    the squad screen's own words for the cadence, never a percentage and
+    never a promise about a single batch (riders/README.md, *Youth
+    intake*)."""
+
+    every_weeks = serializers.IntegerField()
+    batch_size = serializers.IntegerField()
+    # {season, week}, the same shape RetiredSerializer already gives a
+    # nullable season position — null when no further intake week is
+    # declared in the calendar yet.
+    next = RetiredSerializer(allow_null=True)
+
+
 class DevelopmentSquadLevelSerializer(serializers.Serializer):
     """One level as the screen needs to show it: what moving onto it costs,
     what running it costs, what that adds up to over a season, and what the
@@ -788,13 +853,19 @@ class DevelopmentSquadLevelSerializer(serializers.Serializer):
 
 class DevelopmentSquadSerializer(serializers.Serializer):
     """The Development squad screen's whole state: which level is open (null
-    when closed), every level with its prices, and the balance, so the SPA can
+    when closed), every level with its prices, the balance, so the SPA can
     disable an action the team cannot afford without a second round trip —
-    the same both-keys-always-present shape StaffSerializer uses."""
+    the same both-keys-always-present shape StaffSerializer uses — plus the
+    squad's own riders and the intake cadence (#33). `riders` is empty and
+    `intake` still present while the squad is open with nothing arrived yet;
+    the view sends [] for both keys while the squad is closed, since a
+    closed squad has no riders and nothing due."""
 
     level = serializers.IntegerField(allow_null=True)
     levels = DevelopmentSquadLevelSerializer(many=True)
     balance = serializers.IntegerField()
+    riders = DevelopmentSquadRiderSerializer(many=True)
+    intake = DevelopmentSquadIntakeSerializer(allow_null=True)
 
 
 class DevelopmentSquadLevelChoiceSerializer(serializers.Serializer):

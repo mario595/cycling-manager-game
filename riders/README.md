@@ -6,9 +6,11 @@
 everything the engine does not know about: speciality, build, age, and a set
 of hidden traits. Generation (`generation.py`), the display mapping
 (`display.py`), the age curve (`services.py`), the `reset_riders`
-management command, and a team's **development squad** — which level it runs
-at and what that costs (`development_squad.py`). Not race-day squads or
-results (`racing/`), not the race simulation itself (`race_engine/`).
+management command, a team's **development squad** — which level it runs
+at and what that costs (`development_squad.py`) — and **youth intake**
+(`youth_intake.py`, #33) — the batches of young riders a squad periodically
+receives. Not race-day squads or results (`racing/`), not the race
+simulation itself (`race_engine/`).
 
 ## Visible vs hidden
 
@@ -18,7 +20,11 @@ Every rider carries two kinds of attribute:
   `freshness`, `weekly_salary`, and the five engine attributes (`climb`,
   `sprint`, `flat`, `resistance`, `positioning`). These are what
   `api.RiderSerializer` and `api.SquadRiderSerializer` ship to the player
-  (`weekly_salary` is roster-only — see *Salary*, below).
+  (`weekly_salary` is roster-only — see *Salary*, below). `intake_at` and
+  `development_squad` are visible too, but only through their consequence:
+  `intake_at` resolves to the `arrived` season/week on the squad screen and
+  `development_squad` resolves to the owning team on a rider's profile —
+  neither ships as the raw field (see *Youth intake*, below).
 - **Hidden**: `potential`, `peak_age`, `decline_rate`, `injury_proneness`,
   `training_affinity`, `recovery_rate`, `growth_debt`. **Never add one of
   these to a serializer.** The whole premise of the hidden-trait design is that the
@@ -551,19 +557,124 @@ again. A mid-week change is charged at the new rate from the next
 week boundary, with nothing prorated and nothing refunded for the half-week
 just gone; see `economy/README.md`, *Development squad costs*.
 
-Claiming a team closes its squad (`teams/README.md`, *Claiming a team*).
-Releasing one does not.
+Claiming a team closes its squad, releasing every rider then sitting in it as
+a free agent with `unattached_since` stamped (`teams/README.md`, *Claiming a
+team*; see *Youth intake*, below, for the release path itself). Releasing a
+team does not touch the squad.
 
-**#33 will generate youth riders into the squad. Nothing populates it yet, and
-that is deliberate.** The spec's *Decisions taken* rules it out: ship "without
-any 'coming soon' messaging, even though the squad produces nothing until #33
-lands", because the game has no live players yet and a half-finished payoff
-does not need flagging. The corollary is the one worth stating in a README:
-**no screen may promise riders the code does not produce.** A subtitle
-saying a squad "develops young riders" would be a promise about behaviour that
-does not exist, made to a manager who would pay real money on the strength of
-it — and what a higher level will actually do to intake is #33's decision, not
-this one's. `DevelopmentSquad.test.tsx` pins the rule for both states.
+**Youth intake (#33) populates the squad.** See *Youth intake*, below, for
+what arrives, how often, and how a manager sees it. The corollary the
+previous paragraph used to state — that no screen may promise riders the code
+does not produce — is now the narrower rule the screen actually follows:
+it describes the cadence and that a higher level improves the odds, and it
+never states a percentage or promises an outcome for a single batch (spec, *In
+scope* 9). `DevelopmentSquad.test.tsx` pins that rule for both states.
+
+## Youth intake
+
+Every open development squad receives a batch of young riders on a fixed
+cadence, through `youth_intake.py` — the same file that decides *what* a
+batch looks like; *when* it runs is `world/`'s decision (`world/README.md`,
+*How a tick works*).
+
+**Representation: `team = NULL` and `development_squad` set — never a flag on
+top of a roster spot.** Every roster-shaped query in the codebase already
+filters on `team` (wages, training focus, the roster cap, auctions, releases,
+race squads, the roster GET), so a squad rider with `team = NULL` falls out
+of all of them with no change to any of that code. The only thing a null
+`team` pulls a rider into is the free-agent pool, which `free_agents()` and
+`sign_free_agent` both exclude a squad rider from explicitly (see
+*Free agents* in `transfers/README.md`). Keeping `team` set and adding an
+`in_development_squad` flag was rejected: it would invert the surface, and
+every one of those roster queries would need its own exclusion — the first
+one forgotten pays a youth rider's wage or lets them race.
+
+**Two database invariants**, `CheckConstraint`s on `Rider`:
+`rider_not_on_roster_and_in_squad` (`team IS NULL OR development_squad IS
+NULL`) and `retired_rider_not_in_squad` (`retired_at IS NULL OR
+development_squad IS NULL`). Cheap, and they turn the likeliest future bug —
+#34's promotion setting `team` and forgetting to clear the squad — into an
+`IntegrityError` rather than a rider in two places at once.
+
+**`intake_at`** (`DateTimeField`, null, never cleared) records the game time
+a rider arrived through intake — always a `week.starts_at`, resolved through
+`schedule.services.current_position` the same way `retired_at` resolves to a
+season/week on the profile screen. It doubles as the idempotency key for a
+batch (a squad can never get two batches dated to the same `intake_at`) and
+as the "is this rider from the latest batch" marker the squad screen shows
+(`is_new` in `api/README.md`).
+
+**Cadence and batch size are constants**: `INTAKE_INTERVAL_WEEKS` (4) and
+`INTAKE_BATCH_SIZE` (2). `is_intake_week(week_number)` is `week_number %
+INTAKE_INTERVAL_WEEKS == 0`, giving weeks 4, 8 and 12 of a twelve-week
+season — three batches, six riders, for a squad open the whole season.
+
+**Generation is potential-first, not quality-first.** For a youth,
+"hopeless or promising" is a statement about hidden `potential`, and the
+squad's level has to bias exactly that trait — deriving potential from a
+rolled quality the way ordinary generation does would only give the level an
+indirect handle on it. `generate_youth_rider(level, *, rng)`:
+
+1. Picks a potential band from `POTENTIAL_BANDS` — `(20, 35)` hopeless,
+   `(36, 50)` journeyman, `(51, 65)` promising, `(66, 85)` gem — weighted by
+   `BAND_WEIGHTS[level]`, and draws `potential` uniformly inside it.
+2. Sets `quality = round(potential * uniform(*YOUTH_QUALITY_FRACTION))`
+   (`YOUTH_QUALITY_FRACTION = (0.25, 0.40)`), clamped to at least 1 — a
+   youth's starting ability sits well below their ceiling, "far below
+   professional level" even for a gem.
+3. Draws age uniformly from `INTAKE_AGE_RANGE` (17-19).
+4. Calls `generation.generate_rider(quality=..., age=..., potential=...,
+   rng=rng)` — the new optional `potential=` argument on `generate_rider`
+   replaces `_roll_potential`'s own derivation, still floored at the rider's
+   own best rolled attribute (`max(potential, best_attribute)`), the same
+   young-rider rule that already holds without the override.
+
+`BAND_WEIGHTS` is keyed by the same integers as `development_squad.LEVELS`,
+and a test asserts the two key sets are equal so a fourth level cannot
+silently skip intake. Three properties of the table are enforced by tests,
+not just the numbers themselves: the share of promising-or-better rises
+strictly with level, the bottom two bands are a majority at every level, and
+every band has a non-zero weight at every level — even a Regional squad can
+produce a gem, rarely.
+
+**`run_intake(*, at, rng=None)` is the load-bearing function.** For every
+team with an open squad, under the **same team lock `close_squad` takes**,
+it re-reads the squad **by team** (not by the id listed earlier — a squad
+closed and reopened between the listing and the lock still gets its batch),
+skips a team whose squad has closed since, skips a batch already written for
+this `(squad, intake_at)` pair (the second line of defence behind the
+`WeekTransition` row's exactly-once guarantee), and otherwise creates
+`INTAKE_BATCH_SIZE` youth riders with `development_squad` set and `intake_at
+= at`, then writes their baseline attribute snapshots
+(`record_initial_snapshots`). The lock matters because a manager can close
+the squad *during* the tick — without it, intake could insert riders
+pointing at a squad `close_squad` is deleting, and the FK's `SET_NULL`
+would then leave them in the free-agent pool with no `unattached_since`
+stamp, the exact bug D6 below exists to prevent by another route.
+
+**Closing releases the squad's riders, and the release must stamp
+`unattached_since` before the row disappears.** `close_squad(team, *, at)`
+now takes a required `at`: every rider in the squad is stamped
+`unattached_since = at` via the existing `mark_team_change(riders,
+team_now=None, at=at)`, then has `development_squad` cleared, and only then
+is the squad row deleted. Deleting first would let the FK's `SET_NULL`
+unlink them silently with a null `unattached_since` — and a free agent with
+a null `unattached_since` is never treated as long-unattached by the pool's
+expiry rule (`transfers/README.md`, *Free agents*), so an unwanted 17-year-old
+would sit in the market forever.
+
+**Squad riders grow like any other rider, but draw no wage and get no
+trainer focus.** Growth is free: `apply_weekly_growth` and
+`apply_weekly_recovery` both iterate `Rider.objects.active()`, which a squad
+rider is. Wages and training are free by construction, not by an exclusion
+someone had to remember: `economy.services.charge_weekly_wages` sums
+`Team.riders`, and `world.services._apply_training_week` iterates
+`trainer.team.riders.all()` — both read the `team` FK, which is null for a
+squad rider. A rider arriving in an intake week's own tick first grows at
+the *following* week's boundary, because intake in the tick runs **after**
+that week's growth, training and charges — otherwise a rider's baseline
+snapshot and their first week of growth would land at the same instant, and
+the attribute history would open with a jump that never happened.
 
 ## Generation
 
@@ -596,6 +707,16 @@ whose potential sits below an attribute they already have — a
 contradiction the spec rules out explicitly. `generate_rider` derives
 potential from `max(rolled attributes)` as well as `quality` and age to
 avoid it.
+
+**`generate_rider` takes an optional `potential=` override (#33).** When
+given, it replaces the derivation above entirely: the rider's `potential` is
+`clamp(max(potential, max(rolled attributes)), 1, 100)`, still floored at the
+rider's own best rolled attribute so the young-rider rule ("cannot already
+exceed their own ceiling") holds whether potential is rolled or supplied.
+Every caller before #33 passes nothing, so behaviour is unchanged for
+ordinary generation — the only caller that supplies it is youth intake's
+`generate_youth_rider`, which rolls potential first from a squad level's
+odds and derives `quality` from it (see *Youth intake*, above).
 
 Every generation function takes an optional `rng: random.Random` so tests
 (and anything that wants a reproducible roster) can seed it; callers that

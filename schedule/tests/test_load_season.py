@@ -174,6 +174,42 @@ def test_load_season_creates_race_markers(db, tmp_path):
     ]
 
 
+def test_load_season_stores_marker_weight(db, tmp_path):
+    path = write_season_file(
+        tmp_path,
+        races=[
+            race_entry(
+                course=[{"length": 10000.0, "gradient": 0.0}],
+                markers=[
+                    {"kind": "sprint", "name": "Big One", "distance": 4000, "weight": "major"},
+                ],
+            )
+        ],
+    )
+
+    call_command("load_season", path)
+
+    race = Week.objects.get(season__number=1, number=1).races.get()
+    assert race.markers.get().weight == "major"
+
+
+def test_example_season_declares_weighted_and_finish_line_sprints(db):
+    """seasons/season-1.example.json is what a fresh checkout seeds from —
+    it must actually demonstrate weight, not just be parseable."""
+    call_command("load_season", "seasons/season-1.example.json")
+
+    week1 = Week.objects.get(season__number=1, number=1).races.get()
+    weights = set(week1.markers.values_list("weight", flat=True))
+    assert "minor" in weights
+    assert "major" in weights
+
+    week3 = Week.objects.get(season__number=1, number=3).races.get()
+    course_length = sum(s["length"] for s in week3.course)
+    finish_marker = week3.markers.get()
+    assert finish_marker.kind == "sprint"
+    assert finish_marker.distance == course_length
+
+
 def stage_race_entry(**overrides):
     data = {
         "name": "Alpine Tour",

@@ -17,6 +17,11 @@ function retiredLabel(retired: RiderRetired): string {
 }
 
 function affiliation(profile: RiderProfileData): string {
+  // Checked first: a squad rider carries no `team` (riders/README.md,
+  // *Youth intake* — team is null whenever development_squad is set), so
+  // this branch has to run before the team/retired/free-agent checks below
+  // or a squad rider would misread as a free agent.
+  if (profile.development_squad) return `${profile.development_squad.name} · Development squad`
   if (profile.team) return profile.team.name
   if (profile.retired) return retiredLabel(profile.retired)
   return 'Free agent'
@@ -65,7 +70,12 @@ export function RiderProfile() {
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         <StatTile label="HEIGHT" value={`${profile.height_cm} cm`} minWidth={104} />
         <StatTile label="WEIGHT" value={`${profile.weight_kg} kg`} minWidth={104} />
-        <StatTile label="WEEKLY SALARY" value={formatMoney(profile.weekly_salary)} suffix="/wk" minWidth={130} />
+        <StatTile
+          label="WEEKLY SALARY"
+          value={profile.development_squad ? 'Paid by squad' : formatMoney(profile.weekly_salary)}
+          suffix={profile.development_squad ? undefined : '/wk'}
+          minWidth={130}
+        />
         <StatTile label="MARKET VALUE" value={formatMoney(profile.market_value)} minWidth={130} />
         <StatTile label="FRESHNESS" value={`${profile.freshness} / 10`} minWidth={104} />
       </div>

@@ -105,7 +105,11 @@ the history has no silent gaps.
 ([#25](https://github.com/mario595/cycling-manager/issues/25)), not a head
 count times `WEEKLY_WAGE_PER_RIDER`.** That constant still exists — it is
 now only the average a generated rider's salary is calibrated to land near,
-never charged directly; see `riders/README.md`, *Salary*. `charge_weekly_wages`
+never charged directly; see `riders/README.md`, *Salary*. Because the sum
+reads `Team.riders` (a `team` FK), a development squad rider (#33) — whose
+`team` is always null — is never in it: the squad's own weekly cost, charged
+separately above, is what pays for them (`riders/README.md`, *Youth
+intake*). `charge_weekly_wages`
 annotates `Sum("riders__weekly_salary")` alongside the existing rider-count
 annotation and wraps it in `Coalesce(..., 0)` — a team with no riders makes
 `Sum` return `None`, and `amount=-None` would raise rather than write the
@@ -373,6 +377,9 @@ the week's points as an injected argument,
 about everything — computes that dict from
 `competitions.services.points_by_team(week)` right before the call. This is
 the same inversion `competitions/README.md` documents for `racing/`.
+`points_by_team` sums finish points **and** sprint points (#16), so a
+sprint-heavy week moves both fanbase and sponsorship, the same as a
+strong finish would — see `competitions/README.md`, *Sprint points*.
 
 ## Fanbase is clamped at write time
 

@@ -13,14 +13,16 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from competitions.models import RacePoints
+from competitions.models import MarkerPoints, RacePoints
 from competitions.scoring import (
     GC_POINTS_BY_POSITION,
     POINTS_BY_POSITION,
+    SPRINT_PLACES,
     gc_points_for,
     gc_prize_for,
     points_for,
     prize_for,
+    sprint_points_for,
     stage_points_for,
     stage_prize_for,
 )
@@ -44,7 +46,16 @@ from economy.services import (
     sign_offer,
 )
 from economy.sponsors import PROFILES_BY_KEY
-from racing.models import SQUAD_SIZE, MarkerCrossing, Race, RaceLog, RaceSquad, RaceSquadRider, StageRace
+from racing.models import (
+    SQUAD_SIZE,
+    MarkerCrossing,
+    Race,
+    RaceLog,
+    RaceMarker,
+    RaceSquad,
+    RaceSquadRider,
+    StageRace,
+)
 from racing.services import SquadError, carried_squad, general_classification, set_squad, suggested_squad
 from riders.development_squad import (
     LEVELS,
@@ -66,7 +77,9 @@ from riders.development_squad import (
 # turns a 409 the player should see into a 500.
 from riders.development_squad import InsufficientFunds as SquadInsufficientFunds
 from riders.models import ENGINE_ATTRIBUTES, DevelopmentSquad, Rider
-from schedule.models import SEASON_WEEKS
+from riders.pricing import strength
+from riders.youth_intake import INTAKE_BATCH_SIZE, INTAKE_INTERVAL_WEEKS, is_intake_week
+from schedule.models import SEASON_WEEKS, Week
 from schedule.services import current_position, weeks_opened_between
 from staff.pricing import hire_fee
 from staff.services import (
@@ -510,7 +523,9 @@ class RiderProfileView(APIView):
     """
 
     def get(self, request, rider_id: int):
-        rider = get_object_or_404(Rider.objects.select_related("team"), pk=rider_id)
+        rider = get_object_or_404(
+            Rider.objects.select_related("team", "development_squad__team"), pk=rider_id,
+        )
         profile = rider_profile(rider, at=now())
         return Response(RiderProfileSerializer(rider, context={"profile": profile}).data)
 
@@ -772,6 +787,24 @@ class MyBidsView(APIView):
         return Response(MyBidStatusSerializer(rows, many=True).data)
 
 
+def _marker_payload(marker) -> dict:
+    """A marker as the course preview and the results screen both show it.
+    weight/points are null for a mountain marker — #17 decides what a
+    mountain marker is worth, and until then it has none."""
+    is_sprint = marker.kind == RaceMarker.Kind.SPRINT
+    return {
+        "id": marker.pk,
+        "kind": marker.kind,
+        "name": marker.name,
+        "distance": marker.distance,
+        "weight": marker.weight if is_sprint else None,
+        "points": (
+            [sprint_points_for(marker.weight, p) for p in range(1, SPRINT_PLACES + 1)]
+            if is_sprint else None
+        ),
+    }
+
+
 class RaceDetailView(APIView):
     """One race's own facts — identity, status, when, how far, and the
     course profile. Unlike SquadView this is not about the caller's team:
@@ -801,13 +834,7 @@ class RaceDetailView(APIView):
                 for p in sorted(GC_POINTS_BY_POSITION)
             ] if race.stage_race_id else [],
             "markers": [
-                {
-                    "id": m.pk,
-                    "kind": m.kind,
-                    "name": m.name,
-                    "distance": m.distance,
-                }
-                for m in race.markers.all()  # model ordering: distance, pk
+                _marker_payload(m) for m in race.markers.all()  # model ordering: distance, pk
             ],
             # Whether the SPA can offer a Watch race. A row with a file is
             # enough: stat'ing the file here would be a network round trip
@@ -912,7 +939,7 @@ def _result_row(result, team) -> dict:
     }
 
 
-def _crossing_payload(crossing, team_by_rider) -> dict:
+def _crossing_payload(crossing, team_by_rider, scored_crossing) -> dict:
     team = team_by_rider.get(crossing.rider_id)
     return {
         "position": crossing.position,
@@ -923,12 +950,16 @@ def _crossing_payload(crossing, team_by_rider) -> dict:
             {"id": team.pk, "name": team.name, "code": team.code}
             if team is not None else None
         ),
+        # None for a mountain crossing, and for a sprint crossing whose
+        # teammate already scored the team's one row at this marker.
+        "points": scored_crossing.get((crossing.marker_id, crossing.rider_id)),
     }
 
 
-#: How many crossings per marker the results screen shows — D11. The full
-#: order stays in the database for the features above the markers.
-MARKER_PLACES_SHOWN = 3
+#: How many crossings per marker the results screen shows — D11, raised to
+#: match SPRINT_PLACES so every scoring position is visible. The full order
+#: stays in the database for the features above the markers.
+MARKER_PLACES_SHOWN = SPRINT_PLACES
 
 
 class RaceResultsView(APIView):
@@ -961,14 +992,15 @@ class RaceResultsView(APIView):
                     .select_related("rider"),
             ))
         )
+        scored_crossing = {
+            (mp.marker_id, mp.rider_id): mp.points
+            for mp in MarkerPoints.objects.filter(marker__race=race)
+        }
         markers_payload = [
             {
-                "id": m.pk,
-                "kind": m.kind,
-                "name": m.name,
-                "distance": m.distance,
+                **_marker_payload(m),
                 "crossings": [
-                    _crossing_payload(c, team_by_rider)
+                    _crossing_payload(c, team_by_rider, scored_crossing)
                     for c in m.crossings.all()  # model ordering: marker, position
                 ],
             }
@@ -983,6 +1015,13 @@ class RaceResultsView(APIView):
             .select_related("team").order_by("position")
         )
         scored = {p.team_id: p for p in points}
+        sprint_by_team = {
+            row["team_id"]: row["total"]
+            for row in MarkerPoints.objects
+                .filter(marker__race=race, marker__kind=RaceMarker.Kind.SPRINT)
+                .values("team_id")
+                .annotate(total=Sum("points"))
+        }
         starters = (
             Team.objects
             .filter(race_squads__race=race)
@@ -1000,20 +1039,27 @@ class RaceResultsView(APIView):
             {
                 "team": {"id": p.team.pk, "name": p.team.name, "code": p.team.code},
                 "position": p.position,
-                "points": p.points,
+                "finish_points": p.points,
+                "sprint_points": sprint_by_team.get(p.team_id, 0),
+                "points": p.points + sprint_by_team.get(p.team_id, 0),
                 "prize": prize_by_team.get(p.team_id, 0),
             }
             for p in points
-        ] + [
-            {
-                "team": {"id": t.pk, "name": t.name, "code": t.code},
-                "position": None,
-                "points": 0,
-                "prize": prize_by_team.get(t.pk, 0),
-            }
-            for t in starters
-            if t.pk not in scored
-        ]
+        ] + sorted(
+            [
+                {
+                    "team": {"id": t.pk, "name": t.name, "code": t.code},
+                    "position": None,
+                    "finish_points": 0,
+                    "sprint_points": sprint_by_team.get(t.pk, 0),
+                    "points": sprint_by_team.get(t.pk, 0),
+                    "prize": prize_by_team.get(t.pk, 0),
+                }
+                for t in starters
+                if t.pk not in scored
+            ],
+            key=lambda row: (-row["sprint_points"], row["team"]["name"]),
+        )
 
         payload = {
             "race": {
@@ -1218,6 +1264,33 @@ def _squad_charge(team):
     return charge
 
 
+def _next_intake(at) -> dict | None:
+    """{season, week} of the first declared Week after `at` that is an
+    intake week, or None when no such week is declared yet — a season not
+    yet loaded past this point, or no season at all. At most a few dozen
+    Week rows exist, so a Python-side is_intake_week filter over one ordered
+    query is simpler than reimplementing `% INTAKE_INTERVAL_WEEKS` in SQL,
+    and it keeps the rule in the one place riders.youth_intake owns it."""
+    for week in Week.objects.select_related("season").filter(
+        starts_at__gt=at,
+    ).order_by("starts_at"):
+        if is_intake_week(week.number):
+            return {"season": week.season.number, "week": week.number}
+    return None
+
+
+def _latest_intake_at(at):
+    """starts_at of the last declared Week at or before `at` that is an
+    intake week, or None if none has opened yet. This is what an arrival's
+    intake_at is compared against for is_new (#33's plan, Design decision
+    15) — the most recently opened intake week, not a rolling time window."""
+    latest = None
+    for week in Week.objects.filter(starts_at__lte=at).order_by("starts_at"):
+        if is_intake_week(week.number):
+            latest = week.starts_at
+    return latest
+
+
 class DevelopmentSquadView(APIView):
     """The caller's development squad: which level is open, and what each of
     the three costs and offers. GET only, and no team id in the URL — the team
@@ -1268,11 +1341,30 @@ class DevelopmentSquadView(APIView):
                 }
             )
 
+        at = now()
+        if squad is not None:
+            riders = sorted(
+                Rider.objects.filter(development_squad=squad),
+                key=strength, reverse=True,
+            )
+            intake = {
+                "every_weeks": INTAKE_INTERVAL_WEEKS,
+                "batch_size": INTAKE_BATCH_SIZE,
+                "next": _next_intake(at),
+            }
+            latest_intake_at = _latest_intake_at(at)
+        else:
+            riders = []
+            intake = None
+            latest_intake_at = None
+
         return Response(DevelopmentSquadSerializer({
             "level": current_level,
             "levels": levels,
             "balance": balance_for(team),
-        }).data)
+            "riders": riders,
+            "intake": intake,
+        }, context={"latest_intake_at": latest_intake_at}).data)
 
 
 class OpenDevelopmentSquadView(APIView):
@@ -1362,7 +1454,7 @@ class CloseDevelopmentSquadView(APIView):
         if team is None:
             return Response({"detail": "You do not manage a team."}, status=403)
 
-        if not close_squad(team):
+        if not close_squad(team, at=now()):
             return Response(
                 {"detail": "Your team has no development squad."}, status=409
             )

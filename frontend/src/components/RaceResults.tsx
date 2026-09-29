@@ -205,6 +205,11 @@ export function TeamPointsTable({ results }: { results: RaceResults }) {
               <span style={{ marginLeft: 8, fontFamily: font.mono, fontSize: 11.5, color: color.muted }}>
                 {entry.team.code}
               </span>
+              {entry.sprint_points > 0 ? (
+                <div style={{ fontSize: 11.5, color: color.muted, marginTop: 2 }}>
+                  finish {entry.finish_points} · sprints {entry.sprint_points}
+                </div>
+              ) : null}
             </div>
             <div style={{ fontFamily: font.mono, fontSize: 14, fontWeight: 600 }}>{entry.points}</div>
           </div>
@@ -230,6 +235,11 @@ export function MarkerResultsCard({ results }: { results: RaceResults }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
               <div style={{ fontSize: 14, fontWeight: 600 }}>
                 {marker.kind === 'sprint' ? 'Sprint' : 'Mountain'} · {marker.name}
+                {marker.weight !== null ? (
+                  <span style={{ marginLeft: 8, fontFamily: font.mono, fontSize: 11, fontWeight: 600, color: color.muted }}>
+                    {marker.weight}
+                  </span>
+                ) : null}
               </div>
               <div style={{ fontFamily: font.mono, fontSize: 11.5, color: color.mutedStrong, whiteSpace: 'nowrap' }}>
                 km {(marker.distance / 1000).toFixed(1)}
@@ -247,6 +257,11 @@ export function MarkerResultsCard({ results }: { results: RaceResults }) {
                   {crossing.team ? (
                     <span style={{ fontFamily: font.mono, fontSize: 11, color: color.muted }}>
                       {crossing.team.code}
+                    </span>
+                  ) : null}
+                  {crossing.points !== null ? (
+                    <span style={{ marginLeft: 'auto', fontFamily: font.mono, fontSize: 12.5, fontWeight: 600, color: color.positive }}>
+                      +{crossing.points}
                     </span>
                   ) : null}
                 </div>
