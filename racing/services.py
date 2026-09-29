@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import tempfile
 from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -351,6 +352,63 @@ def carried_squad(race: Race, team: Team) -> tuple[list[int], int | None]:
     members = [m for m in stage1_squad.members.all() if m.rider_id in still_in]
     leader_id = next((m.rider_id for m in members if m.is_leader), None)
     return [m.rider_id for m in members], leader_id
+
+
+@dataclass(frozen=True)
+class GCEntry:
+    rider_id: int
+    team_id: int | None
+    gc_time: float
+    position_sum: int
+    stages: int
+
+
+def general_classification(stage_race: StageRace, *, through_stage: int | None = None) -> list[GCEntry]:
+    """The general classification, computed fresh from stage results — D6,
+    specs/stage-races.md, Rules and edge cases.
+
+    A rider is eligible iff they have a non-null finish_time in EVERY
+    FINISHED stage up to `through_stage` (or every FINISHED stage, if
+    `through_stage` is None). Their GC time is the sum of those stages'
+    group_time (D5 guarantees every finisher has one). Ordered by GC time
+    ascending, then by the sum of their stage positions ascending (the
+    spec's tiebreak: better individual stage placings), then by rider id
+    for a deterministic order. `team_id` is read from the STAGE-1 squad —
+    a rider cannot change team mid-tour (D4), and the squad is the durable
+    record of who raced for whom (racing/README.md, *Squads*).
+    """
+    stages = stage_race.stages.filter(status=Race.Status.FINISHED)
+    if through_stage is not None:
+        stages = stages.filter(stage_number__lte=through_stage)
+    stage_ids = list(stages.values_list("pk", flat=True))
+    if not stage_ids:
+        return []
+
+    by_rider: dict[int, dict] = {}
+    for rider_id, finish_time, group_time, position in RaceResult.objects.filter(
+        race_id__in=stage_ids,
+    ).values_list("rider_id", "finish_time", "group_time", "position"):
+        entry = by_rider.setdefault(rider_id, {"finished": 0, "gc_time": 0.0, "position_sum": 0})
+        entry["position_sum"] += position
+        if finish_time is not None:
+            entry["finished"] += 1
+            entry["gc_time"] += group_time
+
+    team_by_rider = dict(
+        RaceSquadRider.objects
+        .filter(squad__race__stage_race=stage_race, squad__race__stage_number=1)
+        .values_list("rider_id", "squad__team_id")
+    )
+
+    entries = [
+        GCEntry(
+            rider_id=rider_id, team_id=team_by_rider.get(rider_id),
+            gc_time=data["gc_time"], position_sum=data["position_sum"], stages=len(stage_ids),
+        )
+        for rider_id, data in by_rider.items()
+        if data["finished"] == len(stage_ids)
+    ]
+    return sorted(entries, key=lambda e: (e.gc_time, e.position_sum, e.rider_id))
 
 
 def _carry_squads(race: Race) -> None:

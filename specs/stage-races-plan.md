@@ -639,7 +639,7 @@ stage-1 `is_leader` is unchanged), `test_set_squad_refuses_later_stage`,
 at stage 2). **Load-bearing:** the short-squad path must not go through
 `_write_squad`.
 
-### W4 — `racing/services.py`: `general_classification`
+### W4 — `racing/services.py`: `general_classification` — done
 Tests: `test_gc_sums_group_times`, `test_gc_excludes_rider_who_missed_a_stage`,
 `test_gc_through_stage_ignores_later_stages`,
 `test_gc_ignores_failed_stage`, `test_gc_tie_broken_by_stage_position_sum`,

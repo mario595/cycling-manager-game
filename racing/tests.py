@@ -28,6 +28,7 @@ from racing.services import (
     create_race,
     create_stage_race,
     ensure_squads,
+    general_classification,
     group_times,
     previous_squad,
     riders_still_in,
@@ -543,6 +544,126 @@ def test_carried_squad_matches_what_ensure_squads_would_write(db, team, four_rid
 
     assert set(rider_ids) == {r.pk for r in four_riders[:3]}
     assert leader_id == four_riders[0].pk
+
+
+def _finished_stage(stage_race, week, number):
+    """A stage race's stage, created SCHEDULED then flipped FINISHED — the
+    only status set_squad accepts a write against — same shape the W3
+    carried-squad tests use."""
+    stage = _stage(stage_race, week, number)
+    stage.status = Race.Status.FINISHED
+    stage.save(update_fields=["status"])
+    return stage
+
+
+def _result(race, rider, *, position, finish_time, group_time=None):
+    return RaceResult.objects.create(
+        race=race, rider=rider, position=position, finish_time=finish_time,
+        group_time=finish_time if group_time is None and finish_time is not None else group_time,
+    )
+
+
+def test_finisher_always_has_group_time(running_race, four_riders):
+    simulate_race(running_race, game_time=timezone.now())
+
+    for result in RaceResult.objects.filter(race=running_race):
+        assert (result.finish_time is None) == (result.group_time is None)
+
+
+def test_gc_sums_group_times(db, team, four_riders, week, stage_race):
+    a, b = four_riders[0], four_riders[1]
+    stage1 = _finished_stage(stage_race, week, 1)
+    stage2 = _finished_stage(stage_race, week, 2)
+    _result(stage1, a, position=1, finish_time=100.0)
+    _result(stage1, b, position=2, finish_time=110.0)
+    _result(stage2, a, position=2, finish_time=205.0)
+    _result(stage2, b, position=1, finish_time=200.0)
+
+    entries = general_classification(stage_race)
+
+    by_rider = {e.rider_id: e for e in entries}
+    assert by_rider[a.pk].gc_time == 100.0 + 205.0
+    assert by_rider[b.pk].gc_time == 110.0 + 200.0
+    assert entries[0].rider_id == a.pk  # a's total (305) beats b's (310)
+
+
+def test_gc_excludes_rider_who_missed_a_stage(db, team, four_riders, week, stage_race):
+    a, b = four_riders[0], four_riders[1]
+    stage1 = _finished_stage(stage_race, week, 1)
+    stage2 = _finished_stage(stage_race, week, 2)
+    _result(stage1, a, position=1, finish_time=100.0)
+    _result(stage1, b, position=2, finish_time=110.0)
+    _result(stage2, a, position=1, finish_time=200.0)
+    _result(stage2, b, position=2, finish_time=None)  # b did not finish stage 2
+
+    entries = general_classification(stage_race)
+
+    assert [e.rider_id for e in entries] == [a.pk]
+
+
+def test_gc_through_stage_ignores_later_stages(db, team, four_riders, week, stage_race):
+    a, b = four_riders[0], four_riders[1]
+    stage1 = _finished_stage(stage_race, week, 1)
+    stage2 = _finished_stage(stage_race, week, 2)
+    _result(stage1, a, position=2, finish_time=110.0)
+    _result(stage1, b, position=1, finish_time=100.0)
+    # Stage 2 would flip the order, but through_stage=1 must not see it.
+    _result(stage2, a, position=1, finish_time=100.0)
+    _result(stage2, b, position=2, finish_time=500.0)
+
+    entries = general_classification(stage_race, through_stage=1)
+
+    assert entries[0].rider_id == b.pk
+    assert entries[0].gc_time == 100.0
+
+
+def test_gc_ignores_failed_stage(db, team, four_riders, week, stage_race):
+    a, b = four_riders[0], four_riders[1]
+    stage1 = _finished_stage(stage_race, week, 1)
+    _result(stage1, a, position=1, finish_time=100.0)
+    _result(stage1, b, position=2, finish_time=110.0)
+    stage2 = _stage(stage_race, week, 2)
+    stage2.status = Race.Status.FAILED
+    stage2.save(update_fields=["status"])
+
+    entries = general_classification(stage_race)
+
+    # Only stage 1 counts; a FAILED stage has no results to have missed.
+    assert [e.rider_id for e in entries] == [a.pk, b.pk]
+    assert entries[0].gc_time == 100.0
+
+
+def test_gc_tie_broken_by_stage_position_sum(db, team, four_riders, week, stage_race):
+    a, b = four_riders[0], four_riders[1]
+    stage1 = _finished_stage(stage_race, week, 1)
+    stage2 = _finished_stage(stage_race, week, 2)
+    # Same total group time for both, but a placed better each stage.
+    _result(stage1, a, position=1, finish_time=100.0)
+    _result(stage1, b, position=2, finish_time=100.0)
+    _result(stage2, a, position=1, finish_time=200.0)
+    _result(stage2, b, position=2, finish_time=200.0)
+
+    entries = general_classification(stage_race)
+
+    assert entries[0].rider_id == a.pk
+    assert entries[0].gc_time == entries[1].gc_time == 300.0
+    assert entries[0].position_sum == 2
+    assert entries[1].position_sum == 4
+
+
+def test_gc_team_is_stage_one_squad_team(db, team, four_riders, week, stage_race):
+    a = four_riders[0]
+    stage1 = _stage(stage_race, week, 1)
+    set_squad(stage1, team, [r.pk for r in four_riders], a.pk)
+    stage1.status = Race.Status.FINISHED
+    stage1.save(update_fields=["status"])
+    _result(stage1, a, position=1, finish_time=100.0)
+    for i, r in enumerate(four_riders[1:], start=2):
+        _result(stage1, r, position=i, finish_time=100.0 + i)
+
+    entries = general_classification(stage_race)
+
+    assert next(e for e in entries if e.rider_id == a.pk).team_id == team.pk
 
 
 def test_a_team_cannot_have_two_squads_for_one_race(db, running_race, team):
