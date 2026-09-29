@@ -535,7 +535,7 @@ Update #16's test
 no longer null for a mountain marker. Rename it to
 `test_race_detail_mountain_marker_has_null_weight`.
 
-### W8 — `frontend/`: types, course profile, results cards
+### W8 — `frontend/`: types, course profile, results cards ✅
 - `CourseProfile.test.tsx`: `shows category and winner points for a mountain marker`.
   Update #16's `mountain marker shows no weight`, which should still hold
   for weight, so it may need no change at all; confirm this.
