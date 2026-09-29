@@ -498,7 +498,7 @@ load-bearing** tests:
 - `test_mountains_still_score_after_sprints_scored`: the same, in the
   other order.
 
-### W5 — `competitions/services.py`: `points_by_team` and `standings` count mountains
+### W5 — `competitions/services.py`: `points_by_team` and `standings` count mountains ✅
 In `competitions/tests/test_services.py`: **delete**
 `test_points_by_team_ignores_mountain_marker_points` (D7) and add
 - `test_points_by_team_adds_mountain_points`
