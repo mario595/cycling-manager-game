@@ -615,7 +615,7 @@ constraint raises `IntegrityError`), `test_stage_numbers_unique_within_stage_rac
 scheduled → False; mixed finished/failed → True; all failed → False),
 `test_final_stage_is_highest_number`.
 
-### W2 — `riders/services.py` + `racing/services.py`: group times and stage fatigue
+### W2 — `riders/services.py` + `racing/services.py`: group times and stage fatigue — done
 `STAGE_FRESHNESS_COST`, `apply_race_cost(cost=)`, `GROUP_GAP_SECONDS`,
 `group_times`, both wired into `simulate_race`.
 Tests: `riders/tests/test_services.py::test_apply_race_cost_custom_cost`;

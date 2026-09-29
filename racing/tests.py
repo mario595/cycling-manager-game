@@ -25,6 +25,7 @@ from racing.services import (
     auto_pick_squad,
     course_training_attribute,
     create_race,
+    group_times,
     previous_squad,
     riders_who_raced,
     riders_who_started,
@@ -33,7 +34,7 @@ from racing.services import (
     suggested_squad,
 )
 from riders.models import Rider
-from riders.services import FRESHNESS_FLOOR
+from riders.services import FRESHNESS_FLOOR, RACE_FRESHNESS_COST, STAGE_FRESHNESS_COST
 from schedule.models import Season, Week
 from teams.models import Team
 
@@ -113,6 +114,25 @@ def test_team_codes_match_player_format(team):
 
     assert codes[str(team.pk)]["code"] == "ALP"
     assert codes[str(team.pk)]["colour"] == "#FF0000"
+
+
+def test_group_times_chains_consecutive_gaps():
+    # Each gap is <= 1.0s from its predecessor, so all six chain into one
+    # group even though the last is 6s clear of the first.
+    assert group_times([100, 100, 101, 102, 105, 106]) == [100, 100, 100, 100, 105, 105]
+
+
+def test_group_times_gap_just_over_threshold_splits():
+    assert group_times([100.0, 101.0, 101.1]) == [100.0, 100.0, 100.0]
+    assert group_times([100.0, 101.1, 101.2]) == [100.0, 101.1, 101.1]
+
+
+def test_group_times_single_finisher():
+    assert group_times([42.0]) == [42.0]
+
+
+def test_group_times_every_rider_isolated():
+    assert group_times([10.0, 20.0, 30.0]) == [10.0, 20.0, 30.0]
 
 
 def test_race_defaults_to_scheduled_and_unscheduled(db):
@@ -844,6 +864,63 @@ def test_simulate_race_deducts_freshness_from_finishers(running_race, four_rider
     for rider in four_riders:
         rider.refresh_from_db()
         assert rider.freshness == 100 - 25
+
+
+def test_simulate_one_day_race_costs_race_freshness(running_race, four_riders):
+    simulate_race(running_race, game_time=timezone.now())
+
+    for rider in four_riders:
+        rider.refresh_from_db()
+        assert rider.freshness == 100 - RACE_FRESHNESS_COST
+
+
+def test_simulate_stage_costs_stage_freshness(db, team, four_riders, week):
+    stage_race = StageRace.objects.create(name="Alpine Tour", week=week)
+    stage = Race.objects.create(
+        name="Alpine Tour — Stage 1",
+        course=[{"length": 500.0, "gradient": 0.0}],
+        starts_at=week.starts_at,
+        week=week,
+        stage_race=stage_race,
+        stage_number=1,
+        status=Race.Status.RUNNING,
+    )
+
+    simulate_race(stage, game_time=timezone.now())
+
+    for rider in four_riders:
+        rider.refresh_from_db()
+        assert rider.freshness == 100 - STAGE_FRESHNESS_COST
+
+
+def test_simulate_race_writes_group_time_for_finishers_only(running_race, four_riders, monkeypatch):
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    # Riders 0-2 finish within GROUP_GAP_SECONDS of each other; rider 3 is
+    # clear of them and does not finish at all.
+    states = [
+        SimpleNamespace(finish_time=100.0, position=1000.0, rider=SimpleNamespace(id=str(four_riders[0].pk))),
+        SimpleNamespace(finish_time=100.5, position=999.0, rider=SimpleNamespace(id=str(four_riders[1].pk))),
+        SimpleNamespace(finish_time=101.0, position=998.0, rider=SimpleNamespace(id=str(four_riders[2].pk))),
+        SimpleNamespace(finish_time=None, position=500.0, rider=SimpleNamespace(id=str(four_riders[3].pk))),
+    ]
+
+    def fake_run_race(riders, course, log_path, *args, **kwargs):
+        Path(log_path).touch()
+        return states, 0, 2
+
+    monkeypatch.setattr("racing.services.run_race_via_adapter", fake_run_race)
+
+    simulate_race(running_race, game_time=timezone.now())
+
+    results_by_rider = {
+        r.rider_id: r for r in RaceResult.objects.filter(race=running_race)
+    }
+    assert results_by_rider[four_riders[0].pk].group_time == 100.0
+    assert results_by_rider[four_riders[1].pk].group_time == 100.0
+    assert results_by_rider[four_riders[2].pk].group_time == 100.0
+    assert results_by_rider[four_riders[3].pk].group_time is None
 
 
 def test_simulate_race_deducts_freshness_from_non_finishers(running_race, four_riders, monkeypatch):

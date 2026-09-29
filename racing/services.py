@@ -18,7 +18,7 @@ from django.db import transaction
 from django.db.models import F
 
 from riders.models import ENGINE_ATTRIBUTES, Rider
-from riders.services import apply_race_cost, freshness_multiplier
+from riders.services import RACE_FRESHNESS_COST, STAGE_FRESHNESS_COST, apply_race_cost, freshness_multiplier
 from teams.models import Team
 
 from .adapters import run_race_via_adapter, to_engine_course, to_engine_rider, to_team_codes
@@ -48,6 +48,28 @@ CLIMB_GRADIENT_THRESHOLD = 2.0
 SPRINT_MAX_DISTANCE = 120_000
 #: Courses at or over this length (m) train resistance.
 RESISTANCE_MIN_DISTANCE = 200_000
+
+#: Finishers separated by no more than this many seconds from the rider
+#: ahead of them share a group time (specs/stage-races.md, In scope 6).
+#: Finish times are whole seconds (the engine ticks at 1s), so this is the
+#: smallest threshold that groups more than riders crossing the same tick.
+GROUP_GAP_SECONDS = 1.0
+
+
+def group_times(finish_times: list[float]) -> list[float]:
+    """Each finisher's group time: the time of the first rider of their
+    group. A new group starts when the gap to the PREVIOUS finisher exceeds
+    GROUP_GAP_SECONDS — chained, so a bunch strung out over several
+    consecutive small gaps is still one group. `finish_times` must be
+    sorted ascending and contain only finishers.
+    """
+    out: list[float] = []
+    head = None
+    for i, t in enumerate(finish_times):
+        if i == 0 or t - finish_times[i - 1] > GROUP_GAP_SECONDS:
+            head = t
+        out.append(head)
+    return out
 
 
 def course_training_attribute(course: list[dict]) -> str:
@@ -400,10 +422,20 @@ def simulate_race(race: Race, *, game_time: datetime) -> list[RaceResult]:
                 "size_bytes": size,
             },
         )
+        # group_time (D5, specs/stage-races.md In scope 6): computed only
+        # over the finishers, who are already the ascending-time prefix of
+        # `ordered`. Written for every race, one-day included — only a
+        # stage race's general classification ever reads it.
+        finishers = [s for s in ordered if s.finish_time is not None]
+        groups = group_times([float(s.finish_time) for s in finishers])
+        group_time_by_rider = {
+            s.rider.id: g for s, g in zip(finishers, groups)
+        }
         results = RaceResult.objects.bulk_create([
             RaceResult(
                 race=race, rider=by_pk[s.rider.id], position=i,
                 finish_time=float(s.finish_time) if s.finish_time is not None else None,
+                group_time=group_time_by_rider.get(s.rider.id),
             )
             for i, s in enumerate(ordered, start=1)
         ])
@@ -411,8 +443,12 @@ def simulate_race(race: Race, *, game_time: datetime) -> list[RaceResult]:
         # race takes just as much out of a rider's legs as running it does
         # (broom-wagon-time-cut spec, In scope 5). Written here, in the
         # results transaction, so "started" and "paid for it" are atomic —
-        # see the plan's Design decision 7.
-        apply_race_cost([by_pk[s.rider.id].pk for s in states])
+        # see the plan's Design decision 7. A stage costs less than a full
+        # one-day race (specs/stage-races.md, Decisions taken).
+        apply_race_cost(
+            [by_pk[s.rider.id].pk for s in states],
+            cost=STAGE_FRESHNESS_COST if race.stage_race_id else RACE_FRESHNESS_COST,
+        )
         # Marker crossings join the same transaction, after the results they
         # are written against. A crossing row is a fact of what happened,
         # never amended later, so it is written once here. Ordering: D5 makes
