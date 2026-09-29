@@ -473,7 +473,7 @@ Tests in `competitions/tests/test_scoring.py`:
 - `test_mountain_position_outside_table_scores_zero`
 - `test_mountain_table_keys_match_marker_categories`
 
-### W4 — `competitions/services.py`: `_score_markers`, `score_mountains`
+### W4 — `competitions/services.py`: `_score_markers`, `score_mountains` ✅
 Refactor as shown. **#16's `test_sprints.py` must pass unchanged**; that
 alone proves the refactor preserved sprint behaviour.
 

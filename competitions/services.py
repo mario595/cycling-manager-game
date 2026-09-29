@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from django.db.models import Sum
 from racing.models import MarkerCrossing, Race, RaceMarker, RaceResult
 from schedule.models import Season, Week
@@ -7,8 +9,10 @@ from teams.models import Team
 
 from .models import MarkerPoints, RacePoints
 from .scoring import (
+    MOUNTAIN_PLACES,
     POINTS_BY_POSITION,
     SPRINT_PLACES,
+    mountain_points_for,
     points_for,
     prize_for,
     sprint_points_for,
@@ -53,31 +57,39 @@ def score_race(race: Race) -> list[RacePoints]:
     return RacePoints.objects.bulk_create(to_create, ignore_conflicts=True)
 
 
-def score_sprints(race: Race) -> list[MarkerPoints]:
-    """Award sprint points for one finished race: per sprint marker, each
-    team's best-placed rider among the top SPRINT_PLACES crossings.
-    Idempotent: a race already scored returns its existing rows.
+def _score_markers(
+    race: Race,
+    kind: str,
+    places: int,
+    points_for: Callable[[RaceMarker, int], int],
+) -> list[MarkerPoints]:
+    """Award one kind of marker points for one finished race: per marker of
+    `kind`, each team's best-placed rider among the top `places` crossings.
+    Idempotent per kind: a kind already scored for this race returns its
+    existing rows.
 
     Raises ValueError if the race is not FINISHED.
     """
     if race.status != Race.Status.FINISHED:
         raise ValueError(f"{race} is not finished; nothing to score")
 
-    existing = list(MarkerPoints.objects.filter(marker__race=race))
+    # The guard is filtered by kind deliberately. Unfiltered, whichever of
+    # sprints and mountains ran second would find the other's rows and score
+    # nothing — with no error anywhere to say so.
+    existing = list(MarkerPoints.objects.filter(marker__race=race, marker__kind=kind))
     if existing:
         return existing
 
     to_create = []
-    for marker in race.markers.filter(kind=RaceMarker.Kind.SPRINT):
-        # Cut to the top SPRINT_PLACES crossings FIRST, then keep each
-        # team's best among them — not the reverse. Walking down the
-        # crossing order until five distinct teams have scored would let a
-        # 6th-place rider score when a teammate already took two of the
-        # top five, which is exactly the double-scoring the best-rider rule
-        # exists to prevent.
+    for marker in race.markers.filter(kind=kind):
+        # Cut to the top `places` crossings FIRST, then keep each team's
+        # best among them — not the reverse. Walking down the crossing order
+        # until five distinct teams have scored would let a 6th-place rider
+        # score when a teammate already took two of the top five, which is
+        # exactly the double-scoring the best-rider rule exists to prevent.
         crossings = (
             MarkerCrossing.objects
-            .filter(marker=marker, position__lte=SPRINT_PLACES)
+            .filter(marker=marker, position__lte=places)
             .order_by("position")
             .values_list("rider_id", "rider__team_id", "position")
         )
@@ -88,11 +100,22 @@ def score_sprints(race: Race) -> list[MarkerPoints]:
             best[team_id] = (rider_id, position)
         to_create += [
             MarkerPoints(marker=marker, team_id=team_id, rider_id=rider_id,
-                         position=position,
-                         points=sprint_points_for(marker.weight, position))
+                         position=position, points=points_for(marker, position))
             for team_id, (rider_id, position) in best.items()
         ]
     return MarkerPoints.objects.bulk_create(to_create, ignore_conflicts=True)
+
+
+def score_sprints(race: Race) -> list[MarkerPoints]:
+    """Sprint points for one finished race. See _score_markers."""
+    return _score_markers(race, RaceMarker.Kind.SPRINT, SPRINT_PLACES,
+                          lambda m, p: sprint_points_for(m.weight, p))
+
+
+def score_mountains(race: Race) -> list[MarkerPoints]:
+    """Mountain points for one finished race. See _score_markers."""
+    return _score_markers(race, RaceMarker.Kind.MOUNTAIN, MOUNTAIN_PLACES,
+                          lambda m, p: mountain_points_for(m.category, p))
 
 
 def prizes_by_team(race: Race) -> dict[int, list[tuple[int, int]]]:
