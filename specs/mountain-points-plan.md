@@ -5,13 +5,12 @@
 
 ## Context you need
 
-**This ticket is built on top of #16 (sprint points), which is not merged
-yet.** When this plan was written, #16 was being implemented on the
-`sprint-points` branch: W1–W4 of `specs/sprint-points-plan.md` were done, and
-W5–W10 were still to come. Everything below that says "from #16" refers to
-that plan and that branch. **Do not start W1 until #16 is merged into
-master.** W0 covers the rebase, and checks that #16 landed the way its plan
-said.
+**#16 (sprint points) is merged** — PR #119, on master as of this plan's W0
+pass. Every name and shape below (`RaceMarker.Weight`, migration `0008`,
+`MarkerPoints`, `score_sprints`, `_marker_payload`, `MARKER_PLACES_SHOWN`,
+the `sprint_by_team` split in `RaceResultsView`) was checked directly
+against the merged code, not against #16's plan, and matches what is written
+here exactly. W0 below is the record of that check.
 
 **Markers (#70, `specs/archive/course-markers.md`, `racing/README.md`,
 *Markers and crossings*).** `racing.RaceMarker` has a `kind` (sprint or
@@ -414,22 +413,36 @@ It comes after the `continue` for failed races, and it never touches
 
 ## Work items
 
-### W0 — Rebase onto master after #16 merges; reconcile names
-`git fetch origin && git rebase origin/master` on `mountain-points`. The
-branch holds only the spec and this plan, so it should rebase cleanly. Then
-confirm each of the following exists as #16's plan describes it, and note
-any difference before writing code. **Where #16's merged code differs from
-this plan, the code wins; adapt the names here.**
-- `RaceMarker.Weight`, `racing/migrations/0008_racemarker_weight.py`
-- `schedule.loaders.MARKER_WEIGHTS`
-- `competitions.scoring.SPRINT_PLACES`, `sprint_points_for`
-- `competitions.models.MarkerPoints`, `competitions.services.score_sprints`
-- the `marker__kind` sprint filter in `points_by_team` and `standings`
-- `api.views._marker_payload`, `MARKER_PLACES_SHOWN == 5`, whether
-  `scored_crossing` / `sprint_by_team` filter by kind
-- `test_points_by_team_ignores_mountain_marker_points`
+### W0 — Rebase onto master; confirmed done ✅
+`git rebase origin/master` on `mountain-points` was clean (the branch held
+only the spec and this plan). Every name and shape this plan assumes was then
+checked directly against the merged `sprint-points` code (PR #119) and
+matches exactly:
+- `RaceMarker.Weight`, `racing/migrations/0008_racemarker_weight.py` ✅
+- `competitions.scoring.SPRINT_PLACES`, `SPRINT_POINTS_BY_WEIGHT`,
+  `sprint_points_for` ✅
+- `competitions.services.score_sprints` — guard is
+  `MarkerPoints.objects.filter(marker__race=race)`, **unfiltered by kind**,
+  confirming D5's refactor is necessary, not precautionary ✅
+- `points_by_team` and `standings` both filter their `MarkerPoints`
+  aggregate to `marker__kind=RaceMarker.Kind.SPRINT` — D7's removal of that
+  filter (`points_by_team`) and its per-kind split (`standings`) apply
+  exactly as written ✅
+- `api.views._marker_payload`, `MARKER_PLACES_SHOWN = SPRINT_PLACES` (i.e.
+  5) ✅
+- `RaceResultsView`: `scored_crossing` (crossing → points) is built from
+  **all** of the race's `MarkerPoints`, unfiltered — mountain crossings will
+  carry their points with no change once mountain rows exist, matching D8.
+  `sprint_by_team` is already filtered to `marker__kind=SPRINT` — add a
+  parallel `mountain_by_team` dict the same way, per D8, rather than
+  building one unfiltered dict and splitting it.
+- `RaceResultPointsEntrySerializer` has `finish_points`, `sprint_points`,
+  `points`, `prize` — add `mountain_points` alongside `sprint_points`.
+- `RaceMarkerSerializer` has `weight` and `points`, both nullable — add
+  `category`, nullable the same way.
 
-There is no commit unless the rebase needed one.
+No code difference from what this plan assumed anywhere. No commit for this
+step.
 
 ### W1 — `racing/`: `RaceMarker.category`, migration 0009, `create_race`
 Tests in `racing/tests.py`:
