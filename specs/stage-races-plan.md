@@ -659,7 +659,7 @@ the same rows), `test_gc_refuses_incomplete_stage_race`,
 `test_gc_row_and_final_stage_row_coexist`,
 `test_standings.py::test_standings_include_gc_points`.
 
-### W6 — `economy/`: `GC_PRIZE_MONEY` and `pay_gc_prizes`
+### W6 — `economy/`: `GC_PRIZE_MONEY` and `pay_gc_prizes` — done
 Kind, constraint, migration `0012_gc_prize_money`, `_pay_prizes` refactor,
 `pay_gc_prizes`.
 Tests in `economy/tests/test_services.py`: `test_pay_gc_prizes_idempotent`,
