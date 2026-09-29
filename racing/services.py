@@ -15,7 +15,7 @@ from pathlib import Path
 
 from django.core.files.base import ContentFile
 from django.db import transaction
-from django.db.models import F
+from django.db.models import Count, F
 
 from riders.models import ENGINE_ATTRIBUTES, Rider
 from riders.services import RACE_FRESHNESS_COST, STAGE_FRESHNESS_COST, apply_race_cost, freshness_multiplier
@@ -31,6 +31,7 @@ from .models import (
     RaceSquad,
     RaceSquadRider,
     MarkerCrossing,
+    StageRace,
 )
 
 logger = logging.getLogger(__name__)
@@ -262,7 +263,13 @@ def set_squad(race: Race, team: Team, rider_ids: list[int], leader_id: int) -> R
 
     Refuses a race that is not SCHEDULED, then delegates to _write_squad.
     Raises SquadError for that and for every validation failure below.
+
+    A stage race's squad is chosen once, for stage 1 — see D12,
+    specs/stage-races.md, Out of scope. A later stage's squad is carried by
+    ensure_squads/_carry_squads, never picked by a manager.
     """
+    if race.stage_number is not None and race.stage_number > 1:
+        raise SquadError(f"{race} is a later stage; the squad is chosen for stage 1")
     if race.status != Race.Status.SCHEDULED:
         raise SquadError(f"{race} has already started; its squad is fixed")
     return _write_squad(race, team, rider_ids, leader_id, auto=False)
@@ -290,6 +297,91 @@ def create_race(*, markers: Iterable[dict] = (), **fields) -> Race:
     return race
 
 
+def create_stage_race(*, name: str, week) -> StageRace:
+    """Create a stage race. Injected into `schedule/`'s loader the same way
+    `create_race` is — `schedule/` must not import `racing/` at module scope
+    (AGENTS.md)."""
+    return StageRace.objects.create(name=name, week=week)
+
+
+def riders_still_in(stage_race: StageRace, before_stage: int) -> set[int]:
+    """Which of stage 1's squad riders are still in `stage_race` as of
+    `before_stage` — D4, specs/stage-races.md, Rules and edge cases.
+
+    A rider is still in iff they were in the stage-1 squad AND finished
+    (non-null finish_time) every earlier FINISHED stage. A FAILED stage
+    has no results and neither removes anyone nor counts as "earlier" —
+    there is nothing to have finished or missed.
+    """
+    stage1 = stage_race.stages.get(stage_number=1)
+    squad_riders = set(
+        RaceSquadRider.objects.filter(squad__race=stage1).values_list("rider_id", flat=True)
+    )
+    earlier_stage_ids = list(
+        stage_race.stages
+        .filter(stage_number__lt=before_stage, status=Race.Status.FINISHED)
+        .values_list("pk", flat=True)
+    )
+    if not earlier_stage_ids:
+        return squad_riders
+
+    finished_every_stage = (
+        RaceResult.objects
+        .filter(race_id__in=earlier_stage_ids, rider_id__in=squad_riders, finish_time__isnull=False)
+        .values("rider_id")
+        .annotate(n=Count("pk"))
+        .filter(n=len(earlier_stage_ids))
+        .values_list("rider_id", flat=True)
+    )
+    return squad_riders & set(finished_every_stage)
+
+
+def carried_squad(race: Race, team: Team) -> tuple[list[int], int | None]:
+    """Read-only version of what _carry_squads would write for `team` in
+    `race`: `team`'s stage-1 squad, minus any rider no longer in the race
+    (riders_still_in). `leader_id` is None if the stage-1 leader is among
+    those dropped — the promotion in _effective_leader_ids is a
+    simulation-time-only rule, not something to predict here."""
+    stage1 = race.stage_race.stages.get(stage_number=1)
+    stage1_squad = RaceSquad.objects.filter(race=stage1, team=team).prefetch_related("members").first()
+    if stage1_squad is None:
+        return [], None
+
+    still_in = riders_still_in(race.stage_race, race.stage_number)
+    members = [m for m in stage1_squad.members.all() if m.rider_id in still_in]
+    leader_id = next((m.rider_id for m in members if m.is_leader), None)
+    return [m.rider_id for m in members], leader_id
+
+
+def _carry_squads(race: Race) -> None:
+    """Write every team's carried squad for a stage after the first — D3.
+
+    Unlike _write_squad, a carried squad may hold fewer than SQUAD_SIZE
+    riders, or none: this deliberately bypasses _write_squad's exactly-four
+    check, because that check protects a manager's write, not a tour
+    continuing short-handed. A team with nobody left gets no RaceSquad row
+    for this stage at all.
+    """
+    stage1 = race.stage_race.stages.get(stage_number=1)
+    still_in = riders_still_in(race.stage_race, race.stage_number)
+    stage1_squads = RaceSquad.objects.filter(race=stage1).prefetch_related("members")
+
+    for stage1_squad in stage1_squads:
+        members = [m for m in stage1_squad.members.all() if m.rider_id in still_in]
+        if not members:
+            continue
+        with transaction.atomic():
+            squad, _ = RaceSquad.objects.update_or_create(
+                race=race, team_id=stage1_squad.team_id,
+                defaults={"is_auto_picked": stage1_squad.is_auto_picked},
+            )
+            squad.members.all().delete()
+            RaceSquadRider.objects.bulk_create([
+                RaceSquadRider(squad=squad, rider_id=m.rider_id, is_leader=m.is_leader)
+                for m in members
+            ])
+
+
 def ensure_squads(race: Race) -> None:
     """Give every team with enough riders a squad for this race, if it has
     not got one. Called from simulate_race so a team whose manager never
@@ -298,7 +390,14 @@ def ensure_squads(race: Race) -> None:
     A team with fewer than SQUAD_SIZE riders is skipped with a warning, not
     an exception: that is a broken roster (see the spec's Rules and edge
     cases) and it must not stop every other team racing.
+
+    A stage after the first never auto-picks — its squads are carried from
+    stage 1 (D3), so this delegates entirely to _carry_squads and returns.
     """
+    if race.stage_race_id and race.stage_number > 1:
+        _carry_squads(race)
+        return
+
     have = set(RaceSquad.objects.filter(race=race).values_list("team_id", flat=True))
     for team in Team.objects.exclude(pk__in=have):
         try:

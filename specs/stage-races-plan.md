@@ -626,7 +626,7 @@ Tests: `riders/tests/test_services.py::test_apply_race_cost_custom_cost`;
 `test_simulate_stage_costs_stage_freshness` vs
 `test_simulate_one_day_race_costs_race_freshness`.
 
-### W3 — `racing/services.py`: carried squads and the stage-1 lock
+### W3 — `racing/services.py`: carried squads and the stage-1 lock — done
 `riders_still_in`, `_carry_squads`, `carried_squad`, the `ensure_squads`
 branch, the `set_squad` refusal, `create_stage_race`.
 Tests: `test_later_stage_carries_stage_one_squad_and_leader`,
