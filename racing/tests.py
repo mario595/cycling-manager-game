@@ -1011,6 +1011,42 @@ def test_create_race_without_weight_gives_standard(db):
     assert race.markers.get().weight == RaceMarker.Weight.STANDARD
 
 
+def test_marker_category_defaults_to_cat2(db):
+    race = Race.objects.create(
+        name="Hilly Day",
+        course=[{"length": 1000.0, "gradient": 0.0}],
+    )
+    marker = RaceMarker.objects.create(
+        race=race, kind=RaceMarker.Kind.MOUNTAIN, name="Rise", distance=500.0,
+    )
+
+    assert marker.category == RaceMarker.Category.CAT2
+
+
+def test_create_race_stores_marker_category(db):
+    race = create_race(
+        name="Marked Stage",
+        course=[{"length": 5000.0, "gradient": 0.0}],
+        markers=[
+            {"kind": "mountain", "name": "Final Top", "distance": 5000.0, "category": "hc"},
+        ],
+    )
+
+    assert race.markers.get().category == RaceMarker.Category.HC
+
+
+def test_create_race_without_category_gives_cat2(db):
+    race = create_race(
+        name="Marked Stage",
+        course=[{"length": 5000.0, "gradient": 0.0}],
+        markers=[
+            {"kind": "mountain", "name": "Hilltop", "distance": 4500.0},
+        ],
+    )
+
+    assert race.markers.get().category == RaceMarker.Category.CAT2
+
+
 def test_loader_weights_match_race_marker_weights():
     from schedule.loaders import MARKER_WEIGHTS
 

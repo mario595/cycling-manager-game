@@ -254,6 +254,12 @@ class RaceMarker(models.Model):
         STANDARD = "standard", "Standard"
         MAJOR = "major", "Major"
 
+    class Category(models.TextChoices):
+        HC = "hc", "HC"
+        CAT1 = "cat1", "Cat 1"
+        CAT2 = "cat2", "Cat 2"
+        CAT3 = "cat3", "Cat 3"
+
     race = models.ForeignKey(Race, on_delete=models.CASCADE, related_name="markers")
     kind = models.CharField(max_length=10, choices=Kind.choices)
     name = models.CharField(max_length=100)
@@ -262,7 +268,11 @@ class RaceMarker(models.Model):
     )
     weight = models.CharField(
         max_length=10, choices=Weight.choices, default=Weight.STANDARD,
-        help_text="How much a sprint marker is worth. Inert on mountain markers (#17 decides theirs).",
+        help_text="How much a sprint marker is worth. Inert on mountain markers.",
+    )
+    category = models.CharField(
+        max_length=4, choices=Category.choices, default=Category.CAT2,
+        help_text="A mountain marker's climb category. Inert on sprint markers.",
     )
 
     class Meta:

@@ -444,7 +444,7 @@ matches exactly:
 No code difference from what this plan assumed anywhere. No commit for this
 step.
 
-### W1 — `racing/`: `RaceMarker.category`, migration 0009, `create_race`
+### W1 — `racing/`: `RaceMarker.category`, migration 0009, `create_race` ✅
 Tests in `racing/tests.py`:
 - `test_marker_category_defaults_to_cat2`
 - `test_create_race_stores_marker_category`
