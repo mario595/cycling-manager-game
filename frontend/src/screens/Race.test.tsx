@@ -67,15 +67,15 @@ const finishedResults: RaceResults = {
     // Two placed riders in the same team: the API's points row carries the
     // summed prize (35_000), but the SPA must not render it at the team
     // level — the winnings live with the riders who earned them.
-    { team: { id: 1, name: 'Results Team', code: 'RES' }, position: 1, points: 20, prize: 35_000 },
-    { team: { id: 2, name: 'Zero Team', code: 'ZRO' }, position: null, points: 0, prize: 0 },
+    { team: { id: 1, name: 'Results Team', code: 'RES' }, position: 1, finish_points: 20, sprint_points: 0, points: 20, prize: 35_000 },
+    { team: { id: 2, name: 'Zero Team', code: 'ZRO' }, position: null, finish_points: 0, sprint_points: 0, points: 0, prize: 0 },
   ],
   markers: [],
 }
 
 const markers: RaceMarker[] = [
-  { id: 1, kind: 'sprint', name: 'Line One', distance: 40000 },
-  { id: 2, kind: 'mountain', name: 'Summit', distance: 80000 },
+  { id: 1, kind: 'sprint', name: 'Line One', distance: 40000, weight: 'standard', points: [6, 4, 3, 2, 1] },
+  { id: 2, kind: 'mountain', name: 'Summit', distance: 80000, weight: null, points: null },
 ]
 
 const finishedResultsWithMarkers: RaceResults = {
@@ -86,10 +86,12 @@ const finishedResultsWithMarkers: RaceResults = {
       kind: 'sprint',
       name: 'Line One',
       distance: 40000,
+      weight: 'standard',
+      points: [6, 4, 3, 2, 1],
       crossings: [
-        { position: 1, rider: { id: 1, name: 'Winner Rider' }, team: { id: 1, name: 'Results Team', code: 'RES' } },
-        { position: 2, rider: { id: 2, name: 'Second Rider' }, team: { id: 1, name: 'Results Team', code: 'RES' } },
-        { position: 3, rider: { id: 3, name: 'DNF Rider' }, team: { id: 2, name: 'Zero Team', code: 'ZRO' } },
+        { position: 1, rider: { id: 1, name: 'Winner Rider' }, team: { id: 1, name: 'Results Team', code: 'RES' }, points: 6 },
+        { position: 2, rider: { id: 2, name: 'Second Rider' }, team: { id: 1, name: 'Results Team', code: 'RES' }, points: null },
+        { position: 3, rider: { id: 3, name: 'DNF Rider' }, team: { id: 2, name: 'Zero Team', code: 'ZRO' }, points: null },
       ],
     },
   ],
@@ -292,7 +294,7 @@ describe('Race', () => {
 
     renderRace()
 
-    expect(screen.getByText('Sprint · Line One · km 40.0')).toBeInTheDocument()
+    expect(screen.getByText(/Sprint · Line One · km 40\.0/)).toBeInTheDocument()
     expect(screen.getByText('Mountain · Summit · km 80.0')).toBeInTheDocument()
     expect(screen.queryByText('Sprints and summits')).toBeNull()
   })
@@ -316,6 +318,58 @@ describe('Race', () => {
     expect(screen.getAllByText('Winner Rider')).toHaveLength(2)
     expect(screen.getAllByText('Second Rider')).toHaveLength(2)
     expect(screen.getAllByText('DNF Rider')).toHaveLength(2)
+  })
+
+  it('marker results show points beside scoring riders', () => {
+    mockUseRaceDetail.mockReturnValue({
+      race: { ...upcomingRace, status: 'finished', markers },
+      loading: false,
+      error: false,
+    })
+    mockUseRaceResults.mockReturnValue({ results: finishedResultsWithMarkers, loading: false, error: false })
+
+    renderRace()
+    revealResults()
+
+    expect(screen.getByText('+6')).toBeInTheDocument()
+  })
+
+  it('team points show finish/sprint split when sprints scored', () => {
+    mockUseRaceDetail.mockReturnValue({
+      race: { ...upcomingRace, status: 'finished', markers },
+      loading: false,
+      error: false,
+    })
+    mockUseRaceResults.mockReturnValue({
+      results: {
+        ...finishedResultsWithMarkers,
+        points: [
+          { team: { id: 1, name: 'Results Team', code: 'RES' }, position: 1, finish_points: 20, sprint_points: 6, points: 26, prize: 35_000 },
+          { team: { id: 2, name: 'Zero Team', code: 'ZRO' }, position: null, finish_points: 0, sprint_points: 0, points: 0, prize: 0 },
+        ],
+      },
+      loading: false,
+      error: false,
+    })
+
+    renderRace()
+    revealResults()
+
+    expect(screen.getByText('finish 20 · sprints 6')).toBeInTheDocument()
+  })
+
+  it('no split line when a team scored no sprint points', () => {
+    mockUseRaceDetail.mockReturnValue({
+      race: { ...upcomingRace, status: 'finished' },
+      loading: false,
+      error: false,
+    })
+    mockUseRaceResults.mockReturnValue({ results: finishedResults, loading: false, error: false })
+
+    renderRace()
+    revealResults()
+
+    expect(screen.queryByText(/finish \d+ · sprints/)).toBeNull()
   })
 
   it('shows no marker card for a finished race without markers', () => {
