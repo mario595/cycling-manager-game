@@ -646,7 +646,7 @@ Tests: `test_gc_sums_group_times`, `test_gc_excludes_rider_who_missed_a_stage`,
 `test_gc_team_is_stage_one_squad_team`,
 `test_finisher_always_has_group_time` (the invariant D6 relies on).
 
-### W5 — `competitions/`: tables, `RacePoints.kind`, stage and GC scoring
+### W5 — `competitions/`: tables, `RacePoints.kind`, stage and GC scoring — done
 `scoring.py` tables, `RacePoints.Kind` + migration `0002_racepoints_kind`,
 `score_race`/`prizes_by_team` table switch, `score_general_classification`,
 `gc_prizes_by_team`.
