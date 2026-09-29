@@ -212,14 +212,83 @@ function WeekRow({ week, isCurrent, isFirst }: { week: CalendarWeek; isCurrent: 
             Training week — no race held
           </div>
         ) : (
-          week.races.map((race) => <RaceRow key={race.id} race={race} />)
+          groupStageRaces(week.races).map((entry) =>
+            entry.type === 'stage_race' ? (
+              <StageRaceGroup key={`stage-race-${entry.stageRace.id}`} races={entry.races} />
+            ) : (
+              <RaceRow key={entry.race.id} race={entry.race} />
+            ),
+          )
         )}
       </div>
     </div>
   )
 }
 
-function RaceRow({ race }: { race: CalendarRace }) {
+type CalendarEntry =
+  | { type: 'race'; race: CalendarRace }
+  | { type: 'stage_race'; stageRace: NonNullable<CalendarRace['stage_race']>; races: CalendarRace[] }
+
+/** Folds consecutive races sharing a stage_race.id into one group — the
+ * calendar entry the spec asks for: a tour reads as one banner spanning
+ * its days, not a run of otherwise-identical race rows. A one-day race
+ * passes through untouched. */
+function groupStageRaces(races: CalendarRace[]): CalendarEntry[] {
+  const entries: CalendarEntry[] = []
+  for (const race of races) {
+    const last = entries[entries.length - 1]
+    if (race.stage_race && last?.type === 'stage_race' && last.stageRace.id === race.stage_race.id) {
+      last.races.push(race)
+      continue
+    }
+    entries.push(
+      race.stage_race
+        ? { type: 'stage_race', stageRace: race.stage_race, races: [race] }
+        : { type: 'race', race },
+    )
+  }
+  return entries
+}
+
+function StageRaceGroup({ races }: { races: CalendarRace[] }) {
+  const { name, stage_count } = races[0].stage_race!
+  const dayRange =
+    races[0].starts_at && races[races.length - 1].starts_at
+      ? `${new Date(races[0].starts_at).toLocaleDateString(undefined, { weekday: 'short' })}–${new Date(
+          races[races.length - 1].starts_at!,
+        ).toLocaleDateString(undefined, { weekday: 'short' })}`
+      : null
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 6,
+        borderRadius: 12,
+        border: `1px solid ${calendarAccent.border}`,
+        background: calendarAccent.headerWash,
+        padding: 10,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '0 2px' }}>
+        <span style={{ fontSize: 13.5, fontWeight: 700, letterSpacing: '-0.2px', color: calendarAccent.ink }}>
+          {name}
+        </span>
+        <span style={{ fontSize: 10.5, fontFamily: font.mono, color: color.mutedStrong, letterSpacing: '0.5px' }}>
+          {stage_count} stages{dayRange ? ` · ${dayRange}` : ''}
+        </span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {races.map((race) => (
+          <RaceRow key={race.id} race={race} stageLabel={`Stage ${race.stage_race!.stage_number}`} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function RaceRow({ race, stageLabel }: { race: CalendarRace; stageLabel?: string }) {
   const date = race.starts_at
     ? new Date(race.starts_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
     : ''
@@ -243,7 +312,9 @@ function RaceRow({ race }: { race: CalendarRace }) {
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 14, fontWeight: 600, letterSpacing: '-0.2px' }}>{race.name}</span>
+          <span style={{ fontSize: 14, fontWeight: 600, letterSpacing: '-0.2px' }}>
+            {stageLabel ? stageLabel : race.name}
+          </span>
           <span
             style={{
               fontSize: 9.5,

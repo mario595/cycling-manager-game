@@ -93,12 +93,24 @@ export async function getPosition(): Promise<Position> {
   return response.json()
 }
 
+/** A race's stage-race context, when it belongs to one — see
+ * racing/README.md, *Stage races*. `stage_count` is the tour's whole
+ * length, not "stages remaining", so the SPA can label "Stage 2 of 5"
+ * without a second request. */
+export interface StageRaceRef {
+  id: number
+  name: string
+  stage_number: number
+  stage_count: number
+}
+
 export interface CalendarRace {
   id: number
   name: string
   starts_at: string | null
   status: 'scheduled' | 'running' | 'finished' | 'failed'
   distance_km: number
+  stage_race: StageRaceRef | null
 }
 
 export interface CalendarWeek {
@@ -201,6 +213,11 @@ export interface SquadRider {
   is_leader: boolean
 }
 
+export interface SquadStageRace {
+  name: string
+  stage_number: number
+}
+
 export interface Squad {
   race: number
   race_name: string
@@ -213,6 +230,11 @@ export interface Squad {
   saved: boolean
   squad_size: number
   candidates: SquadRider[]
+  /** Set when this race is a stage race's stage. On stage 1 the squad is
+   * still an ordinary choice; from stage 2 on `editable` is always false
+   * and the candidates are the carried squad — see racing/README.md,
+   * *Stage races*. */
+  stage_race: SquadStageRace | null
 }
 
 export async function getSquad(raceId: number): Promise<Squad> {
@@ -489,6 +511,11 @@ export interface RaceResultEntry {
   rider: { id: number; name: string }
   team: RaceResultTeam | null
   finish_time: number | null
+  /** This rider's finishing GROUP's time — same for every rider who
+   * crossed with no meaningful gap to the rider ahead. Null for a
+   * non-finisher. Only meaningful for a stage race's GC; a one-day race's
+   * gap display still reads finish_time. See racing/README.md. */
+  group_time: number | null
   finished: boolean
 }
 
@@ -516,11 +543,39 @@ export interface RaceMarkerResult extends RaceMarker {
   crossings: RaceMarkerCrossing[]
 }
 
+export interface GCStandingEntry {
+  position: number
+  rider: { id: number; name: string }
+  team: RaceResultTeam | null
+  gc_time: number
+  /** Seconds behind the leader; 0 for the leader themselves. */
+  gap: number
+}
+
+export interface GCPointsEntry {
+  team: RaceResultTeam
+  position: number
+  points: number
+  prize: number
+}
+
+/** A stage race's general classification as of one of its stages. `final`
+ * is true once the whole tour has completed, and only then is `points`
+ * populated — the GC award is made once, on the final stage (D11). */
+export interface GC {
+  after_stage: number
+  final: boolean
+  standings: GCStandingEntry[]
+  points: GCPointsEntry[]
+}
+
 export interface RaceResults {
-  race: { id: number; name: string; status: string }
+  race: { id: number; name: string; status: string; stage_race: StageRaceRef | null }
   results: RaceResultEntry[]
   points: RaceResultPointsEntry[]
   markers: RaceMarkerResult[]
+  /** Null for a one-day race. */
+  gc: GC | null
 }
 
 export async function getRaceResults(raceId: number): Promise<RaceResults> {
@@ -542,6 +597,21 @@ export interface RacePayoutEntry {
   prize: number
 }
 
+export interface RaceDetailStage {
+  id: number
+  stage_number: number
+  starts_at: string | null
+  status: string
+}
+
+export interface RaceDetailStageRace {
+  id: number
+  name: string
+  stage_number: number
+  stage_count: number
+  stages: RaceDetailStage[]
+}
+
 export interface RaceDetail {
   id: number
   name: string
@@ -549,12 +619,18 @@ export interface RaceDetail {
   starts_at: string | null
   distance_km: number
   course: CourseSegment[]
+  /** A stage race's stage uses the reduced stage table; a one-day race the
+   * unchanged one. */
   payout: RacePayoutEntry[]
+  /** Empty for a one-day race. The bigger award paid once, on the final
+   * stage, when the whole stage race completes. */
+  gc_payout: RacePayoutEntry[]
   markers: RaceMarker[]
   /** Whether the server holds a log worth replaying for this race. Always
    * false while the race is unfinished, and false for a finished race
    * recorded before replays existed. */
   has_replay: boolean
+  stage_race: RaceDetailStageRace | null
 }
 
 export async function getRaceDetail(raceId: number): Promise<RaceDetail> {
@@ -680,11 +756,11 @@ export async function setTrainingFocus(attribute: string): Promise<void> {
 }
 
 /** One ledger entry as the Finances screen needs it. `kind` is the machine
- * name (starting_balance/wages/takeover/prize_money/merchandise/
- * sponsorship/trainer_fee/trainer_salary/transfer_fee/development_squad/
- * development_squad_fee); the screen renders the label. `rider_count` is set
- * on wage entries only — null elsewhere. `balance_after` is computed
- * server-side: the running balance just after this entry. */
+ * name (starting_balance/wages/takeover/prize_money/gc_prize_money/
+ * merchandise/sponsorship/trainer_fee/trainer_salary/transfer_fee/
+ * development_squad/development_squad_fee); the screen renders the label.
+ * `rider_count` is set on wage entries only — null elsewhere. `balance_after`
+ * is computed server-side: the running balance just after this entry. */
 export interface LedgerEntry {
   id: number
   kind:
@@ -692,6 +768,7 @@ export interface LedgerEntry {
     | 'wages'
     | 'takeover'
     | 'prize_money'
+    | 'gc_prize_money'
     | 'merchandise'
     | 'sponsorship'
     | 'trainer_fee'

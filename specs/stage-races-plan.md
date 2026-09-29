@@ -699,7 +699,7 @@ Tests in `api/tests.py`: `test_calendar_race_carries_stage_race`,
 `test_results_gc_after_stage`, `test_results_final_gc_has_points_and_prizes`,
 `test_results_one_day_race_gc_is_null`.
 
-### W10 — `frontend/`: calendar, race page, results, finances
+### W10 — `frontend/`: calendar, race page, results, finances — done
 Tests: `screens/Calendar` — add `Calendar.test.tsx` with
 `groups stages of a stage race under one header` and `renders one-day races
 unchanged`; `screens/Race.test.tsx` — `shows stage strip and GC payout`,
