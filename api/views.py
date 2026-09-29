@@ -13,7 +13,17 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from competitions.scoring import POINTS_BY_POSITION, points_for, prize_for
+from competitions.models import RacePoints
+from competitions.scoring import (
+    GC_POINTS_BY_POSITION,
+    POINTS_BY_POSITION,
+    gc_points_for,
+    gc_prize_for,
+    points_for,
+    prize_for,
+    stage_points_for,
+    stage_prize_for,
+)
 from competitions.services import standings
 from economy.models import FanbaseEntry, LedgerEntry
 from economy.services import (
@@ -34,8 +44,8 @@ from economy.services import (
     sign_offer,
 )
 from economy.sponsors import PROFILES_BY_KEY
-from racing.models import SQUAD_SIZE, MarkerCrossing, Race, RaceLog, RaceSquadRider
-from racing.services import SquadError, set_squad, suggested_squad
+from racing.models import SQUAD_SIZE, MarkerCrossing, Race, RaceLog, RaceSquad, RaceSquadRider, StageRace
+from racing.services import SquadError, carried_squad, general_classification, set_squad, suggested_squad
 from riders.development_squad import (
     LEVELS,
     CannotDowngrade,
@@ -175,6 +185,23 @@ def _distance_km(race) -> float:
     return sum(s["length"] for s in race.course) / 1000
 
 
+def _stage_race_ref_payload(race) -> dict | None:
+    """A race's stage-race context, or None for a one-day race.
+
+    Reads `race.stage_race.stages.all()` — never `.count()` — so a caller
+    that has prefetched `stage_race__stages` pays no extra query; one that
+    has not still works, just without the saving.
+    """
+    if race.stage_race_id is None:
+        return None
+    return {
+        "id": race.stage_race.pk,
+        "name": race.stage_race.name,
+        "stage_number": race.stage_number,
+        "stage_count": len(race.stage_race.stages.all()),
+    }
+
+
 def _race_payload(race) -> dict:
     return {
         "id": race.pk,
@@ -182,6 +209,7 @@ def _race_payload(race) -> dict:
         "starts_at": race.starts_at,
         "status": race.status,
         "distance_km": _distance_km(race),
+        "stage_race": _stage_race_ref_payload(race),
     }
 
 
@@ -209,7 +237,15 @@ class CalendarView(APIView):
                 "weeks": [],
             }).data)
 
-        weeks = position.season.weeks.prefetch_related("races").order_by("number")
+        # stage_race__stages: every race's stage-race context and its
+        # sibling stage count come from this one prefetch — see
+        # _stage_race_ref_payload, which reads .all() rather than .count()
+        # so the query never grows with how many stages a tour has.
+        weeks = (
+            position.season.weeks
+            .prefetch_related("races__stage_race__stages")
+            .order_by("number")
+        )
         return Response(CalendarSerializer({
             "state": position.state,
             "season": position.season.number,
@@ -280,7 +316,11 @@ class MeView(APIView):
         return Response(MeSerializer(payload).data)
 
 
-def _squad_payload(race, team, rider_ids: list[int], leader_id: int, *, saved: bool) -> dict:
+def _later_stage(race) -> bool:
+    return race.stage_number is not None and race.stage_number > 1
+
+
+def _squad_payload(race, team, rider_ids: list[int], leader_id: int | None, *, saved: bool) -> dict:
     selected = set(rider_ids)
     candidates = [
         {
@@ -303,10 +343,17 @@ def _squad_payload(race, team, rider_ids: list[int], leader_id: int, *, saved: b
         "distance_km": _distance_km(race),
         "team": team.pk,
         "team_name": team.name,
-        "editable": race.status == Race.Status.SCHEDULED,
+        # A later stage's squad is carried from stage 1, never chosen here
+        # — see racing/README.md, *Stage races*, and set_squad's own
+        # refusal for the write side of this rule.
+        "editable": race.status == Race.Status.SCHEDULED and not _later_stage(race),
         "saved": saved,
         "squad_size": len(rider_ids),
         "candidates": candidates,
+        "stage_race": (
+            {"name": race.stage_race.name, "stage_number": race.stage_number}
+            if race.stage_race_id else None
+        ),
     }
 
 
@@ -324,6 +371,16 @@ class SquadView(APIView):
         team = team_for(request.user)
         if team is None:
             return Response({"detail": "You do not manage a team."}, status=403)
+
+        if _later_stage(race):
+            # Never suggested_squad here: that falls back through
+            # previous_squad (most recent race before this one, by
+            # starts_at), which is the wrong rule for a stage — the squad
+            # is always stage 1's, carried forward, never "whatever this
+            # team raced last". See racing/README.md, *Stage races*.
+            rider_ids, leader_id = carried_squad(race, team)
+            payload = _squad_payload(race, team, rider_ids, leader_id, saved=True)
+            return Response(SquadSerializer(payload).data)
 
         existing = race.squads.filter(team=team).prefetch_related("members").first()
         saved_selection = None
@@ -723,6 +780,11 @@ class RaceDetailView(APIView):
 
     def get(self, request, race_id: int):
         race = get_object_or_404(Race, pk=race_id)
+        # A stage uses the reduced stage table; a one-day race the
+        # unchanged one-day table — same switch racing/README.md's scoring
+        # functions make (specs/stage-races.md, Decisions taken).
+        points_for_position = stage_points_for if race.stage_race_id else points_for
+        prize_for_position = stage_prize_for if race.stage_race_id else prize_for
         payload = {
             "id": race.pk,
             "name": race.name,
@@ -731,9 +793,13 @@ class RaceDetailView(APIView):
             "distance_km": _distance_km(race),
             "course": race.course,
             "payout": [
-                {"position": p, "points": points_for(p), "prize": prize_for(p)}
+                {"position": p, "points": points_for_position(p), "prize": prize_for_position(p)}
                 for p in sorted(POINTS_BY_POSITION)
             ],
+            "gc_payout": [
+                {"position": p, "points": gc_points_for(p), "prize": gc_prize_for(p)}
+                for p in sorted(GC_POINTS_BY_POSITION)
+            ] if race.stage_race_id else [],
             "markers": [
                 {
                     "id": m.pk,
@@ -749,8 +815,25 @@ class RaceDetailView(APIView):
             # that has gone missing surfaces on the replay screen itself
             # (D5).
             "has_replay": RaceLog.objects.filter(race=race).exclude(file="").exists(),
+            "stage_race": _race_detail_stage_race_payload(race),
         }
         return Response(RaceDetailSerializer(payload).data)
+
+
+def _race_detail_stage_race_payload(race) -> dict | None:
+    if race.stage_race_id is None:
+        return None
+    stages = list(race.stage_race.stages.order_by("stage_number"))
+    return {
+        "id": race.stage_race.pk,
+        "name": race.stage_race.name,
+        "stage_number": race.stage_number,
+        "stage_count": len(stages),
+        "stages": [
+            {"id": s.pk, "stage_number": s.stage_number, "starts_at": s.starts_at, "status": s.status}
+            for s in stages
+        ],
+    }
 
 
 def _accepts_brotli(header: str) -> bool:
@@ -824,6 +907,7 @@ def _result_row(result, team) -> dict:
         "rider": {"id": result.rider.pk, "name": result.rider.name},
         "team": {"id": team.pk, "name": team.name, "code": team.code} if team is not None else None,
         "finish_time": result.finish_time,
+        "group_time": result.group_time,
         "finished": result.finish_time is not None,
     }
 
@@ -890,7 +974,14 @@ class RaceResultsView(APIView):
             }
             for m in markers.all()  # model ordering: distance, pk
         ]
-        points = race.points.select_related("team").order_by("position")
+        # kind=RACE: the final stage of a completed tour also carries a
+        # kind=GC row (competitions.models.RacePoints.Kind) — without this
+        # filter a GC award would show up in the stage's own team-points
+        # table (see racing/README.md, *Stage races*, and the plan's Risks).
+        points = (
+            race.points.filter(kind=RacePoints.Kind.RACE)
+            .select_related("team").order_by("position")
+        )
         scored = {p.team_id: p for p in points}
         starters = (
             Team.objects
@@ -925,12 +1016,75 @@ class RaceResultsView(APIView):
         ]
 
         payload = {
-            "race": {"id": race.pk, "name": race.name, "status": race.status},
+            "race": {
+                "id": race.pk, "name": race.name, "status": race.status,
+                "stage_race": _stage_race_ref_payload(race),
+            },
             "results": [_result_row(r, team_by_rider.get(r.rider_id)) for r in results],
             "points": points_payload,
             "markers": markers_payload,
+            "gc": _gc_payload(race),
         }
         return Response(RaceResultsSerializer(payload).data)
+
+
+def _gc_payload(race) -> dict | None:
+    """None for a one-day race. Otherwise the GC as of THIS race's stage —
+    racing.services.general_classification(through_stage=...), D6 — plus
+    the frozen award once the whole stage race has completed (D11)."""
+    if race.stage_race_id is None:
+        return None
+
+    stage_race = race.stage_race
+    entries = general_classification(stage_race, through_stage=race.stage_number)
+    leader_time = entries[0].gc_time if entries else 0.0
+    team_by_rider = {
+        m.rider_id: m.squad.team
+        for m in RaceSquadRider.objects
+            .filter(squad__race__stage_race=stage_race, squad__race__stage_number=1)
+            .select_related("squad__team")
+    }
+    rider_by_id = {r.pk: r for r in Rider.objects.filter(pk__in=[e.rider_id for e in entries])}
+
+    final = stage_race.is_complete() and race.stage_number == stage_race.final_stage().stage_number
+    gc_points_payload = []
+    if final:
+        final_stage = stage_race.final_stage()
+        gc_points = final_stage.points.filter(kind=RacePoints.Kind.GC).select_related("team").order_by("position")
+        gc_prizes = (
+            LedgerEntry.objects
+            .filter(race=final_stage, kind=LedgerEntry.Kind.GC_PRIZE_MONEY)
+            .values("team_id").annotate(total=Sum("amount"))
+        )
+        gc_prize_by_team = {p["team_id"]: p["total"] for p in gc_prizes}
+        gc_points_payload = [
+            {
+                "team": {"id": p.team.pk, "name": p.team.name, "code": p.team.code},
+                "position": p.position,
+                "points": p.points,
+                "prize": gc_prize_by_team.get(p.team_id, 0),
+            }
+            for p in gc_points
+        ]
+
+    return {
+        "after_stage": race.stage_number,
+        "final": final,
+        "standings": [
+            {
+                "position": i,
+                "rider": {"id": e.rider_id, "name": rider_by_id[e.rider_id].name},
+                "team": (
+                    {"id": t.pk, "name": t.name, "code": t.code}
+                    if (t := team_by_rider.get(e.rider_id)) is not None else None
+                ),
+                "gc_time": e.gc_time,
+                "gap": e.gc_time - leader_time,
+            }
+            for i, e in enumerate(entries, start=1)
+        ],
+        "points": gc_points_payload,
+    }
 
 
 class StandingsView(APIView):

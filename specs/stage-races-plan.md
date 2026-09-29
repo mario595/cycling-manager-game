@@ -689,7 +689,7 @@ Tests: `schedule/tests/test_loaders.py` —
 `test_replace_deletes_stage_races`, and
 `test_example_season_file_loads` (loads `seasons/season-1.example.json`).
 
-### W9 — `api/`: calendar, race detail, squad, results
+### W9 — `api/`: calendar, race detail, squad, results — done
 Tests in `api/tests.py`: `test_calendar_race_carries_stage_race`,
 `test_calendar_query_count_does_not_grow_with_stages`
 (`django_assert_max_num_queries`), `test_race_detail_stage_payout_and_gc_payout`,

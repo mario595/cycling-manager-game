@@ -12,8 +12,9 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 import world.services as world_services
-from competitions.scoring import points_for, prize_for
-from competitions.services import score_race
+from competitions.models import RacePoints
+from competitions.scoring import gc_points_for, gc_prize_for, points_for, prize_for, stage_points_for
+from competitions.services import score_general_classification, score_race
 from economy.models import STARTING_BALANCE, LedgerEntry, SalaryReviewReport
 from racing.models import (
     MarkerCrossing,
@@ -23,6 +24,7 @@ from racing.models import (
     RaceResult,
     RaceSquad,
     RaceSquadRider,
+    StageRace,
 )
 from riders.development_squad import LEVELS, open_squad
 from riders.display import to_display_scale
@@ -189,6 +191,62 @@ def test_calendar_race_carries_status_and_distance(db):
         race_data = next(w for w in response.data["weeks"] if w["races"])["races"][0]
         assert race_data["status"] == "scheduled"
         assert race_data["distance_km"] == 50.0
+    finally:
+        world_services._clock = None
+
+
+@override_settings(GAME_CLOCK_CLASS="world.clocks.MockClock")
+def test_calendar_race_carries_stage_race(db):
+    world_services._clock = None
+    try:
+        season = _create_season_with_weeks(now())
+        week_one = Week.objects.get(season=season, number=1)
+        stage_race = StageRace.objects.create(name="Alpine Tour", week=week_one)
+        for n in range(1, 4):
+            Race.objects.create(
+                name=f"Alpine Tour — Stage {n}",
+                course=[{"length": 40000.0, "gradient": 0.0}],
+                starts_at=week_one.starts_at + timedelta(days=n - 1, hours=14),
+                week=week_one, stage_race=stage_race, stage_number=n,
+            )
+
+        client = APIClient()
+        user = User.objects.create_user(email="calendar-stage@example.com", password="s0meth1ng-good")
+        client.force_authenticate(user=user)
+        response = client.get("/api/schedule/calendar/")
+
+        week_data = next(w for w in response.data["weeks"] if w["races"])
+        assert len(week_data["races"]) == 3
+        for race_data in week_data["races"]:
+            assert race_data["stage_race"]["name"] == "Alpine Tour"
+            assert race_data["stage_race"]["stage_count"] == 3
+        assert [r["stage_race"]["stage_number"] for r in week_data["races"]] == [1, 2, 3]
+    finally:
+        world_services._clock = None
+
+
+@override_settings(GAME_CLOCK_CLASS="world.clocks.MockClock")
+def test_calendar_query_count_does_not_grow_with_stages(db, django_assert_max_num_queries):
+    world_services._clock = None
+    try:
+        season = _create_season_with_weeks(now())
+        week_one = Week.objects.get(season=season, number=1)
+        stage_race = StageRace.objects.create(name="Long Tour", week=week_one)
+        for n in range(1, 6):
+            Race.objects.create(
+                name=f"Long Tour — Stage {n}",
+                course=[{"length": 40000.0, "gradient": 0.0}],
+                starts_at=week_one.starts_at + timedelta(days=n - 1, hours=14),
+                week=week_one, stage_race=stage_race, stage_number=n,
+            )
+
+        client = APIClient()
+        user = User.objects.create_user(email="calendar-queries@example.com", password="s0meth1ng-good")
+        client.force_authenticate(user=user)
+
+        with django_assert_max_num_queries(15):
+            response = client.get("/api/schedule/calendar/")
+        assert response.status_code == 200
     finally:
         world_services._clock = None
 
@@ -458,6 +516,52 @@ def test_putting_five_riders_is_a_400(squad_race, squad_riders, squad_team, squa
     }
 
     response = squad_client.put(f"/api/racing/races/{squad_race.pk}/squad/", body, format="json")
+
+    assert response.status_code == 400
+
+
+@pytest.fixture
+def squad_stage_race(db, squad_team, squad_riders) -> tuple[Race, Race]:
+    """A two-stage tour whose team has already chosen its stage-1 squad."""
+    from racing.services import set_squad
+
+    season = Season.objects.create(number=1, starts_at=datetime(2027, 3, 1, tzinfo=dt_timezone.utc))
+    week = Week.objects.create(
+        season=season, number=1, starts_at=season.starts_at, ends_at=season.starts_at + timedelta(weeks=1),
+    )
+    stage_race = StageRace.objects.create(name="Alpine Tour", week=week)
+    stage1 = Race.objects.create(
+        name="Alpine Tour — Stage 1", course=[{"length": 40000.0, "gradient": 0.0}],
+        starts_at=week.starts_at, week=week, stage_race=stage_race, stage_number=1,
+    )
+    stage2 = Race.objects.create(
+        name="Alpine Tour — Stage 2", course=[{"length": 40000.0, "gradient": 0.0}],
+        starts_at=week.starts_at + timedelta(days=1), week=week, stage_race=stage_race, stage_number=2,
+    )
+    set_squad(stage1, squad_team, [r.pk for r in squad_riders], squad_riders[0].pk)
+    return stage1, stage2
+
+
+def test_squad_later_stage_is_read_only_carried(squad_stage_race, squad_riders, squad_client):
+    _, stage2 = squad_stage_race
+
+    response = squad_client.get(f"/api/racing/races/{stage2.pk}/squad/")
+
+    assert response.status_code == 200
+    assert response.data["editable"] is False
+    assert response.data["saved"] is True
+    assert response.data["stage_race"] == {"name": "Alpine Tour", "stage_number": 2}
+    selected = {c["id"] for c in response.data["candidates"] if c["selected"]}
+    assert selected == {r.pk for r in squad_riders}
+    leader = next(c for c in response.data["candidates"] if c["is_leader"])
+    assert leader["id"] == squad_riders[0].pk
+
+
+def test_squad_put_later_stage_400(squad_stage_race, squad_riders, squad_client):
+    _, stage2 = squad_stage_race
+    body = {"rider_ids": [r.pk for r in squad_riders], "leader_id": squad_riders[0].pk}
+
+    response = squad_client.put(f"/api/racing/races/{stage2.pk}/squad/", body, format="json")
 
     assert response.status_code == 400
 
@@ -820,6 +924,129 @@ def test_race_results_requires_login(finished_race_with_points):
     assert response.status_code == 403
 
 
+@pytest.fixture
+def finished_stage_race(db) -> tuple[Race, Race]:
+    """A two-stage tour, both stages finished, squad set and results
+    recorded, ready for score_race/score_general_classification."""
+    from racing.services import set_squad
+
+    team = Team.objects.create(name="Tour Team", code="TUR")
+    riders = [
+        Rider.objects.create(
+            name=f"Tour Rider {i}", team=team,
+            climb=50, sprint=50, flat=50, resistance=50, positioning=50,
+        )
+        for i in range(4)
+    ]
+    season = Season.objects.create(number=1, starts_at=datetime(2027, 3, 1, tzinfo=dt_timezone.utc))
+    week = Week.objects.create(
+        season=season, number=1, starts_at=season.starts_at, ends_at=season.starts_at + timedelta(weeks=1),
+    )
+    stage_race = StageRace.objects.create(name="Alpine Tour", week=week)
+    stage1 = Race.objects.create(
+        name="Alpine Tour — Stage 1", course=[{"length": 40000.0, "gradient": 0.0}],
+        starts_at=week.starts_at, week=week, stage_race=stage_race, stage_number=1,
+        status=Race.Status.FINISHED,
+    )
+    stage2 = Race.objects.create(
+        name="Alpine Tour — Stage 2", course=[{"length": 40000.0, "gradient": 0.0}],
+        starts_at=week.starts_at + timedelta(days=1), week=week, stage_race=stage_race, stage_number=2,
+        status=Race.Status.FINISHED,
+    )
+    stage1.status = Race.Status.SCHEDULED
+    stage1.save(update_fields=["status"])
+    set_squad(stage1, team, [r.pk for r in riders], riders[0].pk)
+    stage1.status = Race.Status.FINISHED
+    stage1.save(update_fields=["status"])
+
+    for i, r in enumerate(riders, start=1):
+        RaceResult.objects.create(
+            race=stage1, rider=r, position=i, finish_time=1000.0 + i, group_time=1000.0 + i,
+        )
+        RaceResult.objects.create(
+            race=stage2, rider=r, position=i, finish_time=2000.0 + i, group_time=2000.0 + i,
+        )
+    score_race(stage1)
+    score_race(stage2)
+    return stage1, stage2
+
+
+def test_results_stage_points_exclude_gc_rows(finished_stage_race):
+    stage1, stage2 = finished_stage_race
+    score_general_classification(stage1.stage_race)
+
+    client = APIClient()
+    user = User.objects.create_user(email="stage-results@example.com", password="s0meth1ng-good")
+    client.force_authenticate(user=user)
+
+    response = client.get(f"/api/racing/races/{stage2.pk}/results/")
+
+    assert response.status_code == 200
+    # The GC award lives on stage2 too (the final stage), but the team
+    # points table must show only stage2's own stage points — one row.
+    assert len(response.data["points"]) == 1
+    assert response.data["points"][0]["points"] == stage_points_for(1)
+
+
+def test_results_gc_after_stage(finished_stage_race):
+    stage1, stage2 = finished_stage_race
+    team = stage1.results.first().rider.team
+
+    client = APIClient()
+    user = User.objects.create_user(email="gc-after-stage1@example.com", password="s0meth1ng-good")
+    client.force_authenticate(user=user)
+
+    response = client.get(f"/api/racing/races/{stage1.pk}/results/")
+
+    assert response.status_code == 200
+    gc = response.data["gc"]
+    assert gc is not None
+    assert gc["after_stage"] == 1
+    assert gc["final"] is False
+    assert gc["points"] == []
+    assert gc["standings"][0]["team"]["id"] == team.pk
+    assert gc["standings"][0]["gap"] == 0.0
+
+
+def test_results_final_gc_has_points_and_prizes(finished_stage_race):
+    stage1, stage2 = finished_stage_race
+    stage_race = stage1.stage_race
+    score_general_classification(stage_race)
+    team = stage1.results.first().rider.team
+    LedgerEntry.objects.create(
+        team=team, kind=LedgerEntry.Kind.GC_PRIZE_MONEY, amount=40_000,
+        occurred_at=timezone.now(), race=stage2, position=1,
+        description="General classification — Alpine Tour",
+    )
+
+    client = APIClient()
+    user = User.objects.create_user(email="gc-final@example.com", password="s0meth1ng-good")
+    client.force_authenticate(user=user)
+
+    response = client.get(f"/api/racing/races/{stage2.pk}/results/")
+
+    assert response.status_code == 200
+    gc = response.data["gc"]
+    assert gc["after_stage"] == 2
+    assert gc["final"] is True
+    assert len(gc["points"]) == 1
+    assert gc["points"][0]["team"]["id"] == team.pk
+    assert gc["points"][0]["points"] == gc_points_for(1)
+    assert gc["points"][0]["prize"] == 40_000
+
+
+def test_results_one_day_race_gc_is_null(finished_race_with_points):
+    client = APIClient()
+    user = User.objects.create_user(email="one-day-gc@example.com", password="s0meth1ng-good")
+    client.force_authenticate(user=user)
+
+    response = client.get(f"/api/racing/races/{finished_race_with_points.pk}/results/")
+
+    assert response.status_code == 200
+    assert response.data["gc"] is None
+    assert response.data["race"]["stage_race"] is None
+
+
 def test_race_results_team_is_team_raced_for_after_release(db):
     """Load-bearing: the team on a result row is the one the rider raced
     for, from RaceSquadRider — never rider.team. After the race, releasing
@@ -892,6 +1119,43 @@ def test_race_detail_includes_payout_table(db):
         {"position": position, "points": points_for(position), "prize": prize_for(position)}
         for position in range(1, 11)
     ]
+    assert response.data["gc_payout"] == []
+    assert response.data["stage_race"] is None
+
+
+def test_race_detail_stage_payout_and_gc_payout(db):
+    season = Season.objects.create(number=1, starts_at=datetime(2027, 3, 1, tzinfo=dt_timezone.utc))
+    week_one = Week.objects.create(
+        season=season, number=1,
+        starts_at=season.starts_at, ends_at=season.starts_at + timedelta(weeks=1),
+    )
+    stage_race = StageRace.objects.create(name="Alpine Tour", week=week_one)
+    stage1 = Race.objects.create(
+        name="Alpine Tour — Stage 1", course=[{"length": 40000.0, "gradient": 0.0}],
+        starts_at=week_one.starts_at, week=week_one, stage_race=stage_race, stage_number=1,
+    )
+    stage2 = Race.objects.create(
+        name="Alpine Tour — Stage 2", course=[{"length": 40000.0, "gradient": 0.0}],
+        starts_at=week_one.starts_at + timedelta(days=1), week=week_one,
+        stage_race=stage_race, stage_number=2,
+    )
+    client = APIClient()
+    user = User.objects.create_user(email="stage-payout@example.com", password="s0meth1ng-good")
+    client.force_authenticate(user=user)
+
+    response = client.get(f"/api/racing/races/{stage1.pk}/")
+
+    assert response.status_code == 200
+    assert response.data["payout"][0]["points"] == stage_points_for(1)
+    assert response.data["payout"][0]["points"] != points_for(1)  # the stage table, not the one-day table
+    assert response.data["gc_payout"] == [
+        {"position": p, "points": gc_points_for(p), "prize": gc_prize_for(p)}
+        for p in range(1, 11)
+    ]
+    assert response.data["stage_race"]["name"] == "Alpine Tour"
+    assert response.data["stage_race"]["stage_number"] == 1
+    assert response.data["stage_race"]["stage_count"] == 2
+    assert [s["id"] for s in response.data["stage_race"]["stages"]] == [stage1.pk, stage2.pk]
 
 
 def test_race_detail_available_without_a_team(db):
