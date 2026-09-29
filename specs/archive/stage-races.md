@@ -1,6 +1,6 @@
 # Stage races as an entity
 
-**Status:** proposed
+**Status:** implemented
 **Domain(s):** `schedule`, `racing`, `competitions`, `riders`
 **One-liner:** A stage race is a run of consecutive-day races that shares one squad and adds up to a general classification, so a manager can win a multi-day battle even without winning a single stage.
 

@@ -52,7 +52,7 @@ SPRINT_MAX_DISTANCE = 120_000
 RESISTANCE_MIN_DISTANCE = 200_000
 
 #: Finishers separated by no more than this many seconds from the rider
-#: ahead of them share a group time (specs/stage-races.md, In scope 6).
+#: ahead of them share a group time (specs/archive/stage-races.md, In scope 6).
 #: Finish times are whole seconds (the engine ticks at 1s), so this is the
 #: smallest threshold that groups more than riders crossing the same tick.
 GROUP_GAP_SECONDS = 1.0
@@ -266,7 +266,7 @@ def set_squad(race: Race, team: Team, rider_ids: list[int], leader_id: int) -> R
     Raises SquadError for that and for every validation failure below.
 
     A stage race's squad is chosen once, for stage 1 — see D12,
-    specs/stage-races.md, Out of scope. A later stage's squad is carried by
+    specs/archive/stage-races.md, Out of scope. A later stage's squad is carried by
     ensure_squads/_carry_squads, never picked by a manager.
     """
     if race.stage_number is not None and race.stage_number > 1:
@@ -307,7 +307,7 @@ def create_stage_race(*, name: str, week) -> StageRace:
 
 def riders_still_in(stage_race: StageRace, before_stage: int) -> set[int]:
     """Which of stage 1's squad riders are still in `stage_race` as of
-    `before_stage` — D4, specs/stage-races.md, Rules and edge cases.
+    `before_stage` — D4, specs/archive/stage-races.md, Rules and edge cases.
 
     A rider is still in iff they were in the stage-1 squad AND finished
     (non-null finish_time) every earlier FINISHED stage. A FAILED stage
@@ -365,7 +365,7 @@ class GCEntry:
 
 def general_classification(stage_race: StageRace, *, through_stage: int | None = None) -> list[GCEntry]:
     """The general classification, computed fresh from stage results — D6,
-    specs/stage-races.md, Rules and edge cases.
+    specs/archive/stage-races.md, Rules and edge cases.
 
     A rider is eligible iff they have a non-null finish_time in EVERY
     FINISHED stage up to `through_stage` (or every FINISHED stage, if
@@ -579,7 +579,7 @@ def simulate_race(race: Race, *, game_time: datetime) -> list[RaceResult]:
                 "size_bytes": size,
             },
         )
-        # group_time (D5, specs/stage-races.md In scope 6): computed only
+        # group_time (D5, specs/archive/stage-races.md In scope 6): computed only
         # over the finishers, who are already the ascending-time prefix of
         # `ordered`. Written for every race, one-day included — only a
         # stage race's general classification ever reads it.
@@ -601,7 +601,7 @@ def simulate_race(race: Race, *, game_time: datetime) -> list[RaceResult]:
         # (broom-wagon-time-cut spec, In scope 5). Written here, in the
         # results transaction, so "started" and "paid for it" are atomic —
         # see the plan's Design decision 7. A stage costs less than a full
-        # one-day race (specs/stage-races.md, Decisions taken).
+        # one-day race (specs/archive/stage-races.md, Decisions taken).
         apply_race_cost(
             [by_pk[s.rider.id].pk for s in states],
             cost=STAGE_FRESHNESS_COST if race.stage_race_id else RACE_FRESHNESS_COST,

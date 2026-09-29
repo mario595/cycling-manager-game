@@ -31,7 +31,7 @@ def prize_for(position: int) -> int:
 #: Points for one stage of a stage race — roughly half POINTS_BY_POSITION,
 #: so a team that only ever finishes mid-pack still earns something every
 #: stage without a long tour paying out as if it were several classics.
-#: See specs/stage-races.md, Decisions taken.
+#: See specs/archive/stage-races.md, Decisions taken.
 STAGE_POINTS_BY_POSITION: dict[int, int] = {
     1: 10, 2: 8, 3: 6, 4: 5, 5: 4, 6: 3, 7: 2, 8: 2, 9: 1, 10: 1,
 }

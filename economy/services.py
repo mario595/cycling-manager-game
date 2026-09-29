@@ -255,7 +255,7 @@ def pay_gc_prizes(final_stage_id: int, *, stage_race_name: str, at,
     (GC_PRIZE_MONEY, not PRIZE_MONEY) is load-bearing — the final stage's
     own stage prize and its GC prize can both land on the same (team, race,
     position), and sharing PRIZE_MONEY's constraint would collide and drop
-    one of them (see specs/stage-races.md).
+    one of them (see specs/archive/stage-races.md).
     """
     return _pay_prizes(
         kind=LedgerEntry.Kind.GC_PRIZE_MONEY, race_id=final_stage_id,

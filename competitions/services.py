@@ -22,7 +22,7 @@ def score_race(race: Race) -> list[RacePoints]:
     finisher. Idempotent: a race already scored returns its existing rows.
 
     A stage scores from the reduced STAGE_POINTS_BY_POSITION table rather
-    than the one-day POINTS_BY_POSITION table — see specs/stage-races.md,
+    than the one-day POINTS_BY_POSITION table — see specs/archive/stage-races.md,
     Decisions taken. The existing-rows check filters kind=RACE: the final
     stage of a completed tour also carries a GC row (see
     score_general_classification), which must not look like "already
@@ -77,7 +77,7 @@ def prizes_by_team(race: Race) -> dict[int, list[tuple[int, int]]]:
     (economy/README.md, *Why `economy/` does not query `RacePoints`*).
 
     A stage pays from the reduced STAGE_PRIZE_BY_POSITION table rather than
-    the one-day PRIZE_BY_POSITION table — see specs/stage-races.md,
+    the one-day PRIZE_BY_POSITION table — see specs/archive/stage-races.md,
     Decisions taken.
 
     Raises ValueError if the race is not FINISHED.
@@ -107,7 +107,7 @@ def prizes_by_team(race: Race) -> dict[int, list[tuple[int, int]]]:
 
 def score_general_classification(stage_race: StageRace) -> list[RacePoints]:
     """Award GC points on the final stage, once, when the whole stage race
-    has completed — D11, specs/stage-races.md, In scope 8.
+    has completed — D11, specs/archive/stage-races.md, In scope 8.
 
     Idempotent the same way score_race is: existing kind=GC rows for the
     final stage are returned unchanged rather than re-created. Each team's

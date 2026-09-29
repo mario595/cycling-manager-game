@@ -782,7 +782,7 @@ class RaceDetailView(APIView):
         race = get_object_or_404(Race, pk=race_id)
         # A stage uses the reduced stage table; a one-day race the
         # unchanged one-day table — same switch racing/README.md's scoring
-        # functions make (specs/stage-races.md, Decisions taken).
+        # functions make (specs/archive/stage-races.md, Decisions taken).
         points_for_position = stage_points_for if race.stage_race_id else points_for
         prize_for_position = stage_prize_for if race.stage_race_id else prize_for
         payload = {

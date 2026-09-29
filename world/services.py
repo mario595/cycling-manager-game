@@ -135,7 +135,7 @@ def _claim(limit: int, at: datetime) -> list[int]:
 
 def _settle_stage_race(stage_race: StageRace, tick: TickRun, at: datetime) -> None:
     """Score and pay the general classification once every stage of
-    `stage_race` has run — D11, specs/stage-races.md. Idempotent, and a
+    `stage_race` has run — D11, specs/archive/stage-races.md. Idempotent, and a
     failure here is recorded on the tick, never raised: called from
     `_execute` on both the success and the failure path, so a failed final
     stage still settles the GC over whichever stages actually ran.

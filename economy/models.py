@@ -70,7 +70,7 @@ class LedgerEntry(TimeStampedModel):
         # final stage carries both a stage prize and a GC prize for the same
         # (team, race, position) when both belong to the same team — sharing
         # PRIZE_MONEY's constraint would collide and silently drop one payout
-        # (see specs/stage-races.md, racing/README.md *Stage races*).
+        # (see specs/archive/stage-races.md, racing/README.md *Stage races*).
         GC_PRIZE_MONEY = "gc_prize_money", "General classification prize"
         MERCHANDISE = "merchandise", "Merchandise revenue"
         SPONSORSHIP = "sponsorship", "Sponsorship"

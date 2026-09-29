@@ -38,7 +38,7 @@ _KNOWN_STAGE_RACE_KEYS = {"name", "week", "start_day", "time", "stages"}
 _KNOWN_STAGE_KEYS = {"name", "time", "course", "wind", "seed", "markers"}
 
 #: A stage race is 2-7 consecutive days, always inside one calendar week —
-#: see specs/stage-races.md, Rules and edge cases.
+#: see specs/archive/stage-races.md, Rules and edge cases.
 STAGE_RACE_MIN_STAGES = 2
 STAGE_RACE_MAX_STAGES = 7
 _DAY_NAMES = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
@@ -117,7 +117,7 @@ def parse_season_file(data: dict) -> SeasonDeclaration:
 
     # Shared across races AND stage races: a one-day race and a tour's
     # stage can clash on the same (week, day) just as two one-day races
-    # can — see specs/stage-races.md, Rules and edge cases, "one thing
+    # can — see specs/archive/stage-races.md, Rules and edge cases, "one thing
     # happens on a stage race's days".
     seen: dict[tuple[int, str], str] = {}
 

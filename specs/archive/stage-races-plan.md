@@ -1,6 +1,6 @@
 # Stage races as an entity — Implementation Plan
 
-**Spec:** `specs/stage-races.md` · **Issue:** #9 · **Status:** proposed
+**Spec:** `specs/archive/stage-races.md` · **Issue:** #9 · **Status:** implemented
 **Apps touched:** `racing/`, `competitions/`, `economy/`, `riders/`, `schedule/`, `world/`, `api/`, `frontend/`
 
 ## Context you need

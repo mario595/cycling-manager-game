@@ -14,7 +14,7 @@ SQUAD_SIZE = 4
 class StageRace(TimeStampedModel):
     """A named run of consecutive-day races sharing one squad and a general
     classification (see racing/README.md, *Stage races*, and
-    specs/stage-races.md).
+    specs/archive/stage-races.md).
 
     Deliberately stores nothing derivable from its stages: no status, no
     stage count, no GC. `is_complete()` and `final_stage()` compute it from

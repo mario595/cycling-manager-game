@@ -297,7 +297,7 @@ class MyBidStatusSerializer(serializers.Serializer):
 
 class SquadRaceStageSerializer(serializers.Serializer):
     """A squad's stage-race context: enough for the screen to explain WHY
-    it's read-only from stage 2 on — see specs/stage-races.md, Decisions
+    it's read-only from stage 2 on — see specs/archive/stage-races.md, Decisions
     taken (squad chosen once, for stage 1)."""
 
     name = serializers.CharField()

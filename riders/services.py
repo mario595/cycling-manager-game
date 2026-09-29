@@ -75,7 +75,7 @@ RACE_FRESHNESS_COST = 25
 #: Per-stage cost inside a stage race — less than one full race, so a full
 #: tour still costs more than one race: a 7-stage tour costs 70, above one
 #: race (25) but below wrecking a fresh rider (floor is 20). See
-#: specs/stage-races.md, Decisions taken.
+#: specs/archive/stage-races.md, Decisions taken.
 STAGE_FRESHNESS_COST = 10
 
 #: Weekly recovery range a hidden recovery_rate of 1-100 maps onto
@@ -410,7 +410,7 @@ def apply_race_cost(rider_ids: list[int], *, cost: int = RACE_FRESHNESS_COST) ->
 
     `cost` defaults to RACE_FRESHNESS_COST for a one-day race;
     `racing.services.simulate_race` passes STAGE_FRESHNESS_COST for a stage
-    — see specs/stage-races.md.
+    — see specs/archive/stage-races.md.
     """
     return Rider.objects.filter(pk__in=rider_ids).update(
         freshness=Greatest(
