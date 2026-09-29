@@ -546,7 +546,7 @@ no longer null for a mountain marker. Rename it to
 
 Run `npm test`, `npm run lint` and `npm run build` in `frontend/`.
 
-### W9 — `seasons/season-1.example.json`: categories and a summit finish
+### W9 — `seasons/season-1.example.json`: categories and a summit finish ✅
 Add
 `test_example_season_declares_categorised_climbs_and_a_summit_finish` to
 `schedule/tests/test_loaders.py`. It asserts that an `hc` marker exists,

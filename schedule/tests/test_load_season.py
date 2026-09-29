@@ -6,6 +6,7 @@ import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
+from racing.models import RaceMarker
 from schedule.models import Season, Week
 
 
@@ -227,3 +228,22 @@ def test_example_season_declares_weighted_and_finish_line_sprints(db):
     finish_marker = week3.markers.get()
     assert finish_marker.kind == "sprint"
     assert finish_marker.distance == course_length
+
+
+def test_example_season_declares_categorised_climbs_and_a_summit_finish(db):
+    """The example season must actually demonstrate climb categories and a
+    mountain marker on the finish line, not just be parseable."""
+    call_command("load_season", "seasons/season-1.example.json")
+
+    categories = set(
+        RaceMarker.objects.filter(kind=RaceMarker.Kind.MOUNTAIN)
+        .values_list("category", flat=True)
+    )
+    assert "hc" in categories
+    assert "cat1" in categories
+
+    week11 = Week.objects.get(season__number=1, number=11).races.get()
+    course_length = sum(s["length"] for s in week11.course)
+    summit = week11.markers.get(name="Final Top")
+    assert summit.kind == "mountain"
+    assert summit.distance == course_length
