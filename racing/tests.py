@@ -18,6 +18,7 @@ from racing.models import (
     RaceResult,
     RaceSquad,
     RaceSquadRider,
+    StageRace,
 )
 from racing.services import (
     SquadError,
@@ -292,6 +293,99 @@ def test_two_weekless_races_on_the_same_date_are_accepted(db):
     )
 
     assert Race.objects.filter(week__isnull=True, race_day=MONDAY.date()).count() == 2
+
+
+@pytest.fixture
+def stage_race(db, week) -> StageRace:
+    return StageRace.objects.create(name="Alpine Tour", week=week)
+
+
+def _stage(stage_race, week, number, **kwargs):
+    return Race.objects.create(
+        name=f"Alpine Tour — Stage {number}",
+        course=[{"length": 500.0, "gradient": 0.0}],
+        starts_at=week.starts_at + timedelta(days=number - 1),
+        week=week,
+        stage_race=stage_race,
+        stage_number=number,
+        **kwargs,
+    )
+
+
+def test_stage_number_requires_stage_race(db, week):
+    with pytest.raises(IntegrityError):
+        Race.objects.create(
+            name="Orphan Stage",
+            course=[{"length": 500.0, "gradient": 0.0}],
+            starts_at=week.starts_at,
+            week=week,
+            stage_number=1,
+        )
+
+
+def test_stage_race_requires_stage_number(db, week, stage_race):
+    with pytest.raises(IntegrityError):
+        Race.objects.create(
+            name="Numberless Stage",
+            course=[{"length": 500.0, "gradient": 0.0}],
+            starts_at=week.starts_at,
+            week=week,
+            stage_race=stage_race,
+        )
+
+
+def test_stage_numbers_unique_within_stage_race(db, week, stage_race):
+    _stage(stage_race, week, 1)
+
+    with pytest.raises(IntegrityError):
+        _stage(stage_race, week, 1)
+
+
+def test_stage_must_share_stage_race_week(db, week, stage_race):
+    other_season = Season.objects.create(number=2, starts_at=MONDAY + timedelta(weeks=20))
+    other_week = Week.objects.create(
+        season=other_season, number=1,
+        starts_at=other_season.starts_at, ends_at=other_season.starts_at + timedelta(weeks=1),
+    )
+
+    with pytest.raises(ValidationError):
+        Race.objects.create(
+            name="Alpine Tour — Stage 1",
+            course=[{"length": 500.0, "gradient": 0.0}],
+            starts_at=other_week.starts_at,
+            week=other_week,
+            stage_race=stage_race,
+            stage_number=1,
+        )
+
+
+def test_is_complete_false_while_any_stage_is_scheduled(db, week, stage_race):
+    _stage(stage_race, week, 1, status=Race.Status.FINISHED)
+    _stage(stage_race, week, 2)
+
+    assert stage_race.is_complete() is False
+
+
+def test_is_complete_true_once_every_stage_finished_or_failed(db, week, stage_race):
+    _stage(stage_race, week, 1, status=Race.Status.FINISHED)
+    _stage(stage_race, week, 2, status=Race.Status.FAILED)
+
+    assert stage_race.is_complete() is True
+
+
+def test_is_complete_false_when_every_stage_failed(db, week, stage_race):
+    _stage(stage_race, week, 1, status=Race.Status.FAILED)
+    _stage(stage_race, week, 2, status=Race.Status.FAILED)
+
+    assert stage_race.is_complete() is False
+
+
+def test_final_stage_is_highest_number(db, week, stage_race):
+    _stage(stage_race, week, 1)
+    third = _stage(stage_race, week, 3)
+    _stage(stage_race, week, 2)
+
+    assert stage_race.final_stage() == third
 
 
 def test_a_team_cannot_have_two_squads_for_one_race(db, running_race, team):

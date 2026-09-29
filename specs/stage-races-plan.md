@@ -606,7 +606,7 @@ Keep courses 90–180 km, like the existing races.
 
 ## Work items
 
-### W1 — `racing/models.py`: `StageRace`, `Race.stage_race`/`stage_number`, `RaceResult.group_time`
+### W1 — `racing/models.py`: `StageRace`, `Race.stage_race`/`stage_number`, `RaceResult.group_time` — done
 Models, constraints, `clean()` week check, `final_stage()`, `is_complete()`,
 migration `0008_stage_race`, admin registration beside `Race`'s.
 Tests in `racing/tests.py`: `test_stage_number_requires_stage_race` (check
