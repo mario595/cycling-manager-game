@@ -511,7 +511,7 @@ In `test_standings.py`:
 - `test_team_with_only_mountain_points_appears_in_standings`
 - `test_mountain_points_do_not_count_in_countback`
 
-### W6 — `world/services.py`: call `score_mountains`
+### W6 — `world/services.py`: call `score_mountains` ✅
 In `world/tests/test_tick.py`:
 - `test_tick_scores_mountain_points_for_a_finished_race`
 - `test_mountain_scoring_failure_does_not_fail_the_race`: monkeypatch
