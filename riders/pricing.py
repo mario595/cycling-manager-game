@@ -30,7 +30,7 @@ _STRENGTH_EXPONENT = 2.0
 #: field only — never `peak_age`, which is hidden (riders/README.md,
 #: Visible vs hidden). A rider outside this band costs up to
 #: _AGE_PENALTY_MAX less, tapering linearly to the model's age limits
-#: (18, 40) at the edges.
+#: (17, 40) at the edges.
 _PRIME_AGE_LOW = 24
 _PRIME_AGE_HIGH = 32
 _AGE_PENALTY_MAX = 0.15
@@ -39,7 +39,7 @@ _AGE_PENALTY_MAX = 0.15
 #: this module stays self-contained arithmetic, same reasoning as
 #: staff/pricing.py's _SPECIALITY_BAND duplicating staff/generation.py's
 #: band.
-_MIN_AGE = 18
+_MIN_AGE = 17
 _MAX_AGE = 40
 
 #: Smallest salary movement worth reporting to a manager (#26). The

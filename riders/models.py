@@ -59,6 +59,12 @@ class Rider(TimeStampedModel):
     player acts on; how fast it climbs back is learned by watching it.
     `retired_at` is visible, and a retired rider is frozen (see
     riders/README.md, *Retirement*).
+
+    `team` is null for a free agent, a retired rider, or a rider sitting
+    in a development squad (#33) — `development_squad` is the fourth
+    field distinguishing the three, and a rider can never carry both
+    `team` and `development_squad` at once (see the
+    `rider_not_on_roster_and_in_squad` constraint, below).
     """
 
     objects = RiderQuerySet.as_manager()
@@ -90,7 +96,25 @@ class Rider(TimeStampedModel):
         null=True,
         blank=True,
         related_name="riders",
-        help_text="Null means a free agent — no team.",
+        help_text=(
+            "Null means no senior team: a free agent, a retired rider, or a "
+            "development squad rider (see development_squad)."
+        ),
+    )
+    development_squad = models.ForeignKey(
+        "DevelopmentSquad",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="riders",
+        help_text=(
+            "Set only while the rider is in a development squad (#33). "
+            "team is always null whenever this is set — see the "
+            "rider_not_on_roster_and_in_squad constraint below. SET_NULL is "
+            "a backstop only: close_squad releases riders explicitly before "
+            "deleting the squad row, because SET_NULL cannot stamp "
+            "unattached_since."
+        ),
     )
     # --- Engine attributes (1-100) ---
     climb = _attribute_field("Speed uphill and ability to attack climbs.")
@@ -118,7 +142,7 @@ class Rider(TimeStampedModel):
     )
     age = models.PositiveSmallIntegerField(
         default=25,
-        validators=[MinValueValidator(18), MaxValueValidator(40)],
+        validators=[MinValueValidator(17), MaxValueValidator(40)],
         help_text="Advanced by one for every rider when a season closes (#58).",
     )
     freshness = models.PositiveSmallIntegerField(
@@ -171,6 +195,16 @@ class Rider(TimeStampedModel):
         help_text=(
             "Game time this rider left the game for good. Null means active; "
             "a retired rider is frozen and can never be signed."
+        ),
+    )
+    intake_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Game time this rider arrived through youth intake (#33) — a "
+            "week.starts_at, resolved through schedule.services."
+            "current_position the same way retired_at is. Never cleared. "
+            "Null for every rider who didn't come through intake."
         ),
     )
 
@@ -230,6 +264,16 @@ class Rider(TimeStampedModel):
                 condition=models.Q(retired_at__isnull=True)
                 | models.Q(team__isnull=True),
                 name="retired_rider_has_no_team",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(team__isnull=True)
+                | models.Q(development_squad__isnull=True),
+                name="rider_not_on_roster_and_in_squad",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(retired_at__isnull=True)
+                | models.Q(development_squad__isnull=True),
+                name="retired_rider_not_in_squad",
             ),
         ]
 

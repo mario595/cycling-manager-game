@@ -40,8 +40,16 @@ remember.
 
 The first built slice of the transfer market (#29). A **free agent** is any
 active `Rider` with no team; the pool is
-`Rider.objects.active().filter(team__isnull=True)`, ordered by name. Retired
-riders are never returned. Two actions move riders in and out of it, both
+`Rider.objects.active().filter(team__isnull=True, development_squad__isnull=True)`,
+ordered by name. Retired riders are never returned, and neither are
+development squad riders (#33) — a `team = NULL` rider with
+`development_squad` set is still in a squad, not the market, and
+`sign_free_agent` refuses one under the rider lock the same way it refuses a
+retired rider. A squad rider only enters the pool once their squad closes,
+which stamps `unattached_since` on the way out (`riders/README.md`, *Youth
+intake*) — the same stamp every other released or unsigned rider carries, so
+a youth nobody wants expires by the same rule as anyone else. Two actions
+move riders in and out of the pool, both
 row-locked write paths in `transfers/services.py` that charge an **injected**
 `charge(rider, fee)` callback the way `hire_trainer` does — `transfers/` may
 not import `economy/` (AGENTS.md), so the caller (`api/`) supplies the ledger
@@ -266,6 +274,15 @@ Rounding also differs: salary rounds to the nearest 50 (right for a weekly
 figure in the hundreds); value rounds to the nearest 1,000 (`_round_to_nearest_1000`,
 local to this app — a capital sum in the hundreds of thousands rounded to 50
 reads as false precision).
+
+**`_MIN_AGE` dropped from 18 to 17 alongside the model's own age floor
+(#33)** — youth intake generates riders as young as 17, and `career_horizon`
+duplicates the model's age validators the same way `riders.pricing`'s own
+`_MIN_AGE`/`_MAX_AGE` do, so both had to move together or a 17-year-old's
+value would compute against a floor the model no longer enforces.
+`career_horizon` is flat below `_PEAK_VALUE_AGE` (23) regardless, so the
+change is for consistency with the model rather than a behaviour change at
+17 itself.
 
 ## Never a hidden trait
 

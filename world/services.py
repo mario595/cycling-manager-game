@@ -46,6 +46,7 @@ from riders.services import (
     retire_riders,
     training_deltas,
 )
+from riders.youth_intake import is_intake_week, run_intake
 from schedule.models import SeasonTransition, Week
 from schedule.services import process_transitions, process_week_transitions, weeks_opened_between
 from staff.models import Trainer, TrainingWeekReport
@@ -473,6 +474,7 @@ def tick() -> TickRun:
     sponsorship_entries = 0
     trainer_salary_entries = 0
     development_squad_entries = 0
+    youth_intake_riders = 0
     teams_released = 0
     agents_expired = 0
     agents_retired = 0
@@ -507,6 +509,14 @@ def tick() -> TickRun:
         development_squad_entries += charge_development_squad_costs(
             week, cost_by_team=squad_cost_by_team,
         )
+
+        # After the week's growth, training and charges: a rider arriving
+        # this week first grows at NEXT week's boundary (#33's plan, Design
+        # decision 8), and this is what run_intake's idempotency check
+        # compares against — dated to week.starts_at, not now(), so a late
+        # tick's batch is still found on a second pass.
+        if is_intake_week(week.number):
+            youth_intake_riders += run_intake(at=week.starts_at)
 
         # Fanbase reads the week that just COMPLETED, not the one opening:
         # this loop runs before _claim()/_execute(), so `week`'s own races
@@ -585,6 +595,7 @@ def tick() -> TickRun:
         sponsorship_entries=sponsorship_entries,
         trainer_salary_entries=trainer_salary_entries,
         development_squad_entries=development_squad_entries,
+        youth_intake_riders=youth_intake_riders,
         teams_released=teams_released,
         agents_expired=agents_expired,
         agents_retired=agents_retired,

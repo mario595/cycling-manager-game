@@ -7,6 +7,8 @@ from riders.generation import generate_rider
 from riders.models import Rider
 from riders.pricing import (
     SALARY_AT_MIN_STRENGTH,
+    _AGE_PENALTY_MAX,
+    age_multiplier,
     weekly_salary_for,
 )
 
@@ -63,7 +65,7 @@ def test_price_reads_speciality_weighting():
 
 def test_prime_age_costs_more_than_the_edges():
     prime = _rider(age=27, climb=60, sprint=60, flat=60, resistance=60, positioning=60)
-    young = _rider(age=18, climb=60, sprint=60, flat=60, resistance=60, positioning=60)
+    young = _rider(age=17, climb=60, sprint=60, flat=60, resistance=60, positioning=60)
     old = _rider(age=40, climb=60, sprint=60, flat=60, resistance=60, positioning=60)
 
     assert weekly_salary_for(prime) > weekly_salary_for(young)
@@ -73,9 +75,13 @@ def test_prime_age_costs_more_than_the_edges():
 def test_age_penalty_is_mild():
     # Design decision 4: age must not swing the price more than ~15%.
     prime = _rider(age=27, climb=60, sprint=60, flat=60, resistance=60, positioning=60)
-    edge = _rider(age=18, climb=60, sprint=60, flat=60, resistance=60, positioning=60)
+    edge = _rider(age=17, climb=60, sprint=60, flat=60, resistance=60, positioning=60)
 
     assert weekly_salary_for(edge) >= weekly_salary_for(prime) * 0.8
+
+
+def test_age_multiplier_at_17_is_max_penalty():
+    assert age_multiplier(17) == 1 - _AGE_PENALTY_MAX
 
 
 def test_floor_attributes_still_cost_at_least_the_minimum():

@@ -25,7 +25,7 @@ from riders.development_squad import (
     squad_for,
     weekly_cost,
 )
-from riders.models import DevelopmentSquad
+from riders.models import DevelopmentSquad, Rider
 
 #: The game time every test opens a squad at. Game time, not wall clock.
 OPENED_AT = datetime(2027, 3, 1, tzinfo=dt_timezone.utc)
@@ -331,12 +331,38 @@ def test_change_to_an_unknown_level_raises(team):
 def test_close_deletes_and_returns_true(team):
     _open(team, 2)
 
-    assert close_squad(team) is True
+    assert close_squad(team, at=OPENED_AT) is True
     assert not DevelopmentSquad.objects.filter(team=team).exists()
 
 
 def test_close_when_closed_returns_false(team):
-    assert close_squad(team) is False
+    assert close_squad(team, at=OPENED_AT) is False
+
+
+def test_close_releases_squad_riders_to_pool_with_unattached_since(team):
+    """This is the test that catches D6: skip the stamp and a released youth
+    rider would never be treated as long-unattached, so they would sit in
+    the free-agent pool forever."""
+    squad = _open(team, 1)
+    rider = Rider.objects.create(
+        name="Youth One", development_squad=squad,
+        climb=20, sprint=20, flat=20, resistance=20, positioning=20,
+    )
+    release_at = datetime(2027, 4, 1, tzinfo=dt_timezone.utc)
+
+    assert close_squad(team, at=release_at) is True
+    rider.refresh_from_db()
+
+    assert rider.team_id is None
+    assert rider.development_squad_id is None
+    assert rider.unattached_since == release_at
+
+
+def test_close_with_no_riders_still_closes(team):
+    _open(team, 1)
+
+    assert close_squad(team, at=OPENED_AT) is True
+    assert not DevelopmentSquad.objects.filter(team=team).exists()
 
 
 def test_reopen_after_close_charges_full_fee_from_the_bottom(team):
@@ -345,7 +371,7 @@ def test_reopen_after_close_charges_full_fee_from_the_bottom(team):
     Regional — the same position, and the same fee, as a team that never had
     one."""
     _open(team, 3)
-    close_squad(team)
+    close_squad(team, at=OPENED_AT)
     charge = RecordingCharge(team)
 
     squad = open_squad(team, ENTRY_LEVEL, at=OPENED_AT, charge=charge)
@@ -359,7 +385,7 @@ def test_reopen_above_the_entry_level_raises(team):
     """Even a team that had reached Elite cannot reopen at Elite, which is
     what makes a reopened squad start from scratch rather than resume."""
     _open(team, 3)
-    close_squad(team)
+    close_squad(team, at=OPENED_AT)
     charge = RecordingCharge(team)
 
     with pytest.raises(LevelLocked):

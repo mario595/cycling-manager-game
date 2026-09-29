@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { DevelopmentSquad as SquadPayload, Me } from '../api'
+import type { DevelopmentSquad as SquadPayload, DevelopmentSquadRider, Me } from '../api'
 import { useAuth } from '../useAuth'
 import { useDevelopmentSquad } from '../useDevelopmentSquad'
 import { DevelopmentSquad } from './DevelopmentSquad'
@@ -24,12 +24,32 @@ const NAMES = { 1: 'Regional', 2: 'National', 3: 'Elite' }
 const FEES = { 1: 30_000, 2: 75_000, 3: 150_000 }
 const WEEKLY_COSTS = { 1: 1_500, 2: 3_500, 3: 6_000 }
 
+function developmentSquadRider(overrides: Partial<DevelopmentSquadRider> = {}): DevelopmentSquadRider {
+  return {
+    id: 1,
+    name: 'Youth Rider',
+    speciality: 'climber',
+    nationality: 'ES',
+    age: 18,
+    climb: 3,
+    sprint: 2,
+    flat: 2,
+    resistance: 3,
+    positioning: 2,
+    arrived: { season: 1, week: 4 },
+    is_new: false,
+    ...overrides,
+  }
+}
+
 /** Builds a payload the way the server sends it: a level's price is its own
- * fee whatever state the team is in, and `action`/`requires` come from the
- * ladder rule rather than being worked out here. */
+ * fee whatever state the team is in, `action`/`requires` come from the
+ * ladder rule rather than being worked out here, and `riders`/`intake` are
+ * only meaningful while open — the default is a closed squad with neither. */
 function payload(
   current: number | null,
   balance = 500_000,
+  overrides: Partial<Pick<SquadPayload, 'riders' | 'intake'>> = {},
 ): SquadPayload {
   return {
     level: current,
@@ -61,6 +81,9 @@ function payload(
         requires: action === 'locked' ? lockedNote : null,
       }
     }),
+    riders: current === null ? [] : [],
+    intake: current === null ? null : { every_weeks: 4, batch_size: 2, next: { season: 1, week: 8 } },
+    ...overrides,
   }
 }
 
@@ -122,31 +145,62 @@ describe('DevelopmentSquad', () => {
     expect(screen.queryByRole('button', { name: 'Close squad' })).not.toBeInTheDocument()
   })
 
-  // The spec forbids this screen promising riders, and the first build broke
-  // it in both subtitles ("develop young riders between seasons", "a higher
-  // level develops riders faster") — neither of which is true yet, and a
-  // manager would pay real money on the strength of either. Pinned here
-  // because the rule is a spec decision nothing else in the code enforces.
-  it.each([
-    [
-      'closed',
-      closed,
-      'Closed. A squad starts at Regional, and each level above costs more to reach and to run.',
-    ],
-    ['open', openAtNational, 'Running at National, charged its weekly cost every week.'],
-  ])('promises no riders while %s — only what is actually charged', (_state, squad, subtitle) => {
-    mockSquad(squad as SquadPayload)
+  // #33 shipped: the screen now names the cadence and says a higher level
+  // improves the odds. What it must still never do is put a number on that
+  // claim or promise an outcome for the next batch specifically — the rule
+  // this test pins now that "promises no riders" is obsolete by design.
+  it('describes intake without promising an outcome', () => {
+    mockSquad(openAtNational)
 
     renderScreen()
 
-    expect(screen.getByText(subtitle)).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Running at National. 2 young riders arrive every 4 weeks; a higher level improves the odds of a promising one.',
+      ),
+    ).toBeInTheDocument()
     const copy = document.body.textContent ?? ''
-    // Not /develop/ — the screen is called "Development squad". What must not
-    // appear is a claim that it produces riders, or a teaser for a feature
-    // that does not exist yet.
-    expect(copy).not.toMatch(/rider/i)
-    expect(copy).not.toMatch(/youth/i)
-    expect(copy).not.toMatch(/soon/i)
+    expect(copy).not.toMatch(/guarantee/i)
+    expect(copy).not.toMatch(/\d+\s*%/)
+
+    mockSquad(closed)
+    renderScreen()
+    expect(document.body.textContent ?? '').not.toMatch(/soon/i)
+  })
+
+  it('lists squad riders with arrival and a NEW badge on the latest batch', () => {
+    mockSquad(
+      payload(2, 500_000, {
+        riders: [
+          developmentSquadRider({ id: 1, name: 'Old Batch', arrived: { season: 1, week: 4 }, is_new: false }),
+          developmentSquadRider({ id: 2, name: 'New Batch', arrived: { season: 1, week: 8 }, is_new: true }),
+        ],
+      }),
+    )
+
+    renderScreen()
+
+    expect(screen.getByText('Old Batch')).toBeInTheDocument()
+    expect(screen.getByText('New Batch')).toBeInTheDocument()
+    expect(screen.getByText('Arrived S1 W4')).toBeInTheDocument()
+    expect(screen.getByText('Arrived S1 W8')).toBeInTheDocument()
+    expect(screen.getByText('NEW')).toBeInTheDocument()
+  })
+
+  it('shows the next intake week, and the empty state when no riders have arrived', () => {
+    mockSquad(payload(1, 500_000, { riders: [], intake: { every_weeks: 4, batch_size: 2, next: { season: 1, week: 4 } } }))
+
+    renderScreen()
+
+    expect(screen.getByText('Next intake: Season 1, Week 4')).toBeInTheDocument()
+    expect(screen.getByText(/No riders yet/)).toBeInTheDocument()
+  })
+
+  it('shows no riders or intake card while closed', () => {
+    renderScreen()
+
+    expect(screen.queryByText(/Next intake/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Squad riders')).not.toBeInTheDocument()
   })
 
   it('labels the fee by the rung it buys, not by what the team can do', () => {

@@ -63,7 +63,9 @@ from riders.development_squad import (
 # turns a 409 the player should see into a 500.
 from riders.development_squad import InsufficientFunds as SquadInsufficientFunds
 from riders.models import ENGINE_ATTRIBUTES, DevelopmentSquad, Rider
-from schedule.models import SEASON_WEEKS
+from riders.pricing import strength
+from riders.youth_intake import INTAKE_BATCH_SIZE, INTAKE_INTERVAL_WEEKS, is_intake_week
+from schedule.models import SEASON_WEEKS, Week
 from schedule.services import current_position, weeks_opened_between
 from staff.pricing import hire_fee
 from staff.services import (
@@ -460,7 +462,9 @@ class RiderProfileView(APIView):
     """
 
     def get(self, request, rider_id: int):
-        rider = get_object_or_404(Rider.objects.select_related("team"), pk=rider_id)
+        rider = get_object_or_404(
+            Rider.objects.select_related("team", "development_squad__team"), pk=rider_id,
+        )
         profile = rider_profile(rider, at=now())
         return Response(RiderProfileSerializer(rider, context={"profile": profile}).data)
 
@@ -1102,6 +1106,33 @@ def _squad_charge(team):
     return charge
 
 
+def _next_intake(at) -> dict | None:
+    """{season, week} of the first declared Week after `at` that is an
+    intake week, or None when no such week is declared yet — a season not
+    yet loaded past this point, or no season at all. At most a few dozen
+    Week rows exist, so a Python-side is_intake_week filter over one ordered
+    query is simpler than reimplementing `% INTAKE_INTERVAL_WEEKS` in SQL,
+    and it keeps the rule in the one place riders.youth_intake owns it."""
+    for week in Week.objects.select_related("season").filter(
+        starts_at__gt=at,
+    ).order_by("starts_at"):
+        if is_intake_week(week.number):
+            return {"season": week.season.number, "week": week.number}
+    return None
+
+
+def _latest_intake_at(at):
+    """starts_at of the last declared Week at or before `at` that is an
+    intake week, or None if none has opened yet. This is what an arrival's
+    intake_at is compared against for is_new (#33's plan, Design decision
+    15) — the most recently opened intake week, not a rolling time window."""
+    latest = None
+    for week in Week.objects.filter(starts_at__lte=at).order_by("starts_at"):
+        if is_intake_week(week.number):
+            latest = week.starts_at
+    return latest
+
+
 class DevelopmentSquadView(APIView):
     """The caller's development squad: which level is open, and what each of
     the three costs and offers. GET only, and no team id in the URL — the team
@@ -1152,11 +1183,30 @@ class DevelopmentSquadView(APIView):
                 }
             )
 
+        at = now()
+        if squad is not None:
+            riders = sorted(
+                Rider.objects.filter(development_squad=squad),
+                key=strength, reverse=True,
+            )
+            intake = {
+                "every_weeks": INTAKE_INTERVAL_WEEKS,
+                "batch_size": INTAKE_BATCH_SIZE,
+                "next": _next_intake(at),
+            }
+            latest_intake_at = _latest_intake_at(at)
+        else:
+            riders = []
+            intake = None
+            latest_intake_at = None
+
         return Response(DevelopmentSquadSerializer({
             "level": current_level,
             "levels": levels,
             "balance": balance_for(team),
-        }).data)
+            "riders": riders,
+            "intake": intake,
+        }, context={"latest_intake_at": latest_intake_at}).data)
 
 
 class OpenDevelopmentSquadView(APIView):
@@ -1246,7 +1296,7 @@ class CloseDevelopmentSquadView(APIView):
         if team is None:
             return Response({"detail": "You do not manage a team."}, status=403)
 
-        if not close_squad(team):
+        if not close_squad(team, at=now()):
             return Response(
                 {"detail": "Your team has no development squad."}, status=409
             )
