@@ -462,7 +462,7 @@ Also add `test_loader_categories_match_race_marker_categories` to
 `test_load_season_stores_marker_category` to
 `schedule/tests/test_load_season.py`.
 
-### W3 — `competitions/scoring.py`: the mountain tables
+### W3 — `competitions/scoring.py`: the mountain tables ✅
 Tests in `competitions/tests/test_scoring.py`:
 - `test_every_category_has_exactly_five_scoring_places`
 - `test_mountain_points_decline_down_the_order`

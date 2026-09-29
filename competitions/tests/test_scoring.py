@@ -3,9 +3,11 @@ from __future__ import annotations
 from racing.models import RaceMarker
 
 from competitions.scoring import (
+    MOUNTAIN_POINTS_BY_CATEGORY,
     POINTS_BY_POSITION,
     PRIZE_BY_POSITION,
     SPRINT_POINTS_BY_WEIGHT,
+    mountain_points_for,
     points_for,
     prize_for,
     sprint_points_for,
@@ -87,3 +89,42 @@ def test_sprint_position_outside_table_scores_zero():
 
 def test_sprint_table_keys_match_marker_weights():
     assert set(SPRINT_POINTS_BY_WEIGHT) == set(RaceMarker.Weight.values)
+
+
+def test_every_category_has_exactly_five_scoring_places():
+    for category, table in MOUNTAIN_POINTS_BY_CATEGORY.items():
+        assert set(table) == {1, 2, 3, 4, 5}, category
+
+
+def test_mountain_points_decline_down_the_order():
+    for category, table in MOUNTAIN_POINTS_BY_CATEGORY.items():
+        values = [table[p] for p in sorted(table)]
+        assert values == sorted(values, reverse=True), category
+
+
+def test_harder_categories_never_pay_less():
+    for position in range(1, 6):
+        cat3 = mountain_points_for("cat3", position)
+        cat2 = mountain_points_for("cat2", position)
+        cat1 = mountain_points_for("cat1", position)
+        hc = mountain_points_for("hc", position)
+        assert cat3 <= cat2 <= cat1 <= hc
+
+
+def test_hc_win_is_at_most_half_a_race_win():
+    assert mountain_points_for("hc", 1) <= points_for(1) / 2
+
+
+def test_hc_win_equals_major_sprint_win():
+    """Deliberate parity, so neither specialist is favoured before the
+    retune the spec defers. Changing this belongs to the retune ticket."""
+    assert mountain_points_for("hc", 1) == sprint_points_for("major", 1)
+
+
+def test_mountain_position_outside_table_scores_zero():
+    assert mountain_points_for("cat2", 6) == 0
+    assert mountain_points_for("cat2", 50) == 0
+
+
+def test_mountain_table_keys_match_marker_categories():
+    assert set(MOUNTAIN_POINTS_BY_CATEGORY) == set(RaceMarker.Category.values)

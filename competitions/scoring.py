@@ -44,3 +44,25 @@ def sprint_points_for(weight: str, position: int) -> int:
     """What a crossing position at a sprint of this weight is worth. Zero
     outside the table."""
     return SPRINT_POINTS_BY_WEIGHT.get(weight, {}).get(position, 0)
+
+
+#: How many crossing positions at a mountain marker score. Its own constant,
+#: not SPRINT_PLACES: the spec defers making depth grow with category, and
+#: that change must not move sprints.
+MOUNTAIN_PLACES = 5
+
+#: Mountain points by marker category, then crossing position (1-indexed).
+#: Positions beyond MOUNTAIN_PLACES score nothing. Frozen per marker at award
+#: time — see specs/archive/mountain-points.md. Keys match RaceMarker.Category.
+MOUNTAIN_POINTS_BY_CATEGORY: dict[str, dict[int, int]] = {
+    "cat3": {1: 4,  2: 3, 3: 2, 4: 1, 5: 1},
+    "cat2": {1: 6,  2: 4, 3: 3, 4: 2, 5: 1},
+    "cat1": {1: 8,  2: 6, 3: 4, 4: 2, 5: 1},
+    "hc":   {1: 10, 2: 7, 3: 5, 4: 3, 5: 2},
+}
+
+
+def mountain_points_for(category: str, position: int) -> int:
+    """What a crossing position at a climb of this category is worth. Zero
+    outside the table."""
+    return MOUNTAIN_POINTS_BY_CATEGORY.get(category, {}).get(position, 0)
