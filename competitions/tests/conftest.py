@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from racing.models import Race
+from racing.models import Race, RaceMarker
 from riders.models import Rider
 from teams.models import Team
 
@@ -14,6 +14,19 @@ def race(db) -> Race:
         course=[{"length": 40000.0, "gradient": 0.0}],
         status=Race.Status.FINISHED,
     )
+
+
+@pytest.fixture
+def make_marker(db):
+    """Factory for a RaceMarker. make_marker(race, kind="sprint", weight="standard")."""
+    def _make(
+        race: Race, name: str = "Marker", kind: str = RaceMarker.Kind.SPRINT,
+        distance: float = 1000.0, weight: str = RaceMarker.Weight.STANDARD,
+    ) -> RaceMarker:
+        return RaceMarker.objects.create(
+            race=race, name=name, kind=kind, distance=distance, weight=weight,
+        )
+    return _make
 
 
 @pytest.fixture
@@ -44,5 +57,17 @@ def make_result(db):
         from racing.models import RaceResult
         return RaceResult.objects.create(
             race=race, rider=rider, position=position, finish_time=finish_time,
+        )
+    return _make
+
+
+@pytest.fixture
+def make_crossing(db):
+    """Factory for a MarkerCrossing row: make_crossing(marker, rider, position,
+    crossed_at=1000.0)."""
+    def _make(marker: RaceMarker, rider: Rider, position: int, crossed_at: float = 1000.0):
+        from racing.models import MarkerCrossing
+        return MarkerCrossing.objects.create(
+            marker=marker, rider=rider, position=position, crossed_at=crossed_at,
         )
     return _make

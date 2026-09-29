@@ -18,7 +18,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 from django.utils.module_loading import import_string
 
-from competitions.services import points_by_team, prizes_by_team, score_race
+from competitions.services import points_by_team, prizes_by_team, score_race, score_sprints
 from economy.services import (
     apply_weekly_fanbase,
     charge_development_squad_costs,
@@ -142,6 +142,13 @@ def _execute(race_ids: list[int], tick: TickRun, at: datetime) -> None:
             race.save(update_fields=["status"])
             tick.error += f"race {race_id}:\n{traceback.format_exc()}\n"
             continue                      # nothing to pay for a failed race
+
+        try:
+            score_sprints(race)
+        except Exception:
+            # The race ran and finish-scored; a sprint-scoring failure must
+            # not rewrite that into a failed race. Record it and move on.
+            tick.error += f"race {race_id} sprint points:\n{traceback.format_exc()}\n"
 
         try:
             prizes = prizes_by_team(race)

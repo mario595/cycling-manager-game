@@ -5,6 +5,7 @@ from datetime import timedelta
 import pytest
 
 from accounts.models import User
+from competitions.models import MarkerPoints
 from economy.models import (
     MERCHANDISE_FANBASE_PER_CREDIT,
     STARTING_FANBASE,
@@ -14,7 +15,7 @@ from economy.models import (
     SponsorOffer,
 )
 from economy.services import ensure_opening_balance, sign_offer
-from racing.models import Race, RaceResult
+from racing.models import Race, RaceMarker, RaceResult
 from riders.development_squad import change_level
 from riders.models import ENGINE_ATTRIBUTES, DevelopmentSquad, Rider
 from staff.services import set_focus
@@ -186,6 +187,59 @@ def test_prize_failure_does_not_fail_the_race(db, team, riders, monkeypatch):
     assert run.races_finished == 1
     assert run.prize_entries == 0
     assert "prizes exploded" in run.error
+
+
+def test_tick_scores_sprint_points_for_a_finished_race(db, team, riders):
+    clock: MockClock = get_clock()
+    race = Race.objects.create(
+        name="Due Race",
+        course=[{"length": 500.0, "gradient": 0.0}],
+        starts_at=now() + timedelta(hours=1),
+        status=Race.Status.SCHEDULED,
+    )
+    RaceMarker.objects.create(
+        race=race, kind=RaceMarker.Kind.SPRINT, name="Mid-line", distance=250.0,
+        weight=RaceMarker.Weight.STANDARD,
+    )
+    clock.advance_to_next_due()
+
+    tick()
+
+    race.refresh_from_db()
+    assert race.status == Race.Status.FINISHED
+    assert MarkerPoints.objects.filter(marker__race=race).exists()
+
+
+def test_sprint_scoring_failure_does_not_fail_the_race(db, team, riders, monkeypatch):
+    clock: MockClock = get_clock()
+    race = Race.objects.create(
+        name="Due Race",
+        course=[{"length": 500.0, "gradient": 0.0}],
+        starts_at=now() + timedelta(hours=1),
+        status=Race.Status.SCHEDULED,
+    )
+    RaceMarker.objects.create(
+        race=race, kind=RaceMarker.Kind.SPRINT, name="Mid-line", distance=250.0,
+    )
+    clock.advance_to_next_due()
+
+    def _raise(race):
+        raise RuntimeError("sprint scoring exploded")
+
+    monkeypatch.setattr("world.services.score_sprints", _raise)
+
+    run = tick()
+
+    race.refresh_from_db()
+    assert race.status == Race.Status.FINISHED
+    assert run.races_finished == 1
+    assert not MarkerPoints.objects.filter(marker__race=race).exists()
+    placed = list(
+        RaceResult.objects.filter(race=race, finish_time__isnull=False)
+        .values_list("position", flat=True)
+    )
+    assert run.prize_entries == len(placed)
+    assert "sprint scoring exploded" in run.error
 
 
 def make_trainer(team, **overrides):

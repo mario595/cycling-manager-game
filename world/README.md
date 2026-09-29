@@ -310,6 +310,7 @@ count of teams released lands on `TickRun.teams_released`.
    (`world/migrations/0015`). See *The AI market (#30)*.
 5. **Execute** — outside any transaction: simulate each claimed race,
    record its result, then score it (`competitions.services.score_race`),
+   then score its sprint markers (`competitions.services.score_sprints`),
    then pay its prize money (`economy.services.pay_race_prizes`).
 
 **Training's race half reads the week that just completed, not the one being
@@ -332,8 +333,18 @@ that simulates but fails to score is treated as a broken race: the
 existing per-race `try`/`except` in `_execute` marks it `FAILED` and
 records the traceback, without stopping the rest of the tick.
 
-**Prize money is paid in a second, separate try block, and a payout
-failure does not fail the race.** After `score_race`, the tick computes
+**Sprint points are scored in their own try block, between finish scoring
+and the prize payout, and a sprint-scoring failure does not fail the race
+either.** `score_sprints(race)` writes `competitions.MarkerPoints` for
+each sprint marker's top crossings — see `competitions/README.md`,
+*Sprint points*. Same reasoning as the prize block below: a race that
+simulated and finish-scored is a real result, so a sprint-scoring bug must
+not retroactively mark it `FAILED`. The failure is recorded on `tick.error`
+(`"race {id} sprint points: ..."`) and the tick carries on to pay prizes
+regardless.
+
+**Prize money is paid in a third, separate try block, and a payout
+failure does not fail the race.** After scoring, the tick computes
 `competitions.services.prizes_by_team(race)` and hands it to
 `economy.services.pay_race_prizes`. It is deliberately *not* inside the
 simulate-and-score block: a race that simulated and scored successfully is

@@ -4,9 +4,9 @@ from datetime import datetime, timedelta, timezone as dt_timezone
 
 import pytest
 
-from competitions.models import RacePoints
-from competitions.services import points_by_team, score_race
-from racing.models import Race
+from competitions.models import MarkerPoints, RacePoints
+from competitions.services import points_by_team, score_race, score_sprints
+from racing.models import Race, RaceMarker
 from schedule.models import SEASON_WEEKS, Season, Week
 
 
@@ -144,3 +144,36 @@ def test_points_by_team_omits_teams_that_scored_nothing(db, make_team, make_ride
 
     assert points_by_team(week) == {scorer.pk: 20, also_scorer.pk: 12}
     assert silent.pk not in points_by_team(week)
+
+
+def test_points_by_team_adds_sprint_points(db, make_team, make_rider, make_result, make_marker, make_crossing):
+    season = make_season_with_weeks()
+    team = make_team("ALP")
+    week = season.weeks.get(number=1)
+
+    race = make_race_in_week(season, 1, "Race One")
+    make_result(race, make_rider("Finisher", team), position=3)
+    score_race(race)
+
+    marker = make_marker(race, weight=RaceMarker.Weight.STANDARD)
+    make_crossing(marker, make_rider("Sprinter", team), position=1)
+    score_sprints(race)
+
+    assert points_by_team(week) == {team.pk: 12 + 6}
+
+
+def test_points_by_team_ignores_mountain_marker_points(db, make_team, make_rider, make_marker):
+    season = make_season_with_weeks()
+    team = make_team("ALP")
+    week = season.weeks.get(number=1)
+    race = make_race_in_week(season, 1, "Race One")
+    mountain_marker = make_marker(race, kind=RaceMarker.Kind.MOUNTAIN)
+    rider = make_rider("Climber", team)
+
+    # A hand-made MarkerPoints row on a mountain marker, as #17 will
+    # eventually write — must never leak into the sprint total here.
+    MarkerPoints.objects.create(
+        marker=mountain_marker, team=team, rider=rider, position=1, points=999,
+    )
+
+    assert points_by_team(week) == {}

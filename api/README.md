@@ -208,7 +208,7 @@ Since #29 each rider also carries `release_cost`
   (`RaceDetailSerializer`, `RaceDetailView`): id, name, status, starts_at,
   distance and the raw `{length, gradient}` course segments. It also carries
   `markers`, the race's `RaceMarker` rows in course order
-  (`{kind, name, distance}`). It also carries
+  (`{kind, name, distance, weight, points}` — see below). It also carries
   `payout` — the race's `{position, points, prize}` list for 1st through 10th,
   from `competitions/scoring.py`'s two tables — so the SPA can show the prize
   list before the race has run. It also carries `has_replay`: whether a
@@ -256,12 +256,16 @@ Since #29 each rider also carries `release_cost`
   a `200` with an empty list — "no results yet" and "no such race" would
   otherwise look the same to the SPA. `points` carries one row per team that
   started, scoring teams first ordered by position and then the rest by
-  name, with `position: null`, `points: 0` and `prize: 0` for a team that
-  scored nothing — the starter set comes from `RaceSquad`, not from which
-  teams recorded a result (see `racing/README.md`, *Squads*). `prize` is the
-  team's total winnings, summed from its `prize_money` ledger entries for the
-  race, so the results page and the ledger cannot disagree. `IsAuthenticated`,
-  the project default.
+  sprint points then name, with `position: null` and `prize: 0` for a team
+  that scored no finish points — the starter set comes from `RaceSquad`, not
+  from which teams recorded a result (see `racing/README.md`, *Squads*).
+  Each row's `points` is `finish_points + sprint_points`: `finish_points`
+  is what `RacePoints` awarded (0 if none), `sprint_points` is the team's
+  season sprint `MarkerPoints` for this race (0 if none) — a team can be
+  in the "unplaced" group by finish and still carry a nonzero `points` from
+  sprints alone. `prize` is the team's total winnings, summed from its
+  `prize_money` ledger entries for the race, so the results page and the
+  ledger cannot disagree. `IsAuthenticated`, the project default.
 
   Each row's own `team` (in `results`, alongside `rider`) is the team that
   rider **raced for**, from `RaceSquadRider` — not `rider.team`, which is
@@ -271,13 +275,25 @@ Since #29 each rider also carries `release_cost`
   always agree about which team ran a given race.
 
   The payload also carries `markers`, one entry per `RaceMarker` in course
-  order, each with `crossings` — the first `MARKER_PLACES_SHOWN` (**3**)
-  riders across that marker, `{position, rider, team, crossed_at}`. `team`
-  here is again the team raced for (the same `team_by_rider` map the
-  results rows use), so a rider released since still shows the team they
-  crossed with. The full crossing order stays in the database for #16/#17;
-  a 64-rider field over ten markers is 640 rows this screen never draws.
-  `markers` is `[]` for a race with none.
+  order, each with `crossings` — the first `MARKER_PLACES_SHOWN` (**5**,
+  raised from 3 to match `SPRINT_PLACES` so every scoring position is
+  visible — #16) riders across that marker, `{position, rider, team,
+  points}`. `team` here is again the team raced for (the same
+  `team_by_rider` map the results rows use), so a rider released since
+  still shows the team they crossed with. `points` is what that crossing
+  scored — `null` for a mountain crossing, and `null` for a sprint
+  crossing whose teammate already took the team's one scoring row at that
+  marker (`competitions/README.md`, *Sprint points*). The full crossing
+  order stays in the database for #17; a 64-rider field over ten markers
+  is 640 rows this screen never draws. `markers` is `[]` for a race with
+  none.
+
+  A marker entry itself (both here and on race detail above) carries
+  `weight` and `points`: for a sprint marker, `weight` is its
+  `minor`/`standard`/`major` tier and `points` is that tier's award by
+  crossing position, `[1st, 2nd, 3rd, 4th, 5th]` — e.g. `[6, 4, 3, 2, 1]`
+  for `standard`. Both are `null` for a mountain marker; #17 decides what
+  one is worth.
 - `GET /api/competitions/standings/` — the current season's points table
   (`StandingsSerializer`, `StandingsView`, serializing
   `competitions.services.standings`). Same `state` vocabulary as

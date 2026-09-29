@@ -13,7 +13,14 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from competitions.scoring import POINTS_BY_POSITION, points_for, prize_for
+from competitions.models import MarkerPoints
+from competitions.scoring import (
+    POINTS_BY_POSITION,
+    SPRINT_PLACES,
+    points_for,
+    prize_for,
+    sprint_points_for,
+)
 from competitions.services import standings
 from economy.models import FanbaseEntry, LedgerEntry
 from economy.services import (
@@ -34,7 +41,7 @@ from economy.services import (
     sign_offer,
 )
 from economy.sponsors import PROFILES_BY_KEY
-from racing.models import SQUAD_SIZE, MarkerCrossing, Race, RaceLog, RaceSquadRider
+from racing.models import SQUAD_SIZE, MarkerCrossing, Race, RaceLog, RaceMarker, RaceSquadRider
 from racing.services import SquadError, set_squad, suggested_squad
 from riders.development_squad import (
     LEVELS,
@@ -719,6 +726,24 @@ class MyBidsView(APIView):
         return Response(MyBidStatusSerializer(rows, many=True).data)
 
 
+def _marker_payload(marker) -> dict:
+    """A marker as the course preview and the results screen both show it.
+    weight/points are null for a mountain marker — #17 decides what a
+    mountain marker is worth, and until then it has none."""
+    is_sprint = marker.kind == RaceMarker.Kind.SPRINT
+    return {
+        "id": marker.pk,
+        "kind": marker.kind,
+        "name": marker.name,
+        "distance": marker.distance,
+        "weight": marker.weight if is_sprint else None,
+        "points": (
+            [sprint_points_for(marker.weight, p) for p in range(1, SPRINT_PLACES + 1)]
+            if is_sprint else None
+        ),
+    }
+
+
 class RaceDetailView(APIView):
     """One race's own facts — identity, status, when, how far, and the
     course profile. Unlike SquadView this is not about the caller's team:
@@ -739,13 +764,7 @@ class RaceDetailView(APIView):
                 for p in sorted(POINTS_BY_POSITION)
             ],
             "markers": [
-                {
-                    "id": m.pk,
-                    "kind": m.kind,
-                    "name": m.name,
-                    "distance": m.distance,
-                }
-                for m in race.markers.all()  # model ordering: distance, pk
+                _marker_payload(m) for m in race.markers.all()  # model ordering: distance, pk
             ],
             # Whether the SPA can offer a Watch race. A row with a file is
             # enough: stat'ing the file here would be a network round trip
@@ -832,7 +851,7 @@ def _result_row(result, team) -> dict:
     }
 
 
-def _crossing_payload(crossing, team_by_rider) -> dict:
+def _crossing_payload(crossing, team_by_rider, scored_crossing) -> dict:
     team = team_by_rider.get(crossing.rider_id)
     return {
         "position": crossing.position,
@@ -843,12 +862,16 @@ def _crossing_payload(crossing, team_by_rider) -> dict:
             {"id": team.pk, "name": team.name, "code": team.code}
             if team is not None else None
         ),
+        # None for a mountain crossing, and for a sprint crossing whose
+        # teammate already scored the team's one row at this marker.
+        "points": scored_crossing.get((crossing.marker_id, crossing.rider_id)),
     }
 
 
-#: How many crossings per marker the results screen shows — D11. The full
-#: order stays in the database for the features above the markers.
-MARKER_PLACES_SHOWN = 3
+#: How many crossings per marker the results screen shows — D11, raised to
+#: match SPRINT_PLACES so every scoring position is visible. The full order
+#: stays in the database for the features above the markers.
+MARKER_PLACES_SHOWN = SPRINT_PLACES
 
 
 class RaceResultsView(APIView):
@@ -881,14 +904,15 @@ class RaceResultsView(APIView):
                     .select_related("rider"),
             ))
         )
+        scored_crossing = {
+            (mp.marker_id, mp.rider_id): mp.points
+            for mp in MarkerPoints.objects.filter(marker__race=race)
+        }
         markers_payload = [
             {
-                "id": m.pk,
-                "kind": m.kind,
-                "name": m.name,
-                "distance": m.distance,
+                **_marker_payload(m),
                 "crossings": [
-                    _crossing_payload(c, team_by_rider)
+                    _crossing_payload(c, team_by_rider, scored_crossing)
                     for c in m.crossings.all()  # model ordering: marker, position
                 ],
             }
@@ -896,6 +920,13 @@ class RaceResultsView(APIView):
         ]
         points = race.points.select_related("team").order_by("position")
         scored = {p.team_id: p for p in points}
+        sprint_by_team = {
+            row["team_id"]: row["total"]
+            for row in MarkerPoints.objects
+                .filter(marker__race=race, marker__kind=RaceMarker.Kind.SPRINT)
+                .values("team_id")
+                .annotate(total=Sum("points"))
+        }
         starters = (
             Team.objects
             .filter(race_squads__race=race)
@@ -913,20 +944,27 @@ class RaceResultsView(APIView):
             {
                 "team": {"id": p.team.pk, "name": p.team.name, "code": p.team.code},
                 "position": p.position,
-                "points": p.points,
+                "finish_points": p.points,
+                "sprint_points": sprint_by_team.get(p.team_id, 0),
+                "points": p.points + sprint_by_team.get(p.team_id, 0),
                 "prize": prize_by_team.get(p.team_id, 0),
             }
             for p in points
-        ] + [
-            {
-                "team": {"id": t.pk, "name": t.name, "code": t.code},
-                "position": None,
-                "points": 0,
-                "prize": prize_by_team.get(t.pk, 0),
-            }
-            for t in starters
-            if t.pk not in scored
-        ]
+        ] + sorted(
+            [
+                {
+                    "team": {"id": t.pk, "name": t.name, "code": t.code},
+                    "position": None,
+                    "finish_points": 0,
+                    "sprint_points": sprint_by_team.get(t.pk, 0),
+                    "points": sprint_by_team.get(t.pk, 0),
+                    "prize": prize_by_team.get(t.pk, 0),
+                }
+                for t in starters
+                if t.pk not in scored
+            ],
+            key=lambda row: (-row["sprint_points"], row["team"]["name"]),
+        )
 
         payload = {
             "race": {"id": race.pk, "name": race.name, "status": race.status},
