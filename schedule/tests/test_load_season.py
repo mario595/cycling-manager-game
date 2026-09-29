@@ -193,6 +193,25 @@ def test_load_season_stores_marker_weight(db, tmp_path):
     assert race.markers.get().weight == "major"
 
 
+def test_load_season_stores_marker_category(db, tmp_path):
+    path = write_season_file(
+        tmp_path,
+        races=[
+            race_entry(
+                course=[{"length": 10000.0, "gradient": 0.0}],
+                markers=[
+                    {"kind": "mountain", "name": "Final Top", "distance": 10000, "category": "hc"},
+                ],
+            )
+        ],
+    )
+
+    call_command("load_season", path)
+
+    race = Week.objects.get(season__number=1, number=1).races.get()
+    assert race.markers.get().category == "hc"
+
+
 def test_example_season_declares_weighted_and_finish_line_sprints(db):
     """seasons/season-1.example.json is what a fresh checkout seeds from —
     it must actually demonstrate weight, not just be parseable."""

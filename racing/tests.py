@@ -1053,6 +1053,12 @@ def test_loader_weights_match_race_marker_weights():
     assert set(MARKER_WEIGHTS) == set(RaceMarker.Weight.values)
 
 
+def test_loader_categories_match_race_marker_categories():
+    from schedule.loaders import MARKER_CATEGORIES
+
+    assert set(MARKER_CATEGORIES) == set(RaceMarker.Category.values)
+
+
 def test_simulate_race_records_every_crossing_in_order(running_race, four_riders):
     marker = RaceMarker.objects.create(
         race=running_race, kind=RaceMarker.Kind.SPRINT, name="Mid-line", distance=250.0

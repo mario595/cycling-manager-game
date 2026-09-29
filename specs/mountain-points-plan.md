@@ -450,7 +450,7 @@ Tests in `racing/tests.py`:
 - `test_create_race_stores_marker_category`
 - `test_create_race_without_category_gives_cat2`
 
-### W2 — `schedule/loaders.py`: parse `category`
+### W2 — `schedule/loaders.py`: parse `category` ✅
 Tests in `schedule/tests/test_loaders.py`:
 - `test_mountain_marker_category_is_parsed`
 - `test_missing_category_defaults_to_cat2`
