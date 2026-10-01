@@ -299,7 +299,7 @@ Tests:
 - `riders/tests/test_models.py::test_graduated_requires_intake` (IntegrityError for `graduated_at` without `intake_at`).
 - `riders/tests/test_development_squad.py::test_levels_rise_strictly_in_both_columns` extended to `places` (rename to `..._in_every_column`).
 
-### W2 — `riders/youth_triage.py`: queries, ownership, graduate/release, promote, discard
+### W2 — `riders/youth_triage.py`: queries, ownership, graduate/release, promote, discard ✅
 Everything in that section except `squad_development_deltas`. Tests in new `riders/tests/test_youth_triage.py`:
 - `in_squad` / `graduates` / `free_places` partition a squad correctly.
 - `belongs_to`:
