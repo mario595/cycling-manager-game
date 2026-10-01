@@ -4184,7 +4184,7 @@ def test_prospect_payload_carries_weeks_left_change_and_promotion_salary(
 
     assert len(data["riders"]) == 2
     rider = data["riders"][0]
-    assert rider["weeks_left"] == 14  # a full spell, one week in
+    assert rider["weeks_left"] == 13  # a 14-week spell, one week opened
     assert rider["promotion_salary"] > 0
     # Change is measured against the baseline snapshot the intake wrote, so it
     # is zero on arrival rather than null (no snapshot to compare against).
@@ -4233,7 +4233,7 @@ def test_graduate_payload_carries_window_value_and_listed_state(
     assert len(data["graduates"]) == 1
     row = data["graduates"][0]
     assert row["id"] == graduate.pk
-    assert row["weeks_left"] == 2  # the whole window
+    assert row["weeks_left"] == 1  # one week of the two-week window opened
     assert row["market_value"] > 0
     assert row["promotion_salary"] > 0
     assert row["listed"] is False
@@ -4248,6 +4248,32 @@ def test_a_listed_graduate_is_reported_as_listed(dev_squad_client, dev_squad_tea
     data = dev_squad_client.get("/api/development-squad/").data
 
     assert data["graduates"][0]["listed"] is True
+
+
+def test_weeks_left_reads_the_full_wait_at_the_boundary_it_starts(
+    dev_squad_client, dev_squad_team, squad_season,
+):
+    """The count has to be read *at* the boundary, not a day into the week
+    after it — which is when a player actually sees it, since intake and
+    graduation both happen inside a tick.
+
+    An arriving prospect has the whole spell ahead of them and a rider who has
+    just graduated has the whole window: the week they arrived in is the week
+    whose opening already counted, and #33 has them grow nothing until the next
+    boundary. Counting that week twice would read "Decide within 3 weeks" for a
+    two-week window, and a deadline that over-states itself is worse than no
+    deadline at all.
+    """
+    clock, season_start = squad_season
+    _open_squad(dev_squad_team, 1)
+    run_intake(at=season_start)
+    _graduate(_first_prospect(dev_squad_team))
+    clock.set(season_start)
+
+    data = dev_squad_client.get("/api/development-squad/").data
+
+    assert data["graduates"][0]["weeks_left"] == 2
+    assert data["riders"][0]["weeks_left"] == 14
 
 
 def test_arrivals_at_risk_counts_the_batch_a_full_squad_cannot_take(

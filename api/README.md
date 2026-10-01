@@ -484,7 +484,12 @@ Since #29 each rider also carries `release_cost`
   Every row adds `weeks_left` (the rest of the spell for a prospect, the
   remaining decision window for a graduate — **a count, not a
   `{season, week}`**, since the next season is often undeclared and a
-  position-less rider is exactly the one a manager needs a number for),
+  position-less rider is exactly the one a manager needs a number for, and
+  **the total less the weeks already opened** rather than the plan's
+  `+ 1 - opened`: the week a rider arrives in is the week whose opening has
+  already counted for them, and they develop nothing until the next boundary,
+  so counting it again would read "Decide within 3 weeks" on a two-week
+  window),
   `change` (displayed movement on each of the five attributes since the
   intake's baseline snapshot, on the 0-10 scale both sides are taken on, and
   **`null`** when the rider has no baseline rather than a fabricated zero),

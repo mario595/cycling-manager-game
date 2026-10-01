@@ -537,12 +537,25 @@ describe('DevelopmentSquad', () => {
     renderScreen()
 
     expect(screen.getByText('Graduate')).toBeInTheDocument()
-    expect(screen.getByText('Decide within 1 weeks')).toBeInTheDocument()
+    expect(screen.getByText('Decide within 1 week')).toBeInTheDocument()
     // Both figures are money, so both carry the $ (AGENTS.md).
     expect(screen.getByText(/Salary \$4,000/)).toBeInTheDocument()
     expect(screen.getByText(/Value \$52,000/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'List for sale' })).toBeEnabled()
   })
+
+  it('pluralises the remaining window, so a single week does not read "1 weeks"',
+    () => {
+      mockSquad(
+        payload(1, 500_000, {
+          graduates: [developmentSquadGraduate({ id: 5, name: 'Graduate', weeks_left: 2 })],
+        }),
+      )
+
+      renderScreen()
+
+      expect(screen.getByText('Decide within 2 weeks')).toBeInTheDocument()
+    })
 
   it('hides the graduates card when there are none', () => {
     mockSquad(payload(1, 500_000, { graduates: [] }))

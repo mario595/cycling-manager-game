@@ -1469,14 +1469,23 @@ def _weeks_left(started_at, total: int, at) -> int:
     A count rather than a `{season, week}` position on purpose: the next
     season is often not declared yet, which would leave every rider a
     position-less "unknown" exactly when the player needs to know how long
-    they have. `+ 1` because a rider who arrived this boundary has this
-    boundary's week still ahead of them.
+    they have.
+
+    It is `total` **less the weeks that have already opened**, matching the
+    rules that end each wait: a prospect graduates and a graduate is released
+    at the boundary where that count reaches `total`, so this is the number of
+    boundaries before that happens — no more. The plan wrote `total + 1`, which
+    is one too many for both, because the week a rider arrives in is the week
+    whose opening has already been counted for them and the week they spend
+    their arrival developing nothing (#33's rule that a newcomer first grows at
+    the *next* boundary). The floor keeps a rider shown at 1 rather than 0 in
+    the rare race between a boundary's tick and the screen reading it.
 
     schedule/ owns week counting (AGENTS.md); world/ just asks.
     """
     if started_at is None:
         return total
-    return max(1, total + 1 - weeks_opened_between(started_at, at))
+    return max(1, total - weeks_opened_between(started_at, at))
 
 
 def _next_intake_payload(at, squad) -> dict | None:

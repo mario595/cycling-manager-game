@@ -415,7 +415,7 @@ export function DevelopmentSquad() {
                     }}
                   >
                     <span style={{ fontSize: 11, color: color.muted }}>
-                      Graduates in {rider.weeks_left} weeks
+                      Graduates in {rider.weeks_left} week{rider.weeks_left === 1 ? '' : 's'}
                     </span>
                     <div style={{ display: 'flex', gap: 6 }}>
                       <Button
@@ -518,7 +518,7 @@ export function DevelopmentSquad() {
                     textAlign: 'right',
                   }}
                 >
-                  <div>Decide within {rider.weeks_left} weeks</div>
+                  <div>Decide within {rider.weeks_left} week{rider.weeks_left === 1 ? '' : 's'}</div>
                   <div style={{ marginTop: 3 }}>
                     Salary {formatMoney(rider.promotion_salary)} · Value{' '}
                     {formatMoney(rider.market_value)}
