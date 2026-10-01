@@ -163,7 +163,7 @@ Add the function above. Tests in `transfers/tests/test_services.py`
 - `test_cancel_listings_with_nothing_open_returns_zero` — a team with no
   listings: returns `0`; a second call after a cancel also returns `0`.
 
-### W2 — `api/views.py`: call it in `ClaimTeamView`
+### W2 — `api/views.py`: call it in `ClaimTeamView` — **done**
 
 Make the change above. Tests in `api/tests.py`, next to
 `test_claim_withdraws_the_claimed_teams_standing_bids` (line ~1630):
