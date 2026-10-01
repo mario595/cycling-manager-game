@@ -196,8 +196,10 @@ def test_parses_markers_on_a_race():
     decl = parse_season_file({**BASE, "races": [marked_race()]})
 
     assert decl.races[0].markers == [
-        {"kind": "sprint", "name": "First", "distance": 2000.0, "weight": "standard"},
-        {"kind": "mountain", "name": "Top", "distance": 9000.5, "weight": "standard"},
+        {"kind": "sprint", "name": "First", "distance": 2000.0, "weight": "standard",
+         "category": "cat2"},
+        {"kind": "mountain", "name": "Top", "distance": 9000.5, "weight": "standard",
+         "category": "cat2"},
     ]
 
 
@@ -236,7 +238,8 @@ def test_unknown_marker_key_is_warned_and_ignored():
     ])]})
 
     assert decl.races[0].markers == [
-        {"kind": "sprint", "name": "N", "distance": 2000.0, "weight": "standard"},
+        {"kind": "sprint", "name": "N", "distance": 2000.0, "weight": "standard",
+         "category": "cat2"},
     ]
     assert any("ignoring unknown" in w and "points" in w for w in decl.warnings)
 
@@ -268,6 +271,36 @@ def test_rejects_weight_on_mountain_marker():
     with pytest.raises(SeasonFileError, match=r"races\[0\]\.markers\[0\]\.weight"):
         parse_season_file({**BASE, "races": [marked_race(markers=[
             {"kind": "mountain", "name": "N", "distance": 2000, "weight": "standard"},
+        ])]})
+
+
+def test_mountain_marker_category_is_parsed():
+    decl = parse_season_file({**BASE, "races": [marked_race(markers=[
+        {"kind": "mountain", "name": "N", "distance": 2000, "category": "hc"},
+    ])]})
+
+    assert decl.races[0].markers[0]["category"] == "hc"
+
+
+def test_missing_category_defaults_to_cat2():
+    decl = parse_season_file({**BASE, "races": [marked_race(markers=[
+        {"kind": "mountain", "name": "N", "distance": 2000},
+    ])]})
+
+    assert decl.races[0].markers[0]["category"] == "cat2"
+
+
+def test_rejects_unknown_category():
+    with pytest.raises(SeasonFileError, match=r"races\[0\]\.markers\[0\]\.category"):
+        parse_season_file({**BASE, "races": [marked_race(markers=[
+            {"kind": "mountain", "name": "N", "distance": 2000, "category": "cat4"},
+        ])]})
+
+
+def test_rejects_category_on_sprint_marker():
+    with pytest.raises(SeasonFileError, match=r"races\[0\]\.markers\[0\]\.category"):
+        parse_season_file({**BASE, "races": [marked_race(markers=[
+            {"kind": "sprint", "name": "N", "distance": 2000, "category": "cat1"},
         ])]})
 
 

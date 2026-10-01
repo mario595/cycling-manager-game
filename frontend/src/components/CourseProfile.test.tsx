@@ -48,14 +48,14 @@ describe('CourseProfile', () => {
   it('draws a line and a list entry per marker', () => {
     const course = [{ length: 110000, gradient: 0 }]
     const markers: RaceMarker[] = [
-      { id: 1, kind: 'sprint', name: 'Line One', distance: 40000, weight: 'standard', points: [6, 4, 3, 2, 1] },
-      { id: 2, kind: 'mountain', name: 'Summit', distance: 80000, weight: null, points: null },
+      { id: 1, kind: 'sprint', name: 'Line One', distance: 40000, weight: 'standard', category: null, points: [6, 4, 3, 2, 1] },
+      { id: 2, kind: 'mountain', name: 'Summit', distance: 80000, weight: null, category: 'cat2', points: [6, 4, 3, 2, 1] },
     ]
     const { container } = render(<CourseProfile course={course} markers={markers} />)
 
     expect(container.querySelectorAll('line[stroke-dasharray]')).toHaveLength(2)
     expect(screen.getByText(/Sprint · Line One · km 40\.0/)).toBeInTheDocument()
-    expect(screen.getByText('Mountain · Summit · km 80.0')).toBeInTheDocument()
+    expect(screen.getByText(/Mountain · Summit · km 80\.0/)).toBeInTheDocument()
   })
 
   it('renders nothing extra without markers', () => {
@@ -68,7 +68,7 @@ describe('CourseProfile', () => {
   it('shows weight and winner points for a sprint marker', () => {
     const course = [{ length: 110000, gradient: 0 }]
     const markers: RaceMarker[] = [
-      { id: 1, kind: 'sprint', name: 'Big One', distance: 40000, weight: 'major', points: [10, 7, 5, 3, 2] },
+      { id: 1, kind: 'sprint', name: 'Big One', distance: 40000, weight: 'major', category: null, points: [10, 7, 5, 3, 2] },
     ]
     render(<CourseProfile course={course} markers={markers} />)
 
@@ -79,10 +79,21 @@ describe('CourseProfile', () => {
   it('mountain marker shows no weight', () => {
     const course = [{ length: 110000, gradient: 0 }]
     const markers: RaceMarker[] = [
-      { id: 1, kind: 'mountain', name: 'Summit', distance: 40000, weight: null, points: null },
+      { id: 1, kind: 'mountain', name: 'Summit', distance: 40000, weight: null, category: 'cat2', points: [6, 4, 3, 2, 1] },
     ]
     render(<CourseProfile course={course} markers={markers} />)
 
-    expect(screen.queryByText(/pts to the winner/)).toBeNull()
+    expect(screen.queryByText(/Minor|Standard|Major/)).toBeNull()
+  })
+
+  it('shows category and winner points for a mountain marker', () => {
+    const course = [{ length: 110000, gradient: 0 }]
+    const markers: RaceMarker[] = [
+      { id: 1, kind: 'mountain', name: 'Final Top', distance: 110000, weight: null, category: 'hc', points: [10, 7, 5, 3, 2] },
+    ]
+    render(<CourseProfile course={course} markers={markers} />)
+
+    expect(screen.getByText(/HC/)).toBeInTheDocument()
+    expect(screen.getByText(/10 pts to the winner/)).toBeInTheDocument()
   })
 })

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone as dt_timezone
 
-from competitions.services import score_race, score_sprints, standings
+from competitions.services import score_mountains, score_race, score_sprints, standings
 from racing.models import Race, RaceMarker
 from schedule.models import SEASON_WEEKS, Season, Week
 
@@ -180,6 +180,98 @@ def test_sprint_points_do_not_count_in_countback(db, make_team, make_rider, make
 
     assert by_team[finisher_team.pk]["points"] == 20
     assert by_team[sprinter_team.pk]["points"] == 20
+    assert table[0]["team"].pk == finisher_team.pk
+
+
+def test_standings_include_mountain_points_in_total(db, make_team, make_rider, make_result, make_marker, make_crossing):
+    season = make_season()
+    team = make_team("ALP")
+
+    race = make_race_in_week(season, 1, "Race One")
+    make_result(race, make_rider("Finisher", team), position=3)
+    score_race(race)
+
+    marker = make_marker(race, kind=RaceMarker.Kind.MOUNTAIN,
+                         category=RaceMarker.Category.CAT1)
+    make_crossing(marker, make_rider("Climber", team), position=1)
+    score_mountains(race)
+
+    table = standings(season)
+
+    assert table[0]["points"] == 12 + 8
+    assert table[0]["mountain_points"] == 8
+
+
+def test_standings_keep_sprint_and_mountain_points_separate(
+    db, make_team, make_rider, make_result, make_marker, make_crossing,
+):
+    season = make_season()
+    team = make_team("ALP")
+
+    race = make_race_in_week(season, 1, "Race One")
+    make_result(race, make_rider("Finisher", team), position=3)
+    score_race(race)
+
+    sprint = make_marker(race, name="Valley Sprint", weight=RaceMarker.Weight.STANDARD)
+    make_crossing(sprint, make_rider("Sprinter", team), position=1)
+    mountain = make_marker(race, name="Hilltop", kind=RaceMarker.Kind.MOUNTAIN)
+    make_crossing(mountain, make_rider("Climber", team), position=1)
+    score_sprints(race)
+    score_mountains(race)
+
+    entry = standings(season)[0]
+
+    assert entry["sprint_points"] == 6
+    assert entry["mountain_points"] == 6
+    assert entry["points"] == 12 + 6 + 6
+
+
+def test_team_with_only_mountain_points_appears_in_standings(db, make_team, make_rider, make_marker, make_crossing):
+    season = make_season()
+    team = make_team("ALP")
+
+    race = make_race_in_week(season, 1, "Race One")
+    marker = make_marker(race, kind=RaceMarker.Kind.MOUNTAIN)
+    make_crossing(marker, make_rider("Climber", team), position=1)
+    score_mountains(race)
+
+    table = standings(season)
+    by_team = {e["team"].pk: e for e in table}
+
+    assert by_team[team.pk]["points"] == 6
+    assert by_team[team.pk]["mountain_points"] == 6
+    assert by_team[team.pk]["sprint_points"] == 0
+    assert by_team[team.pk]["positions"] == {}
+
+
+def test_mountain_points_do_not_count_in_countback(db, make_team, make_rider, make_result, make_marker, make_crossing):
+    """Being first over a summit is not a 1st place for tie-breaking, the
+    same rule a sprint win follows."""
+    season = make_season()
+    finisher_team = make_team("FIN")
+    climber_team = make_team("CLM")
+
+    race1 = make_race_in_week(season, 1, "Race One")
+    make_result(race1, make_rider("Winner", finisher_team), position=1)
+    score_race(race1)
+
+    race2 = make_race_in_week(season, 2, "Race Two")
+    marker1 = make_marker(race2, name="Top A", kind=RaceMarker.Kind.MOUNTAIN,
+                          category=RaceMarker.Category.HC)
+    make_crossing(marker1, make_rider("Climber A", climber_team), position=1)
+    race3 = make_race_in_week(season, 3, "Race Three")
+    marker2 = make_marker(race3, name="Top B", kind=RaceMarker.Kind.MOUNTAIN,
+                          category=RaceMarker.Category.HC)
+    make_crossing(marker2, make_rider("Climber B", climber_team), position=1)
+    score_mountains(race2)
+    score_mountains(race3)
+
+    table = standings(season)
+    by_team = {e["team"].pk: e for e in table}
+
+    assert by_team[finisher_team.pk]["points"] == 20
+    assert by_team[climber_team.pk]["points"] == 20
+    assert by_team[climber_team.pk]["mountain_points"] == 20
     assert table[0]["team"].pk == finisher_team.pk
 
 

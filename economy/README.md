@@ -359,9 +359,12 @@ the week's points as an injected argument,
 about everything — computes that dict from
 `competitions.services.points_by_team(week)` right before the call. This is
 the same inversion `competitions/README.md` documents for `racing/`.
-`points_by_team` sums finish points **and** sprint points (#16), so a
-sprint-heavy week moves both fanbase and sponsorship, the same as a
-strong finish would — see `competitions/README.md`, *Sprint points*.
+`points_by_team` sums finish points **and** both kinds of marker points
+(#16, #17), so a sprint- or climb-heavy week moves both fanbase and
+sponsorship, the same as a strong finish would — see `competitions/README.md`,
+*Marker points*. One dict, one number per team: the two marker kinds are kept
+apart everywhere a player can read them, but a fanbase and a sponsorship
+payment do not care which way a team earned its points.
 
 ## Fanbase is clamped at write time
 
