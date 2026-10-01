@@ -23,12 +23,25 @@ class PositionSerializer(serializers.Serializer):
     week_ends_at = serializers.DateTimeField(allow_null=True)
 
 
+class StageRaceRefSerializer(serializers.Serializer):
+    """A race's stage-race context, when it has one — the calendar entry
+    that groups its stages, and the results/squad payloads' pointer back
+    to it. `None` (the field is omitted by allow_null on the parent) for a
+    one-day race — see racing/README.md, *Stage races*."""
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    stage_number = serializers.IntegerField()
+    stage_count = serializers.IntegerField()
+
+
 class CalendarRaceSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     name = serializers.CharField()
     starts_at = serializers.DateTimeField(allow_null=True)
     status = serializers.CharField()
     distance_km = serializers.FloatField()
+    stage_race = StageRaceRefSerializer(allow_null=True)
 
 
 class CalendarWeekSerializer(serializers.Serializer):
@@ -282,6 +295,15 @@ class MyBidStatusSerializer(serializers.Serializer):
     deadline = serializers.DateTimeField()
 
 
+class SquadRaceStageSerializer(serializers.Serializer):
+    """A squad's stage-race context: enough for the screen to explain WHY
+    it's read-only from stage 2 on — see specs/archive/stage-races.md, Decisions
+    taken (squad chosen once, for stage 1)."""
+
+    name = serializers.CharField()
+    stage_number = serializers.IntegerField()
+
+
 class SquadSerializer(serializers.Serializer):
     race = serializers.IntegerField()
     race_name = serializers.CharField()
@@ -294,6 +316,7 @@ class SquadSerializer(serializers.Serializer):
     saved = serializers.BooleanField()  # False when this is a suggestion
     squad_size = serializers.IntegerField()
     candidates = SquadRiderSerializer(many=True)
+    stage_race = SquadRaceStageSerializer(allow_null=True)
 
 
 class SquadWriteSerializer(serializers.Serializer):
@@ -351,6 +374,24 @@ class RaceMarkerSerializer(serializers.Serializer):
     points = serializers.ListField(child=serializers.IntegerField(), allow_null=True)
 
 
+class RaceDetailStageSerializer(serializers.Serializer):
+    """One stage as listed in a race detail's stage_race block, for the
+    stage strip that links between a tour's stages."""
+
+    id = serializers.IntegerField()
+    stage_number = serializers.IntegerField()
+    starts_at = serializers.DateTimeField(allow_null=True)
+    status = serializers.CharField()
+
+
+class RaceDetailStageRaceSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    stage_number = serializers.IntegerField()
+    stage_count = serializers.IntegerField()
+    stages = RaceDetailStageSerializer(many=True)
+
+
 class RaceDetailSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     name = serializers.CharField()
@@ -359,8 +400,10 @@ class RaceDetailSerializer(serializers.Serializer):
     distance_km = serializers.FloatField()
     course = CourseSegmentSerializer(many=True)
     payout = RacePayoutEntrySerializer(many=True)
+    gc_payout = RacePayoutEntrySerializer(many=True)
     markers = RaceMarkerSerializer(many=True)
     has_replay = serializers.BooleanField()
+    stage_race = RaceDetailStageRaceSerializer(allow_null=True)
 
 
 class RaceResultTeamSerializer(serializers.Serializer):
@@ -379,6 +422,7 @@ class RaceResultEntrySerializer(serializers.Serializer):
     rider = RaceResultRiderSerializer()
     team = RaceResultTeamSerializer(allow_null=True)
     finish_time = serializers.FloatField(allow_null=True)
+    group_time = serializers.FloatField(allow_null=True)
     finished = serializers.BooleanField()
 
 
@@ -396,6 +440,7 @@ class RaceResultRaceSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     name = serializers.CharField()
     status = serializers.CharField()
+    stage_race = StageRaceRefSerializer(allow_null=True)
 
 
 class RaceMarkerCrossingSerializer(serializers.Serializer):
@@ -409,11 +454,39 @@ class RaceMarkerResultSerializer(RaceMarkerSerializer):
     crossings = RaceMarkerCrossingSerializer(many=True)
 
 
+class GCStandingEntrySerializer(serializers.Serializer):
+    position = serializers.IntegerField()
+    rider = RaceResultRiderSerializer()
+    team = RaceResultTeamSerializer(allow_null=True)
+    gc_time = serializers.FloatField()
+    gap = serializers.FloatField()  # 0.0 for the leader
+
+
+class GCPointsEntrySerializer(serializers.Serializer):
+    team = RaceResultTeamSerializer()
+    position = serializers.IntegerField()
+    points = serializers.IntegerField()
+    prize = serializers.IntegerField()
+
+
+class GCSerializer(serializers.Serializer):
+    """A stage race's general classification as of the results screen's own
+    race — see racing.services.general_classification, D6. `final` is true
+    once the whole stage race has completed; `points` is only populated
+    then, matching when the GC award is actually made (D11)."""
+
+    after_stage = serializers.IntegerField()
+    final = serializers.BooleanField()
+    standings = GCStandingEntrySerializer(many=True)
+    points = GCPointsEntrySerializer(many=True)
+
+
 class RaceResultsSerializer(serializers.Serializer):
     race = RaceResultRaceSerializer()
     results = RaceResultEntrySerializer(many=True)
     points = RaceResultPointsEntrySerializer(many=True)
     markers = RaceMarkerResultSerializer(many=True)
+    gc = GCSerializer(allow_null=True)
 
 
 class AttributeSnapshotSerializer(serializers.Serializer):

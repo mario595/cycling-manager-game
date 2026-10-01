@@ -19,7 +19,13 @@ from django.utils import timezone
 from django.utils.module_loading import import_string
 
 from competitions.services import (
-    points_by_team, prizes_by_team, score_mountains, score_race, score_sprints,
+    gc_prizes_by_team,
+    points_by_team,
+    prizes_by_team,
+    score_general_classification,
+    score_mountains,
+    score_race,
+    score_sprints,
 )
 from economy.services import (
     apply_weekly_fanbase,
@@ -28,13 +34,14 @@ from economy.services import (
     charge_transfer_fee,
     charge_weekly_wages,
     ensure_offer_round,
+    pay_gc_prizes,
     pay_merchandise,
     pay_race_prizes,
     pay_sponsorship,
     pay_transfer_income,
     write_salary_reviews,
 )
-from racing.models import Race, RaceResult
+from racing.models import Race, RaceResult, StageRace
 from racing.services import riders_who_raced, riders_who_started, simulate_race
 from riders.development_squad import LEVELS, weekly_cost
 from riders.models import DevelopmentSquad, Rider
@@ -129,10 +136,40 @@ def _claim(limit: int, at: datetime) -> list[int]:
     return ids
 
 
+def _settle_stage_race(stage_race: StageRace, tick: TickRun, at: datetime) -> None:
+    """Score and pay the general classification once every stage of
+    `stage_race` has run — D11, specs/archive/stage-races.md. Idempotent, and a
+    failure here is recorded on the tick, never raised: called from
+    `_execute` on both the success and the failure path, so a failed final
+    stage still settles the GC over whichever stages actually ran.
+
+    `is_complete()` is re-checked here rather than assumed by the caller —
+    a catch-up tick can process several stages of one tour in the same
+    `_execute` call, and only the last one actually completes it.
+    """
+    if not stage_race.is_complete():
+        return
+    try:
+        score_general_classification(stage_race)
+        final_stage = stage_race.final_stage()
+        tick.prize_entries += pay_gc_prizes(
+            final_stage.pk, stage_race_name=stage_race.name, at=at,
+            prizes_by_team=gc_prizes_by_team(stage_race),
+        )
+    except Exception:
+        tick.error += f"stage race {stage_race.pk} GC:\n{traceback.format_exc()}\n"
+
+
 def _execute(race_ids: list[int], tick: TickRun, at: datetime) -> None:
     """Simulate each claimed race outside any lock. One broken course must
     not stop the run: an exception is recorded on that race and on the
-    tick, and the loop continues."""
+    tick, and the loop continues.
+
+    Stages a day apart within the same tour always run in `starts_at`
+    order — `_claim` orders by it — so a later stage's carried squad
+    (`racing.services.ensure_squads`) always reads an earlier stage's
+    already-committed results.
+    """
     for race_id in race_ids:
         race = Race.objects.get(pk=race_id)
         try:
@@ -143,32 +180,35 @@ def _execute(race_ids: list[int], tick: TickRun, at: datetime) -> None:
             race.status = Race.Status.FAILED
             race.save(update_fields=["status"])
             tick.error += f"race {race_id}:\n{traceback.format_exc()}\n"
-            continue                      # nothing to pay for a failed race
+        else:
+            try:
+                score_sprints(race)
+            except Exception:
+                # The race ran and finish-scored; a sprint-scoring failure
+                # must not rewrite that into a failed race. Record it and
+                # move on.
+                tick.error += f"race {race_id} sprint points:\n{traceback.format_exc()}\n"
 
-        try:
-            score_sprints(race)
-        except Exception:
-            # The race ran and finish-scored; a sprint-scoring failure must
-            # not rewrite that into a failed race. Record it and move on.
-            tick.error += f"race {race_id} sprint points:\n{traceback.format_exc()}\n"
+            try:
+                score_mountains(race)
+            except Exception:
+                # Same isolation as sprints, and scored after them so the
+                # tick reads in the same order as the results screen.
+                tick.error += f"race {race_id} mountain points:\n{traceback.format_exc()}\n"
 
-        try:
-            score_mountains(race)
-        except Exception:
-            # Same isolation as sprints, and scored after them so the tick
-            # reads in the same order as the results screen.
-            tick.error += f"race {race_id} mountain points:\n{traceback.format_exc()}\n"
+            try:
+                prizes = prizes_by_team(race)
+                tick.prize_entries += pay_race_prizes(
+                    race.pk, race_name=race.name, at=race.finished_at,
+                    prizes_by_team=prizes,
+                )
+            except Exception:
+                # The race ran and scored; a payout failure must not rewrite
+                # that into a failed race. Record it and move on.
+                tick.error += f"race {race_id} prizes:\n{traceback.format_exc()}\n"
 
-        try:
-            prizes = prizes_by_team(race)
-            tick.prize_entries += pay_race_prizes(
-                race.pk, race_name=race.name, at=race.finished_at,
-                prizes_by_team=prizes,
-            )
-        except Exception:
-            # The race ran and scored; a payout failure must not rewrite
-            # that into a failed race. Record it and move on.
-            tick.error += f"race {race_id} prizes:\n{traceback.format_exc()}\n"
+        if race.stage_race_id:
+            _settle_stage_race(race.stage_race, tick, at)
 
 
 def _completed_week(week) -> Week | None:

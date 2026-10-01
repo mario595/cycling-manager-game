@@ -20,6 +20,7 @@ const squad: Squad = {
   saved: false,
   squad_size: 4,
   candidates: [],
+  stage_race: null,
 }
 
 describe('useNextRaceSquad', () => {

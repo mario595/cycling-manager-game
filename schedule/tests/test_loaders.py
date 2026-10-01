@@ -4,7 +4,14 @@ from datetime import datetime, time, timedelta, timezone as dt_timezone
 
 import pytest
 
-from schedule.loaders import RaceDeclaration, SeasonFileError, create_races, parse_season_file
+from schedule.loaders import (
+    RaceDeclaration,
+    SeasonFileError,
+    StageRaceDeclaration,
+    create_races,
+    create_stage_races,
+    parse_season_file,
+)
 from schedule.models import Season, Week
 
 BASE = {"number": 1, "starts_at": "2027-03-01T00:00:00Z"}
@@ -322,3 +329,134 @@ def test_create_races_passes_markers_to_the_creator(season):
     create_races(season, declarations, create_race=create_race)
 
     assert created[0]["markers"] == [{"kind": "sprint", "name": "N", "distance": 2000.0}]
+
+
+def stage_race(**overrides):
+    data = {
+        "name": "Alpine Tour",
+        "week": 1,
+        "start_day": "monday",
+        "time": "14:00",
+        "stages": [
+            {"course": [SEGMENT]},
+            {"course": [SEGMENT]},
+            {"course": [SEGMENT]},
+        ],
+    }
+    data.update(overrides)
+    return data
+
+
+def test_stage_race_parsed_onto_consecutive_days():
+    decl = parse_season_file({**BASE, "stage_races": [stage_race()]})
+
+    assert len(decl.stage_races) == 1
+    sr = decl.stage_races[0]
+    assert sr.name == "Alpine Tour"
+    assert sr.week == 1
+    assert [s.day for s in sr.stages] == ["monday", "tuesday", "wednesday"]
+    assert all(s.week == 1 for s in sr.stages)
+    assert all(s.time == time(14, 0) for s in sr.stages)
+
+
+def test_stage_race_names():
+    decl = parse_season_file({**BASE, "stage_races": [stage_race(stages=[
+        {"course": [SEGMENT]},
+        {"course": [SEGMENT], "name": "Mountain Stage"},
+    ])]})
+
+    assert decl.stage_races[0].stages[0].name == "Alpine Tour — Stage 1"
+    assert decl.stage_races[0].stages[1].name == "Alpine Tour — Stage 2: Mountain Stage"
+
+
+def test_stage_race_too_few_stages():
+    with pytest.raises(SeasonFileError):
+        parse_season_file({**BASE, "stage_races": [stage_race(stages=[{"course": [SEGMENT]}])]})
+
+
+def test_stage_race_too_many_stages():
+    with pytest.raises(SeasonFileError):
+        parse_season_file({**BASE, "stage_races": [
+            stage_race(stages=[{"course": [SEGMENT]}] * 8)
+        ]})
+
+
+def test_stage_race_runs_past_sunday():
+    with pytest.raises(SeasonFileError, match="runs past Sunday"):
+        parse_season_file({**BASE, "stage_races": [
+            stage_race(start_day="friday", stages=[{"course": [SEGMENT]}] * 4)
+        ]})
+
+
+def test_stage_clashes_with_one_day_race():
+    with pytest.raises(SeasonFileError) as exc_info:
+        parse_season_file({
+            **BASE,
+            "races": [race(week=1, day="tuesday", name="Tuesday Classic")],
+            "stage_races": [stage_race(start_day="monday")],  # stage 2 lands on Tuesday
+        })
+
+    message = str(exc_info.value)
+    assert "Tuesday Classic" in message
+    assert "Alpine Tour — Stage 2" in message
+
+
+def test_stage_time_overrides_default():
+    decl = parse_season_file({**BASE, "stage_races": [stage_race(stages=[
+        {"course": [SEGMENT]},
+        {"course": [SEGMENT], "time": "09:00"},
+    ])]})
+
+    assert decl.stage_races[0].stages[0].time == time(14, 0)
+    assert decl.stage_races[0].stages[1].time == time(9, 0)
+
+
+def test_unknown_stage_key_warns():
+    decl = parse_season_file({**BASE, "stage_races": [stage_race(stages=[
+        {"course": [SEGMENT], "points": 10},
+        {"course": [SEGMENT]},
+    ])]})
+
+    assert any("ignoring unknown" in w and "points" in w for w in decl.warnings)
+
+
+def test_create_stage_races(season):
+    declarations = [
+        StageRaceDeclaration(
+            name="Alpine Tour", week=1,
+            stages=[
+                RaceDeclaration(
+                    week=1, day="monday", time=time(14, 0),
+                    name="Alpine Tour — Stage 1", course=[SEGMENT],
+                    wind_enabled=True, wind_band=None, seed=None,
+                ),
+                RaceDeclaration(
+                    week=1, day="tuesday", time=time(14, 0),
+                    name="Alpine Tour — Stage 2", course=[SEGMENT],
+                    wind_enabled=True, wind_band=None, seed=None,
+                ),
+            ],
+        ),
+    ]
+    created_races: list = []
+    created_stage_races: list = []
+
+    def create_race(**kwargs):
+        created_races.append(kwargs)
+        return kwargs
+
+    def create_stage_race(**kwargs):
+        created_stage_races.append(kwargs)
+        return kwargs
+
+    result = create_stage_races(
+        season, declarations, create_race=create_race, create_stage_race=create_stage_race,
+    )
+
+    assert len(result) == 1
+    assert created_stage_races == [{"name": "Alpine Tour", "week": season.weeks.get(number=1)}]
+    assert len(created_races) == 2
+    assert created_races[0]["stage_number"] == 1
+    assert created_races[1]["stage_number"] == 2
+    assert created_races[0]["stage_race"] == created_stage_races[0]
+    assert created_races[1]["starts_at"] == created_races[0]["starts_at"] + timedelta(days=1)

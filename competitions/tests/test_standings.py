@@ -2,8 +2,14 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone as dt_timezone
 
-from competitions.services import score_mountains, score_race, score_sprints, standings
-from racing.models import Race, RaceMarker
+from competitions.services import (
+    score_general_classification,
+    score_mountains,
+    score_race,
+    score_sprints,
+    standings,
+)
+from racing.models import Race, RaceMarker, RaceResult, StageRace
 from schedule.models import SEASON_WEEKS, Season, Week
 
 
@@ -291,3 +297,44 @@ def test_table_resets_between_seasons(db, make_team, make_rider, make_result):
 
     assert table_s1[0]["points"] == 20
     assert table_s2 == []
+
+
+def test_standings_include_gc_points(db, make_team, make_rider):
+    from racing.models import RaceSquad, RaceSquadRider
+
+    season = make_season()
+    week = season.weeks.get(number=1)
+    stage_race = StageRace.objects.create(name="Alpine Tour", week=week)
+    stage1 = Race.objects.create(
+        name="Alpine Tour — Stage 1",
+        course=[{"length": 40000.0, "gradient": 0.0}],
+        status=Race.Status.FINISHED,
+        starts_at=week.starts_at,
+        week=week,
+        stage_race=stage_race,
+        stage_number=1,
+    )
+    stage2 = Race.objects.create(
+        name="Alpine Tour — Stage 2",
+        course=[{"length": 40000.0, "gradient": 0.0}],
+        status=Race.Status.FINISHED,
+        starts_at=week.starts_at + timedelta(days=1),
+        week=week,
+        stage_race=stage_race,
+        stage_number=2,
+    )
+    team = make_team("ALP")
+    rider = make_rider("Rider One", team)
+    squad = RaceSquad.objects.create(race=stage1, team=team)
+    RaceSquadRider.objects.create(squad=squad, rider=rider, is_leader=True)
+    RaceResult.objects.create(race=stage1, rider=rider, position=1, finish_time=100.0, group_time=100.0)
+    RaceResult.objects.create(race=stage2, rider=rider, position=1, finish_time=100.0, group_time=100.0)
+
+    score_race(stage1)
+    score_race(stage2)
+    score_general_classification(stage_race)
+
+    table = standings(season)
+
+    # Stage 1 (10, stage table) + stage 2 (10) + GC 1st place (40) = 60.
+    assert table[0]["points"] == 10 + 10 + 40

@@ -13,8 +13,10 @@ from riders.services import (
     MAX_ATTRIBUTE,
     MIN_ATTRIBUTE,
     PENALTY_AT_FLOOR,
+    RACE_FRESHNESS_COST,
     RETIREMENT_AGE_MIN,
     RETIREMENT_AGE_SPAN,
+    STAGE_FRESHNESS_COST,
     _settle,
     advance_ages,
     apply_race_cost,
@@ -503,6 +505,29 @@ def test_apply_race_cost_never_drops_below_the_floor(db):
 
     assert changed == 1
     assert rider.freshness == FRESHNESS_FLOOR
+
+
+def test_apply_race_cost_custom_cost(db):
+    rider = Rider.objects.create(
+        name="Stage Racer", climb=1, sprint=1, flat=1, resistance=1, positioning=1, freshness=50,
+    )
+
+    changed = apply_race_cost([rider.pk], cost=STAGE_FRESHNESS_COST)
+    rider.refresh_from_db()
+
+    assert changed == 1
+    assert rider.freshness == 50 - STAGE_FRESHNESS_COST
+
+
+def test_apply_race_cost_defaults_to_race_cost(db):
+    rider = Rider.objects.create(
+        name="One Day Racer", climb=1, sprint=1, flat=1, resistance=1, positioning=1, freshness=50,
+    )
+
+    apply_race_cost([rider.pk])
+    rider.refresh_from_db()
+
+    assert rider.freshness == 50 - RACE_FRESHNESS_COST
 
 
 def test_apply_weekly_recovery_caps_at_full(db):

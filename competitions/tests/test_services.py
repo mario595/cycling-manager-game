@@ -4,11 +4,17 @@ from datetime import datetime, timedelta, timezone as dt_timezone
 
 import pytest
 
-from competitions.models import RacePoints
+from competitions.models import MarkerPoints, RacePoints
+from competitions.scoring import GC_POINTS_BY_POSITION, STAGE_POINTS_BY_POSITION
 from competitions.services import (
-    points_by_team, score_mountains, score_race, score_sprints,
+    gc_prizes_by_team,
+    points_by_team,
+    score_general_classification,
+    score_mountains,
+    score_race,
+    score_sprints,
 )
-from racing.models import Race, RaceMarker
+from racing.models import Race, RaceMarker, RaceResult, StageRace
 from schedule.models import SEASON_WEEKS, Season, Week
 
 
@@ -114,6 +120,99 @@ def test_unfinished_race_raises(db):
 
     with pytest.raises(ValueError):
         score_race(race)
+
+
+def _stage_race_week() -> Week:
+    starts_at = datetime(2027, 1, 4, tzinfo=dt_timezone.utc)  # a Monday
+    season = Season.objects.create(number=1, starts_at=starts_at)
+    return Week.objects.create(
+        season=season, number=1, starts_at=starts_at, ends_at=starts_at + timedelta(weeks=1),
+    )
+
+
+def _stage(stage_race, week, number, *, status=Race.Status.FINISHED):
+    return Race.objects.create(
+        name=f"{stage_race.name} — Stage {number}",
+        course=[{"length": 40000.0, "gradient": 0.0}],
+        starts_at=week.starts_at + timedelta(days=number - 1),
+        week=week,
+        stage_race=stage_race,
+        stage_number=number,
+        status=status,
+    )
+
+
+def _squad_for(race, team, riders, leader):
+    from racing.models import RaceSquad, RaceSquadRider
+    squad = RaceSquad.objects.create(race=race, team=team)
+    RaceSquadRider.objects.bulk_create([
+        RaceSquadRider(squad=squad, rider=r, is_leader=r.pk == leader.pk) for r in riders
+    ])
+    return squad
+
+
+def test_stage_scored_from_stage_table(db, make_team, make_rider, make_result):
+    week = _stage_race_week()
+    stage_race = StageRace.objects.create(name="Alpine Tour", week=week)
+    stage = _stage(stage_race, week, 1)
+    team = make_team("ALP")
+    make_result(stage, make_rider("Rider One", team), position=1)
+
+    points = score_race(stage)
+
+    assert points[0].points == STAGE_POINTS_BY_POSITION[1]
+    assert points[0].points != 20  # the one-day table's 1st-place value
+
+
+def test_gc_scored_once_on_final_stage(db, make_team, make_rider):
+    week = _stage_race_week()
+    stage_race = StageRace.objects.create(name="Alpine Tour", week=week)
+    stage1 = _stage(stage_race, week, 1)
+    stage2 = _stage(stage_race, week, 2)
+    team = make_team("ALP")
+    rider = make_rider("Rider One", team)
+    _squad_for(stage1, team, [rider], rider)
+    RaceResult.objects.create(race=stage1, rider=rider, position=1, finish_time=100.0, group_time=100.0)
+    RaceResult.objects.create(race=stage2, rider=rider, position=1, finish_time=100.0, group_time=100.0)
+
+    first = score_general_classification(stage_race)
+    assert RacePoints.objects.filter(race=stage2, kind=RacePoints.Kind.GC).count() == 1
+    assert first[0].points == GC_POINTS_BY_POSITION[1]
+
+    second = score_general_classification(stage_race)
+    assert len(second) == 1
+    assert RacePoints.objects.filter(race=stage2, kind=RacePoints.Kind.GC).count() == 1
+
+
+def test_gc_refuses_incomplete_stage_race(db, make_team, make_rider):
+    week = _stage_race_week()
+    stage_race = StageRace.objects.create(name="Alpine Tour", week=week)
+    _stage(stage_race, week, 1, status=Race.Status.SCHEDULED)
+
+    with pytest.raises(ValueError):
+        score_general_classification(stage_race)
+
+    with pytest.raises(ValueError):
+        gc_prizes_by_team(stage_race)
+
+
+def test_gc_row_and_final_stage_row_coexist(db, make_team, make_rider):
+    week = _stage_race_week()
+    stage_race = StageRace.objects.create(name="Alpine Tour", week=week)
+    stage1 = _stage(stage_race, week, 1)
+    team = make_team("ALP")
+    rider = make_rider("Rider One", team)
+    _squad_for(stage1, team, [rider], rider)
+    RaceResult.objects.create(race=stage1, rider=rider, position=1, finish_time=100.0, group_time=100.0)
+
+    stage_points = score_race(stage1)
+    gc_points = score_general_classification(stage_race)
+
+    assert stage_points[0].kind == RacePoints.Kind.RACE
+    assert gc_points[0].kind == RacePoints.Kind.GC
+    assert RacePoints.objects.filter(race=stage1).count() == 2
+    # score_race called again must still see only its own stage-1 row.
+    assert len(score_race(stage1)) == 1
 
 
 def test_points_by_team_sums_a_weeks_races(db, make_team, make_rider, make_result):

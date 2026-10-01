@@ -10,15 +10,16 @@ from __future__ import annotations
 import logging
 import tempfile
 from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
 from django.core.files.base import ContentFile
 from django.db import transaction
-from django.db.models import F
+from django.db.models import Count, F
 
 from riders.models import ENGINE_ATTRIBUTES, Rider
-from riders.services import apply_race_cost, freshness_multiplier
+from riders.services import RACE_FRESHNESS_COST, STAGE_FRESHNESS_COST, apply_race_cost, freshness_multiplier
 from teams.models import Team
 
 from .adapters import run_race_via_adapter, to_engine_course, to_engine_rider, to_team_codes
@@ -31,6 +32,7 @@ from .models import (
     RaceSquad,
     RaceSquadRider,
     MarkerCrossing,
+    StageRace,
 )
 
 logger = logging.getLogger(__name__)
@@ -48,6 +50,28 @@ CLIMB_GRADIENT_THRESHOLD = 2.0
 SPRINT_MAX_DISTANCE = 120_000
 #: Courses at or over this length (m) train resistance.
 RESISTANCE_MIN_DISTANCE = 200_000
+
+#: Finishers separated by no more than this many seconds from the rider
+#: ahead of them share a group time (specs/archive/stage-races.md, In scope 6).
+#: Finish times are whole seconds (the engine ticks at 1s), so this is the
+#: smallest threshold that groups more than riders crossing the same tick.
+GROUP_GAP_SECONDS = 1.0
+
+
+def group_times(finish_times: list[float]) -> list[float]:
+    """Each finisher's group time: the time of the first rider of their
+    group. A new group starts when the gap to the PREVIOUS finisher exceeds
+    GROUP_GAP_SECONDS — chained, so a bunch strung out over several
+    consecutive small gaps is still one group. `finish_times` must be
+    sorted ascending and contain only finishers.
+    """
+    out: list[float] = []
+    head = None
+    for i, t in enumerate(finish_times):
+        if i == 0 or t - finish_times[i - 1] > GROUP_GAP_SECONDS:
+            head = t
+        out.append(head)
+    return out
 
 
 def course_training_attribute(course: list[dict]) -> str:
@@ -240,7 +264,13 @@ def set_squad(race: Race, team: Team, rider_ids: list[int], leader_id: int) -> R
 
     Refuses a race that is not SCHEDULED, then delegates to _write_squad.
     Raises SquadError for that and for every validation failure below.
+
+    A stage race's squad is chosen once, for stage 1 — see D12,
+    specs/archive/stage-races.md, Out of scope. A later stage's squad is carried by
+    ensure_squads/_carry_squads, never picked by a manager.
     """
+    if race.stage_number is not None and race.stage_number > 1:
+        raise SquadError(f"{race} is a later stage; the squad is chosen for stage 1")
     if race.status != Race.Status.SCHEDULED:
         raise SquadError(f"{race} has already started; its squad is fixed")
     return _write_squad(race, team, rider_ids, leader_id, auto=False)
@@ -270,6 +300,148 @@ def create_race(*, markers: Iterable[dict] = (), **fields) -> Race:
     return race
 
 
+def create_stage_race(*, name: str, week) -> StageRace:
+    """Create a stage race. Injected into `schedule/`'s loader the same way
+    `create_race` is — `schedule/` must not import `racing/` at module scope
+    (AGENTS.md)."""
+    return StageRace.objects.create(name=name, week=week)
+
+
+def riders_still_in(stage_race: StageRace, before_stage: int) -> set[int]:
+    """Which of stage 1's squad riders are still in `stage_race` as of
+    `before_stage` — D4, specs/archive/stage-races.md, Rules and edge cases.
+
+    A rider is still in iff they were in the stage-1 squad AND finished
+    (non-null finish_time) every earlier FINISHED stage. A FAILED stage
+    has no results and neither removes anyone nor counts as "earlier" —
+    there is nothing to have finished or missed.
+    """
+    stage1 = stage_race.stages.get(stage_number=1)
+    squad_riders = set(
+        RaceSquadRider.objects.filter(squad__race=stage1).values_list("rider_id", flat=True)
+    )
+    earlier_stage_ids = list(
+        stage_race.stages
+        .filter(stage_number__lt=before_stage, status=Race.Status.FINISHED)
+        .values_list("pk", flat=True)
+    )
+    if not earlier_stage_ids:
+        return squad_riders
+
+    finished_every_stage = (
+        RaceResult.objects
+        .filter(race_id__in=earlier_stage_ids, rider_id__in=squad_riders, finish_time__isnull=False)
+        .values("rider_id")
+        .annotate(n=Count("pk"))
+        .filter(n=len(earlier_stage_ids))
+        .values_list("rider_id", flat=True)
+    )
+    return squad_riders & set(finished_every_stage)
+
+
+def carried_squad(race: Race, team: Team) -> tuple[list[int], int | None]:
+    """Read-only version of what _carry_squads would write for `team` in
+    `race`: `team`'s stage-1 squad, minus any rider no longer in the race
+    (riders_still_in). `leader_id` is None if the stage-1 leader is among
+    those dropped — the promotion in _effective_leader_ids is a
+    simulation-time-only rule, not something to predict here."""
+    stage1 = race.stage_race.stages.get(stage_number=1)
+    stage1_squad = RaceSquad.objects.filter(race=stage1, team=team).prefetch_related("members").first()
+    if stage1_squad is None:
+        return [], None
+
+    still_in = riders_still_in(race.stage_race, race.stage_number)
+    members = [m for m in stage1_squad.members.all() if m.rider_id in still_in]
+    leader_id = next((m.rider_id for m in members if m.is_leader), None)
+    return [m.rider_id for m in members], leader_id
+
+
+@dataclass(frozen=True)
+class GCEntry:
+    rider_id: int
+    team_id: int | None
+    gc_time: float
+    position_sum: int
+    stages: int
+
+
+def general_classification(stage_race: StageRace, *, through_stage: int | None = None) -> list[GCEntry]:
+    """The general classification, computed fresh from stage results — D6,
+    specs/archive/stage-races.md, Rules and edge cases.
+
+    A rider is eligible iff they have a non-null finish_time in EVERY
+    FINISHED stage up to `through_stage` (or every FINISHED stage, if
+    `through_stage` is None). Their GC time is the sum of those stages'
+    group_time (D5 guarantees every finisher has one). Ordered by GC time
+    ascending, then by the sum of their stage positions ascending (the
+    spec's tiebreak: better individual stage placings), then by rider id
+    for a deterministic order. `team_id` is read from the STAGE-1 squad —
+    a rider cannot change team mid-tour (D4), and the squad is the durable
+    record of who raced for whom (racing/README.md, *Squads*).
+    """
+    stages = stage_race.stages.filter(status=Race.Status.FINISHED)
+    if through_stage is not None:
+        stages = stages.filter(stage_number__lte=through_stage)
+    stage_ids = list(stages.values_list("pk", flat=True))
+    if not stage_ids:
+        return []
+
+    by_rider: dict[int, dict] = {}
+    for rider_id, finish_time, group_time, position in RaceResult.objects.filter(
+        race_id__in=stage_ids,
+    ).values_list("rider_id", "finish_time", "group_time", "position"):
+        entry = by_rider.setdefault(rider_id, {"finished": 0, "gc_time": 0.0, "position_sum": 0})
+        entry["position_sum"] += position
+        if finish_time is not None:
+            entry["finished"] += 1
+            entry["gc_time"] += group_time
+
+    team_by_rider = dict(
+        RaceSquadRider.objects
+        .filter(squad__race__stage_race=stage_race, squad__race__stage_number=1)
+        .values_list("rider_id", "squad__team_id")
+    )
+
+    entries = [
+        GCEntry(
+            rider_id=rider_id, team_id=team_by_rider.get(rider_id),
+            gc_time=data["gc_time"], position_sum=data["position_sum"], stages=len(stage_ids),
+        )
+        for rider_id, data in by_rider.items()
+        if data["finished"] == len(stage_ids)
+    ]
+    return sorted(entries, key=lambda e: (e.gc_time, e.position_sum, e.rider_id))
+
+
+def _carry_squads(race: Race) -> None:
+    """Write every team's carried squad for a stage after the first — D3.
+
+    Unlike _write_squad, a carried squad may hold fewer than SQUAD_SIZE
+    riders, or none: this deliberately bypasses _write_squad's exactly-four
+    check, because that check protects a manager's write, not a tour
+    continuing short-handed. A team with nobody left gets no RaceSquad row
+    for this stage at all.
+    """
+    stage1 = race.stage_race.stages.get(stage_number=1)
+    still_in = riders_still_in(race.stage_race, race.stage_number)
+    stage1_squads = RaceSquad.objects.filter(race=stage1).prefetch_related("members")
+
+    for stage1_squad in stage1_squads:
+        members = [m for m in stage1_squad.members.all() if m.rider_id in still_in]
+        if not members:
+            continue
+        with transaction.atomic():
+            squad, _ = RaceSquad.objects.update_or_create(
+                race=race, team_id=stage1_squad.team_id,
+                defaults={"is_auto_picked": stage1_squad.is_auto_picked},
+            )
+            squad.members.all().delete()
+            RaceSquadRider.objects.bulk_create([
+                RaceSquadRider(squad=squad, rider_id=m.rider_id, is_leader=m.is_leader)
+                for m in members
+            ])
+
+
 def ensure_squads(race: Race) -> None:
     """Give every team with enough riders a squad for this race, if it has
     not got one. Called from simulate_race so a team whose manager never
@@ -278,7 +450,14 @@ def ensure_squads(race: Race) -> None:
     A team with fewer than SQUAD_SIZE riders is skipped with a warning, not
     an exception: that is a broken roster (see the spec's Rules and edge
     cases) and it must not stop every other team racing.
+
+    A stage after the first never auto-picks — its squads are carried from
+    stage 1 (D3), so this delegates entirely to _carry_squads and returns.
     """
+    if race.stage_race_id and race.stage_number > 1:
+        _carry_squads(race)
+        return
+
     have = set(RaceSquad.objects.filter(race=race).values_list("team_id", flat=True))
     for team in Team.objects.exclude(pk__in=have):
         try:
@@ -402,10 +581,20 @@ def simulate_race(race: Race, *, game_time: datetime) -> list[RaceResult]:
                 "size_bytes": size,
             },
         )
+        # group_time (D5, specs/archive/stage-races.md In scope 6): computed only
+        # over the finishers, who are already the ascending-time prefix of
+        # `ordered`. Written for every race, one-day included — only a
+        # stage race's general classification ever reads it.
+        finishers = [s for s in ordered if s.finish_time is not None]
+        groups = group_times([float(s.finish_time) for s in finishers])
+        group_time_by_rider = {
+            s.rider.id: g for s, g in zip(finishers, groups)
+        }
         results = RaceResult.objects.bulk_create([
             RaceResult(
                 race=race, rider=by_pk[s.rider.id], position=i,
                 finish_time=float(s.finish_time) if s.finish_time is not None else None,
+                group_time=group_time_by_rider.get(s.rider.id),
             )
             for i, s in enumerate(ordered, start=1)
         ])
@@ -413,8 +602,12 @@ def simulate_race(race: Race, *, game_time: datetime) -> list[RaceResult]:
         # race takes just as much out of a rider's legs as running it does
         # (broom-wagon-time-cut spec, In scope 5). Written here, in the
         # results transaction, so "started" and "paid for it" are atomic —
-        # see the plan's Design decision 7.
-        apply_race_cost([by_pk[s.rider.id].pk for s in states])
+        # see the plan's Design decision 7. A stage costs less than a full
+        # one-day race (specs/archive/stage-races.md, Decisions taken).
+        apply_race_cost(
+            [by_pk[s.rider.id].pk for s in states],
+            cost=STAGE_FRESHNESS_COST if race.stage_race_id else RACE_FRESHNESS_COST,
+        )
         # Marker crossings join the same transaction, after the results they
         # are written against. A crossing row is a fact of what happened,
         # never amended later, so it is written once here. Ordering: D5 makes
