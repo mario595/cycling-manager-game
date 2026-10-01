@@ -244,22 +244,33 @@ def release_graduates(rider_ids: Iterable[int], *, at) -> list[int]:
     Riders that are not graduates are ignored rather than refused: this is
     called with candidate ids from a tick, where the only thing to do about a
     rider who has already gone is nothing.
+
+    **It opens its own transaction**, because one of its three callers — the
+    tick's window step — has none to give it, and `select_for_update` outside
+    a transaction raises rather than quietly doing nothing. Every test calls it
+    inside the transaction pytest-django wraps a test in, which is how this
+    survived them and was found by ticking a seeded world (plan's
+    Verification): the first graduate whose window expired took the tick down
+    with it. It also puts the stamp and the unlink in one transaction, so no
+    reader can see a released graduate still pointing at a squad — or the
+    reverse, a pool rider with no stamp, which the expiry rule never reclaims.
     """
-    released = list(
-        Rider.objects.select_for_update()
-        .filter(
-            pk__in=list(rider_ids),
-            development_squad__isnull=False,
-            graduated_at__isnull=False,
+    with transaction.atomic():
+        released = list(
+            Rider.objects.select_for_update()
+            .filter(
+                pk__in=list(rider_ids),
+                development_squad__isnull=False,
+                graduated_at__isnull=False,
+            )
         )
-    )
-    if not released:
-        return []
-    mark_team_change(released, team_now=None, at=at)
-    Rider.objects.filter(pk__in=[rider.pk for rider in released]).update(
-        development_squad=None,
-    )
-    return [rider.pk for rider in released]
+        if not released:
+            return []
+        mark_team_change(released, team_now=None, at=at)
+        Rider.objects.filter(pk__in=[rider.pk for rider in released]).update(
+            development_squad=None,
+        )
+        return [rider.pk for rider in released]
 
 
 def promote(team, rider_id: int, *, at, roster_cap: int) -> Rider:

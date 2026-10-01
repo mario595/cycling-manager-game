@@ -5,6 +5,7 @@ from datetime import datetime, timezone as dt_timezone
 
 import pytest
 from django.apps import apps
+from django.db import connection
 
 from riders.development_squad import LEVELS
 from riders.display import to_display_scale
@@ -199,6 +200,28 @@ def test_release_graduates_ignores_a_rider_who_already_left(team, squad):
     promoted.refresh_from_db()
     assert promoted.team_id == team.pk
     assert promoted.unattached_since is None
+
+
+@pytest.mark.django_db(transaction=True)
+def test_release_graduates_works_with_no_transaction_of_its_own_to_join(squad):
+    """The tick's window step calls this with no transaction around it, and a
+    test is wrapped in one — so a `select_for_update` with no `atomic()` of its
+    own raises here and nowhere else, and the first graduate whose window
+    expires takes the tick down with it. Found by ticking a seeded world (the
+    plan's Verification), which is the only place it shows up.
+
+    `transaction=True` is the whole point of the test: it takes pytest-django's
+    wrapping transaction away, which is the condition being pinned.
+    """
+    assert not connection.in_atomic_block
+
+    released = _graduate(squad)
+
+    assert release_graduates([released.pk], at=LATER) == [released.pk]
+
+    released.refresh_from_db()
+    assert released.development_squad_id is None
+    assert released.unattached_since == LATER
 
 
 # --- promote -------------------------------------------------------------
