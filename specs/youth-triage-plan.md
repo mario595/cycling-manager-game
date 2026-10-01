@@ -351,7 +351,7 @@ Tests in `transfers/tests/test_services.py`:
 - promoted mid-auction → sale proceeds;
 - `cancel_unowned_listings` cancels a released graduate's listing and a released roster rider's, and leaves an owned one open.
 
-### W6 — `world/`: development, graduation, window, counters
+### W6 — `world/`: development, graduation, window, counters ✅
 - The helpers, the loop order, the `_apply_training_week` merge, the `TickRun` fields and the migration.
 
 Tests in new `world/tests/test_youth_triage.py`, driving `tick()` across weeks with the existing tick fixtures:
