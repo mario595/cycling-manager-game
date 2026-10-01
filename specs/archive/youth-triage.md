@@ -1,6 +1,6 @@
 # Youth triage: promote, develop or discard
 
-**Status:** proposed
+**Status:** implemented
 **Domain(s):** `riders`, `teams`, `transfers`
 **One-liner:** Young riders in a development squad develop for a fixed spell, then graduate — and the manager decides, rider by rider, whether to promote them to the senior team, sell them, or let them go.
 

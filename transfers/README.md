@@ -100,6 +100,24 @@ this app that persists across ticks, hence `transfers/`'s first
 other managers bid over a few real days; the highest bid at the deadline
 buys the rider.
 
+**"Own" is `belongs_to(rider, team)`, not `rider.team == team` (#34).** The
+sale side was written when the only thing a manager could sell was a rider on
+their senior roster, so the roster check *was* the ownership check. A squad
+graduate (`riders/README.md`, *Youth triage*) is sellable and is **not** on
+that roster — they carry `development_squad` and no `team` — so the comparison
+is now `riders.youth_triage.belongs_to`, which is true for a roster rider
+*and* for a graduate of the team that owns them. Every caller that used to ask
+"is this rider on that team?" asks `belongs_to` instead: `list_for_auction`
+and `resolve_auction`. `transfers -> riders` is allowed, so this is an import,
+not a callback.
+
+**A graduate can therefore be listed without occupying a roster place.** This
+was the point of the split: the squad's `places` are for riders it is still
+developing, and a finished rider who is taking one is blocking the intake
+that would replace them. Listing a rider *in* a squad is still refused — they
+are not a product yet, and `belongs_to` is false for them, which is the same
+rule doing the work rather than a new check.
+
 - **`Auction`** — `rider`, `seller_team`, `status` (`open` / `sold` /
   `unsold` / `cancelled`), `reserve_price`, `current_price`,
   `min_increment`, `deadline`, `listed_at`, `resolved_at`.
@@ -185,6 +203,14 @@ buys the rider.
   rider, and marks the auction `SOLD`. `transfers/` may not import
   `economy/`, so both callbacks are injected exactly the way
   `sign_free_agent`'s `charge` is — `world/README.md` has the wiring.
+  **A `SOLD` graduate leaves the squad**: the sale gives them a team, so
+  `development_squad` is cleared rather than left pointing at a squad that no
+  longer owns them. An `UNSOLD` one is the interesting case — the auction ends
+  and the rider is still the squad's, so a graduate whose decision window has
+  since closed is released to the free-agent pool in the same step
+  (`riders.youth_triage.release_graduates`), stamped `unattached_since` like
+  any other expiry. A graduate still **inside** their window goes back to
+  being listed-or-not as the manager left them.
 - **Why resolution is not a week-boundary step.** Every other per-week
   economic step in the tick (`world/README.md`, *How a tick works*) is
   keyed to a crossed `Week`. An auction's deadline is deliberately
@@ -217,6 +243,34 @@ buys the rider.
   bidding — until its deadline. Both functions run in one transaction with
   the retirement itself, so there is no window in which the rider has left
   and the auction is still open.
+- **`cancel_unowned_listings(seller_team, *, at)`** — cancellation for the
+  case where the team can no longer sell what it listed, rather than where the
+  *rider* has gone
+  ([#34](https://github.com/mario595/cycling-manager/issues/34)). It cancels
+  every `OPEN` auction the team is selling whose rider no longer passes
+  `belongs_to` for that team, and nothing else: a listing of a rider the team
+  still owns is left alone.
+
+  Its two callers are the two events that end a team's ownership in one
+  stroke. **Closing a development squad** releases its graduates, so their
+  auctions would otherwise stay biddable until the deadline — managers would
+  keep bidding on a rider already in the free-agent pool, and the winner would
+  be refused at resolve time by the very ownership check that would have caught
+  it days earlier. **Being claimed over** releases the whole roster to the
+  pool (`teams/README.md`, *Claiming a team*), so the same call also closes
+  [#114](https://github.com/mario595/cycling-manager/issues/114): before #34 a
+  claim withdrew the claimed team's *bids* but left its *listings* standing,
+  pointing `seller_team` at the team that had just released the rider. The new
+  manager saw it on the market screen as their own listing for a rider they no
+  longer had, and `world.ai_market` — which filters on
+  `seller_team__manager__isnull=False` — treated it as a *human* listing and
+  bid the reserve on it, tying up an AI team's headroom for up to three days.
+
+  Fixing #114 here rather than with a `rider__team=team` query is deliberate:
+  that narrower query would need a special case to *not* cancel a claimed team's
+  own still-owned listings, which is a special case in the wrong direction. No
+  money moves here either, so an auction cancelled with bids standing refunds
+  nothing — the same property as `cancel_open_auctions`.
 
 ## Withdrawal on claim
 

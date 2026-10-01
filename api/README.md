@@ -374,7 +374,12 @@ Since #29 each rider also carries `release_cost`
   **one** `transaction.atomic()`, with the `except` clauses outside it, so a
   new manager never inherits the team's standing bids and no tick can resolve
   one of them to them in between (#30; see `transfers/README.md`,
-  *Withdrawal on claim*).
+  *Withdrawal on claim*). Since #34 the same block calls
+  `transfers.services.cancel_unowned_listings(team, at=at)`, so a claim also
+  ends the team's **listings** — a claim releases its roster to the free-agent
+  pool, and an auction left open would show the new manager their own "listing"
+  for a rider they no longer have ([#114](https://github.com/mario595/cycling-manager/issues/114);
+  see `transfers/README.md`, *Auction ownership*).
 - `GET /api/staff/` (`StaffSerializer`, `StaffView`) — the **caller's own**
   team's staff: `trainer` (null when the slot is empty), `pool` (every
   unemployed trainer, but only populated when the slot is empty — a team
@@ -463,6 +468,40 @@ Since #29 each rider also carries `release_cost`
   lives once, in `riders.youth_intake.is_intake_week`. `riders` is `[]` and
   `intake` is `null` while the squad is closed — a closed squad has no
   riders and nothing due.
+
+  **Since #34 the payload carries the squad's own state and splits its
+  riders in two.** `places` is the held level's capacity and `in_squad` how
+  many of them are used — so "make room" on the screen means a number rather
+  than an impression — and `roster_count` with `roster_cap` is the *team's*
+  roster, sent so the screen can disable Promote instead of offering an action
+  the server would refuse with a 409. Each level also carries `places` (6 / 8 /
+  10), because a rung's cost and its capacity are read together.
+
+  `riders` is now **only the in-squad prospects**, and `graduates` is a
+  separate list — a graduate keeps its squad link but occupies no place
+  (`riders/README.md`, *Youth triage*), so mixing the two in one list made
+  "how full is my squad" unreadable. Both are ordered strongest first.
+  Every row adds `weeks_left` (the rest of the spell for a prospect, the
+  remaining decision window for a graduate — **a count, not a
+  `{season, week}`**, since the next season is often undeclared and a
+  position-less rider is exactly the one a manager needs a number for),
+  `change` (displayed movement on each of the five attributes since the
+  intake's baseline snapshot, on the 0-10 scale both sides are taken on, and
+  **`null`** when the rider has no baseline rather than a fabricated zero),
+  and `promotion_salary` (what they would draw once promoted — a squad rider
+  draws nothing today, so this is the only wage figure that applies). A
+  graduate row adds `market_value` and `listed`.
+
+  **Every one of those figures is built once for the squad and passed to the
+  serializers through `context`** — `weeks_left`, `graduate_weeks_left`,
+  `promotion_salaries`, `market_values`, `listed` and `baselines` are all
+  per-squad maps keyed by rider pk. A `SerializerMethodField` that queried per
+  rider would turn one squad screen into thirty queries, and the endpoint is
+  asked about at most ten riders. `intake.next` also carries
+  `arrivals_at_risk`: how much of that batch would be turned away if nothing
+  changes before the week, computed from `free_places`, so the warning can be
+  given **before** the week rather than after. It is a projection — promoting
+  or discarding a prospect moves it.
 - `POST /api/development-squad/open/` (`OpenDevelopmentSquadView`) — open the
   squad at `{level}`, debiting that level's fee. `204`; `409` if a squad is
   already open, if `level` is not the entry level (`LevelLocked` — however rich
@@ -480,12 +519,43 @@ Since #29 each rider also carries `release_cost`
   would make a double-click look like a success. `POST` rather than `DELETE`
   for `FireTrainerView`'s reason and then some: the row really is deleted, but
   the opening fee already paid stays in the ledger, so nothing here is
-  destroyed. Since #33, closing also releases every rider then sitting in the
-  squad to the free-agent pool, calling `close_squad(team, at=now())` — see
-  `riders/README.md`, *Youth intake*.
+  destroyed. Since #33, closing also releases every **prospect** then sitting
+  in the squad to the free-agent pool, calling `close_squad(team, at=now())`
+  and any **graduate** is deleted outright — see `riders/README.md`, *Youth
+  intake* and *Youth triage*. Since #34 it wraps that in one transaction with
+  `transfers.services.cancel_unowned_listings(team, at=at)`, because a
+  released graduate's auction would otherwise stay biddable until its
+  deadline and its winner would be refused by the very ownership check that
+  would have caught it days earlier.
+- `POST /api/development-squad/riders/<id>/promote/`
+  (`PromoteSquadRiderView`, #34) — move a prospect **or a graduate** onto the
+  senior roster. `204`; `409` for another team's rider (`NotYourProspect`) or
+  a roster already at `transfers.services.ROSTER_CAP` (`RosterFull`). It works
+  on a graduate because deciding early is a choice a manager is entitled to
+  make — the alternative the spec weighed was refusing it, with the worse
+  consequences. `ROSTER_CAP` is **passed in** rather than imported by
+  `riders/`, which may not know about `transfers/`; the screen disables the
+  button from the payload's `roster_count`/`roster_cap` first.
 
-  All four are `IsAuthenticated` by the project default — **no `AllowAny`** —
-  and all four return `403` without a team, the same `team_for()` check every
+  Promoting a **listed** graduate also cancels their auction, in the same
+  transaction. The squad screen keeps Promote available on a listed rider — a
+  listing takes away the *sale*, not the option of keeping them — so this is
+  the only honest reading of the button: the manager is choosing the rider over
+  the bids, and the sale ends. Left alone, the auction would sit open over a
+  player the team is now paying and fielding.
+- `POST /api/development-squad/riders/<id>/discard/`
+  (`DiscardSquadRiderView`, #34) — discard a prospect or a graduate for good;
+  they leave the game rather than joining the free-agent pool. `204`; `409`
+  while an auction of theirs is open (`ProspectListed`). `POST` like every
+  other action here: the request is an order, not a description of a resource
+  that is already gone. The listing rule arrives as an **injected `check`
+  callback** (`_not_listed`), so `riders/discard` needs no knowledge of the
+  auction market — the same shape `promote`'s `roster_cap` argument takes.
+  It raises rather than returning a verdict, because a check that returns one
+  can be forgotten by a caller while one that raises cannot.
+
+  All six are `IsAuthenticated` by the project default — **no `AllowAny`** —
+  and all six return `403` without a team, the same `team_for()` check every
   other team-scoped view makes. The three writes share a module-level
   `_squad_charge(team)` helper that is the injected `charge` callback: the
   balance check and the `economy.services.charge_development_squad_fee` write

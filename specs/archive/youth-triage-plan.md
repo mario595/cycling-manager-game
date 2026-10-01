@@ -1,6 +1,6 @@
 # Youth triage — Implementation Plan
 
-**Spec:** `specs/youth-triage.md` · **Issue:** #34 · **Status:** proposed
+**Spec:** `specs/archive/youth-triage.md` · **Issue:** #34 · **Status:** implemented
 **Apps touched:** `riders/` (new module `youth_triage.py`), `transfers/`, `world/`, `api/`, `frontend/`, `teams/` (one call site), `seasons/` (a second example season)
 
 ## Context you need
@@ -386,7 +386,7 @@ Run `npm test` and `npm run build` in `frontend/`.
 ### W9 — `seasons/season-2.example.json` and the seed note ✅
 The file, plus the `AGENTS.md` seeding block line (`load_season seasons/season-2.example.json`). Test: `schedule/tests/test_load_season.py::test_season_2_example_loads_after_season_1` — load both files and assert season 2 starts at season 1's `ends_at` (they abut, no overlap error).
 
-### W10 — Documentation, archive spec and plan
+### W10 — Documentation, archive spec and plan ✅
 See below.
 
 ## Execution order

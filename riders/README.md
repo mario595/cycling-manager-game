@@ -485,11 +485,14 @@ closing is not an event that has to be written to the ledger or replayed;
 `close_squad` returns whether there was a squad to close, which is all a
 caller needs to know.
 
-**Prices are a table in `LEVELS`, never columns on the row.** A stored price
-could only ever drift from the table, which is the same reasoning
-`staff/pricing.py` gives for a trainer's fee and salary: derive it, never
-persist it. `LEVELS` maps level to `LevelTerms(level, name, opening_fee,
-weekly_cost)`, and `weekly_cost` / `level_fee` read it.
+**Prices and capacity are a table in `LEVELS`, never columns on the row.** A
+stored price could only ever drift from the table, which is the same
+reasoning `staff/pricing.py` gives for a trainer's fee and salary: derive
+it, never persist it. `LEVELS` maps level to `LevelTerms(level, name,
+opening_fee, weekly_cost, places)`, and `weekly_cost` / `level_fee` /
+`free_places` read it. `places` is how many prospects the level can hold —
+6 / 8 / 10 — so a rung costs more to reach, more to run **and** holds more,
+which is what makes the ladder worth climbing rather than a price list.
 
 **The squad is a ladder, climbed one rung at a time, with no way back down.**
 A squad opens at `ENTRY_LEVEL` (`min(LEVELS)`, derived so adding a level
@@ -550,6 +553,17 @@ request wait, not behave as though the squad were not there. The
 `OneToOneField`'s unique index is the second line of defence behind that
 lock.
 
+**Closing is two different events wearing one button (#34).** Before #34 a
+close released every rider in the squad to the free-agent pool. Now only the
+ones still *in the squad* are released that way; a **graduate** is deleted
+outright instead, because a graduate is not the squad's to give away — they
+are a free agent who happens to have been promised a place, and once that
+window closes the promise is over. `close_squad` returns a `SquadClosure`
+naming which riders went where (or `None` when there was no squad to close),
+because a caller that has to cancel the graduates' auctions afterwards needs
+to know they existed. See *Youth triage*, below, and `transfers/README.md`,
+*Auctions*.
+
 Closing writes nothing to the ledger and refunds nothing, and it is the only
 way to reduce the weekly cost — which is what makes it a drastic measure
 rather than a cheaper setting, and why reopening has to start from the bottom
@@ -557,10 +571,11 @@ again. A mid-week change is charged at the new rate from the next
 week boundary, with nothing prorated and nothing refunded for the half-week
 just gone; see `economy/README.md`, *Development squad costs*.
 
-Claiming a team closes its squad, releasing every rider then sitting in it as
-a free agent with `unattached_since` stamped (`teams/README.md`, *Claiming a
-team*; see *Youth intake*, below, for the release path itself). Releasing a
-team does not touch the squad.
+Claiming a team closes its squad, releasing every prospect still sitting in
+it as a free agent with `unattached_since` stamped and deleting any graduate
+outright (`teams/README.md`, *Claiming a team*; see *Youth intake* and *Youth
+triage*, below, for the release path itself). Releasing a team does not touch
+the squad.
 
 **Youth intake (#33) populates the squad.** See *Youth intake*, below, for
 what arrives, how often, and how a manager sees it. The corollary the
@@ -643,25 +658,37 @@ it re-reads the squad **by team** (not by the id listed earlier — a squad
 closed and reopened between the listing and the lock still gets its batch),
 skips a team whose squad has closed since, skips a batch already written for
 this `(squad, intake_at)` pair (the second line of defence behind the
-`WeekTransition` row's exactly-once guarantee), and otherwise creates
-`INTAKE_BATCH_SIZE` youth riders with `development_squad` set and `intake_at
-= at`, then writes their baseline attribute snapshots
-(`record_initial_snapshots`). The lock matters because a manager can close
-the squad *during* the tick — without it, intake could insert riders
-pointing at a squad `close_squad` is deleting, and the FK's `SET_NULL`
-would then leave them in the free-agent pool with no `unattached_since`
-stamp, the exact bug D6 below exists to prevent by another route.
+`WeekTransition` row's exactly-once guarantee), creates as many of
+`INTAKE_BATCH_SIZE` youth riders as there are **free places**
+(`free_places(squad)`), with `development_squad` set and `intake_at = at`,
+then writes their baseline attribute snapshots (`record_initial_snapshots`).
+The lock matters because a manager can close the squad *during* the tick —
+without it, intake could insert riders pointing at a squad `close_squad` is
+deleting, and the FK's `SET_NULL` would then leave them in the free-agent pool
+with no `unattached_since` stamp, the exact bug D6 below exists to prevent by
+another route.
 
-**Closing releases the squad's riders, and the release must stamp
+**A full squad is turned away, not queued, and intake says so (#34).** Before
+#34 the batch was created unconditionally and simply overfilled the squad;
+now the shortfall is real and reported. `run_intake` returns an
+`IntakeResult(created, turned_away)` per squad, `world/` sums both into its
+`TickRun` counters, and the squad screen's next-intake payload carries
+`arrivals_at_risk` — how much of the *next* batch would be lost if nothing
+changes — so the warning arrives **before** the week rather than after it.
+Discarding a prospect or promoting one into the senior roster frees a place,
+which is why the figure is a projection rather than a promise.
+
+**Closing releases the squad's *prospects*, and the release must stamp
 `unattached_since` before the row disappears.** `close_squad(team, *, at)`
-now takes a required `at`: every rider in the squad is stamped
+takes a required `at`: every **prospect** is stamped
 `unattached_since = at` via the existing `mark_team_change(riders,
 team_now=None, at=at)`, then has `development_squad` cleared, and only then
-is the squad row deleted. Deleting first would let the FK's `SET_NULL`
-unlink them silently with a null `unattached_since` — and a free agent with
-a null `unattached_since` is never treated as long-unattached by the pool's
-expiry rule (`transfers/README.md`, *Free agents*), so an unwanted 17-year-old
-would sit in the market forever.
+is the squad row deleted. A **graduate** is deleted rather than released
+(*Youth triage*, below). Deleting first would let the FK's `SET_NULL` unlink
+them silently with a null `unattached_since` — and a free agent with a null
+`unattached_since` is never treated as long-unattached by the pool's expiry
+rule (`transfers/README.md`, *Free agents*), so an unwanted 17-year-old would
+sit in the market forever.
 
 **Squad riders grow like any other rider, but draw no wage and get no
 trainer focus.** Growth is free: `apply_weekly_growth` and
@@ -675,6 +702,83 @@ the *following* week's boundary, because intake in the tick runs **after**
 that week's growth, training and charges — otherwise a rider's baseline
 snapshot and their first week of growth would land at the same instant, and
 the attribute history would open with a jump that never happened.
+
+## Youth triage
+
+`youth_triage.py` (#34) is what makes a development squad a *decision* rather
+than a queue. Before it, a youth rider simply accumulated in the squad until
+someone closed it, and the interesting question — keep this one, sell that
+one, drop the other — had no answer anywhere in the game.
+
+**A squad has two kinds of member, and the partition is `graduated_at`.** An
+**in-squad rider** is a prospect: `development_squad` set, `graduated_at` null,
+occupying one of the level's `places`, and growing. A **graduate** keeps the
+squad link but has `graduated_at` stamped — so they are still *the squad's to
+decide about* while **occupying no place**, which is the whole point: the
+squad's places exist for riders it is still developing, and holding a
+finished rider in one would block the intake that replaces them.
+`in_squad(squad)` and `graduates(squad)` are the two queries, `free_places(squad)`
+is `places - in_squad.count()`, and `belongs_to(rider, team)` is the ownership
+question both of them answer: true for a roster rider and for this team's
+graduate, false for an in-squad rider and for another team's graduate.
+
+**Squad riders develop faster than anyone else, scaled to a ceiling the player
+never sees.** `squad_development_deltas(rider)` returns only the *extra* week
+of movement on top of the ordinary age curve, and per attribute the total
+wanted this week is
+
+    min(gap, max(base + gap * SQUAD_GROWTH_FRACTION,
+                 SQUAD_MIN_WEEKLY_GAIN if gap > 0 else 0))
+
+where `gap = max(0, ceiling - current)` and the ceiling is the hidden
+`potential` (`attribute_ceilings`). Three promises in three clauses: the term
+is **proportional to the gap**, so watching the bars move is real evidence
+about a ceiling that is never displayed; the **floor**
+(`SQUAD_MIN_WEEKLY_GAIN = 0.8`, `SQUAD_GROWTH_FRACTION = 0.03`) is what makes
+"every rider ends better than they arrived" true — without it the
+proportional term alone leaves the weakest arrivals visibly flat, which the
+age curve on its own does to roughly 17 arrivals in 4,000 over a full spell;
+and the `min(gap, …)` **cap** is what makes "no rider passes their hidden
+ceiling" true however generous the floor is. It never touches the database, so
+the constants were tuned by simulating seeded riders in memory.
+
+**The spell is 14 weeks; the decision window is 2.** `SPELL_WEEKS` and
+`GRADUATE_WINDOW_WEEKS` are constants here, counted in *declared* weeks
+through `schedule.services.weeks_opened_between` — never by dividing a
+timedelta by seven — so a gap between seasons contributes nothing, which is
+what makes a season boundary (a week-4 arrival graduating on week 18, six
+weeks into the next season) fall out for free. `graduate(rider_ids, *, at)`
+stamps `graduated_at` and does nothing to a rider who was already promoted.
+`release_graduates(rider_ids, *, at)` is the other half: a graduate whose
+window closed is stamped `unattached_since`, has the squad cleared and joins
+the free-agent pool — **unless they are listed**, in which case the auction
+decides (`world/README.md`, *How a tick works*).
+
+**Promote and discard are the two decisions, and both take what they cannot
+know.** `promote(team, rider_id, *, at, roster_cap)` moves a prospect *or* a
+graduate onto the senior roster, setting `weekly_salary =
+weekly_salary_for(rider)` and clearing `team` and `development_squad` in one
+`save()` — two saves would put a rider in both places at once for the length of
+a round trip and trip `rider_not_on_roster_and_in_squad`. It works on a
+graduate too: deciding early is a choice a manager is entitled to make, and
+the alternative the spec weighed — refusing it — has the worse consequences.
+`discard(team, rider_id, *, check=None)` deletes the rider outright — they
+leave the game rather than joining the pool — and takes a `check` callback, so
+the API can refuse a rider with an open auction while `riders/` learns nothing
+about the auction market.
+
+**Both take their collaborator as an argument, never an import.**
+`roster_cap` lives in `transfers/` and the listing check lives in `api/`, and
+`riders -> core, teams` (`AGENTS.md`) is not negotiable — the same rule that
+puts `charge` in `open_squad`'s signature. `lock_rider(rider_id)` is public for
+a database reason rather than a design one: a squad row is nullable, so
+`select_for_update()` on an outer join locks *every* table it touches unless
+`of=("self",)` is given.
+
+`development_squad.py` imports the triage module **inside** `close_squad`,
+not at module scope: `youth_triage` imports `LEVELS` for `free_places`, so a
+top-level import between them is a cycle. The lazy import keeps the dependency
+real and breaks the loop, exactly as `teams/` does with `economy/`.
 
 ## Generation
 
