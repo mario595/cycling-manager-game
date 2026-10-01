@@ -72,6 +72,12 @@ FRESHNESS_FLOOR = 20
 #: squad keeps a rider consistently near full.
 RACE_FRESHNESS_COST = 25
 
+#: Per-stage cost inside a stage race — less than one full race, so a full
+#: tour still costs more than one race: a 7-stage tour costs 70, above one
+#: race (25) but below wrecking a fresh rider (floor is 20). See
+#: specs/archive/stage-races.md, Decisions taken.
+STAGE_FRESHNESS_COST = 10
+
 #: Weekly recovery range a hidden recovery_rate of 1-100 maps onto
 #: linearly. At the average rate (~14/week), a rider racing every week
 #: nets -11/week and reaches the floor from full in about seven weeks —
@@ -405,15 +411,18 @@ def recovery_amount(rider: Rider) -> int:
     return round(RECOVERY_MIN + fraction * (RECOVERY_MAX - RECOVERY_MIN))
 
 
-def apply_race_cost(rider_ids: list[int]) -> int:
-    """Deduct RACE_FRESHNESS_COST from each rider, floored at
-    FRESHNESS_FLOOR. One UPDATE via Greatest/F, not a per-row loop.
-    Returns the number of rows updated.
+def apply_race_cost(rider_ids: list[int], *, cost: int = RACE_FRESHNESS_COST) -> int:
+    """Deduct `cost` from each rider, floored at FRESHNESS_FLOOR. One UPDATE
+    via Greatest/F, not a per-row loop. Returns the number of rows updated.
+
+    `cost` defaults to RACE_FRESHNESS_COST for a one-day race;
+    `racing.services.simulate_race` passes STAGE_FRESHNESS_COST for a stage
+    — see specs/archive/stage-races.md.
     """
     return Rider.objects.filter(pk__in=rider_ids).update(
         freshness=Greatest(
             Value(FRESHNESS_FLOOR),
-            F("freshness") - RACE_FRESHNESS_COST,
+            F("freshness") - cost,
         )
     )
 

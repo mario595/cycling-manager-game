@@ -25,5 +25,41 @@
       { "kind": "mountain", "name": "Final Top", "distance": 100000, "category": "hc" }
     ] },
     { "week": 12, "day": "sunday", "time": "14:00", "name": "Championship Finale", "course": [{ "length": 230000, "gradient": 0.0 }] }
+  ],
+  "stage_races": [
+    {
+      "name": "Alpine Tour",
+      "week": 6,
+      "start_day": "monday",
+      "time": "14:00",
+      "stages": [
+        { "name": "Flat Opener", "course": [{ "length": 130000, "gradient": 0.0 }], "markers": [
+          { "kind": "sprint", "name": "Stage 1 Sprint", "distance": 100000 }
+        ] },
+        { "name": "Rolling Hills", "course": [{ "length": 90000, "gradient": 1.5 }, { "length": 60000, "gradient": 0.5 }] },
+        { "name": "First Mountain", "course": [{ "length": 60000, "gradient": 5.0 }, { "length": 40000, "gradient": 3.0 }], "markers": [
+          { "kind": "mountain", "name": "Summit", "distance": 60000 }
+        ] },
+        { "name": "Second Mountain", "course": [{ "length": 45000, "gradient": 6.0 }, { "length": 55000, "gradient": 2.5 }], "markers": [
+          { "kind": "mountain", "name": "High Pass", "distance": 45000 }
+        ] },
+        { "name": "Sprinters' Finale", "course": [{ "length": 140000, "gradient": 0.0 }], "markers": [
+          { "kind": "sprint", "name": "Final Sprint", "distance": 130000 }
+        ] }
+      ]
+    },
+    {
+      "name": "Coastal Three Days",
+      "week": 10,
+      "start_day": "wednesday",
+      "time": "14:00",
+      "stages": [
+        { "name": "Along the Shore", "course": [{ "length": 120000, "gradient": 0.0 }] },
+        { "name": "Inland Loop", "course": [{ "length": 100000, "gradient": 2.0 }, { "length": 20000, "gradient": 0.0 }] },
+        { "name": "Return Leg", "course": [{ "length": 110000, "gradient": 0.0 }], "markers": [
+          { "kind": "sprint", "name": "Coastal Sprint", "distance": 105000 }
+        ] }
+      ]
+    }
   ]
 }

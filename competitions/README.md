@@ -48,6 +48,10 @@ recalculated — if the table is retuned later, races already scored keep
 what they were awarded at the time (`specs/archive/race-points-and-standings.md`,
 *Rules and edge cases*).
 
+`STAGE_POINTS_BY_POSITION` and `GC_POINTS_BY_POSITION` sit alongside it —
+roughly half and double the one-day table respectively — for a stage race's
+own stages and its final general classification. See *Stage races*, below.
+
 ## The prize table sits beside it
 
 `PRIZE_BY_POSITION` pays 1st through 10th, the **same positions** the
@@ -57,6 +61,9 @@ rider earns a prize: a team with riders 2nd and 5th is paid for both. The
 payout is written to `economy/`'s ledger when a race finishes, so — like
 `RacePoints` — the amount is frozen at payout time and a later retune does
 not rewrite past results.
+
+`STAGE_PRIZE_BY_POSITION` and `GC_PRIZE_BY_POSITION` are the stage race
+counterparts, same shape, same positions — see *Stage races*, below.
 
 ## Marker points (sprint and mountain)
 
@@ -163,6 +170,27 @@ expressed as a multi-level SQL `ORDER BY` — clearer at this size.
 reached it purely through markers rank below the one that reached it
 through a finish — sprinting and climbing are different skills from finishing,
 and tie-breaking follows the finish.
+
+## Stage races
+
+A stage race's own stages score and pay exactly like a one-day race —
+`score_race`/`prizes_by_team`, `finish_time__isnull=False`, everything
+above — just from the reduced `STAGE_*` tables instead of the one-day ones,
+switched on `race.stage_race_id`. See `racing/README.md`, *Stage races*,
+for what a stage race is and how the general classification it feeds is
+computed.
+
+The GC itself is different: `RacePoints.kind` (`RACE` or `GC`) exists
+**because** of it. A stage race's final stage carries both its own
+`kind=RACE` points and, once the whole tour completes, a `kind=GC` row for
+the same race — `score_race`'s idempotency check and `standings()`/
+`points_by_team()` (which sum every `RacePoints` row regardless of `kind`,
+so a GC win counts exactly like any other 1st place in countback) both need
+that distinction to not conflate the two. `score_general_classification`
+and `gc_prizes_by_team` are the GC's own `score_race`/`prizes_by_team`:
+called once, from `world.services._settle_stage_race`, the moment the
+stage race completes — never from `racing/` or from this app on its own,
+same as one-day scoring.
 
 ## Future work / possible improvements
 

@@ -66,6 +66,12 @@ class LedgerEntry(TimeStampedModel):
         WAGES = "wages", "Weekly wages"
         TAKEOVER = "takeover", "Team taken over"
         PRIZE_MONEY = "prize_money", "Prize money"
+        # A separate kind from PRIZE_MONEY, not a shared one: a stage race's
+        # final stage carries both a stage prize and a GC prize for the same
+        # (team, race, position) when both belong to the same team — sharing
+        # PRIZE_MONEY's constraint would collide and silently drop one payout
+        # (see specs/archive/stage-races.md, racing/README.md *Stage races*).
+        GC_PRIZE_MONEY = "gc_prize_money", "General classification prize"
         MERCHANDISE = "merchandise", "Merchandise revenue"
         SPONSORSHIP = "sponsorship", "Sponsorship"
         TRAINER_SALARY = "trainer_salary", "Trainer salary"
@@ -114,15 +120,19 @@ class LedgerEntry(TimeStampedModel):
         blank=True,
         related_name="ledger_entries",
         help_text=(
-            "Set on prize_money entries only. Null elsewhere. Declared as a "
-            "string so economy/ never imports racing/ at module scope — same "
-            "pattern as staff.TrainingWeekReport.week."
+            "Set on prize_money and gc_prize_money entries only. Null "
+            "elsewhere. Declared as a string so economy/ never imports "
+            "racing/ at module scope — same pattern as "
+            "staff.TrainingWeekReport.week."
         ),
     )
     position = models.PositiveSmallIntegerField(
         null=True,
         blank=True,
-        help_text="The finishing position this prize was for, 1-10. Meaningful only on prize_money; null elsewhere.",
+        help_text=(
+            "The finishing position this prize was for, 1-10. Meaningful "
+            "only on prize_money and gc_prize_money; null elsewhere."
+        ),
     )
     rider_count = models.PositiveSmallIntegerField(
         default=0,
@@ -145,6 +155,11 @@ class LedgerEntry(TimeStampedModel):
                 fields=["team", "race", "position"],
                 condition=models.Q(kind="prize_money"),
                 name="one_prize_entry_per_team_race_position",
+            ),
+            models.UniqueConstraint(
+                fields=["team", "race", "position"],
+                condition=models.Q(kind="gc_prize_money"),
+                name="one_gc_prize_entry_per_team_race_position",
             ),
             models.UniqueConstraint(
                 fields=["team", "week"],

@@ -2,12 +2,50 @@ from __future__ import annotations
 
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 
 from core.models import TimeStampedModel
 
 #: A squad is exactly this many riders — see racing/README.md, *Squads*.
 #: Imported by services, serializers and tests so the number appears once.
 SQUAD_SIZE = 4
+
+
+class StageRace(TimeStampedModel):
+    """A named run of consecutive-day races sharing one squad and a general
+    classification (see racing/README.md, *Stage races*, and
+    specs/archive/stage-races.md).
+
+    Deliberately stores nothing derivable from its stages: no status, no
+    stage count, no GC. `is_complete()` and `final_stage()` compute it from
+    the `Race` rows in `stages` — the same "derived, not stored" principle
+    `schedule/README.md` uses for the current season/week.
+    """
+
+    name = models.CharField(max_length=120)
+    week = models.ForeignKey(
+        "schedule.Week",
+        on_delete=models.PROTECT,
+        related_name="stage_races",
+        help_text="String reference so racing/models.py needs no import of schedule/.",
+    )
+
+    def __str__(self) -> str:
+        return self.name
+
+    def final_stage(self) -> "Race":
+        return self.stages.order_by("-stage_number").first()
+
+    def is_complete(self) -> bool:
+        """True once every stage has run — FINISHED or FAILED — and at
+        least one actually finished. A stage race entirely FAILED never
+        completes: there is nothing to settle a GC from."""
+        stages = list(self.stages.all())
+        if not stages:
+            return False
+        if any(s.status not in (Race.Status.FINISHED, Race.Status.FAILED) for s in stages):
+            return False
+        return any(s.status == Race.Status.FINISHED for s in stages)
 
 
 class Race(TimeStampedModel):
@@ -79,6 +117,19 @@ class Race(TimeStampedModel):
             "racing/README.md."
         ),
     )
+    stage_race = models.ForeignKey(
+        StageRace,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="stages",
+        help_text="Null for a one-day race. PROTECT: a raced stage must never vanish with its tour.",
+    )
+    stage_number = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="1-based. Null iff stage_race is null — see stage_number_iff_stage_race.",
+    )
 
     class Meta:
         indexes = [
@@ -87,6 +138,16 @@ class Race(TimeStampedModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["week", "race_day"], name="one_race_per_day_per_week",
+            ),
+            models.UniqueConstraint(
+                fields=["stage_race", "stage_number"], name="one_race_per_stage_number",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(stage_race__isnull=True, stage_number__isnull=True)
+                    | Q(stage_race__isnull=False, stage_number__isnull=False, stage_number__gte=1)
+                ),
+                name="stage_number_iff_stage_race",
             ),
         ]
 
@@ -102,6 +163,10 @@ class Race(TimeStampedModel):
                                  f"{self.week.season.number} "
                                  f"({self.week.starts_at} to {self.week.ends_at})",
                 })
+        if self.stage_race_id and self.week_id and self.stage_race.week_id != self.week_id:
+            raise ValidationError({
+                "week": f"must be the same week as its stage race ({self.stage_race})",
+            })
 
     def save(self, *args, **kwargs):
         self.clean()
@@ -155,6 +220,17 @@ class RaceResult(TimeStampedModel):
         null=True,
         blank=True,
         help_text="Seconds from race start. Null if the rider did not finish.",
+    )
+    group_time = models.FloatField(
+        null=True,
+        blank=True,
+        help_text=(
+            "This rider's finishing group's time — the earliest finish_time "
+            "among riders separated by no more than GROUP_GAP_SECONDS from "
+            "the rider ahead. Null for a non-finisher. Written for every "
+            "race, but only read for a stage race's general classification "
+            "— see racing/README.md, *Stage races*."
+        ),
     )
 
     class Meta:

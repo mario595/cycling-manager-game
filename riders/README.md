@@ -243,7 +243,12 @@ when their race is simulated (`racing.services.simulate_race`) — a rider
 cut by the race engine's time limit (the broom wagon; see
 `race_engine/README.md`, *Simulation tick*) pays the same cost as a
 finisher, because missing a race that way still costs a rider's legs the
-same as racing it. A week's recovery is the rider's `recovery_rate` mapped
+same as racing it. A stage of a stage race costs `STAGE_FRESHNESS_COST`
+(10) instead — less than a full race, but a whole tour still costs more:
+a 7-stage tour costs 70, above one race (25) but below wrecking a fresh
+rider (`FRESHNESS_FLOOR` is 20). `racing.services.simulate_race` is what
+picks which constant applies, via `apply_race_cost`'s `cost` keyword — see
+`racing/README.md`, *Stage races*. A week's recovery is the rider's `recovery_rate` mapped
 linearly onto `[RECOVERY_MIN, RECOVERY_MAX]` = [8, 20], applied once per
 week by the tick to every rider who did **not start** a race that week.
 Because the recovery rate is

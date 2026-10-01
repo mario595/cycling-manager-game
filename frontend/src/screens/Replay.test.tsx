@@ -32,8 +32,10 @@ const race: RaceDetail = {
   distance_km: 20,
   course: [{ length: 20000, gradient: 0.02 }],
   payout: [],
+  gc_payout: [],
   markers: [],
   has_replay: true,
+  stage_race: null,
 }
 
 function header(teams: string[], riders: Array<{ id: string; name: string; team: string; role: 'leader' | 'support' }>) {

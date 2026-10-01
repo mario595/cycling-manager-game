@@ -18,13 +18,20 @@ from racing.models import (
     RaceResult,
     RaceSquad,
     RaceSquadRider,
+    StageRace,
 )
 from racing.services import (
     SquadError,
     auto_pick_squad,
+    carried_squad,
     course_training_attribute,
     create_race,
+    create_stage_race,
+    ensure_squads,
+    general_classification,
+    group_times,
     previous_squad,
+    riders_still_in,
     riders_who_raced,
     riders_who_started,
     set_squad,
@@ -32,7 +39,7 @@ from racing.services import (
     suggested_squad,
 )
 from riders.models import Rider
-from riders.services import FRESHNESS_FLOOR
+from riders.services import FRESHNESS_FLOOR, RACE_FRESHNESS_COST, STAGE_FRESHNESS_COST
 from schedule.models import Season, Week
 from teams.models import Team
 
@@ -112,6 +119,25 @@ def test_team_codes_match_player_format(team):
 
     assert codes[str(team.pk)]["code"] == "ALP"
     assert codes[str(team.pk)]["colour"] == "#FF0000"
+
+
+def test_group_times_chains_consecutive_gaps():
+    # Each gap is <= 1.0s from its predecessor, so all six chain into one
+    # group even though the last is 6s clear of the first.
+    assert group_times([100, 100, 101, 102, 105, 106]) == [100, 100, 100, 100, 105, 105]
+
+
+def test_group_times_gap_just_over_threshold_splits():
+    assert group_times([100.0, 101.0, 101.1]) == [100.0, 100.0, 100.0]
+    assert group_times([100.0, 101.1, 101.2]) == [100.0, 101.1, 101.1]
+
+
+def test_group_times_single_finisher():
+    assert group_times([42.0]) == [42.0]
+
+
+def test_group_times_every_rider_isolated():
+    assert group_times([10.0, 20.0, 30.0]) == [10.0, 20.0, 30.0]
 
 
 def test_race_defaults_to_scheduled_and_unscheduled(db):
@@ -292,6 +318,352 @@ def test_two_weekless_races_on_the_same_date_are_accepted(db):
     )
 
     assert Race.objects.filter(week__isnull=True, race_day=MONDAY.date()).count() == 2
+
+
+@pytest.fixture
+def stage_race(db, week) -> StageRace:
+    return StageRace.objects.create(name="Alpine Tour", week=week)
+
+
+def _stage(stage_race, week, number, **kwargs):
+    return Race.objects.create(
+        name=f"Alpine Tour — Stage {number}",
+        course=[{"length": 500.0, "gradient": 0.0}],
+        starts_at=week.starts_at + timedelta(days=number - 1),
+        week=week,
+        stage_race=stage_race,
+        stage_number=number,
+        **kwargs,
+    )
+
+
+def test_stage_number_requires_stage_race(db, week):
+    with pytest.raises(IntegrityError):
+        Race.objects.create(
+            name="Orphan Stage",
+            course=[{"length": 500.0, "gradient": 0.0}],
+            starts_at=week.starts_at,
+            week=week,
+            stage_number=1,
+        )
+
+
+def test_stage_race_requires_stage_number(db, week, stage_race):
+    with pytest.raises(IntegrityError):
+        Race.objects.create(
+            name="Numberless Stage",
+            course=[{"length": 500.0, "gradient": 0.0}],
+            starts_at=week.starts_at,
+            week=week,
+            stage_race=stage_race,
+        )
+
+
+def test_stage_numbers_unique_within_stage_race(db, week, stage_race):
+    _stage(stage_race, week, 1)
+
+    with pytest.raises(IntegrityError):
+        _stage(stage_race, week, 1)
+
+
+def test_stage_must_share_stage_race_week(db, week, stage_race):
+    other_season = Season.objects.create(number=2, starts_at=MONDAY + timedelta(weeks=20))
+    other_week = Week.objects.create(
+        season=other_season, number=1,
+        starts_at=other_season.starts_at, ends_at=other_season.starts_at + timedelta(weeks=1),
+    )
+
+    with pytest.raises(ValidationError):
+        Race.objects.create(
+            name="Alpine Tour — Stage 1",
+            course=[{"length": 500.0, "gradient": 0.0}],
+            starts_at=other_week.starts_at,
+            week=other_week,
+            stage_race=stage_race,
+            stage_number=1,
+        )
+
+
+def test_is_complete_false_while_any_stage_is_scheduled(db, week, stage_race):
+    _stage(stage_race, week, 1, status=Race.Status.FINISHED)
+    _stage(stage_race, week, 2)
+
+    assert stage_race.is_complete() is False
+
+
+def test_is_complete_true_once_every_stage_finished_or_failed(db, week, stage_race):
+    _stage(stage_race, week, 1, status=Race.Status.FINISHED)
+    _stage(stage_race, week, 2, status=Race.Status.FAILED)
+
+    assert stage_race.is_complete() is True
+
+
+def test_is_complete_false_when_every_stage_failed(db, week, stage_race):
+    _stage(stage_race, week, 1, status=Race.Status.FAILED)
+    _stage(stage_race, week, 2, status=Race.Status.FAILED)
+
+    assert stage_race.is_complete() is False
+
+
+def test_final_stage_is_highest_number(db, week, stage_race):
+    _stage(stage_race, week, 1)
+    third = _stage(stage_race, week, 3)
+    _stage(stage_race, week, 2)
+
+    assert stage_race.final_stage() == third
+
+
+def test_create_stage_race(db, week):
+    stage_race = create_stage_race(name="Coastal Three Days", week=week)
+
+    assert stage_race.name == "Coastal Three Days"
+    assert stage_race.week == week
+
+
+def test_set_squad_refuses_later_stage(db, team, four_riders, week, stage_race):
+    stage1 = _stage(stage_race, week, 1)
+    set_squad(stage1, team, [r.pk for r in four_riders], four_riders[0].pk)
+    stage2 = _stage(stage_race, week, 2)
+
+    with pytest.raises(SquadError):
+        set_squad(stage2, team, [r.pk for r in four_riders], four_riders[0].pk)
+
+
+def test_later_stage_carries_stage_one_squad_and_leader(db, team, four_riders, week, stage_race):
+    stage1 = _stage(stage_race, week, 1)
+    set_squad(stage1, team, [r.pk for r in four_riders], four_riders[0].pk)
+    for i, r in enumerate(four_riders, start=1):
+        RaceResult.objects.create(race=stage1, rider=r, position=i, finish_time=100.0 + i)
+    stage1.status = Race.Status.FINISHED
+    stage1.save(update_fields=["status"])
+    stage2 = _stage(stage_race, week, 2)
+
+    ensure_squads(stage2)
+
+    squad = RaceSquad.objects.get(race=stage2, team=team)
+    assert set(squad.members.values_list("rider_id", flat=True)) == {r.pk for r in four_riders}
+    leader = squad.members.get(is_leader=True)
+    assert leader.rider_id == four_riders[0].pk
+
+
+def test_later_stage_never_auto_picks(db, team, four_riders, week, stage_race):
+    # No stage-1 squad was ever saved for this team.
+    _stage(stage_race, week, 1, status=Race.Status.FINISHED)
+    stage2 = _stage(stage_race, week, 2)
+
+    ensure_squads(stage2)
+
+    assert not RaceSquad.objects.filter(race=stage2, team=team).exists()
+
+
+def test_rider_dnf_in_stage_is_not_carried(db, team, four_riders, week, stage_race):
+    stage1 = _stage(stage_race, week, 1)
+    set_squad(stage1, team, [r.pk for r in four_riders], four_riders[0].pk)
+    for i, r in enumerate(four_riders[:3], start=1):
+        RaceResult.objects.create(race=stage1, rider=r, position=i, finish_time=100.0 + i)
+    RaceResult.objects.create(race=stage1, rider=four_riders[3], position=4, finish_time=None)
+    stage1.status = Race.Status.FINISHED
+    stage1.save(update_fields=["status"])
+    stage2 = _stage(stage_race, week, 2)
+
+    ensure_squads(stage2)
+
+    squad = RaceSquad.objects.get(race=stage2, team=team)
+    assert set(squad.members.values_list("rider_id", flat=True)) == {r.pk for r in four_riders[:3]}
+
+
+def test_failed_stage_does_not_remove_anyone(db, team, four_riders, week, stage_race):
+    stage1 = _stage(stage_race, week, 1)
+    set_squad(stage1, team, [r.pk for r in four_riders], four_riders[0].pk)
+    # No RaceResult rows at all — a FAILED stage never ran.
+    stage1.status = Race.Status.FAILED
+    stage1.save(update_fields=["status"])
+    stage2 = _stage(stage_race, week, 2)
+
+    ensure_squads(stage2)
+
+    squad = RaceSquad.objects.get(race=stage2, team=team)
+    assert set(squad.members.values_list("rider_id", flat=True)) == {r.pk for r in four_riders}
+
+
+def test_team_with_no_riders_left_gets_no_squad(db, team, four_riders, week, stage_race):
+    stage1 = _stage(stage_race, week, 1)
+    set_squad(stage1, team, [r.pk for r in four_riders], four_riders[0].pk)
+    for i, r in enumerate(four_riders, start=1):
+        RaceResult.objects.create(race=stage1, rider=r, position=i, finish_time=None)
+    stage1.status = Race.Status.FINISHED
+    stage1.save(update_fields=["status"])
+    stage2 = _stage(stage_race, week, 2)
+
+    ensure_squads(stage2)
+
+    assert not RaceSquad.objects.filter(race=stage2, team=team).exists()
+
+
+def test_leader_out_promotes_lowest_pk_for_the_stage(db, team, four_riders, week, stage_race):
+    stage1 = _stage(stage_race, week, 1)
+    set_squad(stage1, team, [r.pk for r in four_riders], four_riders[0].pk)
+    # The leader (four_riders[0]) does not finish stage 1.
+    RaceResult.objects.create(race=stage1, rider=four_riders[0], position=4, finish_time=None)
+    for i, r in enumerate(four_riders[1:], start=1):
+        RaceResult.objects.create(race=stage1, rider=r, position=i, finish_time=100.0 + i)
+    stage1.status = Race.Status.FINISHED
+    stage1.save(update_fields=["status"])
+    stage2 = _stage(stage_race, week, 2)
+
+    ensure_squads(stage2)
+
+    stage2_squad = RaceSquad.objects.get(race=stage2, team=team)
+    assert not stage2_squad.members.filter(is_leader=True).exists()
+    # Stage 1's own record of who was picked leader is untouched — the
+    # promotion is a simulation-time rule, not a rewrite of what happened.
+    stage1_squad = RaceSquad.objects.get(race=stage1, team=team)
+    assert stage1_squad.members.get(is_leader=True).rider_id == four_riders[0].pk
+
+
+def test_riders_still_in_before_any_earlier_stage_is_the_whole_stage_one_squad(
+    db, team, four_riders, week, stage_race,
+):
+    stage1 = _stage(stage_race, week, 1)
+    set_squad(stage1, team, [r.pk for r in four_riders], four_riders[0].pk)
+
+    assert riders_still_in(stage_race, before_stage=1) == {r.pk for r in four_riders}
+
+
+def test_carried_squad_matches_what_ensure_squads_would_write(db, team, four_riders, week, stage_race):
+    stage1 = _stage(stage_race, week, 1)
+    set_squad(stage1, team, [r.pk for r in four_riders], four_riders[0].pk)
+    for i, r in enumerate(four_riders[:3], start=1):
+        RaceResult.objects.create(race=stage1, rider=r, position=i, finish_time=100.0 + i)
+    RaceResult.objects.create(race=stage1, rider=four_riders[3], position=4, finish_time=None)
+    stage1.status = Race.Status.FINISHED
+    stage1.save(update_fields=["status"])
+    stage2 = _stage(stage_race, week, 2)
+
+    rider_ids, leader_id = carried_squad(stage2, team)
+
+    assert set(rider_ids) == {r.pk for r in four_riders[:3]}
+    assert leader_id == four_riders[0].pk
+
+
+def _finished_stage(stage_race, week, number):
+    """A stage race's stage, created SCHEDULED then flipped FINISHED — the
+    only status set_squad accepts a write against — same shape the W3
+    carried-squad tests use."""
+    stage = _stage(stage_race, week, number)
+    stage.status = Race.Status.FINISHED
+    stage.save(update_fields=["status"])
+    return stage
+
+
+def _result(race, rider, *, position, finish_time, group_time=None):
+    return RaceResult.objects.create(
+        race=race, rider=rider, position=position, finish_time=finish_time,
+        group_time=finish_time if group_time is None and finish_time is not None else group_time,
+    )
+
+
+def test_finisher_always_has_group_time(running_race, four_riders):
+    simulate_race(running_race, game_time=timezone.now())
+
+    for result in RaceResult.objects.filter(race=running_race):
+        assert (result.finish_time is None) == (result.group_time is None)
+
+
+def test_gc_sums_group_times(db, team, four_riders, week, stage_race):
+    a, b = four_riders[0], four_riders[1]
+    stage1 = _finished_stage(stage_race, week, 1)
+    stage2 = _finished_stage(stage_race, week, 2)
+    _result(stage1, a, position=1, finish_time=100.0)
+    _result(stage1, b, position=2, finish_time=110.0)
+    _result(stage2, a, position=2, finish_time=205.0)
+    _result(stage2, b, position=1, finish_time=200.0)
+
+    entries = general_classification(stage_race)
+
+    by_rider = {e.rider_id: e for e in entries}
+    assert by_rider[a.pk].gc_time == 100.0 + 205.0
+    assert by_rider[b.pk].gc_time == 110.0 + 200.0
+    assert entries[0].rider_id == a.pk  # a's total (305) beats b's (310)
+
+
+def test_gc_excludes_rider_who_missed_a_stage(db, team, four_riders, week, stage_race):
+    a, b = four_riders[0], four_riders[1]
+    stage1 = _finished_stage(stage_race, week, 1)
+    stage2 = _finished_stage(stage_race, week, 2)
+    _result(stage1, a, position=1, finish_time=100.0)
+    _result(stage1, b, position=2, finish_time=110.0)
+    _result(stage2, a, position=1, finish_time=200.0)
+    _result(stage2, b, position=2, finish_time=None)  # b did not finish stage 2
+
+    entries = general_classification(stage_race)
+
+    assert [e.rider_id for e in entries] == [a.pk]
+
+
+def test_gc_through_stage_ignores_later_stages(db, team, four_riders, week, stage_race):
+    a, b = four_riders[0], four_riders[1]
+    stage1 = _finished_stage(stage_race, week, 1)
+    stage2 = _finished_stage(stage_race, week, 2)
+    _result(stage1, a, position=2, finish_time=110.0)
+    _result(stage1, b, position=1, finish_time=100.0)
+    # Stage 2 would flip the order, but through_stage=1 must not see it.
+    _result(stage2, a, position=1, finish_time=100.0)
+    _result(stage2, b, position=2, finish_time=500.0)
+
+    entries = general_classification(stage_race, through_stage=1)
+
+    assert entries[0].rider_id == b.pk
+    assert entries[0].gc_time == 100.0
+
+
+def test_gc_ignores_failed_stage(db, team, four_riders, week, stage_race):
+    a, b = four_riders[0], four_riders[1]
+    stage1 = _finished_stage(stage_race, week, 1)
+    _result(stage1, a, position=1, finish_time=100.0)
+    _result(stage1, b, position=2, finish_time=110.0)
+    stage2 = _stage(stage_race, week, 2)
+    stage2.status = Race.Status.FAILED
+    stage2.save(update_fields=["status"])
+
+    entries = general_classification(stage_race)
+
+    # Only stage 1 counts; a FAILED stage has no results to have missed.
+    assert [e.rider_id for e in entries] == [a.pk, b.pk]
+    assert entries[0].gc_time == 100.0
+
+
+def test_gc_tie_broken_by_stage_position_sum(db, team, four_riders, week, stage_race):
+    a, b = four_riders[0], four_riders[1]
+    stage1 = _finished_stage(stage_race, week, 1)
+    stage2 = _finished_stage(stage_race, week, 2)
+    # Same total group time for both, but a placed better each stage.
+    _result(stage1, a, position=1, finish_time=100.0)
+    _result(stage1, b, position=2, finish_time=100.0)
+    _result(stage2, a, position=1, finish_time=200.0)
+    _result(stage2, b, position=2, finish_time=200.0)
+
+    entries = general_classification(stage_race)
+
+    assert entries[0].rider_id == a.pk
+    assert entries[0].gc_time == entries[1].gc_time == 300.0
+    assert entries[0].position_sum == 2
+    assert entries[1].position_sum == 4
+
+
+def test_gc_team_is_stage_one_squad_team(db, team, four_riders, week, stage_race):
+    a = four_riders[0]
+    stage1 = _stage(stage_race, week, 1)
+    set_squad(stage1, team, [r.pk for r in four_riders], a.pk)
+    stage1.status = Race.Status.FINISHED
+    stage1.save(update_fields=["status"])
+    _result(stage1, a, position=1, finish_time=100.0)
+    for i, r in enumerate(four_riders[1:], start=2):
+        _result(stage1, r, position=i, finish_time=100.0 + i)
+
+    entries = general_classification(stage_race)
+
+    assert next(e for e in entries if e.rider_id == a.pk).team_id == team.pk
 
 
 def test_a_team_cannot_have_two_squads_for_one_race(db, running_race, team):
@@ -750,6 +1122,63 @@ def test_simulate_race_deducts_freshness_from_finishers(running_race, four_rider
     for rider in four_riders:
         rider.refresh_from_db()
         assert rider.freshness == 100 - 25
+
+
+def test_simulate_one_day_race_costs_race_freshness(running_race, four_riders):
+    simulate_race(running_race, game_time=timezone.now())
+
+    for rider in four_riders:
+        rider.refresh_from_db()
+        assert rider.freshness == 100 - RACE_FRESHNESS_COST
+
+
+def test_simulate_stage_costs_stage_freshness(db, team, four_riders, week):
+    stage_race = StageRace.objects.create(name="Alpine Tour", week=week)
+    stage = Race.objects.create(
+        name="Alpine Tour — Stage 1",
+        course=[{"length": 500.0, "gradient": 0.0}],
+        starts_at=week.starts_at,
+        week=week,
+        stage_race=stage_race,
+        stage_number=1,
+        status=Race.Status.RUNNING,
+    )
+
+    simulate_race(stage, game_time=timezone.now())
+
+    for rider in four_riders:
+        rider.refresh_from_db()
+        assert rider.freshness == 100 - STAGE_FRESHNESS_COST
+
+
+def test_simulate_race_writes_group_time_for_finishers_only(running_race, four_riders, monkeypatch):
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    # Riders 0-2 finish within GROUP_GAP_SECONDS of each other; rider 3 is
+    # clear of them and does not finish at all.
+    states = [
+        SimpleNamespace(finish_time=100.0, position=1000.0, rider=SimpleNamespace(id=str(four_riders[0].pk))),
+        SimpleNamespace(finish_time=100.5, position=999.0, rider=SimpleNamespace(id=str(four_riders[1].pk))),
+        SimpleNamespace(finish_time=101.0, position=998.0, rider=SimpleNamespace(id=str(four_riders[2].pk))),
+        SimpleNamespace(finish_time=None, position=500.0, rider=SimpleNamespace(id=str(four_riders[3].pk))),
+    ]
+
+    def fake_run_race(riders, course, log_path, *args, **kwargs):
+        Path(log_path).touch()
+        return states, 0, 2
+
+    monkeypatch.setattr("racing.services.run_race_via_adapter", fake_run_race)
+
+    simulate_race(running_race, game_time=timezone.now())
+
+    results_by_rider = {
+        r.rider_id: r for r in RaceResult.objects.filter(race=running_race)
+    }
+    assert results_by_rider[four_riders[0].pk].group_time == 100.0
+    assert results_by_rider[four_riders[1].pk].group_time == 100.0
+    assert results_by_rider[four_riders[2].pk].group_time == 100.0
+    assert results_by_rider[four_riders[3].pk].group_time is None
 
 
 def test_simulate_race_deducts_freshness_from_non_finishers(running_race, four_riders, monkeypatch):

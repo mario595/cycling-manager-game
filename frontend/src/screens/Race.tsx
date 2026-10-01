@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 
-import type { CalendarRace, RaceDetail, RacePayoutEntry, Squad, SquadRider } from '../api'
+import type { CalendarRace, RaceDetail, RaceDetailStageRace, RacePayoutEntry, Squad, SquadRider } from '../api'
 import { CourseProfile } from '../components/CourseProfile'
 import { HiddenResults } from '../components/RaceResults'
 import { Button, Card, CardHeader, LabelBar, PageBody, PageHeading, StatTile } from '../components/primitives'
-import { replayPath } from '../navigation'
-import { raceStatusLabel } from '../raceStatus'
+import { racePath, replayPath } from '../navigation'
+import { raceStatusLabel, raceStatusTone } from '../raceStatus'
 import { color, font } from '../theme'
 import { useRaceDetail } from '../useRaceDetail'
 import { useSquad } from '../useSquad'
@@ -69,8 +69,49 @@ export function Race() {
         <StatTile label="STATUS" value={raceStatusLabel(race.status as CalendarRace['status'])} minWidth={104} />
       </div>
 
+      {race.stage_race ? <StageStrip stageRace={race.stage_race} currentRaceId={race.id} /> : null}
+
       {body}
     </PageBody>
+  )
+}
+
+function StageStrip({ stageRace, currentRaceId }: { stageRace: RaceDetailStageRace; currentRaceId: number }) {
+  return (
+    <Card style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ fontSize: 12.5, fontWeight: 600, color: color.mutedStrong }}>
+        Stage {stageRace.stage_number} of {stageRace.stage_count} — {stageRace.name}
+      </div>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {stageRace.stages.map((stage) => {
+          const isCurrent = stage.id === currentRaceId
+          return (
+            <Link
+              key={stage.id}
+              to={racePath(stage.id)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '6px 10px',
+                borderRadius: 8,
+                fontSize: 12,
+                fontFamily: font.mono,
+                textDecoration: 'none',
+                color: isCurrent ? '#FFFFFF' : color.ink,
+                background: isCurrent ? color.ink : color.canvas,
+                border: `1px solid ${isCurrent ? color.ink : color.border}`,
+              }}
+            >
+              <span>Stage {stage.stage_number}</span>
+              <span style={{ opacity: 0.7, color: isCurrent ? '#FFFFFF' : raceStatusTone(stage.status as CalendarRace['status']) }}>
+                {raceStatusLabel(stage.status as CalendarRace['status'])}
+              </span>
+            </Link>
+          )
+        })}
+      </div>
+    </Card>
   )
 }
 
@@ -120,7 +161,8 @@ function raceBody(
   return (
     <>
       <CourseProfile course={race.course} markers={race.markers} />
-      <PayoutTable payout={race.payout} />
+      <PayoutTable title={race.stage_race ? 'Stage prize list' : 'Prize list'} payout={race.payout} />
+      {race.stage_race ? <PayoutTable title="General classification" payout={race.gc_payout} /> : null}
       {state.squad ? (
         <SquadPanel
           squad={state.squad}
@@ -141,10 +183,10 @@ function MessageCard({ text }: { text: string }) {
   )
 }
 
-function PayoutTable({ payout }: { payout: RacePayoutEntry[] }) {
+function PayoutTable({ title, payout }: { title: string; payout: RacePayoutEntry[] }) {
   return (
     <Card>
-      <CardHeader title="Prize list" />
+      <CardHeader title={title} />
       <div>
         {payout.map((entry) => (
           <div
@@ -229,6 +271,8 @@ function SquadPanel({
         ) : null}
       </div>
 
+      {squad.stage_race ? <SquadStageRaceNote stageRace={squad.stage_race} /> : null}
+
       {squad.editable ? (
         <div style={{ background: color.canvas, borderRadius: 10, padding: '10px 12px' }}>
           <div style={{ fontSize: 10, letterSpacing: '0.9px', color: color.mutedStrong, fontFamily: font.mono }}>
@@ -275,6 +319,18 @@ function SquadPanel({
         </>
       ) : null}
     </Card>
+  )
+}
+
+function SquadStageRaceNote({ stageRace }: { stageRace: NonNullable<Squad['stage_race']> }) {
+  const text =
+    stageRace.stage_number === 1
+      ? `This squad and leader ride every stage of ${stageRace.name}.`
+      : "Chosen at stage 1 — riders who didn't finish an earlier stage are out."
+  return (
+    <div style={{ fontSize: 12, color: color.mutedStrong, background: color.canvas, borderRadius: 8, padding: '8px 10px' }}>
+      {text}
+    </div>
   )
 }
 

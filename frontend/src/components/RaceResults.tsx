@@ -44,6 +44,7 @@ export function HiddenResults({ race }: { race: RaceDetail }) {
         <>
           <RiderResultsTable results={results} payout={race.payout} />
           <TeamPointsTable results={results} />
+          {results.gc ? <GeneralClassificationCard results={results} /> : null}
           {results.markers.length > 0 ? <MarkerResultsCard results={results} /> : null}
         </>
       ) : null}
@@ -52,14 +53,21 @@ export function HiddenResults({ race }: { race: RaceDetail }) {
 }
 
 export function RiderResultsTable({ results, payout }: { results: RaceResults; payout: RacePayoutEntry[] }) {
+  // A stage's gap reads group_time (same-group riders share a time, In
+  // scope 6) — a one-day race's display is unaffected, reading finish_time
+  // exactly as before. See racing/README.md, *Stage races*.
+  const isStage = results.race.stage_race !== null
+  const timeOf = (entry: RaceResultEntry) => (isStage ? entry.group_time : entry.finish_time)
+
   const winner = results.results.find((r) => r.finished)
-  const winnerTime = winner?.finish_time ?? null
+  const winnerTime = winner ? timeOf(winner) : null
   const prizeByPosition = new Map(payout.map((p) => [p.position, p.prize]))
 
   const timeCell = (entry: RaceResultEntry): string => {
-    if (!entry.finished || entry.finish_time === null || winnerTime === null) return 'DNF'
-    if (entry.position === winner?.position) return formatRaceTime(winnerTime)
-    return formatGap(entry.finish_time - winnerTime)
+    const entryTime = timeOf(entry)
+    if (!entry.finished || entryTime === null || winnerTime === null) return 'DNF'
+    if (entry.position === winner?.position) return formatRaceTime(entryTime)
+    return formatGap(entryTime - winnerTime)
   }
 
   const prizeFor = (entry: RaceResultEntry): number => {
@@ -102,6 +110,77 @@ export function RiderResultsTable({ results, payout }: { results: RaceResults; p
           </div>
         ))}
       </div>
+    </Card>
+  )
+}
+
+export function GeneralClassificationCard({ results }: { results: RaceResults }) {
+  const gc = results.gc
+  if (!gc) return null
+
+  const title = gc.final ? 'Final general classification' : `General classification after stage ${gc.after_stage}`
+
+  return (
+    <Card>
+      <CardHeader title={title} />
+      <div>
+        {gc.standings.map((entry) => (
+          <div
+            key={entry.rider.id}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              padding: '12px 20px',
+              borderBottom: `1px solid ${color.divider}`,
+            }}
+          >
+            <div style={{ width: 32, fontFamily: font.mono, fontSize: 13, color: color.mutedStrong }}>
+              {entry.position}
+            </div>
+            <div style={{ flex: 1, fontSize: 14 }}>
+              <Link to={riderPath(entry.rider.id)} style={{ color: color.ink, textDecoration: 'none' }}>
+                {entry.rider.name}
+              </Link>
+              {entry.team ? (
+                <span style={{ marginLeft: 8, fontFamily: font.mono, fontSize: 11.5, color: color.muted }}>
+                  {entry.team.code}
+                </span>
+              ) : null}
+            </div>
+            <div style={{ fontFamily: font.mono, fontSize: 14, fontWeight: 600 }}>
+              {entry.position === 1 ? formatRaceTime(entry.gc_time) : formatGap(entry.gap)}
+            </div>
+          </div>
+        ))}
+      </div>
+      {gc.final && gc.points.length > 0 ? (
+        <div style={{ borderTop: `1px solid ${color.dividerStrong}` }}>
+          {gc.points.map((entry) => (
+            <div
+              key={entry.team.id}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                padding: '12px 20px',
+                borderBottom: `1px solid ${color.divider}`,
+              }}
+            >
+              <div style={{ flex: 1, fontSize: 14 }}>
+                {entry.team.name}
+                <span style={{ marginLeft: 8, fontFamily: font.mono, fontSize: 11.5, color: color.muted }}>
+                  {entry.team.code}
+                </span>
+              </div>
+              <div style={{ width: 64, textAlign: 'right', fontFamily: font.mono, fontSize: 13.5, fontWeight: 600, color: color.positive }}>
+                {formatMoney(entry.prize)}
+              </div>
+              <div style={{ fontFamily: font.mono, fontSize: 14, fontWeight: 600 }}>{entry.points}</div>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </Card>
   )
 }
