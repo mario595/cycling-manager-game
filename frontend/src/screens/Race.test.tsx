@@ -32,18 +32,21 @@ const upcomingRace: RaceDetail = {
     { position: 3, points: 12, prize: 12_000 },
     { position: 10, points: 1, prize: 1_000 },
   ],
+  gc_payout: [],
   markers: [],
   has_replay: false,
+  stage_race: null,
 }
 
 const finishedResults: RaceResults = {
-  race: { id: 42, name: 'Circuit of Example', status: 'finished' },
+  race: { id: 42, name: 'Circuit of Example', status: 'finished', stage_race: null },
   results: [
     {
       position: 1,
       rider: { id: 1, name: 'Winner Rider' },
       team: { id: 1, name: 'Results Team', code: 'RES' },
       finish_time: 3600,
+      group_time: 3600,
       finished: true,
     },
     {
@@ -51,6 +54,7 @@ const finishedResults: RaceResults = {
       rider: { id: 2, name: 'Second Rider' },
       team: { id: 1, name: 'Results Team', code: 'RES' },
       finish_time: 3642,
+      group_time: 3642,
       finished: true,
     },
     // A rider who abandons keeps a position but never finishes, so must not
@@ -60,6 +64,7 @@ const finishedResults: RaceResults = {
       rider: { id: 3, name: 'DNF Rider' },
       team: { id: 2, name: 'Zero Team', code: 'ZRO' },
       finish_time: null,
+      group_time: null,
       finished: false,
     },
   ],
@@ -71,6 +76,7 @@ const finishedResults: RaceResults = {
     { team: { id: 2, name: 'Zero Team', code: 'ZRO' }, position: null, finish_points: 0, sprint_points: 0, mountain_points: 0, points: 0, prize: 0 },
   ],
   markers: [],
+  gc: null,
 }
 
 const markers: RaceMarker[] = [
@@ -128,6 +134,7 @@ const squad: Squad = {
     { id: 3, name: 'Rider Three', speciality: 'Puncher', age: 27, climb: 6, sprint: 6, flat: 6, resistance: 6, positioning: 6, freshness: 7, selected: true, is_leader: false },
     { id: 4, name: 'Rider Four', speciality: 'Time trialist', age: 28, climb: 5, sprint: 5, flat: 5, resistance: 8, positioning: 5, freshness: 6, selected: true, is_leader: false },
   ],
+  stage_race: null,
 }
 
 function renderRace() {
@@ -197,6 +204,100 @@ describe('Race', () => {
     expect(screen.getByText('Prize list')).toBeInTheDocument()
     expect(screen.getByText('$20,000')).toBeInTheDocument()
     expect(screen.getByText('$1,000')).toBeInTheDocument()
+  })
+
+  it('shows stage strip and GC payout', () => {
+    const stageRace: RaceDetail = {
+      ...upcomingRace,
+      gc_payout: [
+        { position: 1, points: 40, prize: 40_000 },
+        { position: 2, points: 30, prize: 30_000 },
+      ],
+      stage_race: {
+        id: 7,
+        name: 'Alpine Tour',
+        stage_number: 1,
+        stage_count: 2,
+        stages: [
+          { id: 42, stage_number: 1, starts_at: '2027-03-15T10:00:00Z', status: 'scheduled' },
+          { id: 43, stage_number: 2, starts_at: '2027-03-16T10:00:00Z', status: 'scheduled' },
+        ],
+      },
+    }
+    mockUseRaceDetail.mockReturnValue({ race: stageRace, loading: false, error: false })
+    mockUseRaceResults.mockReturnValue({ results: null, loading: false, error: false })
+    mockUseSquad.mockReturnValue({
+      squad,
+      loading: false,
+      error: false,
+      save: vi.fn(),
+      saving: false,
+      saveError: null,
+    })
+
+    renderRace()
+
+    expect(screen.getByText('Stage 1 of 2 — Alpine Tour')).toBeInTheDocument()
+    expect(screen.getByText('Stage prize list')).toBeInTheDocument()
+    expect(screen.getByText('General classification')).toBeInTheDocument()
+    expect(screen.getByText('$40,000')).toBeInTheDocument()
+  })
+
+  it('squad note on stage 1', () => {
+    const stageRace: RaceDetail = {
+      ...upcomingRace,
+      stage_race: {
+        id: 7, name: 'Alpine Tour', stage_number: 1, stage_count: 2,
+        stages: [
+          { id: 42, stage_number: 1, starts_at: '2027-03-15T10:00:00Z', status: 'scheduled' },
+          { id: 43, stage_number: 2, starts_at: '2027-03-16T10:00:00Z', status: 'scheduled' },
+        ],
+      },
+    }
+    mockUseRaceDetail.mockReturnValue({ race: stageRace, loading: false, error: false })
+    mockUseRaceResults.mockReturnValue({ results: null, loading: false, error: false })
+    mockUseSquad.mockReturnValue({
+      squad: { ...squad, stage_race: { name: 'Alpine Tour', stage_number: 1 } },
+      loading: false,
+      error: false,
+      save: vi.fn(),
+      saving: false,
+      saveError: null,
+    })
+
+    renderRace()
+
+    expect(screen.getByText('This squad and leader ride every stage of Alpine Tour.')).toBeInTheDocument()
+  })
+
+  it('later stage squad is read-only', () => {
+    const stageRace: RaceDetail = {
+      ...upcomingRace,
+      id: 43,
+      stage_race: {
+        id: 7, name: 'Alpine Tour', stage_number: 2, stage_count: 2,
+        stages: [
+          { id: 42, stage_number: 1, starts_at: '2027-03-15T10:00:00Z', status: 'finished' },
+          { id: 43, stage_number: 2, starts_at: '2027-03-16T10:00:00Z', status: 'scheduled' },
+        ],
+      },
+    }
+    mockUseRaceDetail.mockReturnValue({ race: stageRace, loading: false, error: false })
+    mockUseRaceResults.mockReturnValue({ results: null, loading: false, error: false })
+    mockUseSquad.mockReturnValue({
+      squad: { ...squad, editable: false, stage_race: { name: 'Alpine Tour', stage_number: 2 } },
+      loading: false,
+      error: false,
+      save: vi.fn(),
+      saving: false,
+      saveError: null,
+    })
+
+    renderRace()
+
+    expect(screen.getByText("Chosen at stage 1 — riders who didn't finish an earlier stage are out.")).toBeInTheDocument()
+    expect(screen.getByText('Squad')).toBeInTheDocument()
+    expect(screen.queryByText('Confirm squad')).not.toBeInTheDocument()
   })
 
   it('renders the course profile and both tables for a finished race', () => {

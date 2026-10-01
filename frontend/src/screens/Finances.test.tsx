@@ -127,6 +127,35 @@ describe('Finances', () => {
     expect(screen.getByText('+$20,000')).toBeInTheDocument()
   })
 
+  it('labels gc prize money', () => {
+    mockUseFinances.mockReturnValue({
+      finances: {
+        ...finances,
+        entries: [
+          {
+            id: 4,
+            kind: 'gc_prize_money',
+            description: 'General classification — Alpine Tour',
+            amount: 40_000,
+            occurred_at: '2027-03-15T12:00:00Z',
+            rider_count: null,
+            balance_after: 525_600,
+          },
+          ...finances.entries,
+        ],
+      },
+      loading: false,
+      error: false,
+      refresh: vi.fn(),
+    })
+
+    renderFinances()
+
+    expect(screen.getByText('General classification — Alpine Tour')).toBeInTheDocument()
+    expect(screen.getByText(/GENERAL CLASSIFICATION PRIZE/)).toBeInTheDocument()
+    expect(screen.getByText('+$40,000')).toBeInTheDocument()
+  })
+
   it('shows the warning when the balance is negative', () => {
     mockUseFinances.mockReturnValue({
       finances: { ...finances, balance: -12_400 },

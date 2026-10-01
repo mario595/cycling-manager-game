@@ -308,11 +308,39 @@ count of teams released lands on `TickRun.teams_released`.
    tick catching up three weeks lists once, not three times. Counts land on
    `TickRun.ai_bids_placed` / `ai_listings_created`
    (`world/migrations/0015`). See *The AI market (#30)*.
- 5. **Execute** — outside any transaction: simulate each claimed race,
-    record its result, then score it (`competitions.services.score_race`),
-    then score its marker points (`competitions.services.score_sprints`, then
-    `score_mountains`), then pay its prize money
-    (`economy.services.pay_race_prizes`).
+5. **Execute** — outside any transaction: simulate each claimed race,
+   record its result, then score it (`competitions.services.score_race`),
+   then score its marker points (`competitions.services.score_sprints`, then
+   `score_mountains`), then pay its prize money
+   (`economy.services.pay_race_prizes`). If the
+   race belongs to a stage race (`race.stage_race_id`),
+   `world.services._settle_stage_race` runs next, on **every** race in the
+   loop that has one — including a race that failed simulation — and
+   checks `stage_race.is_complete()` itself before doing anything: it is a
+   no-op until the stage race's last stage has actually run, and a
+   catch-up tick that simulates several stages of one tour in this same
+   loop only sees it complete on the last one. Once complete, it scores
+   and pays the general classification exactly once
+   (`competitions.services.score_general_classification`/
+   `gc_prizes_by_team`, `economy.services.pay_gc_prizes`) — see
+   `racing/README.md`, *Stage races*, and `competitions/README.md`,
+   *Stage races*.
+
+   **Running on the failure path too is deliberate.** A race that raises
+   during simulation still gets `FAILED`, not `FINISHED`, and the normal
+   marker-scoring/prize-payout steps are skipped for it — but
+   `_settle_stage_race` is called unconditionally after that step, not
+   inside it, because `is_complete()` only needs every stage `FINISHED`
+   **or** `FAILED`, with at least one actually `FINISHED`: a tour whose
+   last stage failed to run should still settle the GC over whatever
+   stages did complete, rather than leave it stuck forever.
+
+   **Stage order inside one tick is load-bearing.** Stages of one tour sit
+   on consecutive calendar days, `_claim` orders the rows it locks by
+   `starts_at`, and `_execute` processes them in that same order — so a
+   later stage's carried squad (`racing.services.ensure_squads` →
+   `_carry_squads`) always reads an earlier stage's already-committed
+   `RaceResult` rows within the same tick. Do not parallelise this loop.
 
 **Training's race half reads the week that just completed, not the one being
 entered.** A `WeekTransition` is written when a week *opens*, and the steps

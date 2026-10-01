@@ -16,6 +16,7 @@ function race(id: number, status: CalendarRace['status'], startsAt: string | nul
     starts_at: startsAt,
     status,
     distance_km: 200,
+    stage_race: null,
   }
 }
 

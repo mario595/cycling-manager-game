@@ -12,6 +12,7 @@ from economy.services import (
     ensure_opening_balance,
     entries_for,
     latest_salary_review,
+    pay_gc_prizes,
     pay_race_prizes,
     pay_transfer_income,
     reset_to_starting_balance,
@@ -158,6 +159,50 @@ def test_pay_race_prizes_completes_a_partial_payout(db, team, race):
     assert [row.position for row in rows] == [2, 5]
     assert rows[0].amount == 15_000
     assert rows[1].amount == 8_000
+
+
+def test_pay_gc_prizes_idempotent(db, team, race):
+    at = datetime(2027, 3, 2, 0, 0, tzinfo=dt_timezone.utc)
+    prizes_by_team = {team.pk: [(1, 40_000)]}
+
+    first = pay_gc_prizes(
+        race.pk, stage_race_name="Alpine Tour", at=at, prizes_by_team=prizes_by_team
+    )
+    second = pay_gc_prizes(
+        race.pk, stage_race_name="Alpine Tour", at=at, prizes_by_team=prizes_by_team
+    )
+
+    assert first == 1
+    assert second == 0
+    rows = list(LedgerEntry.objects.filter(team=team, kind=LedgerEntry.Kind.GC_PRIZE_MONEY))
+    assert len(rows) == 1
+    assert rows[0].amount == 40_000
+    assert rows[0].position == 1
+    assert rows[0].race_id == race.pk
+    assert rows[0].description == "General classification — Alpine Tour"
+
+
+def test_gc_prize_and_stage_prize_same_team_race_position_both_recorded(db, team, race):
+    # The final stage's own stage prize and its GC prize can land on the
+    # same (team, race, position) — GC_PRIZE_MONEY must be a separate kind
+    # from PRIZE_MONEY or one of the two writes silently no-ops against the
+    # other's (team, race, position) constraint.
+    at = datetime(2027, 3, 2, 0, 0, tzinfo=dt_timezone.utc)
+    prizes_by_team = {team.pk: [(1, 10_000)]}
+    gc_prizes_by_team = {team.pk: [(1, 40_000)]}
+
+    stage_written = pay_race_prizes(
+        race.pk, race_name=race.name, at=at, prizes_by_team=prizes_by_team
+    )
+    gc_written = pay_gc_prizes(
+        race.pk, stage_race_name="Alpine Tour", at=at, prizes_by_team=gc_prizes_by_team
+    )
+
+    assert stage_written == 1
+    assert gc_written == 1
+    entries = LedgerEntry.objects.filter(team=team, race=race, position=1)
+    assert entries.filter(kind=LedgerEntry.Kind.PRIZE_MONEY, amount=10_000).exists()
+    assert entries.filter(kind=LedgerEntry.Kind.GC_PRIZE_MONEY, amount=40_000).exists()
 
 
 def test_charge_transfer_fee_writes_a_debit(db, team):

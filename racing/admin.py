@@ -8,6 +8,7 @@ from .models import (
     RaceResult,
     RaceSquad,
     RaceSquadRider,
+    StageRace,
 )
 
 
@@ -18,9 +19,26 @@ class RaceMarkerInline(admin.TabularInline):
 
 @admin.register(Race)
 class RaceAdmin(admin.ModelAdmin):
-    list_display = ("name", "status", "starts_at", "week", "wind_enabled", "seed", "created_at")
-    list_filter = ("status", "week")
+    list_display = (
+        "name", "status", "starts_at", "week", "stage_race", "stage_number",
+        "wind_enabled", "seed", "created_at",
+    )
+    list_filter = ("status", "week", "stage_race")
     inlines = [RaceMarkerInline]
+
+
+class RaceInline(admin.TabularInline):
+    model = Race
+    extra = 0
+    fields = ("stage_number", "name", "status", "starts_at")
+    ordering = ["stage_number"]
+
+
+@admin.register(StageRace)
+class StageRaceAdmin(admin.ModelAdmin):
+    list_display = ("name", "week", "created_at")
+    list_filter = ("week",)
+    inlines = [RaceInline]
 
 
 @admin.register(RaceLog)

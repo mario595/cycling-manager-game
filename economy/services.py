@@ -197,29 +197,26 @@ def charge_weekly_wages(week) -> int:
     return written
 
 
-def pay_race_prizes(race_id: int, *, race_name: str, at,
-                    prizes_by_team: dict[int, list[tuple[int, int]]]) -> int:
-    """Credit every team its prize money for one race. Returns rows written.
+def _pay_prizes(
+    *, kind: str, race_id: int, description: str, at,
+    prizes_by_team: dict[int, list[tuple[int, int]]],
+) -> int:
+    """Shared writer behind pay_race_prizes and pay_gc_prizes. Returns rows
+    written.
 
-    Takes the race as an id plus the amounts already computed by
-    competitions.services.prizes_by_team — economy/ may not import
-    racing/ or competitions/ (AGENTS.md), so it never reads a RaceResult
-    itself. The identical shape apply_weekly_fanbase takes points_by_team.
-
-    Idempotent through the (team, race, position) constraint, not an
-    early return: a partial payout (interrupted mid-loop) must be
+    Idempotent through the (team, race, position) constraint for `kind`,
+    not an early return: a partial payout (interrupted mid-loop) must be
     completable on retry, unlike score_race's early return which only
     ever needs to check for the presence of one row per team.
     """
     written = 0
-    description = f"Prize money — {race_name}"[:120]
     for team_id, placements in prizes_by_team.items():
         for position, amount in placements:
             with transaction.atomic():
                 try:
                     LedgerEntry.objects.create(
                         team_id=team_id,
-                        kind=LedgerEntry.Kind.PRIZE_MONEY,
+                        kind=kind,
                         amount=amount,
                         occurred_at=at,
                         race_id=race_id,
@@ -230,6 +227,41 @@ def pay_race_prizes(race_id: int, *, race_name: str, at,
                 except IntegrityError:
                     continue      # already paid; correct outcome, not an error
     return written
+
+
+def pay_race_prizes(race_id: int, *, race_name: str, at,
+                    prizes_by_team: dict[int, list[tuple[int, int]]]) -> int:
+    """Credit every team its prize money for one race. Returns rows written.
+
+    Takes the race as an id plus the amounts already computed by
+    competitions.services.prizes_by_team — economy/ may not import
+    racing/ or competitions/ (AGENTS.md), so it never reads a RaceResult
+    itself. The identical shape apply_weekly_fanbase takes points_by_team.
+    """
+    return _pay_prizes(
+        kind=LedgerEntry.Kind.PRIZE_MONEY, race_id=race_id,
+        description=f"Prize money — {race_name}"[:120], at=at,
+        prizes_by_team=prizes_by_team,
+    )
+
+
+def pay_gc_prizes(final_stage_id: int, *, stage_race_name: str, at,
+                  prizes_by_team: dict[int, list[tuple[int, int]]]) -> int:
+    """Credit every team its general-classification prize money, on the
+    stage race's final stage. Returns rows written.
+
+    The GC counterpart of pay_race_prizes: takes the amounts already
+    computed by competitions.services.gc_prizes_by_team. A separate kind
+    (GC_PRIZE_MONEY, not PRIZE_MONEY) is load-bearing — the final stage's
+    own stage prize and its GC prize can both land on the same (team, race,
+    position), and sharing PRIZE_MONEY's constraint would collide and drop
+    one of them (see specs/archive/stage-races.md).
+    """
+    return _pay_prizes(
+        kind=LedgerEntry.Kind.GC_PRIZE_MONEY, race_id=final_stage_id,
+        description=f"General classification — {stage_race_name}"[:120], at=at,
+        prizes_by_team=prizes_by_team,
+    )
 
 
 def apply_weekly_fanbase(week, *, points_by_team: dict[int, int]) -> int:
