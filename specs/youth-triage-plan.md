@@ -337,7 +337,7 @@ Everything in that section except `squad_development_deltas`. Tests in new `ride
   - returns `None` when closed.
 - Update existing tests that asserted every squad rider becomes a free agent on close. They encode #33's rule, which this ticket deliberately reverses.
 
-### W5 — `transfers/`: graduates on the market
+### W5 — `transfers/`: graduates on the market ✅
 - `belongs_to` in `list_for_auction` and `resolve_auction`.
 - The UNSOLD release and the SOLD squad-clear.
 - `cancel_unowned_listings`.

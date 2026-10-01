@@ -133,8 +133,12 @@ def belongs_to(rider: Rider, team) -> bool:
     return rider.development_squad.team_id == team.pk
 
 
-def _lock_rider(rider_id: int) -> Rider | None:
+def lock_rider(rider_id: int) -> Rider | None:
     """`rider_id` locked for update, with their squad fetched, or None.
+
+    **Public because `transfers/` needs it too** (#34): listing and resolving
+    a graduate's auction both read the squad under the rider's lock, and both
+    would hit the same Postgres error below if they spelled it out again.
 
     `of=("self",)` is load-bearing: `development_squad` is a nullable FK, so
     `select_related` on it produces a LEFT OUTER JOIN, and Postgres refuses
@@ -281,7 +285,7 @@ def promote(team, rider_id: int, *, at, roster_cap: int) -> Rider:
     so it is deliberately not in `update_fields`.
     """
     with transaction.atomic():
-        rider = _lock_rider(rider_id)
+        rider = lock_rider(rider_id)
         if not _prospect_of(rider, team):
             raise NotYourProspect("That rider is not in your development squad.")
 
@@ -315,7 +319,7 @@ def discard(team, rider_id: int, *, check: Callable[[Rider], None] | None = None
     so their only dependents are `RiderAttributeSnapshot` rows, which cascade.
 """
     with transaction.atomic():
-        rider = _lock_rider(rider_id)
+        rider = lock_rider(rider_id)
         if not _prospect_of(rider, team):
             raise NotYourProspect("That rider is not in your development squad.")
 
