@@ -188,7 +188,7 @@ Make the change above. Tests in `api/tests.py`, next to
   item 7). A call placed after the `with` would pass the first test and
   fail this one.
 
-### W3 — `world/tests/test_ai_market.py`: prove the AI side needs no change
+### W3 — `world/tests/test_ai_market.py`: prove the AI side needs no change — **done**
 
 No production change. Tests only, using the file's `_seller`, `_ai_team`,
 `_ai_roster`, `_saved_rider` helpers:
