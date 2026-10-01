@@ -142,7 +142,7 @@ that is what makes a raise roll the whole claim back.
 
 ## Work items
 
-### W1 — `transfers/services.py`: add `cancel_listings`
+### W1 — `transfers/services.py`: add `cancel_listings` — **done**
 
 Add the function above. Tests in `transfers/tests/test_services.py`
 (import `cancel_listings` in the existing import block; use the file's
