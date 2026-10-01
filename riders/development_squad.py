@@ -37,22 +37,26 @@ from .services import mark_team_change
 
 @dataclass(frozen=True)
 class LevelTerms:
-    """What one level costs: the one-off fee to open at it, and what it costs
-    every week while it runs."""
+    """What one level buys and costs: the one-off fee to open at it, what it
+    costs every week while it runs, and how many riders it can develop at once.
+    """
 
     level: int
     name: str
     opening_fee: int
     weekly_cost: int
+    places: int
 
 
 #: The three levels, cheapest first, forming a ladder climbed one rung at a
 #: time: `level_status` opens the lowest and unlocks the next only once the one
-#: below is open. Both columns rise strictly with level so the ladder is a
+#: below is open. Both price columns rise strictly with level so the ladder is a
 #: ladder — the top is the most expensive thing to enter *and* to run, and no
 #: level is ever worth less than the one below it. (The original reason for
 #: that, that an upgrade could undercut opening directly, cannot arise: there
-#: is no way to open above the lowest level.)
+#: is no way to open above the lowest level.) `places` — how many riders the
+#: squad can develop at once (#34) — rises with them too, so a higher level
+#: buys room as well as better odds of a good arrival.
 #:
 #: The numbers are tunable; the ordering is not, and a test enforces it.
 #:
@@ -63,9 +67,9 @@ class LevelTerms:
 #: over a season — 65% of a starting balance, so Elite is a decision a team
 #: makes with prize money and sponsorship behind it, not a default.
 LEVELS: dict[int, LevelTerms] = {
-    1: LevelTerms(1, DevelopmentSquad.Level.REGIONAL.label, 30_000, 1_500),
-    2: LevelTerms(2, DevelopmentSquad.Level.NATIONAL.label, 75_000, 3_500),
-    3: LevelTerms(3, DevelopmentSquad.Level.ELITE.label, 150_000, 6_000),
+    1: LevelTerms(1, DevelopmentSquad.Level.REGIONAL.label, 30_000, 1_500, 6),
+    2: LevelTerms(2, DevelopmentSquad.Level.NATIONAL.label, 75_000, 3_500, 8),
+    3: LevelTerms(3, DevelopmentSquad.Level.ELITE.label, 150_000, 6_000, 10),
 }
 
 #: The one level a squad can be *opened* at, and therefore the base of the

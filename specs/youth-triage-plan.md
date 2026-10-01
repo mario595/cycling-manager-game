@@ -293,7 +293,7 @@ A copy of season 1 with `"number": 2` and `"starts_at": "2027-05-24T00:00:00Z"`,
 
 ## Work items
 
-### W1 — `riders/`: `graduated_at`, constraint, `places` in `LEVELS`, migration
+### W1 — `riders/`: `graduated_at`, constraint, `places` in `LEVELS`, migration ✅
 Add the field, `graduated_requires_intake`, `LevelTerms.places` and the values.
 Tests:
 - `riders/tests/test_models.py::test_graduated_requires_intake` (IntegrityError for `graduated_at` without `intake_at`).

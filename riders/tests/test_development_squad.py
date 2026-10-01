@@ -64,7 +64,7 @@ def _open(team, level):
     return DevelopmentSquad.objects.create(team=team, level=level, opened_at=OPENED_AT)
 
 
-def test_levels_rise_strictly_in_both_columns():
+def test_levels_rise_strictly_in_every_column():
     """Load-bearing, not a balance note. The ladder is climbed for a fee at
     every rung, so the top has to be the most expensive thing to enter and to
     run — otherwise a player would rationally stop short of it, or climb to a
@@ -73,6 +73,9 @@ def test_levels_rise_strictly_in_both_columns():
     This is no longer about an upgrade undercutting a direct opening, which
     was the original reason: there is no way to open above the lowest level
     at all now, so that side door is shut structurally.
+
+    `places` (#34) is in here for the same reason: a higher level has to buy
+    more than it costs, or the level buys nothing a manager wants.
     """
     levels = [LEVELS[level] for level in sorted(LEVELS)]
 
@@ -80,6 +83,7 @@ def test_levels_rise_strictly_in_both_columns():
     for cheaper, dearer in zip(levels, levels[1:]):
         assert dearer.opening_fee > cheaper.opening_fee
         assert dearer.weekly_cost > cheaper.weekly_cost
+        assert dearer.places > cheaper.places
 
 
 def test_weekly_cost_reads_the_table():

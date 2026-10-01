@@ -208,6 +208,18 @@ class Rider(TimeStampedModel):
         ),
     )
 
+    graduated_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Game time this rider completed their development squad spell "
+            "(#34) — a week.starts_at. Never cleared. Meaningful only "
+            "alongside development_squad: a rider is *in* the squad while "
+            "development_squad is set and graduated_at is null, and a "
+            "*graduate* once both are set."
+        ),
+    )
+
     # --- Hidden, between-race traits (never serialized — see class docstring) ---
     potential = models.PositiveSmallIntegerField(
         default=70,
@@ -274,6 +286,11 @@ class Rider(TimeStampedModel):
                 condition=models.Q(retired_at__isnull=True)
                 | models.Q(development_squad__isnull=True),
                 name="retired_rider_not_in_squad",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(graduated_at__isnull=True)
+                | models.Q(intake_at__isnull=False),
+                name="graduated_requires_intake",
             ),
         ]
 
