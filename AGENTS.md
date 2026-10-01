@@ -116,6 +116,7 @@ root, in dependency order:
 .venv/bin/python manage.py seed_teams --claim-for test@mail.com  # teams: one claimed for the demo account, the rest claimable
 .venv/bin/python manage.py seed_trainers  # staff: hireable trainers in the pool
 .venv/bin/python manage.py load_season seasons/season-1.example.json  # schedule: season 1's twelve weeks and races (four of which declare course markers — sprint weights, climb categories, and a finish-line climb; two stage races)
+.venv/bin/python manage.py load_season seasons/season-2.example.json  # schedule: season 2, starting where season 1 ends. Load it too when a squad feature has to be seen across a season boundary — a rider who arrives on week 4 graduates on week 18, which is six weeks into season 2 (#34)
 ```
 
 `seed_user` is idempotent; the others only add (`load_season` errors if the

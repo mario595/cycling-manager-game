@@ -383,7 +383,7 @@ Types, hook and screen as in that section. `DevelopmentSquad.test.tsx` cases:
 
 Run `npm test` and `npm run build` in `frontend/`.
 
-### W9 — `seasons/season-2.example.json` and the seed note
+### W9 — `seasons/season-2.example.json` and the seed note ✅
 The file, plus the `AGENTS.md` seeding block line (`load_season seasons/season-2.example.json`). Test: `schedule/tests/test_load_season.py::test_season_2_example_loads_after_season_1` — load both files and assert season 2 starts at season 1's `ends_at` (they abut, no overlap error).
 
 ### W10 — Documentation, archive spec and plan
