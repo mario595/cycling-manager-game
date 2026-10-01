@@ -16,10 +16,12 @@ from rest_framework.views import APIView
 from competitions.models import MarkerPoints, RacePoints
 from competitions.scoring import (
     GC_POINTS_BY_POSITION,
+    MOUNTAIN_PLACES,
     POINTS_BY_POSITION,
     SPRINT_PLACES,
     gc_points_for,
     gc_prize_for,
+    mountain_points_for,
     points_for,
     prize_for,
     sprint_points_for,
@@ -789,19 +791,21 @@ class MyBidsView(APIView):
 
 def _marker_payload(marker) -> dict:
     """A marker as the course preview and the results screen both show it.
-    weight/points are null for a mountain marker — #17 decides what a
-    mountain marker is worth, and until then it has none."""
+    `weight` is null on a mountain marker and `category` null on a sprint —
+    each vocabulary belongs to the kind it was authored for."""
     is_sprint = marker.kind == RaceMarker.Kind.SPRINT
+    if is_sprint:
+        points = [sprint_points_for(marker.weight, p) for p in range(1, SPRINT_PLACES + 1)]
+    else:
+        points = [mountain_points_for(marker.category, p) for p in range(1, MOUNTAIN_PLACES + 1)]
     return {
         "id": marker.pk,
         "kind": marker.kind,
         "name": marker.name,
         "distance": marker.distance,
         "weight": marker.weight if is_sprint else None,
-        "points": (
-            [sprint_points_for(marker.weight, p) for p in range(1, SPRINT_PLACES + 1)]
-            if is_sprint else None
-        ),
+        "category": None if is_sprint else marker.category,
+        "points": points,
     }
 
 
@@ -1015,13 +1019,20 @@ class RaceResultsView(APIView):
             .select_related("team").order_by("position")
         )
         scored = {p.team_id: p for p in points}
-        sprint_by_team = {
-            row["team_id"]: row["total"]
+        # Keyed by kind as well as team: summing every MarkerPoints row into
+        # sprint_points would quietly put mountain points in the sprint column.
+        marker_by_team_kind = {
+            (row["team_id"], row["marker__kind"]): row["total"]
             for row in MarkerPoints.objects
-                .filter(marker__race=race, marker__kind=RaceMarker.Kind.SPRINT)
-                .values("team_id")
+                .filter(marker__race=race)
+                .values("team_id", "marker__kind")
                 .annotate(total=Sum("points"))
         }
+
+        def _markers_for(team_id) -> int:
+            """Everything this team scored at a marker, either kind."""
+            return sum(marker_by_team_kind.get((team_id, kind), 0) for kind in RaceMarker.Kind)
+
         starters = (
             Team.objects
             .filter(race_squads__race=race)
@@ -1040,8 +1051,11 @@ class RaceResultsView(APIView):
                 "team": {"id": p.team.pk, "name": p.team.name, "code": p.team.code},
                 "position": p.position,
                 "finish_points": p.points,
-                "sprint_points": sprint_by_team.get(p.team_id, 0),
-                "points": p.points + sprint_by_team.get(p.team_id, 0),
+                "sprint_points": marker_by_team_kind.get(
+                    (p.team_id, RaceMarker.Kind.SPRINT), 0),
+                "mountain_points": marker_by_team_kind.get(
+                    (p.team_id, RaceMarker.Kind.MOUNTAIN), 0),
+                "points": p.points + _markers_for(p.team_id),
                 "prize": prize_by_team.get(p.team_id, 0),
             }
             for p in points
@@ -1051,14 +1065,17 @@ class RaceResultsView(APIView):
                     "team": {"id": t.pk, "name": t.name, "code": t.code},
                     "position": None,
                     "finish_points": 0,
-                    "sprint_points": sprint_by_team.get(t.pk, 0),
-                    "points": sprint_by_team.get(t.pk, 0),
+                    "sprint_points": marker_by_team_kind.get(
+                        (t.pk, RaceMarker.Kind.SPRINT), 0),
+                    "mountain_points": marker_by_team_kind.get(
+                        (t.pk, RaceMarker.Kind.MOUNTAIN), 0),
+                    "points": _markers_for(t.pk),
                     "prize": prize_by_team.get(t.pk, 0),
                 }
                 for t in starters
                 if t.pk not in scored
             ],
-            key=lambda row: (-row["sprint_points"], row["team"]["name"]),
+            key=lambda row: (-_markers_for(row["team"]["id"]), row["team"]["name"]),
         )
 
         payload = {

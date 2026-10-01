@@ -21,8 +21,8 @@
     { "week": 9, "day": "sunday", "time": "14:00", "name": "Marlon Grind", "course": [{ "length": 215000, "gradient": 0.0 }] },
     { "week": 10, "day": "sunday", "time": "14:00", "name": "Coastal Dash", "course": [{ "length": 90000, "gradient": 0.0 }] },
     { "week": 11, "day": "sunday", "time": "14:00", "name": "Summit Finish", "course": [{ "length": 65000, "gradient": 4.5 }, { "length": 35000, "gradient": 2.0 }], "markers": [
-      { "kind": "mountain", "name": "First Climb", "distance": 65000 },
-      { "kind": "mountain", "name": "Final Top", "distance": 100000 }
+      { "kind": "mountain", "name": "First Climb", "distance": 65000, "category": "cat1" },
+      { "kind": "mountain", "name": "Final Top", "distance": 100000, "category": "hc" }
     ] },
     { "week": 12, "day": "sunday", "time": "14:00", "name": "Championship Finale", "course": [{ "length": 230000, "gradient": 0.0 }] }
   ],

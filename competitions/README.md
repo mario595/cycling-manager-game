@@ -5,9 +5,9 @@
 Turning a finished race's results into points, and those points into a
 season standings table. `RacePoints` is one model here: one row per team
 per race, recording the position that scored and what it was worth.
-`MarkerPoints` is the other: one row per team per sprint marker, recording
-the crossing position that scored and what it was worth — see *Sprint
-points* below.
+`MarkerPoints` is the other: one row per team per sprint **or mountain**
+marker, recording the crossing position that scored and what it was worth —
+see *Marker points* below.
 
 It also owns the **prize table** — `scoring.PRIZE_BY_POSITION` and
 `prizes_by_team` — but writes no model of its own for it. The money lands
@@ -20,12 +20,12 @@ scoring is.
 `competitions.services.points_by_team(week)` — one dict of a week's combined
 points, `{team_id: total}`, absent keys meaning zero — exists to feed
 `economy/`'s weekly fanbase adjustment (`economy/README.md`, *Why `economy/`
-does not query `RacePoints`*). It sums `RacePoints` and sprint `MarkerPoints`
-together, so fanbase and sponsorship move with sprint points too — see
-*Sprint points* below. `world/` calls it off the week that just
-completed and hands the result to `economy.services.apply_weekly_fanbase`,
-because `economy` may not import this app — the same inversion this file
-documents for `racing/` below.
+does not query `RacePoints`*). It sums `RacePoints` and every `MarkerPoints`
+row for the week — sprint **and** mountain — so fanbase and sponsorship move
+with either kind of marker points. See *Marker points* below. `world/` calls it
+off the week that just completed and hands the result to
+`economy.services.apply_weekly_fanbase`, because `economy` may not import this
+app — the same inversion this file documents for `racing/` below.
 
 There is no `Group` or `Division` model yet — one implicit Group, one
 table, per `specs/archive/race-points-and-standings.md`. See *Future work* below.
@@ -65,41 +65,68 @@ not rewrite past results.
 `STAGE_PRIZE_BY_POSITION` and `GC_PRIZE_BY_POSITION` are the stage race
 counterparts, same shape, same positions — see *Stage races*, below.
 
-## Sprint points
+## Marker points (sprint and mountain)
 
-Each sprint marker (`racing.RaceMarker`, kind `sprint`) carries a `weight` —
+A marker is worth points at the moment the race is scored, and there are two
+kinds, tracked and scored completely separately so a sprinter and a climber
+can each have a good season doing different things.
+
+**A sprint marker** (`racing.RaceMarker`, kind `sprint`) carries a `weight` —
 `minor`, `standard` or `major`, set by the course author, defaulting to
-`standard` so an unweighted marker in an existing season file keeps
-working. `competitions/scoring.py`'s `SPRINT_POINTS_BY_WEIGHT` pays the top
-`SPRINT_PLACES` (5) crossing positions per weight, declining down the
-order; even the `major` tier's win stays at most half of `POINTS_BY_POSITION[1]`,
-so a sprint is a bonus a squad can chase, never an alternate way to top
-the league. `score_sprints(race)` writes one `MarkerPoints` row per
-(marker, team) and is idempotent, the same shape as `score_race`.
+`standard` so an unweighted marker in an existing season file keeps working.
+`competitions/scoring.py`'s `SPRINT_POINTS_BY_WEIGHT` pays the top
+`SPRINT_PLACES` (5) crossing positions per weight, declining down the order.
+
+**A mountain marker** carries a `category` — `hc`, `cat1`, `cat2` or `cat3`,
+defaulting to `cat2` for the same reason. `MOUNTAIN_POINTS_BY_CATEGORY` pays
+the top `MOUNTAIN_PLACES` (5) positions per category.
+
+`MOUNTAIN_PLACES` is deliberately its own constant and not `SPRINT_PLACES`:
+the two are at parity today, and making the number of scoring places grow with
+category (HC deeper than Cat 3) is deferred, so that change must not move
+sprints. `test_hc_win_equals_major_sprint_win` pins the parity — three of the
+four climb rows are the sprint rows exactly (Cat 3 = minor, Cat 2 = standard,
+HC = major), so neither specialist is structurally favoured before the retune
+the spec defers. Changing that belongs to the retune ticket, not to a tidy-up.
+Even the heaviest category's win stays at most half of `POINTS_BY_POSITION[1]`,
+so a climb is a bonus a squad can chase, never an alternate way to top the
+league.
+
+Both write one `MarkerPoints` row per (marker, team) into the **same table** —
+the name is deliberately not `SprintPoints` — and the kind is read from
+`marker.kind`. `score_sprints(race)` and `score_mountains(race)` are
+three-line wrappers over one private `_score_markers(race, kind, places,
+points_for)`, each passing its own places constant and its own table lookup.
+
+**The idempotency guard is filtered by kind, and that is load-bearing.**
+`_score_markers` returns the existing rows early only if a row for *this kind*
+already exists. Unfiltered, whichever of the two ran second would find the
+other's rows, score nothing, and raise nothing — a race would silently carry
+sprint points or mountain points but not both. Two tests in
+`competitions/tests/test_sprints.py` score the same race in both orders and
+assert both kinds end up with rows.
 
 **A team's row comes from its single best-placed rider among the top 5
 crossings — cut to 5 first, then keep each team's best.** Walking the
 crossing order until five distinct teams have scored would let a team
 that took 1st and 2nd push a 6th-place rider into the scoring places,
 which is exactly the double-scoring the best-rider rule exists to
-prevent. `score_sprints` filters `MarkerCrossing.position__lte=SPRINT_PLACES`
-**before** de-duplicating by team, never after.
+prevent. `_score_markers` filters `MarkerCrossing.position__lte=places`
+**before** de-duplicating by team, never after. A crossing that happened and
+then an abandonment still scores, and a teamless rider is skipped — both fall
+out of the same loop.
 
-**Mountain markers never score here.** Every aggregate — `score_sprints`,
-`points_by_team`, `standings` — filters `marker__kind=RaceMarker.Kind.SPRINT`,
-so a future mountain-points ticket (#17) writing its own `MarkerPoints`
-rows on mountain markers cannot leak into a sprint total.
+**Marker points are frozen at award time**, same rule as `RacePoints` and
+the prize table. `world/services.py` calls `score_sprints(race)` and then
+`score_mountains(race)` right after `score_race(race)`, each in its own
+`try`/`except` — a marker-scoring failure is recorded on the tick and never
+rewrites a finished race into `FAILED`.
 
-**Sprint points are frozen at award time**, same rule as `RacePoints` and
-the prize table. `world/services.py` calls `score_sprints(race)` right
-after `score_race(race)`, in its own `try`/`except` — a sprint-scoring
-failure is recorded on the tick and never rewrites a finished race into
-`FAILED`.
-
-**A finish-line sprint marker is not a special case.** It scores like any
-other sprint marker; whether placing one there double-pays a race winner
-is a course-authoring decision this app does not guard against — see
-`specs/archive/sprint-points.md`.
+**A finish-line marker is not a special case**, whether it is a sprint or a
+climb. A marker at the course length scores by the same function from the same
+crossing rows; whether placing one there is worth doing is a
+course-authoring decision this app does not guard against — see
+`specs/archive/sprint-points.md` and `specs/archive/mountain-points.md`.
 
 ## Why non-finishers are filtered
 
@@ -127,9 +154,10 @@ ever changed to credit equal times, this rule needs writing for real.
 
 There is no running-total model. `competitions.services.standings(season)`
 aggregates `RacePoints` for that season on every call, then adds each
-team's season sprint `MarkerPoints` total on top — `entry["points"]` is
-the combined figure the league table shows, and `entry["sprint_points"]`
-the sprint-only component. At twelve races a season and roughly sixteen
+team's season `MarkerPoints` total on top — `entry["points"]` is the combined
+figure the league table shows, `entry["sprint_points"]` and
+`entry["mountain_points"]` the two marker components, kept apart so a caller
+can read one without the other. At twelve races a season and roughly sixteen
 teams that is on the order of two hundred rows — cheap enough that a
 stored total, and the risk of it drifting from the per-race rows if a
 tick half-fails, buys nothing.
@@ -137,11 +165,11 @@ tick half-fails, buys nothing.
 Countback ordering (most 1st places, then most 2nds, and so on) is
 computed in Python over the small per-team aggregate rather than
 expressed as a multi-level SQL `ORDER BY` — clearer at this size.
-**Countback counts finish positions only.** A sprint win never enters
+**Countback counts finish positions only.** A sprint or climb win never enters
 `entry["positions"]`, so two teams level on combined points but one
-reached it purely through sprints rank below the one that reached it
-through a finish — sprinting is a different skill from finishing, and
-tie-breaking follows the finish.
+reached it purely through markers rank below the one that reached it
+through a finish — sprinting and climbing are different skills from finishing,
+and tie-breaking follows the finish.
 
 ## Stage races
 
@@ -174,12 +202,12 @@ same as one-day scoring.
 - **Race tiers** — every race currently awards from the same table;
   scaling points by a race's prestige is deferred until the calendar
   needs that shape.
-- **Mountain points** (#17) — the identical mechanism for mountain
-  markers, tracked as its own `MarkerPoints` rows (filtered by kind) and
-  never pooled with sprint points into one tally.
-- **A full points retune** — sprint points were sized as a starting point
-  (`specs/archive/sprint-points.md`, D6); a pass across every points
-  source belongs after #17 exists and the whole picture is known.
-- **A sprinters' classification** (#18) — accumulating a season's sprint
-  crossings into a standing of their own, with a visible leader mid-race
-  and an end-of-stage-race bonus.
+- **A full points retune** — sprint and mountain points were both sized as a
+  starting point, and deliberately at parity with each other
+  (`specs/archive/mountain-points.md`, D4). A pass across finish, sprint and
+  mountain points together belongs in its own ticket, once the whole picture
+  has run; it also decides whether the number of scoring places should grow
+  with climb category, which is deferred rather than settled.
+- **A sprinters' and a climbers' classification** (#18) — accumulating a
+  season's crossings of each kind into a standing of its own, with a visible
+  leader mid-race and an end-of-stage-race bonus.

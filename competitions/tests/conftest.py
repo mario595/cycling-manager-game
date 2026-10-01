@@ -18,13 +18,16 @@ def race(db) -> Race:
 
 @pytest.fixture
 def make_marker(db):
-    """Factory for a RaceMarker. make_marker(race, kind="sprint", weight="standard")."""
+    """Factory for a RaceMarker. make_marker(race, kind="sprint", weight="standard",
+    category="cat2")."""
     def _make(
         race: Race, name: str = "Marker", kind: str = RaceMarker.Kind.SPRINT,
         distance: float = 1000.0, weight: str = RaceMarker.Weight.STANDARD,
+        category: str = RaceMarker.Category.CAT2,
     ) -> RaceMarker:
         return RaceMarker.objects.create(
             race=race, name=name, kind=kind, distance=distance, weight=weight,
+            category=category,
         )
     return _make
 

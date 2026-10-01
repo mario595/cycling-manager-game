@@ -528,6 +528,7 @@ export interface RaceResultPointsEntry {
   position: number | null
   finish_points: number
   sprint_points: number
+  mountain_points: number
   points: number
   prize: number
 }
@@ -537,9 +538,11 @@ export interface RaceMarker {
   kind: 'sprint' | 'mountain'
   name: string
   distance: number
-  /** Null for a mountain marker — #17 decides what one is worth. */
+  /** Null for a mountain marker — it has a category instead. */
   weight: 'minor' | 'standard' | 'major' | null
-  /** Points by crossing position (1st, 2nd, ...), or null for a mountain marker. */
+  /** A climb's category, or null for a sprint marker. */
+  category: 'hc' | 'cat1' | 'cat2' | 'cat3' | null
+  /** Points by crossing position (1st, 2nd, ...), set for both kinds. */
   points: number[] | null
 }
 
@@ -547,8 +550,8 @@ export interface RaceMarkerCrossing {
   position: number
   rider: { id: number; name: string }
   team: RaceResultTeam | null
-  /** Null for a mountain crossing, or a sprint crossing whose teammate
-   * already scored the team's one row at this marker. */
+  /** Null for a crossing whose teammate already scored the team's one row at
+   * this marker. */
   points: number | null
 }
 

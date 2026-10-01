@@ -23,6 +23,7 @@ from competitions.services import (
     points_by_team,
     prizes_by_team,
     score_general_classification,
+    score_mountains,
     score_race,
     score_sprints,
 )
@@ -187,6 +188,13 @@ def _execute(race_ids: list[int], tick: TickRun, at: datetime) -> None:
                 # must not rewrite that into a failed race. Record it and
                 # move on.
                 tick.error += f"race {race_id} sprint points:\n{traceback.format_exc()}\n"
+
+            try:
+                score_mountains(race)
+            except Exception:
+                # Same isolation as sprints, and scored after them so the
+                # tick reads in the same order as the results screen.
+                tick.error += f"race {race_id} mountain points:\n{traceback.format_exc()}\n"
 
             try:
                 prizes = prizes_by_team(race)

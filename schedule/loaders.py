@@ -33,13 +33,16 @@ _VALID_WIND_BANDS = {"calm", "light", "moderate", "strong"}
 
 _KNOWN_KEYS = {"number", "starts_at", "races", "stage_races"}
 _KNOWN_RACE_KEYS = {"week", "day", "time", "name", "course", "wind", "seed", "markers"}
-_KNOWN_MARKER_KEYS = {"kind", "name", "distance", "weight"}
+_KNOWN_MARKER_KEYS = {"kind", "name", "distance", "weight", "category"}
 _KNOWN_STAGE_RACE_KEYS = {"name", "week", "start_day", "time", "stages"}
 _KNOWN_STAGE_KEYS = {"name", "time", "course", "wind", "seed", "markers"}
 
 #: Duplicated from racing.RaceMarker.Weight — this module may not import
 #: racing/. racing/tests.py checks the two stay in sync.
 MARKER_WEIGHTS = ("minor", "standard", "major")
+
+#: Duplicated from racing.RaceMarker.Category, for the same reason.
+MARKER_CATEGORIES = ("hc", "cat1", "cat2", "cat3")
 
 #: A stage race is 2-7 consecutive days, always inside one calendar week —
 #: see specs/archive/stage-races.md, Rules and edge cases.
@@ -288,7 +291,17 @@ def _parse_markers(
             raise SeasonFileError(
                 f"{at}.weight must be one of {', '.join(MARKER_WEIGHTS)}, got {weight!r}"
             )
-        markers.append({"kind": kind, "name": name, "distance": distance, "weight": weight})
+        category = entry.get("category")
+        if category is not None and kind == "sprint":
+            raise SeasonFileError(f"{at}.category is only allowed on mountain markers")
+        if category is None:
+            category = "cat2"
+        elif category not in MARKER_CATEGORIES:
+            raise SeasonFileError(
+                f"{at}.category must be one of {', '.join(MARKER_CATEGORIES)}, got {category!r}"
+            )
+        markers.append({"kind": kind, "name": name, "distance": distance,
+                        "weight": weight, "category": category})
     return markers
 
 

@@ -14,7 +14,7 @@ from rest_framework.test import APIClient
 import world.services as world_services
 from competitions.models import RacePoints
 from competitions.scoring import gc_points_for, gc_prize_for, points_for, prize_for, stage_points_for
-from competitions.services import score_general_classification, score_race, score_sprints
+from competitions.services import score_general_classification, score_mountains, score_race, score_sprints
 from economy.models import STARTING_BALANCE, LedgerEntry, SalaryReviewReport
 from racing.models import (
     MarkerCrossing,
@@ -1208,11 +1208,11 @@ def test_race_detail_includes_markers(db):
     assert response.data["markers"] == [
         {
             "id": first.pk, "kind": "sprint", "name": "Line One", "distance": 10000.0,
-            "weight": "standard", "points": [6, 4, 3, 2, 1],
+            "weight": "standard", "category": None, "points": [6, 4, 3, 2, 1],
         },
         {
             "id": second.pk, "kind": "mountain", "name": "Summit", "distance": 30000.0,
-            "weight": None, "points": None,
+            "weight": None, "category": "cat2", "points": [6, 4, 3, 2, 1],
         },
     ]
 
@@ -1238,7 +1238,7 @@ def test_race_detail_sprint_marker_has_weight_and_points(db):
     assert payload["points"] == [10, 7, 5, 3, 2]
 
 
-def test_race_detail_mountain_marker_has_null_weight_and_points(db):
+def test_race_detail_mountain_marker_has_null_weight(db):
     race = Race.objects.create(
         name="Mountain Only Race",
         course=[{"length": 40000.0, "gradient": 0.0}],
@@ -1255,7 +1255,47 @@ def test_race_detail_mountain_marker_has_null_weight_and_points(db):
 
     payload = next(m for m in response.data["markers"] if m["id"] == marker.pk)
     assert payload["weight"] is None
-    assert payload["points"] is None
+
+
+def test_race_detail_sprint_marker_has_null_category(db):
+    race = Race.objects.create(
+        name="Sprint Only Race",
+        course=[{"length": 40000.0, "gradient": 0.0}],
+        status=Race.Status.SCHEDULED,
+    )
+    marker = RaceMarker.objects.create(
+        race=race, kind=RaceMarker.Kind.SPRINT, name="Line", distance=10000.0,
+    )
+    client = APIClient()
+    user = User.objects.create_user(email="sprint-only-detail@example.com", password="s0meth1ng-good")
+    client.force_authenticate(user=user)
+
+    response = client.get(f"/api/racing/races/{race.pk}/")
+
+    payload = next(m for m in response.data["markers"] if m["id"] == marker.pk)
+    assert payload["category"] is None
+    assert payload["points"] == [6, 4, 3, 2, 1]
+
+
+def test_race_detail_mountain_marker_has_category_and_points(db):
+    race = Race.objects.create(
+        name="Categorised Race",
+        course=[{"length": 40000.0, "gradient": 0.0}],
+        status=Race.Status.SCHEDULED,
+    )
+    marker = RaceMarker.objects.create(
+        race=race, kind=RaceMarker.Kind.MOUNTAIN, name="Final Top", distance=40000.0,
+        category=RaceMarker.Category.HC,
+    )
+    client = APIClient()
+    user = User.objects.create_user(email="categorised@example.com", password="s0meth1ng-good")
+    client.force_authenticate(user=user)
+
+    response = client.get(f"/api/racing/races/{race.pk}/")
+
+    payload = next(m for m in response.data["markers"] if m["id"] == marker.pk)
+    assert payload["category"] == "hc"
+    assert payload["points"] == [10, 7, 5, 3, 2]
 
 
 def test_race_detail_markers_empty_for_plain_course(db):
@@ -1615,6 +1655,133 @@ def test_race_results_team_with_only_sprint_points_listed_with_them(db):
     assert row["position"] is None
     assert row["finish_points"] == 0
     assert row["sprint_points"] == 6
+    assert row["mountain_points"] == 0
+    assert row["points"] == 6
+
+
+def test_race_results_mountain_crossing_shows_points_for_scoring_rider_only(db):
+    team = Team.objects.create(name="Climb Team", code="CLB")
+    other = Team.objects.create(name="Other Team", code="OTH")
+    race = Race.objects.create(
+        name="Crossing Race",
+        course=[{"length": 40000.0, "gradient": 0.0}],
+        status=Race.Status.FINISHED,
+    )
+    marker = RaceMarker.objects.create(
+        race=race, kind=RaceMarker.Kind.MOUNTAIN, name="Hilltop", distance=30000.0,
+        category=RaceMarker.Category.CAT1,
+    )
+    winner = Rider.objects.create(
+        name="Climber", team=team,
+        climb=50, sprint=50, flat=50, resistance=50, positioning=50,
+    )
+    teammate = Rider.objects.create(
+        name="Teammate", team=team,
+        climb=50, sprint=50, flat=50, resistance=50, positioning=50,
+    )
+    other_rider = Rider.objects.create(
+        name="Rival", team=other,
+        climb=50, sprint=50, flat=50, resistance=50, positioning=50,
+    )
+    for rider, position in [(winner, 1), (teammate, 2), (other_rider, 3)]:
+        MarkerCrossing.objects.create(
+            marker=marker, rider=rider, position=position, crossed_at=100.0,
+        )
+    score_mountains(race)
+
+    client = APIClient()
+    user = User.objects.create_user(email="crossings@example.com", password="s0meth1ng-good")
+    client.force_authenticate(user=user)
+
+    response = client.get(f"/api/racing/races/{race.pk}/results/")
+
+    crossings = {
+        c["rider"]["id"]: c["points"]
+        for m in response.data["markers"] if m["id"] == marker.pk
+        for c in m["crossings"]
+    }
+    assert crossings[winner.pk] == 8
+    assert crossings[teammate.pk] is None
+    assert crossings[other_rider.pk] == 4
+
+
+def test_race_results_team_points_split_finish_sprint_and_mountain(db):
+    """D8: a mountain total must never be folded into sprint_points, and
+    points is always the sum of the three."""
+    team = Team.objects.create(name="Split Team", code="SPL")
+    race = Race.objects.create(
+        name="Three Way Race",
+        course=[{"length": 40000.0, "gradient": 0.0}],
+        status=Race.Status.FINISHED,
+    )
+    finisher = Rider.objects.create(
+        name="Finisher", team=team,
+        climb=50, sprint=50, flat=50, resistance=50, positioning=50,
+    )
+    RaceResult.objects.create(race=race, rider=finisher, position=1, finish_time=1000.0)
+    score_race(race)
+    sprint = RaceMarker.objects.create(
+        race=race, kind=RaceMarker.Kind.SPRINT, name="Line", distance=10000.0,
+        weight=RaceMarker.Weight.STANDARD,
+    )
+    mountain = RaceMarker.objects.create(
+        race=race, kind=RaceMarker.Kind.MOUNTAIN, name="Hilltop", distance=30000.0,
+        category=RaceMarker.Category.HC,
+    )
+    MarkerCrossing.objects.create(marker=sprint, rider=finisher, position=1, crossed_at=100.0)
+    MarkerCrossing.objects.create(marker=mountain, rider=finisher, position=1, crossed_at=200.0)
+    score_sprints(race)
+    score_mountains(race)
+
+    client = APIClient()
+    user = User.objects.create_user(email="three-way@example.com", password="s0meth1ng-good")
+    client.force_authenticate(user=user)
+
+    response = client.get(f"/api/racing/races/{race.pk}/results/")
+
+    row = next(p for p in response.data["points"] if p["team"]["id"] == team.pk)
+    assert row["finish_points"] == 20
+    assert row["sprint_points"] == 6
+    assert row["mountain_points"] == 10
+    assert row["points"] == 20 + 6 + 10
+
+
+def test_race_results_team_with_only_mountain_points_listed_with_them(db):
+    scoring_team = Team.objects.create(name="Scorer", code="SCR")
+    climbing_team = Team.objects.create(name="Climbers", code="CLM")
+    race = Race.objects.create(
+        name="Mountain Only Race",
+        course=[{"length": 40000.0, "gradient": 0.0}],
+        status=Race.Status.FINISHED,
+    )
+    winner = Rider.objects.create(
+        name="Winner", team=scoring_team,
+        climb=50, sprint=50, flat=50, resistance=50, positioning=50,
+    )
+    RaceResult.objects.create(race=race, rider=winner, position=1, finish_time=1000.0)
+    score_race(race)
+    RaceSquad.objects.create(race=race, team=climbing_team)
+    marker = RaceMarker.objects.create(
+        race=race, kind=RaceMarker.Kind.MOUNTAIN, name="Hilltop", distance=30000.0,
+    )
+    climber = Rider.objects.create(
+        name="Climber", team=climbing_team,
+        climb=50, sprint=50, flat=50, resistance=50, positioning=50,
+    )
+    MarkerCrossing.objects.create(marker=marker, rider=climber, position=1, crossed_at=100.0)
+    score_mountains(race)
+
+    client = APIClient()
+    user = User.objects.create_user(email="mountain-only@example.com", password="s0meth1ng-good")
+    client.force_authenticate(user=user)
+
+    response = client.get(f"/api/racing/races/{race.pk}/results/")
+
+    row = next(p for p in response.data["points"] if p["team"]["id"] == climbing_team.pk)
+    assert row["position"] is None
+    assert row["finish_points"] == 0
+    assert row["sprint_points"] == 0
+    assert row["mountain_points"] == 6
     assert row["points"] == 6
 
 
@@ -1649,6 +1816,42 @@ def test_standings_total_includes_sprint_points(db):
 
         row = next(e for e in response.data["standings"] if e["team"]["id"] == team.pk)
         assert row["points"] == 12 + 6
+    finally:
+        world_services._clock = None
+
+
+def test_standings_total_includes_mountain_points(db):
+    world_services._clock = None
+    try:
+        season = make_season_with_weeks(1, now().replace(hour=0, minute=0, second=0, microsecond=0))
+        week = season.weeks.get(number=1)
+        team = Team.objects.create(name="Standings Team", code="STA")
+        rider = Rider.objects.create(
+            name="Standings Rider", team=team,
+            climb=50, sprint=50, flat=50, resistance=50, positioning=50,
+        )
+        race = Race.objects.create(
+            name="Standings Mountain Race",
+            course=[{"length": 40000.0, "gradient": 0.0}],
+            status=Race.Status.FINISHED, week=week, starts_at=week.starts_at,
+        )
+        RaceResult.objects.create(race=race, rider=rider, position=3, finish_time=1000.0)
+        score_race(race)
+        marker = RaceMarker.objects.create(
+            race=race, kind=RaceMarker.Kind.MOUNTAIN, name="Hilltop", distance=30000.0,
+            category=RaceMarker.Category.CAT1,
+        )
+        MarkerCrossing.objects.create(marker=marker, rider=rider, position=1, crossed_at=100.0)
+        score_mountains(race)
+
+        client = APIClient()
+        user = User.objects.create_user(email="standings-mountain@example.com", password="s0meth1ng-good")
+        client.force_authenticate(user=user)
+
+        response = client.get("/api/competitions/standings/")
+
+        row = next(e for e in response.data["standings"] if e["team"]["id"] == team.pk)
+        assert row["points"] == 12 + 8
     finally:
         world_services._clock = None
 

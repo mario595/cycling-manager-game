@@ -123,7 +123,8 @@ prompt for declaring a season — see `specs/archive/season.md`'s *Out of scope*
         { "length": 12000, "gradient": 5.0 }
       ],
       "markers": [
-        { "kind": "sprint", "name": "First Sprint", "distance": 40000, "weight": "major" }
+        { "kind": "sprint", "name": "First Sprint", "distance": 40000, "weight": "major" },
+        { "kind": "mountain", "name": "Final Top", "distance": 52000, "category": "hc" }
       ]
     },
     {
@@ -146,7 +147,7 @@ prompt for declaring a season — see `specs/archive/season.md`'s *Out of scope*
 | `time` | yes | `HH:MM`, 24-hour. Non-zero minutes are accepted with a warning — see *Placing a race*. |
 | `name` | yes | Non-empty, at most 150 characters (`Race.name`'s limit). |
 | `course` | yes | A non-empty list of `{length, gradient}` segments — the engine's own shape. |
-| `markers` | no | A list of `{kind, name, distance, weight?}` named points on the course — same shape the engine's config parser accepts, validated here the same way the course is (*Why the course is validated twice*, below). `kind` is `sprint` \| `mountain`, `name` non-empty (≤ 100 chars), `distance` strictly inside the course length, so each error names `races[i].markers[j]` for the admin. `weight` is `minor` \| `standard` \| `major`, **sprint markers only** — a mountain marker's `weight` key is rejected, since #17 owns what a mountain marker is worth; absent on a sprint marker defaults to `standard`, so every season file written before #16 keeps working unchanged. |
+| `markers` | no | A list of `{kind, name, distance, weight?, category?}` named points on the course — same shape the engine's config parser accepts, validated here the same way the course is (*Why the course is validated twice*, below). `kind` is `sprint` \| `mountain`, `name` non-empty (≤ 100 chars), `distance` strictly inside the course length, so each error names `races[i].markers[j]` for the admin. `weight` is `minor` \| `standard` \| `major`, **sprint markers only** — a `weight` key on a mountain marker is rejected, because the two vocabularies mean different things and data authored under the wrong one would have to be reinterpreted later. `category` is `hc` \| `cat1` \| `cat2` \| `cat3`, **mountain markers only**, rejected on a sprint for the same reason. Both default when absent (`standard` and `cat2` respectively), so every season file written before sprint or mountain points keeps working unchanged. |
 | `wind` | no | `{"enabled": bool, "band": "calm"\|"light"\|"moderate"\|"strong"}`. Absent means the model's defaults: wind on, band rolled from the seed. |
 | `seed` | no | Stored on `Race.seed` for reproducibility. |
 
@@ -271,11 +272,13 @@ duplicates both — `kind` ∈ {sprint, mountain}, non-empty `name` ≤ 100 char
 `RaceSetupError` from inside a simulation. Three copies of a ten-line rule is
 still less than the one import that would violate the dependency direction.
 
-`loaders.MARKER_WEIGHTS` is the same duplication for one field: it repeats
-`RaceMarker.Weight`'s three values because `loaders.py` may not import
-`racing/`. `racing/tests.py::test_loader_weights_match_race_marker_weights`
-is the drift test — it lives on the `racing/` side because that is the app
-allowed to import `schedule/`, not the reverse.
+`loaders.MARKER_WEIGHTS` and `loaders.MARKER_CATEGORIES` are the same
+duplication for two fields: they repeat `RaceMarker.Weight`'s three values and
+`RaceMarker.Category`'s four, because `loaders.py` may not import `racing/`.
+`racing/tests.py::test_loader_weights_match_race_marker_weights` and
+`test_loader_categories_match_race_marker_categories` are the drift tests —
+they live on the `racing/` side because that is the app allowed to import
+`schedule/`, not the reverse.
 
 ## Replacing a season with races
 

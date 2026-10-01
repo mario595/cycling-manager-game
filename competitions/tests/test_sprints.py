@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from competitions.models import MarkerPoints
-from competitions.services import score_sprints
+from competitions.services import score_mountains, score_sprints
 from racing.models import Race, RaceMarker
 from riders.models import Rider
 
@@ -146,3 +146,48 @@ def test_points_frozen_when_table_changes(race, make_team, make_rider, make_mark
     stored = MarkerPoints.objects.get(marker=marker, team=team)
     assert stored.points == awarded
     assert stored.points != 999
+
+
+def test_sprints_still_score_after_mountains_scored(
+    race, make_team, make_rider, make_marker, make_crossing,
+):
+    """D5, load-bearing: the idempotency guard is filtered by kind, so
+    whichever of the two scorers runs second still scores."""
+    sprint = make_marker(race, kind=RaceMarker.Kind.SPRINT)
+    mountain = make_marker(race, kind=RaceMarker.Kind.MOUNTAIN)
+    sprint_team = make_team("ALP")
+    make_crossing(sprint, make_rider("Sprinter", sprint_team), position=1)
+    mountain_team = make_team("BET")
+    make_crossing(mountain, make_rider("Climber", mountain_team), position=1)
+
+    score_mountains(race)
+    score_sprints(race)
+
+    assert set(MarkerPoints.objects.filter(marker=sprint).values_list("team_id", flat=True)) == {
+        sprint_team.pk,
+    }
+    assert set(MarkerPoints.objects.filter(marker=mountain).values_list("team_id", flat=True)) == {
+        mountain_team.pk,
+    }
+
+
+def test_mountains_still_score_after_sprints_scored(
+    race, make_team, make_rider, make_marker, make_crossing,
+):
+    """D5, the other order."""
+    sprint = make_marker(race, kind=RaceMarker.Kind.SPRINT)
+    mountain = make_marker(race, kind=RaceMarker.Kind.MOUNTAIN)
+    sprint_team = make_team("ALP")
+    make_crossing(sprint, make_rider("Sprinter", sprint_team), position=1)
+    mountain_team = make_team("BET")
+    make_crossing(mountain, make_rider("Climber", mountain_team), position=1)
+
+    score_sprints(race)
+    score_mountains(race)
+
+    assert set(MarkerPoints.objects.filter(marker=sprint).values_list("team_id", flat=True)) == {
+        sprint_team.pk,
+    }
+    assert set(MarkerPoints.objects.filter(marker=mountain).values_list("team_id", flat=True)) == {
+        mountain_team.pk,
+    }

@@ -358,6 +358,67 @@ def test_sprint_scoring_failure_does_not_fail_the_race(db, team, riders, monkeyp
     assert "sprint scoring exploded" in run.error
 
 
+def test_tick_scores_mountain_points_for_a_finished_race(db, team, riders):
+    clock: MockClock = get_clock()
+    race = Race.objects.create(
+        name="Due Race",
+        course=[{"length": 500.0, "gradient": 0.0}],
+        starts_at=now() + timedelta(hours=1),
+        status=Race.Status.SCHEDULED,
+    )
+    RaceMarker.objects.create(
+        race=race, kind=RaceMarker.Kind.MOUNTAIN, name="Final Top", distance=500.0,
+        category=RaceMarker.Category.HC,
+    )
+    clock.advance_to_next_due()
+
+    tick()
+
+    race.refresh_from_db()
+    assert race.status == Race.Status.FINISHED
+    assert MarkerPoints.objects.filter(marker__race=race).exists()
+
+
+def test_mountain_scoring_failure_does_not_fail_the_race(db, team, riders, monkeypatch):
+    clock: MockClock = get_clock()
+    race = Race.objects.create(
+        name="Due Race",
+        course=[{"length": 500.0, "gradient": 0.0}],
+        starts_at=now() + timedelta(hours=1),
+        status=Race.Status.SCHEDULED,
+    )
+    RaceMarker.objects.create(
+        race=race, kind=RaceMarker.Kind.MOUNTAIN, name="Final Top", distance=500.0,
+    )
+    RaceMarker.objects.create(
+        race=race, kind=RaceMarker.Kind.SPRINT, name="Mid-line", distance=250.0,
+    )
+    clock.advance_to_next_due()
+
+    def _raise(race):
+        raise RuntimeError("mountain scoring exploded")
+
+    monkeypatch.setattr("world.services.score_mountains", _raise)
+
+    run = tick()
+
+    race.refresh_from_db()
+    assert race.status == Race.Status.FINISHED
+    assert run.races_finished == 1
+    assert not MarkerPoints.objects.filter(
+        marker__race=race, marker__kind=RaceMarker.Kind.MOUNTAIN,
+    ).exists()
+    assert MarkerPoints.objects.filter(
+        marker__race=race, marker__kind=RaceMarker.Kind.SPRINT,
+    ).exists()
+    placed = list(
+        RaceResult.objects.filter(race=race, finish_time__isnull=False)
+        .values_list("position", flat=True)
+    )
+    assert run.prize_entries == len(placed)
+    assert "mountain scoring exploded" in run.error
+
+
 def make_trainer(team, **overrides):
     defaults = dict(
         name="Coach One", climb=90, sprint=40, flat=45, resistance=50, positioning=35,

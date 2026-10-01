@@ -7,6 +7,7 @@ import { riderPath } from '../navigation'
 import { formatGap, formatRaceTime } from '../raceTime'
 import { color, font } from '../theme'
 import { Button, Card, CardHeader } from './primitives'
+import { CATEGORY_LABEL } from './CourseProfile'
 import { useRaceResults } from '../useRaceResults'
 
 /**
@@ -205,9 +206,11 @@ export function TeamPointsTable({ results }: { results: RaceResults }) {
               <span style={{ marginLeft: 8, fontFamily: font.mono, fontSize: 11.5, color: color.muted }}>
                 {entry.team.code}
               </span>
-              {entry.sprint_points > 0 ? (
+              {entry.sprint_points + entry.mountain_points > 0 ? (
                 <div style={{ fontSize: 11.5, color: color.muted, marginTop: 2 }}>
-                  finish {entry.finish_points} · sprints {entry.sprint_points}
+                  finish {entry.finish_points}
+                  {entry.sprint_points > 0 ? <> · sprints {entry.sprint_points}</> : null}
+                  {entry.mountain_points > 0 ? <> · mountains {entry.mountain_points}</> : null}
                 </div>
               ) : null}
             </div>
@@ -238,6 +241,11 @@ export function MarkerResultsCard({ results }: { results: RaceResults }) {
                 {marker.weight !== null ? (
                   <span style={{ marginLeft: 8, fontFamily: font.mono, fontSize: 11, fontWeight: 600, color: color.muted }}>
                     {marker.weight}
+                  </span>
+                ) : null}
+                {marker.category !== null ? (
+                  <span style={{ marginLeft: 8, fontFamily: font.mono, fontSize: 11, fontWeight: 600, color: color.muted }}>
+                    {CATEGORY_LABEL[marker.category]}
                   </span>
                 ) : null}
               </div>

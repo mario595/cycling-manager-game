@@ -310,8 +310,9 @@ count of teams released lands on `TickRun.teams_released`.
    (`world/migrations/0015`). See *The AI market (#30)*.
 5. **Execute** — outside any transaction: simulate each claimed race,
    record its result, then score it (`competitions.services.score_race`),
-   then score its sprint markers (`competitions.services.score_sprints`),
-   then pay its prize money (`economy.services.pay_race_prizes`). If the
+   then score its marker points (`competitions.services.score_sprints`, then
+   `score_mountains`), then pay its prize money
+   (`economy.services.pay_race_prizes`). If the
    race belongs to a stage race (`race.stage_race_id`),
    `world.services._settle_stage_race` runs next, on **every** race in the
    loop that has one — including a race that failed simulation — and
@@ -327,7 +328,7 @@ count of teams released lands on `TickRun.teams_released`.
 
    **Running on the failure path too is deliberate.** A race that raises
    during simulation still gets `FAILED`, not `FINISHED`, and the normal
-   sprint-scoring/prize-payout step is skipped for it — but
+   marker-scoring/prize-payout steps are skipped for it — but
    `_settle_stage_race` is called unconditionally after that step, not
    inside it, because `is_complete()` only needs every stage `FINISHED`
    **or** `FAILED`, with at least one actually `FINISHED`: a tour whose
@@ -361,15 +362,18 @@ that simulates but fails to score is treated as a broken race: the
 existing per-race `try`/`except` in `_execute` marks it `FAILED` and
 records the traceback, without stopping the rest of the tick.
 
-**Sprint points are scored in their own try block, between finish scoring
-and the prize payout, and a sprint-scoring failure does not fail the race
+**Marker points are scored in their own try block, between finish scoring
+and the prize payout, and a marker-scoring failure does not fail the race
 either.** `score_sprints(race)` writes `competitions.MarkerPoints` for
-each sprint marker's top crossings — see `competitions/README.md`,
-*Sprint points*. Same reasoning as the prize block below: a race that
-simulated and finish-scored is a real result, so a sprint-scoring bug must
+each sprint marker's top crossings, and `score_mountains(race)` does the same
+for the mountain markers — see `competitions/README.md`, *Marker points*. The
+order is sprints then mountains only so the tick reads the way the results
+screen does; neither scorer's guard sees the other's rows. Each has its own
+`try`/`except`: same reasoning as the prize block below, a race that
+simulated and finish-scored is a real result, so a marker-scoring bug must
 not retroactively mark it `FAILED`. The failure is recorded on `tick.error`
-(`"race {id} sprint points: ..."`) and the tick carries on to pay prizes
-regardless.
+(`"race {id} sprint points: ..."` / `"race {id} mountain points: ..."`) and
+the tick carries on to pay prizes regardless.
 
 **Prize money is paid in a third, separate try block, and a payout
 failure does not fail the race.** After scoring, the tick computes

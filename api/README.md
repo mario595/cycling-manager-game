@@ -221,7 +221,8 @@ Since #29 each rider also carries `release_cost`
   (`RaceDetailSerializer`, `RaceDetailView`): id, name, status, starts_at,
   distance and the raw `{length, gradient}` course segments. It also carries
   `markers`, the race's `RaceMarker` rows in course order
-  (`{kind, name, distance, weight, points}` — see below). It also carries
+  (`{kind, name, distance, category, weight, points}` — see below). It also
+  carries
   `payout` — the race's `{position, points, prize}` list for 1st through 10th,
   from `competitions/scoring.py`'s two tables — so the SPA can show the prize
   list before the race has run. It also carries `has_replay`: whether a
@@ -277,14 +278,16 @@ Since #29 each rider also carries `release_cost`
   a `200` with an empty list — "no results yet" and "no such race" would
   otherwise look the same to the SPA. `points` carries one row per team that
   started, scoring teams first ordered by position and then the rest by
-  sprint points then name, with `position: null` and `prize: 0` for a team
+  marker points then name, with `position: null` and `prize: 0` for a team
   that scored no finish points — the starter set comes from `RaceSquad`, not
   from which teams recorded a result (see `racing/README.md`, *Squads*).
-  Each row's `points` is `finish_points + sprint_points`: `finish_points`
-  is what `RacePoints` awarded (0 if none), `sprint_points` is the team's
-  season sprint `MarkerPoints` for this race (0 if none) — a team can be
-  in the "unplaced" group by finish and still carry a nonzero `points` from
-  sprints alone. `prize` is the team's total winnings, summed from its
+  Each row's `points` is `finish_points + sprint_points + mountain_points`:
+  `finish_points` is what `RacePoints` awarded (0 if none), `sprint_points`
+  and `mountain_points` are the team's `MarkerPoints` for this race split by
+  marker kind (0 if none) — a team can be in the "unplaced" group by finish
+  and still carry a nonzero `points` from markers alone. The split is keyed
+  by kind rather than summed into one column, so a climb never shows up as
+  sprint points. `prize` is the team's total winnings, summed from its
   `prize_money` ledger entries for the race, so the results page and the
   ledger cannot disagree. `IsAuthenticated`, the project default.
 
@@ -297,24 +300,26 @@ Since #29 each rider also carries `release_cost`
 
   The payload also carries `markers`, one entry per `RaceMarker` in course
   order, each with `crossings` — the first `MARKER_PLACES_SHOWN` (**5**,
-  raised from 3 to match `SPRINT_PLACES` so every scoring position is
+  raised from 3 to match the marker scoring depth so every scoring position is
   visible — #16) riders across that marker, `{position, rider, team,
   points}`. `team` here is again the team raced for (the same
   `team_by_rider` map the results rows use), so a rider released since
   still shows the team they crossed with. `points` is what that crossing
-  scored — `null` for a mountain crossing, and `null` for a sprint
-  crossing whose teammate already took the team's one scoring row at that
-  marker (`competitions/README.md`, *Sprint points*). The full crossing
-  order stays in the database for #17; a 64-rider field over ten markers
+  scored, read from the marker's own kind — `null` for a crossing whose
+  teammate already took the team's one scoring row at that marker
+  (`competitions/README.md`, *Marker points*). The full crossing
+  order stays in the database; a 64-rider field over ten markers
   is 640 rows this screen never draws. `markers` is `[]` for a race with
   none.
 
   A marker entry itself (both here and on race detail above) carries
-  `weight` and `points`: for a sprint marker, `weight` is its
+  `category`, `weight` and `points`: for a sprint marker, `weight` is its
   `minor`/`standard`/`major` tier and `points` is that tier's award by
   crossing position, `[1st, 2nd, 3rd, 4th, 5th]` — e.g. `[6, 4, 3, 2, 1]`
-  for `standard`. Both are `null` for a mountain marker; #17 decides what
-  one is worth.
+  for `standard`; for a mountain marker, `category` is its `hc`/`cat1`/`cat2`/
+  `cat3` class and `points` that class's award, e.g. `[10, 7, 5, 3, 2]` for
+  `hc`. The other field is `null` in each case, so a client never has to
+  guess which of the two vocabularies a marker is scored under.
 
   Each `results` row also carries `group_time` — the finish time shared by
   every rider who crossed with no meaningful gap to the rider ahead, null
