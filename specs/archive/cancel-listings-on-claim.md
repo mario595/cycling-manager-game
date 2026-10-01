@@ -1,6 +1,6 @@
 # Cancel listings on claim
 
-**Status:** approved
+**Status:** implemented
 **Domain(s):** transfers, teams, api
 **One-liner:** When a player claims a team, every rider that team had up for auction is taken off the market, so the new manager never inherits a sale they did not start.
 

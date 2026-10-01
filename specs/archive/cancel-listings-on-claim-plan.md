@@ -1,6 +1,6 @@
 # Cancel listings on claim — Implementation Plan
 
-**Spec:** `specs/cancel-listings-on-claim.md` · **Issue:** #114 · **Status:** proposed
+**Spec:** `specs/cancel-listings-on-claim.md` · **Issue:** #114 · **Status:** implemented
 **Apps touched:** `transfers/`, `api/`, `world/` (tests only)
 
 ## Context you need
@@ -204,7 +204,7 @@ No production change. Tests only, using the file's `_seller`, `_ai_team`,
   on the seller; list a second rider with the same reserve; `place_ai_bids`
   places `1` on the second. Spec item 6.
 
-### W4 — Docs, spec and plan status, archive
+### W4 — Docs, spec and plan status, archive — **done**
 
 See *Documentation update*. Set both `Status:` lines to `implemented` and
 move `specs/cancel-listings-on-claim.md` and this plan to `specs/archive/`.
