@@ -129,6 +129,7 @@ from transfers.services import (
     RiderNotOnRoster,
     RosterFull,
     SelfBid,
+    cancel_open_auctions,
     cancel_unowned_listings,
     free_agents,
     list_for_auction,
@@ -1615,6 +1616,14 @@ class PromoteSquadRiderView(APIView):
     A roster at `ROSTER_CAP` is a 409 `RosterFull` rather than a refusal
     after the fact; the screen disables the button first, using the same
     `roster_count`/`roster_cap` the GET sends.
+
+    **Promoting a listed graduate cancels their auction in the same
+    transaction.** The squad screen keeps Promote on a listed rider — the
+    sale is what a listing takes away, not the option of keeping them — so
+    this is the button's only honest reading: the manager is choosing the
+    rider over the bids, and the sale ends. Without it the auction would sit
+    open over a rider now on the roster, and the winner at its deadline would
+    take a player the team is also paying and fielding.
     """
 
     def post(self, request, rider_id: int):
@@ -1622,8 +1631,11 @@ class PromoteSquadRiderView(APIView):
         if team is None:
             return Response({"detail": "You do not manage a team."}, status=403)
 
+        at = now()
         try:
-            promote(team, rider_id, at=now(), roster_cap=ROSTER_CAP)
+            with transaction.atomic():
+                promote(team, rider_id, at=at, roster_cap=ROSTER_CAP)
+                cancel_open_auctions([rider_id], at=at)
         except (NotYourProspect, SquadRosterFull) as error:
             return Response({"detail": str(error)}, status=409)
 

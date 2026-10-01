@@ -370,7 +370,7 @@ Views, serializers and urls as in that section. Tests in `api/tests.py`:
 - close cancels a listed graduate's auction;
 - claim cancels the old roster's open listings.
 
-### W8 — `frontend/`: squad screen triage
+### W8 — `frontend/`: squad screen triage ✅
 Types, hook and screen as in that section. `DevelopmentSquad.test.tsx` cases:
 - places shown on cards and header;
 - warning shown only when `arrivals_at_risk > 0`;

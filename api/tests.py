@@ -4409,3 +4409,24 @@ def test_claim_cancels_the_old_rosters_open_listings(db, dev_squad_manager):
 
     assert response.status_code == 201
     assert Auction.objects.get(pk=auction.pk).status == Auction.Status.CANCELLED
+
+
+def test_promote_cancels_a_listed_graduate_auction(dev_squad_client, dev_squad_team):
+    """Promote stays available on a listed graduate — the sale is what a
+    listing takes away, not the option of keeping them — so choosing to keep
+    the rider has to end the sale. Otherwise the auction sits open over a
+    player the team is now paying and fielding, and the winner at its
+    deadline takes them off the roster."""
+    _open_squad(dev_squad_team, 1)
+    run_intake(at=now())
+    graduate = _graduate(_first_prospect(dev_squad_team))
+    auction = list_for_auction(dev_squad_team, graduate.pk, at=now())
+
+    response = dev_squad_client.post(
+        f"/api/development-squad/riders/{graduate.pk}/promote/",
+    )
+
+    assert response.status_code == 204
+    assert Auction.objects.get(pk=auction.pk).status == Auction.Status.CANCELLED
+    graduate.refresh_from_db()
+    assert graduate.team_id == dev_squad_team.pk
