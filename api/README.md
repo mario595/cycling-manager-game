@@ -524,10 +524,12 @@ Since #29 each rider also carries `release_cost`
   would make a double-click look like a success. `POST` rather than `DELETE`
   for `FireTrainerView`'s reason and then some: the row really is deleted, but
   the opening fee already paid stays in the ledger, so nothing here is
-  destroyed. Since #33, closing also releases every **prospect** then sitting
-  in the squad to the free-agent pool, calling `close_squad(team, at=now())`
-  and any **graduate** is deleted outright — see `riders/README.md`, *Youth
-  intake* and *Youth triage*. Since #34 it wraps that in one transaction with
+  destroyed. A close has disposed of every rider in the squad since #33, and
+  since #34 the two states go opposite ways — every rider still **in** the
+  squad is discarded outright, every **graduate** is released to the
+  free-agent pool — calling `close_squad(team, at=now())` and see
+  `riders/README.md`, *Youth intake* and *Youth triage*. Since #34 it wraps
+  that in one transaction with
   `transfers.services.cancel_unowned_listings(team, at=at)`, because a
   released graduate's auction would otherwise stay biddable until its
   deadline and its winner would be refused by the very ownership check that

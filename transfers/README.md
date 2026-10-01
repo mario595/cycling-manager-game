@@ -45,10 +45,13 @@ ordered by name. Retired riders are never returned, and neither are
 development squad riders (#33) — a `team = NULL` rider with
 `development_squad` set is still in a squad, not the market, and
 `sign_free_agent` refuses one under the rider lock the same way it refuses a
-retired rider. A squad rider only enters the pool once their squad closes,
-which stamps `unattached_since` on the way out (`riders/README.md`, *Youth
-intake*) — the same stamp every other released or unsigned rider carries, so
-a youth nobody wants expires by the same rule as anyone else. Two actions
+retired rider. A squad rider reaches the pool one way only, and only having
+served their full spell: as a **graduate**, released by a closing squad, a
+lapsed decision window or an unsold auction, each of which stamps
+`unattached_since` on the way out (`riders/README.md`, *Youth triage*) — the
+same stamp every other released or unsigned rider carries, so a youth nobody
+wants expires by the same rule as anyone else. A rider still *in* the squad is
+never in the pool: closing discards them. Two actions
 move riders in and out of the pool, both
 row-locked write paths in `transfers/services.py` that charge an **injected**
 `charge(rider, fee)` callback the way `hire_trainer` does — `transfers/` may

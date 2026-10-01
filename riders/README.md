@@ -554,15 +554,16 @@ request wait, not behave as though the squad were not there. The
 lock.
 
 **Closing is two different events wearing one button (#34).** Before #34 a
-close released every rider in the squad to the free-agent pool. Now only the
-ones still *in the squad* are released that way; a **graduate** is deleted
-outright instead, because a graduate is not the squad's to give away — they
-are a free agent who happens to have been promised a place, and once that
-window closes the promise is over. `close_squad` returns a `SquadClosure`
-naming which riders went where (or `None` when there was no squad to close),
-because a caller that has to cancel the graduates' auctions afterwards needs
-to know they existed. See *Youth triage*, below, and `transfers/README.md`,
-*Auctions*.
+close released every rider in the squad to the free-agent pool. Now the
+rider's **state** decides, and the two go opposite ways: one still *in the
+squad* is **discarded outright**, while a **graduate** is **released to the
+pool**. The reason is the spec's: a rider who served their full spell is a
+plausible signing and worth a market place, and one pulled mid-development is
+not. `close_squad` returns a `SquadClosure` naming which riders went where
+(`discarded: int`, `released: list[int]`, or `None` when there was no squad to
+close), because a caller that has to cancel the released riders' auctions
+afterwards needs to know they existed. See *Youth triage*, below, and
+`transfers/README.md`, *Auctions*.
 
 Closing writes nothing to the ledger and refunds nothing, and it is the only
 way to reduce the weekly cost — which is what makes it a drastic measure
@@ -571,11 +572,11 @@ again. A mid-week change is charged at the new rate from the next
 week boundary, with nothing prorated and nothing refunded for the half-week
 just gone; see `economy/README.md`, *Development squad costs*.
 
-Claiming a team closes its squad, releasing every prospect still sitting in
-it as a free agent with `unattached_since` stamped and deleting any graduate
-outright (`teams/README.md`, *Claiming a team*; see *Youth intake* and *Youth
-triage*, below, for the release path itself). Releasing a team does not touch
-the squad.
+Claiming a team closes its squad the same way — discarding every rider still
+in it and releasing every graduate to the free-agent pool with
+`unattached_since` stamped (`teams/README.md`, *Claiming a team*; see *Youth
+intake* and *Youth triage*, below, for the release path itself). Releasing a
+team does not touch the squad.
 
 **Youth intake (#33) populates the squad.** See *Youth intake*, below, for
 what arrives, how often, and how a manager sees it. The corollary the
