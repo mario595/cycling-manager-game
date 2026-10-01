@@ -3769,9 +3769,16 @@ def test_development_squad_closed_has_no_riders(dev_squad_client, dev_squad_team
     assert response.data["intake"] is None
 
 
-def test_close_endpoint_releases_riders_to_free_agent_list(dev_squad_client, dev_squad_team):
+def test_close_endpoint_releases_graduates_to_free_agent_list(dev_squad_client, dev_squad_team):
+    """Closing the squad discards the prospects still in development and
+    lists the graduates; only the latter reach the market (#34)."""
     _open_squad(dev_squad_team, 1)
     run_intake(at=now())
+    graduated, still_here = list(
+        Rider.objects.filter(development_squad__team=dev_squad_team).order_by("pk"),
+    )
+    graduated.graduated_at = now()
+    graduated.save(update_fields=["graduated_at"])
     market_client = APIClient()
     market_manager = User.objects.create_user(
         email="squad-close-buyer@example.com", password="s0meth1ng-good",
@@ -3783,7 +3790,8 @@ def test_close_endpoint_releases_riders_to_free_agent_list(dev_squad_client, dev
 
     assert response.status_code == 204
     pool = market_client.get("/api/transfers/free-agents/")
-    assert len(pool.data["riders"]) == 2
+    assert [r["id"] for r in pool.data["riders"]] == [graduated.pk]
+    assert not Rider.objects.filter(pk=still_here.pk).exists()
 
 
 def test_rider_profile_shows_development_squad_team(dev_squad_client, dev_squad_team):

@@ -565,7 +565,7 @@ def tick() -> TickRun:
         # compares against — dated to week.starts_at, not now(), so a late
         # tick's batch is still found on a second pass.
         if is_intake_week(week.number):
-            youth_intake_riders += run_intake(at=week.starts_at)
+            youth_intake_riders += run_intake(at=week.starts_at).created
 
         # Fanbase reads the week that just COMPLETED, not the one opening:
         # this loop runs before _claim()/_execute(), so `week`'s own races

@@ -104,18 +104,29 @@ def test_sign_squad_rider_raises_not_available(db, claimed_at):
     assert rider.development_squad_id == squad.pk
 
 
-def test_released_squad_rider_is_signable(db, claimed_at):
+def test_released_graduate_is_signable(db, claimed_at):
+    """A graduate released by a squad close is a normal free agent and can be
+    signed; a rider still mid-development is deleted instead and never
+    reaches the market (#34)."""
     team = Team.objects.create(name="Team Alpha", code="ALP", managed_since=claimed_at)
     other_team = Team.objects.create(name="Team Beta", code="BET")
     squad = DevelopmentSquad.objects.create(
         team=other_team, level=1, opened_at=claimed_at,
     )
-    rider = _rider(name="Youth One", team=None, development_squad=squad)
+    graduate = _rider(
+        name="Graduate One", team=None, development_squad=squad,
+        intake_at=claimed_at, graduated_at=claimed_at,
+    )
+    in_development = _rider(
+        name="Youth One", team=None, development_squad=squad,
+        intake_at=claimed_at,
+    )
 
     close_squad(other_team, at=claimed_at)
-    signed = sign_free_agent(team, rider.pk, at=claimed_at, charge=Mock())
+    signed = sign_free_agent(team, graduate.pk, at=claimed_at, charge=Mock())
 
     assert signed.team_id == team.pk
+    assert not Rider.objects.filter(pk=in_development.pk).exists()
 
 
 def test_signing_a_retired_rider_raises_not_available(db, claimed_at):

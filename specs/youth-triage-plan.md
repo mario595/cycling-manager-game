@@ -324,7 +324,7 @@ Everything in that section except `squad_development_deltas`. Tests in new `ride
 - `test_squad_development_tracks_potential` (same attributes, higher potential, larger delta).
 - **`test_every_youth_gains_over_a_spell`** — seeded `random.Random`, 2,000 riders per level from `generate_youth_rider`. Apply 14 weeks of `weekly_deltas + squad_development_deltas` through `_settle` in memory (no DB) and assert every rider's summed display value rose. This is the load-bearing test of the spec's "everyone improves" promise. If it fails after a tuning change, the tuning is wrong, not the test.
 
-### W4 — `riders/`: intake respects places; `close_squad` discards and releases
+### W4 — `riders/`: intake respects places; `close_squad` discards and releases ✅
 - `run_intake` returns `IntakeResult` and creates `min(batch, free)`.
 - `close_squad` behaves as in Design decision 11 and returns `SquadClosure | None`.
 - Update `teams/services.py`'s comment.
