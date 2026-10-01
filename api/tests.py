@@ -34,8 +34,10 @@ from riders.youth_intake import run_intake
 from schedule.models import SEASON_WEEKS, Season, Week
 from staff.models import Trainer, TrainingWeekReport
 from staff.pricing import hire_fee, weekly_salary
+from riders.pricing import weekly_salary_for
 from transfers.models import Auction, Bid
 from transfers.pricing import market_value_for, severance_fee_for, signing_fee_for
+from transfers.services import ROSTER_CAP, list_for_auction
 from teams.models import ManagerialSpell, Team
 from world.services import now
 
@@ -3752,7 +3754,11 @@ def test_development_squad_intake_next_week(dev_squad_client, dev_squad_team):
         _open_squad(dev_squad_team, 1)
 
         response = dev_squad_client.get("/api/development-squad/")
-        assert response.data["intake"]["next"] == {"season": 1, "week": 4}
+        # arrivals_at_risk is 0 for an empty squad: every one of the batch's
+        # two riders has a place to land in (#34).
+        assert response.data["intake"]["next"] == {
+            "season": 1, "week": 4, "arrivals_at_risk": 0,
+        }
 
         # After the season's last intake week (12), nothing further is declared.
         clock.set(season.weeks.get(number=12).starts_at + timedelta(hours=1))
@@ -4076,3 +4082,330 @@ def test_reopening_above_the_entry_level_is_409(dev_squad_client, dev_squad_team
 
     assert response.status_code == 409
     assert not DevelopmentSquad.objects.filter(team=dev_squad_team).exists()
+
+
+# --- Youth triage over the API (#34) ------------------------------------------------
+
+
+def _graduate(rider):
+    """Mark a squad rider as having finished their spell, in place."""
+    rider.graduated_at = now()
+    rider.save(update_fields=["graduated_at"])
+    return rider
+
+
+def _first_prospect(team):
+    return Rider.objects.filter(
+        development_squad__team=team, graduated_at__isnull=True,
+    ).first()
+
+
+@pytest.fixture
+def squad_season(settings):
+    """A declared season plus a MockClock, handed over as `(clock, start)`.
+
+    `weeks_left` counts *declared* weeks, so it only means anything once a
+    season exists — with no `Week` rows at all it degenerates to the full
+    length, and a test asserting it would be asserting the absence of a
+    season rather than the arithmetic. Tests move the clock to a week
+    boundary, do their thing, then step a day in before asking, because
+    `weeks_opened_between` counts a week as seen only once it has opened.
+
+    `settings` rather than `@override_settings` because pytest resolves
+    fixtures before it invokes the (decorated) test, so a decorator is not
+    yet in force while this runs.
+    """
+    settings.GAME_CLOCK_CLASS = "world.clocks.MockClock"
+    world_services._clock = None
+    try:
+        import world.models as world_models
+        from world.clocks import MockClock
+        from world.services import get_clock
+
+        world_models.GameClock.load()
+        clock: MockClock = get_clock()
+        season_start = datetime(2027, 3, 1, 0, 0, tzinfo=dt_timezone.utc)
+        clock.set(season_start)
+        _create_season_with_weeks(season_start)
+        yield clock, season_start
+    finally:
+        world_services._clock = None
+
+
+def _a_day_into_week_one(clock, season_start) -> None:
+    clock.set(season_start + timedelta(days=1))
+
+
+def test_squad_payload_carries_places_and_roster_room(dev_squad_client, dev_squad_team):
+    """The screen needs three separate things and gets all three: how many
+    places the level has, how many are used, and whether the roster has room
+    to promote into — the last so Promote can be disabled instead of
+    provoking a 409."""
+    _open_squad(dev_squad_team, 1)
+    run_intake(at=now())
+
+    response = dev_squad_client.get("/api/development-squad/")
+    data = response.data
+
+    assert response.status_code == 200
+    assert [level["places"] for level in data["levels"]] == [6, 8, 10]
+    assert data["places"] == 6
+    assert data["in_squad"] == 2
+    assert data["roster_count"] == 0
+    assert data["roster_cap"] == 30
+    # Graduates are listed apart, and are not counted as occupying a place.
+    assert data["graduates"] == []
+
+
+def test_a_closed_squad_reports_no_places_and_no_riders(dev_squad_client):
+    """The both-keys-always-present shape: a closed squad is a state this
+    screen shows, not a 404, so `places` is null rather than absent."""
+    data = dev_squad_client.get("/api/development-squad/").data
+
+    assert data["places"] is None
+    assert data["in_squad"] == 0
+    assert data["riders"] == []
+    assert data["graduates"] == []
+    assert data["intake"] is None
+
+
+def test_prospect_payload_carries_weeks_left_change_and_promotion_salary(
+    dev_squad_client, dev_squad_team, squad_season,
+):
+    """A prospect's row has to say how long their spell has left, what they
+    have gained since they arrived, and what promoting them would cost in
+    wages — a rider in a squad draws none of that today."""
+    clock, season_start = squad_season
+    _open_squad(dev_squad_team, 1)
+    run_intake(at=now())
+    _a_day_into_week_one(clock, season_start)
+
+    data = dev_squad_client.get("/api/development-squad/").data
+
+    assert len(data["riders"]) == 2
+    rider = data["riders"][0]
+    assert rider["weeks_left"] == 14  # a full spell, one week in
+    assert rider["promotion_salary"] > 0
+    # Change is measured against the baseline snapshot the intake wrote, so it
+    # is zero on arrival rather than null (no snapshot to compare against).
+    assert set(rider["change"]) == {
+        "climb", "sprint", "flat", "resistance", "positioning",
+    }
+    assert all(value == 0 for value in rider["change"].values())
+
+
+@override_settings(GAME_CLOCK_CLASS="world.clocks.MockClock")
+def test_change_is_null_for_a_rider_with_no_baseline(dev_squad_client, dev_squad_team):
+    """Defensive, per the plan: a rider with no arrival snapshot gets null
+    changes rather than a fabricated zero, so the screen shows nothing
+    rather than a claim it cannot back."""
+    squad_row = DevelopmentSquad.objects.create(
+        team=dev_squad_team, level=1, opened_at=now(),
+    )
+    Rider.objects.create(
+        name="No Baseline", development_squad=squad_row, intake_at=now(),
+        climb=40, sprint=40, flat=40, resistance=40, positioning=40,
+    )
+
+    data = dev_squad_client.get("/api/development-squad/").data
+
+    assert data["riders"][0]["change"] is None
+
+
+def test_graduate_payload_carries_window_value_and_listed_state(
+    dev_squad_client, dev_squad_team, squad_season,
+):
+    """A graduate is a different decision from a prospect, so their row adds
+    what it takes to make it: what the window leaves, what the market would
+    pay, and whether they are already listed."""
+    clock, season_start = squad_season
+    _open_squad(dev_squad_team, 1)
+    run_intake(at=now())
+    graduate = _graduate(_first_prospect(dev_squad_team))
+    _a_day_into_week_one(clock, season_start)
+
+    data = dev_squad_client.get("/api/development-squad/").data
+
+    # The graduate has left the squad's places; the other arrival still holds
+    # one.
+    assert len(data["riders"]) == 1
+    assert data["in_squad"] == 1
+    assert len(data["graduates"]) == 1
+    row = data["graduates"][0]
+    assert row["id"] == graduate.pk
+    assert row["weeks_left"] == 2  # the whole window
+    assert row["market_value"] > 0
+    assert row["promotion_salary"] > 0
+    assert row["listed"] is False
+
+
+def test_a_listed_graduate_is_reported_as_listed(dev_squad_client, dev_squad_team):
+    _open_squad(dev_squad_team, 1)
+    run_intake(at=now())
+    graduate = _graduate(_first_prospect(dev_squad_team))
+    list_for_auction(dev_squad_team, graduate.pk, at=now())
+
+    data = dev_squad_client.get("/api/development-squad/").data
+
+    assert data["graduates"][0]["listed"] is True
+
+
+def test_arrivals_at_risk_counts_the_batch_a_full_squad_cannot_take(
+    dev_squad_client, dev_squad_team, squad_season,
+):
+    """The warning the squad screen gives *before* the week arrives: at 6 of 6
+    places, both arrivals would be turned away."""
+    clock, season_start = squad_season
+    squad_row = DevelopmentSquad.objects.create(
+        team=dev_squad_team, level=1, opened_at=now(),
+    )
+    for index in range(LEVELS[1].places):
+        Rider.objects.create(
+            name=f"Prospect {index}", development_squad=squad_row,
+            intake_at=now(), climb=40, sprint=40, flat=40,
+            resistance=40, positioning=40,
+        )
+    _a_day_into_week_one(clock, season_start)
+
+    data = dev_squad_client.get("/api/development-squad/").data
+
+    assert data["in_squad"] == LEVELS[1].places
+    assert data["intake"]["next"]["week"] == 4
+    assert data["intake"]["next"]["arrivals_at_risk"] == 2
+
+
+def test_promote_endpoint_moves_a_prospect_to_the_roster(dev_squad_client, dev_squad_team):
+    _open_squad(dev_squad_team, 1)
+    run_intake(at=now())
+    prospect = Rider.objects.filter(graduated_at__isnull=True).first()
+    salary = weekly_salary_for(prospect)
+
+    response = dev_squad_client.post(
+        f"/api/development-squad/riders/{prospect.pk}/promote/",
+    )
+
+    assert response.status_code == 204
+    prospect.refresh_from_db()
+    assert prospect.team_id == dev_squad_team.pk
+    assert prospect.development_squad_id is None
+    assert prospect.weekly_salary == salary
+
+
+def test_promote_endpoint_promotes_a_graduate_too(dev_squad_client, dev_squad_team):
+    """Deciding early is a choice a manager is entitled to make."""
+    _open_squad(dev_squad_team, 1)
+    run_intake(at=now())
+    graduate = _graduate(Rider.objects.filter(graduated_at__isnull=True).first())
+
+    response = dev_squad_client.post(
+        f"/api/development-squad/riders/{graduate.pk}/promote/",
+    )
+
+    assert response.status_code == 204
+    graduate.refresh_from_db()
+    assert graduate.team_id == dev_squad_team.pk
+    assert graduate.development_squad_id is None
+
+
+def test_promote_is_409_when_the_roster_is_full(dev_squad_client, dev_squad_team):
+    _open_squad(dev_squad_team, 1)
+    run_intake(at=now())
+    prospect = Rider.objects.filter(graduated_at__isnull=True).first()
+    for index in range(ROSTER_CAP):
+        Rider.objects.create(
+            name=f"Roster {index}", team=dev_squad_team,
+            climb=50, sprint=50, flat=50, resistance=50, positioning=50,
+        )
+
+    response = dev_squad_client.post(
+        f"/api/development-squad/riders/{prospect.pk}/promote/",
+    )
+
+    assert response.status_code == 409
+    prospect.refresh_from_db()
+    assert prospect.team_id is None
+
+
+def test_promote_is_409_for_another_teams_prospect(dev_squad_client, dev_squad_team):
+    rival_manager = User.objects.create_user(
+        email="rival-squad@example.com", password="rival-pass-good",
+    )
+    rival_team = Team.objects.create(
+        name="Rival Squad", code="RVS", manager=rival_manager,
+    )
+    squad_row = DevelopmentSquad.objects.create(team=rival_team, level=1, opened_at=now())
+    theirs = Rider.objects.create(
+        name="Theirs", development_squad=squad_row, intake_at=now(),
+        climb=40, sprint=40, flat=40, resistance=40, positioning=40,
+    )
+
+    response = dev_squad_client.post(
+        f"/api/development-squad/riders/{theirs.pk}/promote/",
+    )
+
+    assert response.status_code == 409
+
+
+def test_discard_endpoint_deletes_a_prospect(dev_squad_client, dev_squad_team):
+    _open_squad(dev_squad_team, 1)
+    run_intake(at=now())
+    prospect = Rider.objects.filter(graduated_at__isnull=True).first()
+
+    response = dev_squad_client.post(
+        f"/api/development-squad/riders/{prospect.pk}/discard/",
+    )
+
+    assert response.status_code == 204
+    assert not Rider.objects.filter(pk=prospect.pk).exists()
+
+
+def test_discard_is_409_while_a_listing_is_open(dev_squad_client, dev_squad_team):
+    """A buyer has money on the table; the auction resolves on its own terms
+    instead."""
+    _open_squad(dev_squad_team, 1)
+    run_intake(at=now())
+    graduate = _graduate(Rider.objects.filter(graduated_at__isnull=True).first())
+    list_for_auction(dev_squad_team, graduate.pk, at=now())
+
+    response = dev_squad_client.post(
+        f"/api/development-squad/riders/{graduate.pk}/discard/",
+    )
+
+    assert response.status_code == 409
+    assert Rider.objects.filter(pk=graduate.pk).exists()
+
+
+def test_close_cancels_a_listed_graduate_auction(dev_squad_client, dev_squad_team):
+    """A released graduate's auction must not stay biddable until its
+    deadline, when the winner would be refused by the ownership check."""
+    _open_squad(dev_squad_team, 1)
+    run_intake(at=now())
+    graduate = _graduate(Rider.objects.filter(graduated_at__isnull=True).first())
+    auction = list_for_auction(dev_squad_team, graduate.pk, at=now())
+
+    response = dev_squad_client.post("/api/development-squad/close/")
+
+    assert response.status_code == 204
+    assert Auction.objects.get(pk=auction.pk).status == Auction.Status.CANCELLED
+
+
+def test_claim_cancels_the_old_rosters_open_listings(db, dev_squad_manager):
+    """Closes #114: a claim releases the claimed team's whole roster to the
+    pool, so an OPEN auction for one of those riders must not survive with
+    `seller_team` pointing at the now-managed team — the new manager would
+    see it as their own listing for a rider they no longer have, and the AI
+    would bid on it. An unmanaged team with a listing is exactly the shape the
+    AI market leaves behind."""
+    claimed = Team.objects.create(name="Unmanaged Team", code="UNM")
+    rider = Rider.objects.create(
+        name="Listed Then Claimed", team=claimed,
+        climb=50, sprint=50, flat=50, resistance=50, positioning=50,
+    )
+    auction = list_for_auction(claimed, rider.pk, at=now())
+    dev_squad_client = APIClient()
+    dev_squad_client.force_authenticate(user=dev_squad_manager)
+
+    response = dev_squad_client.post("/api/teams/claim/", {"name": "New Team", "code": "NEW"})
+
+    assert response.status_code == 201
+    assert Auction.objects.get(pk=auction.pk).status == Auction.Status.CANCELLED

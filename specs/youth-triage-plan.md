@@ -362,7 +362,7 @@ Tests in new `world/tests/test_youth_triage.py`, driving `tick()` across weeks w
 - A squad rider's attributes grow faster than an identical rider's with no squad.
 - The new `TickRun` counters match.
 
-### W7 — `api/`: squad payload, promote/discard, cancel on close/claim
+### W7 — `api/`: squad payload, promote/discard, cancel on close/claim ✅
 Views, serializers and urls as in that section. Tests in `api/tests.py`:
 - the GET shape (places, `in_squad`, `weeks_left`, `change` from baseline, graduates with `listed`/`market_value`/`promotion_salary`, `arrivals_at_risk` for a full squad);
 - promote 204 and 409 (roster full / not yours);
