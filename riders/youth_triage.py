@@ -34,9 +34,9 @@ from django.db import transaction
 from django.db.models import QuerySet
 
 from .development_squad import LEVELS
-from .models import DevelopmentSquad, Rider
+from .models import ENGINE_ATTRIBUTES, DevelopmentSquad, Rider
 from .pricing import weekly_salary_for
-from .services import mark_team_change
+from .services import attribute_ceilings, mark_team_change, weekly_deltas
 
 #: In-season weeks a rider spends in the squad before graduating. Chosen so the
 #: squad's place cap actually binds: arrivals come every four weeks, so a squad
@@ -162,6 +162,50 @@ def _prospect_of(rider: Rider | None, team) -> bool:
     if rider is None or rider.development_squad_id is None:
         return False
     return rider.development_squad.team_id == team.pk
+
+
+def squad_development_deltas(rider: Rider) -> dict[str, float]:
+    """One extra week of attribute movement for a rider in a development
+    squad, on top of the ordinary age curve.
+
+    Per attribute, with `gap = max(0, ceiling - current)` and
+    `base = weekly_deltas(rider)[a]`, the total wanted this week is
+
+        min(gap, max(base + gap * SQUAD_GROWTH_FRACTION,
+                     SQUAD_MIN_WEEKLY_GAIN if gap > 0 else 0))
+
+    and what is returned is that total minus `base`. Three clauses, each
+    carrying one promise:
+
+    - **Proportional to the gap**, because the ceiling comes from hidden
+      `potential`. A rider with more room develops faster, so watching the
+      numbers move is real evidence about a ceiling the player is never shown.
+    - **The floor** is what makes "every rider ends better than they arrived"
+      true. Without it the proportional term alone leaves a hopeless youth
+      visibly flat — the age curve on its own leaves about 17 arrivals in
+      4,000 with no visible gain over a spell at all.
+    - **The `min(gap, ...)` cap** is what makes "no rider passes their hidden
+      ceiling" true, however generous the floor is.
+
+    Returns only the *extra*: `world.services._apply_training_week` adds it
+    into the per-rider `extra_deltas` map alongside the trainer's, and
+    `apply_weekly_growth` settles age curve, training and squad development
+    through one `growth_debt`, so a week rounds once instead of three times.
+
+    Never touches the database, so it can be simulated in memory against a
+    seeded `random.Random` — which is how the constants were tuned.
+    """
+    ceilings = attribute_ceilings(rider)
+    base = weekly_deltas(rider)
+    extra: dict[str, float] = {}
+
+    for name in ENGINE_ATTRIBUTES:
+        gap = max(0.0, ceilings[name] - getattr(rider, name))
+        floor = SQUAD_MIN_WEEKLY_GAIN if gap > 0 else 0.0
+        total = min(gap, max(base[name] + gap * SQUAD_GROWTH_FRACTION, floor))
+        extra[name] = total - base[name]
+
+    return extra
 
 
 def graduate(rider_ids: Iterable[int], *, at) -> int:

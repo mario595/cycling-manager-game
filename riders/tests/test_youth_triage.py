@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+import random
 from datetime import datetime, timezone as dt_timezone
 
 import pytest
 from django.apps import apps
 
 from riders.development_squad import LEVELS
-from riders.models import DevelopmentSquad, Rider, RiderAttributeSnapshot
+from riders.display import to_display_scale
+from riders.models import ENGINE_ATTRIBUTES, DevelopmentSquad, Rider, RiderAttributeSnapshot
 from riders.pricing import weekly_salary_for
+from riders.services import _settle, attribute_ceilings, weekly_deltas
+from riders.youth_intake import generate_youth_rider
 from riders.youth_triage import (
+    SPELL_WEEKS,
     NotYourProspect,
     ProspectListed,
     RosterFull,
@@ -20,6 +25,7 @@ from riders.youth_triage import (
     in_squad,
     promote,
     release_graduates,
+    squad_development_deltas,
 )
 from teams.models import Team
 
@@ -364,3 +370,119 @@ def test_squad_riders_have_no_race_history_dependents(team, squad):
 
     discard(team, youth.pk)
     assert not Rider.objects.filter(pk=youth.pk).exists()
+
+
+
+# --- squad development deltas --------------------------------------------
+
+
+def _at_ceiling(rider: Rider) -> Rider:
+    """`rider` with every attribute sitting exactly on its per-attribute
+    ceiling. The values are left as floats because
+    `squad_development_deltas` is a pure read of the instance and a ceiling is
+    itself a float — rounding down would leave a gap the rider can still grow
+    into, and rounding up would model a state no code path produces."""
+    ceilings = attribute_ceilings(rider)
+    for name in ENGINE_ATTRIBUTES:
+        setattr(rider, name, ceilings[name])
+    return rider
+
+
+def _total_movement(rider: Rider) -> dict[str, float]:
+    """One week of attribute movement as the growth pass would apply it: the
+    age curve plus squad development, which is how `extra_deltas` is fed."""
+    base = weekly_deltas(rider)
+    extra = squad_development_deltas(rider)
+    return {name: base[name] + extra[name] for name in ENGINE_ATTRIBUTES}
+
+
+def test_squad_development_never_passes_ceiling(squad):
+    """The min(gap, ...) cap. A rider already on their ceiling gets no growth
+    at all — squad development is not a licence to exceed a hidden potential,
+    whatever the floor says."""
+    assert set(_total_movement(_at_ceiling(_squad_rider(squad))).values()) == {0.0}
+
+
+def test_squad_development_stops_at_the_ceiling(squad):
+    """One week's movement never closes more than the gap that is left, so no
+    number of weeks can carry a rider past their ceiling."""
+    rider = _squad_rider(squad)
+    ceilings = attribute_ceilings(rider)
+
+    for name, movement in _total_movement(rider).items():
+        gap = ceilings[name] - getattr(rider, name)
+        assert 0.0 <= movement <= gap
+
+
+def test_squad_development_is_per_attribute_not_per_rider(squad):
+    """A rider whose strongest attribute is maxed still has four others to
+    grow, so the cap applies attribute by attribute."""
+    rider = _at_ceiling(_squad_rider(squad))
+    ceilings = attribute_ceilings(rider)
+    for name, ceiling in ceilings.items():
+        setattr(rider, name, ceiling * 0.5)
+    maxed = max(ENGINE_ATTRIBUTES, key=lambda name: ceilings[name])
+    setattr(rider, maxed, ceilings[maxed])
+
+    movement = _total_movement(rider)
+
+    assert movement[maxed] == 0.0
+    assert any(value > 0 for value in movement.values())
+
+
+def test_squad_development_tracks_potential(squad):
+    """Two riders with identical attributes, different hidden potential. The
+    one with more room develops faster — which is the whole clue the spec
+    sells: growth rate is evidence of a ceiling the player never sees."""
+    modest = _squad_rider(squad, name="Modest")
+    roomy = _squad_rider(squad, name="Roomy")
+    roomy.potential = min(100, modest.potential + 40)
+
+    modest_movement = _total_movement(modest)
+    roomy_movement = _total_movement(roomy)
+
+    for name in ENGINE_ATTRIBUTES:
+        assert roomy_movement[name] > modest_movement[name]
+
+
+def test_every_youth_gains_over_a_spell(db):
+    """The load-bearing test of the spec's "every rider ends their spell
+    better than they arrived" promise.
+
+    Simulated in memory — no database, no ticking — by applying fourteen
+    weeks of the age curve plus squad development through the real `_settle`,
+    so the settlement and rounding are the production ones and not a model of
+    them.
+
+    If this fails after a change to the squad constants, the *tuning* is
+    wrong, not the test: the floor exists precisely to deliver this.
+    """
+    rng = random.Random(20270301)
+
+    for level in sorted(LEVELS):
+        for _ in range(2000):
+            rider = generate_youth_rider(level, rng=rng)
+            before = sum(
+                to_display_scale(getattr(rider, name)) for name in ENGINE_ATTRIBUTES
+            )
+            debt = {}
+
+            for _week in range(SPELL_WEEKS):
+                base = weekly_deltas(rider)
+                extra = squad_development_deltas(rider)
+                for name in ENGINE_ATTRIBUTES:
+                    value, remainder = _settle(
+                        getattr(rider, name),
+                        debt.get(name, 0.0),
+                        base[name] + extra[name],
+                    )
+                    setattr(rider, name, value)
+                    debt[name] = remainder
+
+            after = sum(
+                to_display_scale(getattr(rider, name)) for name in ENGINE_ATTRIBUTES
+            )
+            assert after > before, (
+                f"a level {level} youth finished their spell with no visible "
+                f"gain ({before} -> {after})"
+            )

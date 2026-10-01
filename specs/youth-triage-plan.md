@@ -318,7 +318,7 @@ Everything in that section except `squad_development_deltas`. Tests in new `ride
   - refuses another team's rider.
 - `test_squad_riders_have_no_race_history_dependents` — the precondition from Design decision 8. Build a squad rider and assert that no FK other than snapshots can point at them in a normal flow; this is a guard against a future squad-racing feature making delete unsafe.
 
-### W3 — `riders/`: squad development deltas
+### W3 — `riders/`: squad development deltas ✅
 `squad_development_deltas` per Design decision 3. Tests:
 - `test_squad_development_never_passes_ceiling` (rider at ceiling gets 0).
 - `test_squad_development_tracks_potential` (same attributes, higher potential, larger delta).
