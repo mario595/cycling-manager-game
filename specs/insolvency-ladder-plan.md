@@ -632,7 +632,7 @@ the way `test_inactivity.py` does:
   writes no check (balance reset), and `is_embargoed` is False immediately after
   the claim.
 
-### W6 — `api/`: embargo, status, force sale
+### W6 — `api/`: embargo, status, force sale — done
 Views, serializers and urls as above. Tests in `api/tests.py`:
 - `test_embargo_blocks_signing` / `_bidding` / `_hiring` / `_opening_squad` /
   `_upgrading_squad`: each is a 409 with `EMBARGO_MESSAGE`.
