@@ -652,7 +652,7 @@ Tests:
   when insolvent.
 - `Dashboard.test.tsx`: the banner renders when insolvent.
 
-### W8 — `frontend/`: Roster force sale, AuctionCard tag
+### W8 — `frontend/`: Roster force sale, AuctionCard tag — done
 Tests:
 - `Roster.test.tsx`: the "Force sale" button shows only when insolvent, is
   disabled at the floor, confirms, then calls `forceSell`.
