@@ -511,8 +511,9 @@ unmanaged team's ledger, before any per-auction guard exists — is caught
 around the whole AI step, so the tick still settles its week, charges wages
 and writes its `TickRun`. Losing a tick to the garnish would be a bad trade.
 
-**Balances, measured.** Unmanaged teams earn no wages, prize money or
-sponsorship; they only spend. A seeded season 1 left the average unmanaged
+**Balances, measured.** Unmanaged teams earn prize money like any other team
+(it is paid to every team with a placed finisher, managed or not), but no
+sponsorship, so wages outrun income. A seeded season 1 left the average unmanaged
 team with about **$330,000**, and at roughly `12 × $1,200` a week of wages
 each team owes the market rather than the other way round, that is about
 **three seasons** before AI buying dries up. The fix when it bites is
