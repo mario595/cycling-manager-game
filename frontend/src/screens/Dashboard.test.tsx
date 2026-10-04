@@ -2,9 +2,10 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { placeBid, type AuctionMarket, type Calendar, type Me, type MyBidStatus, type Position, type Standings } from '../api'
+import { placeBid, type AuctionMarket, type Calendar, type Me, type MyBidStatus, type Position, type Solvency, type Standings } from '../api'
 import { useAuctions } from '../useAuctions'
 import { useAuth } from '../useAuth'
+import { useSolvency } from '../useSolvency'
 import { useCalendar } from '../useCalendar'
 import { useClock } from '../useClock'
 import { useMyBids } from '../useMyBids'
@@ -25,6 +26,7 @@ vi.mock('../api', async (importOriginal) => ({
 vi.mock('../useAuctions', () => ({ useAuctions: vi.fn() }))
 vi.mock('../useMyBids', () => ({ useMyBids: vi.fn() }))
 vi.mock('../useClock', () => ({ useClock: vi.fn() }))
+vi.mock('../useSolvency', () => ({ useSolvency: vi.fn() }))
 
 const mockUseAuth = vi.mocked(useAuth)
 const mockUseSeason = vi.mocked(useSeason)
@@ -34,6 +36,7 @@ const mockUseNextRaceSquad = vi.mocked(useNextRaceSquad)
 const mockUseAuctions = vi.mocked(useAuctions)
 const mockUseMyBids = vi.mocked(useMyBids)
 const mockUseClock = vi.mocked(useClock)
+const mockUseSolvency = vi.mocked(useSolvency)
 const mockPlaceBid = vi.mocked(placeBid)
 
 const manager: Me = {
@@ -78,6 +81,21 @@ const standings: Standings = {
   standings: [{ rank: 3, team: { id: 1, name: 'Squad Team', code: 'SQD' }, points: 144 }],
 }
 
+const solvent: Solvency = {
+  insolvent: false,
+  balance: 500_000,
+  shortfall: 0,
+  target: 0,
+  cut_so_far: 0,
+  outgoings: 0,
+  income: 0,
+  strikes: 0,
+  paydays_left: null,
+  deadline: null,
+  roster_size: 12,
+  roster_floor: 4,
+}
+
 function renderDashboard() {
   return render(
     <MemoryRouter>
@@ -109,9 +127,29 @@ beforeEach(() => {
   mockUseMyBids.mockReturnValue({ bids: [], refresh: vi.fn() })
   mockUseClock.mockReturnValue({ now: new Date('2027-03-01T00:00:00Z'), loading: false, error: false })
   mockPlaceBid.mockResolvedValue(undefined)
+  mockUseSolvency.mockReturnValue({ solvency: solvent, loading: false, error: false, refresh: vi.fn() })
 })
 
 describe('Dashboard', () => {
+  it('shows the insolvency banner when the team is insolvent', () => {
+    mockUseSolvency.mockReturnValue({
+      solvency: { ...solvent, insolvent: true, shortfall: 5_000, target: 5_000, paydays_left: 3 },
+      loading: false,
+      error: false,
+      refresh: vi.fn(),
+    })
+
+    renderDashboard()
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Your team is insolvent')
+  })
+
+  it('shows no insolvency banner for a solvent team', () => {
+    renderDashboard()
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   it('greets the logged-in manager by name', () => {
     renderDashboard()
 
@@ -233,6 +271,7 @@ describe('Dashboard', () => {
       min_next_bid: 63_000,
       deadline: '2027-03-04T12:00:00Z',
       is_own_listing: true,
+      forced: false,
       bids: [],
       rider: {
         id: 21,
@@ -279,6 +318,7 @@ describe('Dashboard', () => {
       min_next_bid: 47_000,
       deadline: '2027-03-04T12:00:00Z',
       is_own_listing: false,
+      forced: false,
       bids: [],
       rider: {
         id: 30,
@@ -350,6 +390,7 @@ describe('Dashboard', () => {
       min_next_bid: 11_000,
       deadline: '2027-03-04T12:00:00Z',
       is_own_listing: false,
+      forced: false,
       bids: [],
       rider: {
         id: 22,
@@ -390,6 +431,7 @@ describe('Dashboard', () => {
       min_next_bid: 21_000,
       deadline: '2027-03-04T12:00:00Z',
       is_own_listing: false,
+      forced: false,
       bids: [],
       rider: {
         id: 40,

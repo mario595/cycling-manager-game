@@ -643,7 +643,7 @@ Views, serializers and urls as above. Tests in `api/tests.py`:
 - `test_force_sell_success_returns_204_and_lowers_payroll`
 - `test_auction_market_reports_forced`
 
-### W7 — `frontend/`: api, hook, banner, Dashboard, Finances
+### W7 — `frontend/`: api, hook, banner, Dashboard, Finances — done
 Tests:
 - **new** `src/components/SolvencyBanner.test.tsx`: hidden when solvent; the
   insolvent wording with a deadline; the "within N paydays" fallback; the

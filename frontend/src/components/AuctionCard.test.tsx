@@ -13,6 +13,7 @@ const auction: AuctionListing = {
   min_next_bid: 63_000,
   deadline: '2027-03-04T12:00:00Z',
   is_own_listing: false,
+  forced: false,
   bids: [
     { team_name: 'Rival Racing', amount: 60_000, placed_at: '2027-03-01T10:00:00Z' },
     { team_name: 'Squad Team', amount: 55_000, placed_at: '2027-03-01T09:00:00Z' },

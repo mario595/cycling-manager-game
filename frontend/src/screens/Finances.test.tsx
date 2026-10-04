@@ -2,17 +2,35 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { Finances as FinancesPayload, Me } from '../api'
+import type { Finances as FinancesPayload, Me, Solvency } from '../api'
 import { color } from '../theme'
 import { useAuth } from '../useAuth'
 import { useFinances } from '../useFinances'
+import { useSolvency } from '../useSolvency'
 import { Finances } from './Finances'
 
 vi.mock('../useAuth', () => ({ useAuth: vi.fn() }))
 vi.mock('../useFinances', () => ({ useFinances: vi.fn() }))
+vi.mock('../useSolvency', () => ({ useSolvency: vi.fn() }))
 
 const mockUseAuth = vi.mocked(useAuth)
 const mockUseFinances = vi.mocked(useFinances)
+const mockUseSolvency = vi.mocked(useSolvency)
+
+const solvent: Solvency = {
+  insolvent: false,
+  balance: 485_600,
+  shortfall: 0,
+  target: 0,
+  cut_so_far: 0,
+  outgoings: 0,
+  income: 0,
+  strikes: 0,
+  paydays_left: null,
+  deadline: null,
+  roster_size: 12,
+  roster_floor: 4,
+}
 
 const manager: Me = {
   authenticated: true,
@@ -67,6 +85,7 @@ beforeEach(() => {
     acknowledgeLostTeam: vi.fn(),
   })
   mockUseFinances.mockReturnValue({ finances, loading: false, error: false, refresh: vi.fn() })
+  mockUseSolvency.mockReturnValue({ solvency: solvent, loading: false, error: false, refresh: vi.fn() })
 })
 
 describe('Finances', () => {
@@ -169,6 +188,26 @@ describe('Finances', () => {
     expect(screen.getByText(/Your balance is negative/)).toBeInTheDocument()
     // The sign goes before the "$", not between it and the digits.
     expect(screen.getByText('−$12,400')).toBeInTheDocument()
+  })
+
+  it('hands the negative balance over to the insolvency banner once a payday has found it', () => {
+    mockUseFinances.mockReturnValue({
+      finances: { ...finances, balance: -12_400 },
+      loading: false,
+      error: false,
+      refresh: vi.fn(),
+    })
+    mockUseSolvency.mockReturnValue({
+      solvency: { ...solvent, insolvent: true, shortfall: 5_000, target: 5_000, paydays_left: 3 },
+      loading: false,
+      error: false,
+      refresh: vi.fn(),
+    })
+
+    renderFinances()
+
+    expect(screen.queryByText(/Your balance is negative/)).not.toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('Your team is insolvent')
   })
 
   it('renders the fanbase tile with its weekly change', () => {
