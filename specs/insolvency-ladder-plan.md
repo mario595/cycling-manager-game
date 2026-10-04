@@ -560,7 +560,7 @@ Tests in `economy/tests/test_models.py`:
   `(team, week)` raises `IntegrityError`.
 - `test_solvency_checks_order_newest_first`.
 
-### W2 — `economy/solvency.py`: shortfall, income, open_check, status
+### W2 — `economy/solvency.py`: shortfall, income, open_check, status — done
 Everything except `assess_solvency`. Tests in **new**
 `economy/tests/test_solvency.py`:
 - `test_shortfall_is_outgoings_minus_income_floored_at_zero`
