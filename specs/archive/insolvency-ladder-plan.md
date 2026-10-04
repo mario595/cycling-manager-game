@@ -1,6 +1,6 @@
 # Insolvency: act or lose the team — Implementation Plan
 
-**Spec:** `specs/insolvency-ladder.md` · **Issue:** #27 · **Status:** proposed
+**Spec:** `specs/insolvency-ladder.md` · **Issue:** #27 · **Status:** implemented
 **Apps touched:** `economy/`, `transfers/`, `world/`, `api/`, `frontend/` (and docs in `teams/`)
 
 ## Context you need
@@ -661,7 +661,7 @@ Tests:
 Also check that Transfers/Staff/DevelopmentSquad show a 409 `detail` (read the
 code). If one doesn't, fix it and add a test there.
 
-### W9 — Docs, spec status, archive
+### W9 — Docs, spec status, archive — done
 See *Documentation update*.
 
 ## Execution order

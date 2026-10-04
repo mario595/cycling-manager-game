@@ -1,6 +1,6 @@
 # Insolvency: act or lose the team
 
-**Status:** proposed
+**Status:** implemented
 **Domain(s):** `economy/`, `teams/`, `transfers/`, `staff/`, `riders/`, `world/`, `api/`, `frontend/`
 **One-liner:** A managed team whose balance is negative after payday is told exactly how much weekly spending to cut and by when; a manager who cuts it keeps the team, one who doesn't loses it.
 
