@@ -52,7 +52,7 @@ behave the way it claims to.
 
 | Order | Issue | Why | Blocked by |
 |---|---|---|---|
-| 1 | [#114](https://github.com/mario595/cycling-manager/issues/114) cancel a claimed team's open listings | **A bug in shipped code, found reviewing [#30](https://github.com/mario595/cycling-manager/issues/30).** A claim withdraws the team's bids but not its listings, so the new manager sees a "their own" listing for a rider no longer on their roster, and AI teams bid the reserve on it — tying up their headroom for up to three days. No money moves wrongly; about one claim in ten hits it. A few lines inside the existing claim transaction. | — |
+| 1 | [#114](https://github.com/mario595/cycling-manager/issues/114) cancel a claimed team's open listings | **A bug in shipped code, found reviewing [#30](https://github.com/mario595/cycling-manager/issues/30).** A claim withdraws the team's bids but not its listings, so the new manager sees a "their own" listing for a rider no longer on their roster, and AI teams bid the reserve on it — tying up their headroom for up to three days. No money moves wrongly; about one claim in ten hits it. A few lines inside the existing claim transaction. Shipped — see `transfers/README.md`, *Withdrawal and cancellation on claim*. | — |
 | 2 | [#34](https://github.com/mario595/cycling-manager/issues/34) promote, retain or discard youth riders | **The development squad is currently a dead end.** [#33](https://github.com/mario595/cycling-manager/issues/33) delivers two riders every four weeks, and nothing moves one onto the senior roster short of closing the squad. It is also the payoff of the hidden-attribute design — triage is a judgement only because potential is hidden — and the thing that gives a scout ([#40](https://github.com/mario595/cycling-manager/issues/40)) something to sell. | [#33](https://github.com/mario595/cycling-manager/issues/33) ✅ · [#29](https://github.com/mario595/cycling-manager/issues/29) ✅ |
 
 ## 2.2 — Unmanaged teams stop bleeding
@@ -119,7 +119,7 @@ rather than merit.
 The chains that still constrain order:
 
 ```
-#30 AI market ✅ ──→ #114 claim cancels listings
+#30 AI market ✅ ──→ #114 claim cancels listings ✅
 
 #33 intake ✅ ──→ #34 triage ──→ (#40 scout)
 

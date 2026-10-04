@@ -1950,6 +1950,71 @@ def test_claim_rolls_back_the_withdrawal_when_it_fails(
     assert Auction.objects.get(pk=auction.pk).current_price == auction.reserve_price
 
 
+def test_claim_cancels_the_claimed_teams_open_listings(
+    db, claim_client, market_client, market_team,
+):
+    from transfers.services import list_for_auction, place_bid
+
+    # Created first so the claim — which takes the lowest-pk unmanaged team —
+    # takes the seller, not some other unmanaged team.
+    seller = Team.objects.create(name="Claimable Seller", code="CSL")
+    rider = _market_rider(name="For Sale", team=seller)
+    auction = list_for_auction(seller, rider.pk, at=now())
+    place_bid(auction.pk, market_team, auction.reserve_price, at=now())
+
+    response = claim_client.post(
+        "/api/teams/claim/", {"name": "Claimed Team", "code": "CLM"}, format="json",
+    )
+
+    auction.refresh_from_db()
+    rider.refresh_from_db()
+    assert response.status_code == 201
+    assert auction.status == Auction.Status.CANCELLED
+    assert auction.resolved_at is not None
+    assert rider.team_id is None
+
+    market = market_client.get("/api/transfers/auctions/")
+    mine = market_client.get("/api/transfers/auctions/mine/")
+    listed_ids = {row["id"] for row in market.data["auctions"]}
+    mine_ids = {row["id"] for row in mine.data}
+    assert auction.pk not in listed_ids
+    assert auction.pk not in mine_ids
+
+
+def test_claim_rolls_back_listing_cancellation_when_it_fails(
+    db, claim_client, market_team, monkeypatch,
+):
+    # The same atomicity the bid withdrawal relies on: a cancellation that
+    # raised outside the view's transaction would leave the manager holding a
+    # re-rostered team whose old listings were cancelled anyway.
+    from transfers.services import list_for_auction, place_bid
+
+    seller = Team.objects.create(name="Claimable Seller", code="CSL")
+    rider = _market_rider(name="For Sale", team=seller)
+    auction = list_for_auction(seller, rider.pk, at=now())
+    place_bid(auction.pk, market_team, auction.reserve_price, at=now())
+    name_before, code_before = seller.name, seller.code
+
+    def _explode(*args, **kwargs):
+        raise RuntimeError("the ledger is on fire")
+
+    monkeypatch.setattr("api.views.cancel_listings", _explode)
+
+    with pytest.raises(RuntimeError):
+        claim_client.post(
+            "/api/teams/claim/", {"name": "Mountain Goats", "code": "MGO"}, format="json",
+        )
+
+    seller.refresh_from_db()
+    rider.refresh_from_db()
+    auction.refresh_from_db()
+    assert seller.manager is None
+    assert (seller.name, seller.code) == (name_before, code_before)
+    assert rider.team_id == seller.pk
+    assert auction.status == Auction.Status.OPEN
+    assert auction.resolved_at is None
+
+
 def test_claim_lowercase_code_is_accepted_and_uppercased(db, claim_client):
     Team.objects.create(name="Unclaimed Team", code="UNC")
 

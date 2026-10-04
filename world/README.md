@@ -521,9 +521,10 @@ every month) and a reserve above zero, it lists:
 | `AI_RELIST_COOLDOWN` | 4 weeks | Stops the same unsold rider reappearing monthly. |
 
 **Claiming a team stops the bidding.** `api/`'s claim endpoint withdraws
-every live bid the claimed team held, in the same transaction as the claim
-(`transfers/README.md`, *Withdrawal on claim*), so a new manager never
-inherits an in-progress purchase.
+every live bid the claimed team held and cancels every open auction it was
+selling, in the same transaction as the claim (`transfers/README.md`,
+*Withdrawal and cancellation on claim*), so a new manager inherits neither an
+in-progress purchase nor a sale the previous manager started.
 
 **A failing AI market is recorded, never fatal.** Three levels, all landing
 on `TickRun.error`: a bid that raises for one auction is skipped and the pass

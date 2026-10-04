@@ -22,6 +22,7 @@ from transfers.services import (
     RiderNotOnRoster,
     RosterFull,
     SelfBid,
+    cancel_listings,
     cancel_open_auctions,
     cancel_unowned_listings,
     free_agents,
@@ -865,3 +866,78 @@ def test_cancel_unowned_listings_cancels_only_listings_the_team_has_lost(db, cla
     assert Auction.objects.get(pk=graduate_auction.pk).status == Auction.Status.CANCELLED
     assert Auction.objects.get(pk=roster_auction.pk).status == Auction.Status.CANCELLED
     assert Auction.objects.get(pk=kept_auction.pk).status == Auction.Status.OPEN
+=======
+def test_cancel_listings_cancels_the_teams_open_listings(db, claimed_at):
+    seller = Team.objects.create(name="Seller", code="SEL")
+    bidder = Team.objects.create(name="Bidder", code="BID")
+    first = list_for_auction(seller, _rider(name="First", team=seller).pk, at=claimed_at)
+    second = list_for_auction(seller, _rider(name="Second", team=seller).pk, at=claimed_at)
+    place_bid(first.pk, bidder, first.reserve_price, at=claimed_at)
+    claimed = claimed_at + timedelta(minutes=1)
+
+    cancelled = cancel_listings(seller, at=claimed)
+
+    first.refresh_from_db()
+    second.refresh_from_db()
+    assert cancelled == 2
+    assert first.status == Auction.Status.CANCELLED
+    assert first.resolved_at == claimed
+    assert second.status == Auction.Status.CANCELLED
+    assert second.resolved_at == claimed
+
+
+def test_cancel_listings_leaves_other_sellers_and_closed_auctions_alone(db, claimed_at):
+    seller = Team.objects.create(name="Seller", code="SEL")
+    other = Team.objects.create(name="Other", code="OTH")
+    other_listing = list_for_auction(other, _rider(name="Theirs", team=other).pk, at=claimed_at)
+    sold = list_for_auction(seller, _rider(name="Sold", team=seller).pk, at=claimed_at)
+    sold.status = Auction.Status.SOLD
+    sold.resolved_at = claimed_at + timedelta(minutes=1)
+    sold.save(update_fields=["status", "resolved_at", "updated_at"])
+    unsold = list_for_auction(seller, _rider(name="Unsold", team=seller).pk, at=claimed_at)
+    unsold.status = Auction.Status.UNSOLD
+    unsold.resolved_at = claimed_at + timedelta(minutes=2)
+    unsold.save(update_fields=["status", "resolved_at", "updated_at"])
+    claimed = claimed_at + timedelta(minutes=3)
+
+    cancelled = cancel_listings(seller, at=claimed)
+
+    other_listing.refresh_from_db()
+    sold.refresh_from_db()
+    unsold.refresh_from_db()
+    assert cancelled == 0
+    assert other_listing.status == Auction.Status.OPEN
+    assert other_listing.resolved_at is None
+    assert sold.status == Auction.Status.SOLD
+    assert sold.resolved_at == claimed_at + timedelta(minutes=1)
+    assert unsold.status == Auction.Status.UNSOLD
+    assert unsold.resolved_at == claimed_at + timedelta(minutes=2)
+
+
+def test_cancel_listings_keeps_bids_live_as_history(db, claimed_at):
+    """The bids were not withdrawn — the auction ended — so `withdrawn_at`
+    stays null. Every reader that counts them filters on an OPEN auction."""
+    seller = Team.objects.create(name="Seller", code="SEL")
+    bidder = Team.objects.create(name="Bidder", code="BID")
+    rider = _rider(name="For Sale", team=seller)
+    auction = list_for_auction(seller, rider.pk, at=claimed_at)
+    place_bid(auction.pk, bidder, auction.reserve_price, at=claimed_at)
+
+    cancel_listings(seller, at=claimed_at + timedelta(minutes=1))
+
+    bid = auction.bids.get()
+    assert bid.amount == auction.reserve_price
+    assert bid.bidder_team_id == bidder.pk
+    assert bid.withdrawn_at is None
+
+
+def test_cancel_listings_with_nothing_open_returns_zero(db, claimed_at):
+    seller = Team.objects.create(name="Seller", code="SEL")
+    rider = _rider(name="For Sale", team=seller)
+    auction = list_for_auction(seller, rider.pk, at=claimed_at)
+
+    assert cancel_listings(seller, at=claimed_at) == 1
+    assert cancel_listings(seller, at=claimed_at + timedelta(minutes=1)) == 0
+    auction.refresh_from_db()
+    assert auction.status == Auction.Status.CANCELLED
+>>>>>>> origin/master

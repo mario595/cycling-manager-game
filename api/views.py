@@ -461,6 +461,10 @@ class ClaimTeamView(APIView):
     choosing, with a fresh roster. Falls back to the project default,
     IsAuthenticated — do not re-add AllowAny.
 
+    The claim, the withdrawal of the team's standing bids and the cancellation
+    of its open listings share one transaction: a new manager inherits neither
+    the team's bids (#30) nor its listings (#114).
+
     409 for both "already managing" and "no team available": the request is
     well-formed, but the world's state refuses it. 400 is reserved for a
     malformed name or code.
@@ -482,8 +486,9 @@ class ClaimTeamView(APIView):
                     at=at,
                 )
                 withdraw_bids(team, at=at)
+<<<<<<< HEAD
                 # The claimed-over roster is no longer the team's to sell, so
-                # its open listings go with it (#34) — and so does any
+                # its open listings go with it (#34) and so does any
                 # graduate released by the squad this claim closed. Same pass
                 # either way, which is what closes #114.
                 cancel_unowned_listings(team, at=at)

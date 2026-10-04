@@ -464,6 +464,22 @@ def withdraw_bids(team, *, at) -> int:
     return withdrawn
 
 
+def cancel_listings(team, *, at) -> int:
+    """Cancel every OPEN auction `team` is selling — no money moves (bids are
+    never escrowed). Returns auctions cancelled.
+
+    Called on a claim (#114), the sale-side counterpart to withdraw_bids: the
+    claim has already released the listed riders to the free-agent pool, so a
+    listing left open would show the new manager a sale they never made and
+    invite bids on a rider nobody is selling. Bids are left as they are —
+    they were not withdrawn, the auction ended — and every reader that counts
+    them filters on an OPEN auction.
+    """
+    return Auction.objects.filter(
+        seller_team=team, status=Auction.Status.OPEN,
+    ).update(status=Auction.Status.CANCELLED, resolved_at=at)
+
+
 def cancel_open_auctions(rider_ids: Iterable[int], *, at) -> int:
     """Cancel every OPEN auction of these riders — no money moves (bids are
     never escrowed). Returns auctions cancelled.
