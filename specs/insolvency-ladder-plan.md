@@ -553,7 +553,7 @@ swallows it, surface it there.
 
 ## Work items
 
-### W1 — `economy/`: `SolvencyCheck` model and migration
+### W1 — `economy/`: `SolvencyCheck` model and migration — done
 Add the model (Data model) and `0013_solvencycheck`.
 Tests in `economy/tests/test_models.py`:
 - `test_solvency_check_unique_per_team_per_week`: a second create for the same
