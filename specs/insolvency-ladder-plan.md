@@ -595,7 +595,7 @@ row of the table:
   mid-week is excluded from payroll at assessment. This is decision 4's
   load-bearing note.
 
-### W4 — `transfers/`: `Auction.forced`, `force_list_for_auction`, pool and resolve changes
+### W4 — `transfers/`: `Auction.forced`, `force_list_for_auction`, pool and resolve changes — done
 Model field and `0003_auction_forced`, plus the service code above. Tests in
 `transfers/tests/test_services.py`:
 - `test_force_list_moves_rider_off_roster_and_opens_forced_auction`

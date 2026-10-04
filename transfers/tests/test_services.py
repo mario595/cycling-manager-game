@@ -12,17 +12,21 @@ from transfers.models import Auction, Bid
 from transfers.pricing import min_increment_for, reserve_price_for, severance_fee_for
 from transfers.services import (
     AuctionAlreadyExists,
+    AUCTION_DURATION,
     AuctionNotOpen,
     BidTooLow,
     EXTENSION_WINDOW,
+    FORCED_SALE_ROSTER_FLOOR,
     InsufficientFunds,
     ROSTER_CAP,
     RiderNotAvailable,
     RiderNotOnRoster,
+    RosterAtFloor,
     RosterFull,
     SelfBid,
     cancel_listings,
     cancel_open_auctions,
+    force_list_for_auction,
     free_agents,
     list_for_auction,
     place_bid,
@@ -775,3 +779,165 @@ def test_cancel_listings_with_nothing_open_returns_zero(db, claimed_at):
     assert cancel_listings(seller, at=claimed_at + timedelta(minutes=1)) == 0
     auction.refresh_from_db()
     assert auction.status == Auction.Status.CANCELLED
+
+
+# -- forced sales under insolvency (#27) -----------------------------------
+
+def _roster(team, size: int) -> list[Rider]:
+    return [_rider(name=f"Roster {team.code} {i}", team=team) for i in range(size)]
+
+
+def test_force_list_moves_rider_off_roster_and_opens_forced_auction(db, claimed_at):
+    seller = Team.objects.create(name="Team Alpha", code="ALP")
+    riders = _roster(seller, 6)
+
+    auction = force_list_for_auction(seller, riders[0].pk, at=claimed_at)
+
+    riders[0].refresh_from_db()
+    assert riders[0].team_id is None
+    assert auction.forced is True
+    assert auction.status == Auction.Status.OPEN
+    assert auction.seller_team_id == seller.pk
+    assert auction.reserve_price == reserve_price_for(riders[0])
+    assert auction.deadline == claimed_at + AUCTION_DURATION
+
+
+def test_force_list_charges_nothing(db, claimed_at):
+    from economy.models import LedgerEntry
+
+    seller = Team.objects.create(name="Team Alpha", code="ALP")
+    riders = _roster(seller, 6)
+
+    force_list_for_auction(seller, riders[0].pk, at=claimed_at)
+
+    assert LedgerEntry.objects.filter(team=seller).count() == 0
+
+
+def test_force_list_refused_at_roster_floor(db, claimed_at):
+    seller = Team.objects.create(name="Team Alpha", code="ALP")
+    riders = _roster(seller, FORCED_SALE_ROSTER_FLOOR)
+
+    with pytest.raises(RosterAtFloor):
+        force_list_for_auction(seller, riders[0].pk, at=claimed_at)
+
+    riders[0].refresh_from_db()
+    assert riders[0].team_id == seller.pk
+    assert Auction.objects.count() == 0
+
+
+def test_force_list_rejects_rider_not_on_team(db, claimed_at):
+    seller = Team.objects.create(name="Team Alpha", code="ALP")
+    other = Team.objects.create(name="Team Bravo", code="BRA")
+    _roster(seller, 6)
+    foreign = _rider(name="Foreign", team=other)
+
+    with pytest.raises(RiderNotOnRoster):
+        force_list_for_auction(seller, foreign.pk, at=claimed_at)
+
+
+def test_force_list_converts_existing_voluntary_auction(db, claimed_at):
+    seller = Team.objects.create(name="Team Alpha", code="ALP")
+    bidder = Team.objects.create(name="Team Bravo", code="BRA")
+    riders = _roster(seller, 6)
+    voluntary = list_for_auction(seller, riders[0].pk, at=claimed_at)
+    place_bid(voluntary.pk, bidder, voluntary.reserve_price, at=claimed_at)
+
+    converted = force_list_for_auction(seller, riders[0].pk, at=claimed_at)
+
+    assert converted.pk == voluntary.pk
+    assert converted.forced is True
+    assert converted.bids.live().count() == 1
+    assert Auction.objects.count() == 1
+
+
+def test_force_listed_rider_not_in_free_agent_pool(db, claimed_at):
+    seller = Team.objects.create(name="Team Alpha", code="ALP")
+    riders = _roster(seller, 6)
+
+    force_list_for_auction(seller, riders[0].pk, at=claimed_at)
+
+    assert riders[0] not in free_agents()
+
+
+def test_force_listed_rider_cannot_be_signed(db, claimed_at):
+    seller = Team.objects.create(name="Team Alpha", code="ALP")
+    buyer = Team.objects.create(name="Team Bravo", code="BRA")
+    riders = _roster(seller, 6)
+    force_list_for_auction(seller, riders[0].pk, at=claimed_at)
+
+    with pytest.raises(RiderNotAvailable):
+        sign_free_agent(buyer, riders[0].pk, at=claimed_at)
+
+    riders[0].refresh_from_db()
+    assert riders[0].team_id is None
+
+
+def test_resolve_forced_sold_pays_seller_and_moves_rider(db, claimed_at):
+    seller = Team.objects.create(name="Team Alpha", code="ALP")
+    bidder = Team.objects.create(name="Team Bravo", code="BRA")
+    riders = _roster(seller, 6)
+    auction = force_list_for_auction(seller, riders[0].pk, at=claimed_at)
+    place_bid(auction.pk, bidder, auction.reserve_price, at=claimed_at)
+    manager = Mock()
+
+    resolved = resolve_auction(
+        auction, at=auction.deadline,
+        charge_buyer=manager.charge_buyer, pay_seller=manager.pay_seller,
+    )
+
+    assert resolved.status == Auction.Status.SOLD
+    assert manager.mock_calls == [
+        call.charge_buyer(bidder, auction.reserve_price),
+        call.pay_seller(seller, auction.reserve_price),
+    ]
+    riders[0].refresh_from_db()
+    assert riders[0].team_id == bidder.pk
+
+
+def test_resolve_forced_unsold_leaves_free_agent(db, claimed_at):
+    seller = Team.objects.create(name="Team Alpha", code="ALP")
+    riders = _roster(seller, 6)
+    auction = force_list_for_auction(seller, riders[0].pk, at=claimed_at)
+
+    resolved = resolve_auction(auction, at=auction.deadline)
+
+    assert resolved.status == Auction.Status.UNSOLD
+    riders[0].refresh_from_db()
+    assert riders[0].team_id is None
+    assert riders[0] in free_agents()
+
+
+def test_resolve_forced_winner_at_cap_goes_unsold(db, claimed_at):
+    seller = Team.objects.create(name="Team Alpha", code="ALP")
+    bidder = Team.objects.create(name="Team Bravo", code="BRA")
+    riders = _roster(seller, 6)
+    auction = force_list_for_auction(seller, riders[0].pk, at=claimed_at)
+    place_bid(auction.pk, bidder, auction.reserve_price, at=claimed_at)
+    _roster(bidder, ROSTER_CAP)
+    charge_buyer = Mock()
+
+    resolved = resolve_auction(auction, at=auction.deadline, charge_buyer=charge_buyer)
+
+    assert resolved.status == Auction.Status.UNSOLD
+    charge_buyer.assert_not_called()
+    riders[0].refresh_from_db()
+    assert riders[0].team_id is None
+
+
+def test_resolve_forced_cancels_when_rider_retired(db, claimed_at):
+    seller = Team.objects.create(name="Team Alpha", code="ALP")
+    riders = _roster(seller, 6)
+    auction = force_list_for_auction(seller, riders[0].pk, at=claimed_at)
+    riders[0].refresh_from_db()
+    riders[0].retired_at = claimed_at
+    riders[0].save()
+
+    resolved = resolve_auction(auction, at=auction.deadline)
+
+    assert resolved.status == Auction.Status.CANCELLED
+
+
+def test_forced_sale_floor_matches_racing_squad_size():
+    from racing.models import SQUAD_SIZE
+
+    assert FORCED_SALE_ROSTER_FLOOR == SQUAD_SIZE
