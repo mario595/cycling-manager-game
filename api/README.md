@@ -370,11 +370,12 @@ Since #29 each rider also carries `release_cost`
   world with no unmanaged team left, both return 409 — the request is
   well-formed but the world's state refuses it. A malformed code or a name
   already taken returns 400. See `teams/README.md`, *Claiming a team*.
-  The claim and `transfers.services.withdraw_bids(team, at=at)` run inside
-  **one** `transaction.atomic()`, with the `except` clauses outside it, so a
-  new manager never inherits the team's standing bids and no tick can resolve
-  one of them to them in between (#30; see `transfers/README.md`,
-  *Withdrawal on claim*).
+  The claim, `transfers.services.withdraw_bids(team, at=at)` and
+  `transfers.services.cancel_listings(team, at=at)` run inside **one**
+  `transaction.atomic()`, with the `except` clauses outside it, so a new
+  manager inherits neither the team's standing bids (#30) nor its open
+  listings (#114), and no tick can resolve one of them to them in between (see
+  `transfers/README.md`, *Withdrawal and cancellation on claim*).
 - `GET /api/staff/` (`StaffSerializer`, `StaffView`) — the **caller's own**
   team's staff: `trainer` (null when the slot is empty), `pool` (every
   unemployed trainer, but only populated when the slot is empty — a team

@@ -17,7 +17,7 @@ from schedule.models import Season, Week
 from teams.models import Team
 from transfers.models import Auction, Bid
 from transfers.pricing import reserve_price_for
-from transfers.services import list_for_auction, place_bid, withdraw_bids
+from transfers.services import cancel_listings, list_for_auction, place_bid, withdraw_bids
 from world.ai_market import (
     AI_LISTING_EVERY_WEEKS,
     AI_MIN_ROSTER,
@@ -322,6 +322,43 @@ def test_ai_commitments_reduce_headroom_across_ticks(db):
     assert (later, error) == (0, "")
     assert second.bids.exists() is False
     assert first.bids.live().count() == 1
+
+
+def test_ai_ignores_a_listing_cancelled_by_claim(db):
+    """A claim cancels the seller's listings, which is what keeps the AI off
+    them — without it the managed seller looks like a human to
+    _biddable_auctions and the AI bids reserve on a sale nobody is running."""
+    seller = _seller()
+    listed = _saved_rider("For Sale", seller, level=60)
+    auction = list_for_auction(seller, listed.pk, at=now())
+    cancel_listings(seller, at=now())
+    ai = _ai_team("AI Alpha", "AIA")
+    _ai_roster(ai)
+
+    placed, error = place_ai_bids(at=now())
+
+    assert (placed, error) == (0, "")
+    assert auction.bids.exists() is False
+
+
+def test_ai_headroom_is_freed_when_a_listing_it_bid_on_is_cancelled(db):
+    seller = _seller()
+    first_listed = _saved_rider("First", seller, level=40)
+    first = list_for_auction(seller, first_listed.pk, at=now())
+    ai = _ai_team("AI Alpha", "AIA", balance=2 * first.reserve_price)
+    _ai_roster(ai)
+    placed, error = place_ai_bids(at=now())
+    assert (placed, error) == (1, "")
+
+    cancel_listings(seller, at=now())
+    second_listed = _saved_rider("Second", seller, level=40)
+    second = list_for_auction(seller, second_listed.pk, at=now())
+    assert second.reserve_price == first.reserve_price
+
+    later, error = place_ai_bids(at=now())
+
+    assert (later, error) == (1, "")
+    assert second.bids.live().count() == 1
 
 
 def test_ai_never_raises_after_being_outbid(db):
