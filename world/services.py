@@ -41,6 +41,7 @@ from economy.services import (
     pay_transfer_income,
     write_salary_reviews,
 )
+from economy.solvency import assess_solvency
 from racing.models import Race, RaceResult, StageRace
 from racing.services import riders_who_raced, riders_who_started, simulate_race
 from riders.development_squad import LEVELS, weekly_cost
@@ -72,6 +73,7 @@ from transfers.services import (
     due_auctions,
     free_agents,
     resolve_auction,
+    withdraw_bids,
 )
 
 from .ai_market import list_ai_riders, place_ai_bids
@@ -261,6 +263,45 @@ def _release_inactive(week) -> tuple[int, str]:
             # training — same shape as _execute's per-race guard.
             error += f"release team {team.pk}:\n{traceback.format_exc()}\n"
     return released, error
+
+
+def _settle_solvency(week, *, salary_by_team, squad_cost_by_team) -> tuple[int, int, str]:
+    """Assess every managed team's solvency at this payday, withdraw the live
+    bids of a team whose case just opened, and release any team on its
+    fourth unmet payday (#27).
+
+    Returns (checks written, teams released, accumulated error text), the same
+    shape `_release_inactive` uses: TickRun does not exist yet at this point in
+    the week loop. `squad_cost_by_team` is the tick's `{team: (cost, level
+    name)}` map; the assessment only wants the cost.
+    """
+    outcome = assess_solvency(
+        week,
+        salary_by_team=salary_by_team,
+        squad_cost_by_team={pk: cost for pk, (cost, _name) in squad_cost_by_team.items()},
+    )
+    error = ""
+    # Only on opening: the embargo stops new bids, so after the first
+    # insolvent payday there are none left to withdraw.
+    for team_pk in outcome.opened:
+        try:
+            withdraw_bids(Team.objects.get(pk=team_pk), at=week.starts_at)
+        except Exception:
+            error += f"withdraw bids, team {team_pk}:\n{traceback.format_exc()}\n"
+    released = 0
+    for team_pk in outcome.lost:
+        try:
+            # release_team returns None for an already-unmanaged team, which
+            # keeps this count honest if a concurrent tick got there first.
+            if release_team(
+                Team.objects.get(pk=team_pk),
+                reason=ManagerialSpell.Reason.INSOLVENCY,
+                at=week.starts_at,
+            ) is not None:
+                released += 1
+        except Exception:
+            error += f"insolvency release, team {team_pk}:\n{traceback.format_exc()}\n"
+    return outcome.written, released, error
 
 
 def _expire_free_agents(week) -> tuple[int, int]:
@@ -525,6 +566,9 @@ def tick() -> TickRun:
     development_squad_entries = 0
     youth_intake_riders = 0
     teams_released = 0
+    solvency_checks = 0
+    teams_lost_to_insolvency = 0
+    solvency_error = ""
     agents_expired = 0
     agents_retired = 0
     inactivity_error = ""
@@ -581,6 +625,15 @@ def tick() -> TickRun:
         # already current for this week, the same ordering pay_merchandise
         # already relies on.
         sponsorship_entries += pay_sponsorship(week, points_by_team=points)
+
+        # After the week's money has moved, and before inactivity: a team due
+        # for both is lost to insolvency, the more specific cause.
+        checked, lost, error = _settle_solvency(
+            week, salary_by_team=salary_by_team, squad_cost_by_team=squad_cost_by_team,
+        )
+        solvency_checks += checked
+        teams_lost_to_insolvency += lost
+        solvency_error += error
 
         # After the economy calls: releasing a team must not change what
         # this week's wages/training/fanbase already charged it for.
@@ -646,13 +699,15 @@ def tick() -> TickRun:
         development_squad_entries=development_squad_entries,
         youth_intake_riders=youth_intake_riders,
         teams_released=teams_released,
+        solvency_checks=solvency_checks,
+        teams_lost_to_insolvency=teams_lost_to_insolvency,
         agents_expired=agents_expired,
         agents_retired=agents_retired,
         auctions_sold=auctions_sold,
         auctions_unsold=auctions_unsold,
         ai_bids_placed=ai_bids_placed,
         ai_listings_created=ai_listings_created,
-        error=inactivity_error + auction_error + ai_market_error,
+        error=inactivity_error + solvency_error + auction_error + ai_market_error,
     )
     _execute(reclaimed + claimed, run, at=at)
     run.capped = capped

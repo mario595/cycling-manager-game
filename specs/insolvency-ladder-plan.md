@@ -615,7 +615,7 @@ Model field and `0003_auction_forced`, plus the service code above. Tests in
 - `test_forced_sale_floor_matches_racing_squad_size`: asserts
   `FORCED_SALE_ROSTER_FLOOR == racing.models.SQUAD_SIZE`.
 
-### W5 — `world/`: the tick step
+### W5 — `world/`: the tick step — done
 `TickRun` counters plus migration, `_settle_solvency`, and the call site. Tests
 in **new** `world/tests/test_insolvency.py`, driving `tick()` with the mock clock
 the way `test_inactivity.py` does:
