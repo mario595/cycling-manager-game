@@ -4,9 +4,11 @@ from datetime import datetime, timedelta, timezone as dt_timezone
 
 import pytest
 
-from economy.models import FanbaseEntry, SolvencyCheck, SponsorContract
+from accounts.models import User
+from economy.models import FanbaseEntry, LedgerEntry, SolvencyCheck, SponsorContract
 from economy.solvency import (
     INSOLVENCY_LOSS_STRIKES,
+    assess_solvency,
     is_embargoed,
     open_check,
     regular_income,
@@ -15,6 +17,7 @@ from economy.solvency import (
 )
 from riders.models import Rider
 from schedule.models import Season, Week
+from teams.models import Team
 
 START = datetime(2027, 3, 1, 0, 0, tzinfo=dt_timezone.utc)
 
@@ -153,3 +156,155 @@ def test_status_when_solvent_reports_live_numbers(db, team, season):
     assert status.insolvent is False
     assert status.shortfall == 700
     assert status.paydays_left is None
+
+
+# -- assess_solvency -------------------------------------------------------
+
+@pytest.fixture
+def managed(db) -> Team:
+    user = User.objects.create_user(email="m@example.com", password="s0meth1ng-good")
+    return Team.objects.create(name="Managed", code="MAN", manager=user)
+
+
+def _balance(team, amount: int) -> None:
+    LedgerEntry.objects.create(
+        team=team, kind=LedgerEntry.Kind.STARTING_BALANCE, amount=amount,
+        occurred_at=START, description="Test balance",
+    )
+
+
+def _assess(week):
+    return assess_solvency(week, salary_by_team={}, squad_cost_by_team={})
+
+
+def test_solvent_team_without_case_writes_nothing(db, managed, weeks):
+    _balance(managed, 1_000)
+
+    outcome = _assess(weeks[0])
+
+    assert outcome.written == 0
+    assert SolvencyCheck.objects.count() == 0
+
+
+def test_negative_balance_opens_case_with_one_strike(db, managed, weeks):
+    _rider(managed, 500)
+    _balance(managed, -1)
+
+    outcome = _assess(weeks[0])
+
+    check = SolvencyCheck.objects.get(team=managed)
+    assert (check.strikes, check.shortfall, check.balance) == (1, 500, -1)
+    assert outcome.opened == [managed.pk]
+    assert outcome.lost == []
+
+
+def test_case_opens_with_zero_strikes_when_no_shortfall(db, managed, weeks):
+    _fanbase(managed, 500_000)
+    _balance(managed, -1)
+
+    _assess(weeks[0])
+
+    assert SolvencyCheck.objects.get(team=managed).strikes == 0
+
+
+def test_strikes_accumulate_while_shortfall_open(db, managed, weeks):
+    _rider(managed, 500)
+    _balance(managed, -1)
+
+    for week in weeks[:3]:
+        _assess(week)
+
+    assert list(
+        SolvencyCheck.objects.filter(team=managed).order_by("occurred_at").values_list("strikes", flat=True)
+    ) == [1, 2, 3]
+
+
+def test_meeting_target_resets_strikes(db, managed, weeks):
+    rider = _rider(managed, 500)
+    _balance(managed, -1)
+    _assess(weeks[0])
+    _assess(weeks[1])
+    rider.delete()                              # the shortfall is cut
+
+    _assess(weeks[2])
+
+    assert SolvencyCheck.objects.get(team=managed, week=weeks[2]).strikes == 0
+
+
+def test_new_breach_after_reset_starts_at_one(db, managed, weeks):
+    rider = _rider(managed, 500)
+    _balance(managed, -1)
+    _assess(weeks[0])
+    rider.delete()
+    _assess(weeks[1])                           # strikes reset to 0
+    _rider(managed, 500)                        # wages come back, e.g. a salary review
+
+    _assess(weeks[2])
+
+    assert SolvencyCheck.objects.get(team=managed, week=weeks[2]).strikes == 1
+
+
+def test_recovery_row_closes_case(db, managed, weeks):
+    _rider(managed, 500)
+    _balance(managed, -1)
+    _assess(weeks[0])
+    assert is_embargoed(managed) is True
+    _balance(managed, 10_000)
+
+    outcome = _assess(weeks[1])
+
+    recovery = SolvencyCheck.objects.get(team=managed, week=weeks[1])
+    assert recovery.strikes == 0
+    assert recovery.balance >= 0
+    assert outcome.opened == [] and outcome.lost == []
+    assert is_embargoed(managed) is False
+
+
+def test_fourth_strike_is_reported_lost(db, managed, weeks):
+    _rider(managed, 500)
+    _balance(managed, -1)
+
+    outcomes = [_assess(week) for week in weeks[:INSOLVENCY_LOSS_STRIKES]]
+
+    assert [o.lost for o in outcomes] == [[], [], [], [managed.pk]]
+
+
+def test_unmanaged_teams_are_never_assessed(db, team, weeks):
+    _rider(team, 500)
+    _balance(team, -1)
+
+    assert _assess(weeks[0]).written == 0
+
+
+def test_team_claimed_after_boundary_is_skipped(db, managed, weeks):
+    _rider(managed, 500)
+    _balance(managed, -1)
+    managed.managed_since = weeks[1].starts_at
+    managed.save()
+
+    assert _assess(weeks[0]).written == 0
+
+
+def test_reassessing_same_week_writes_and_reports_nothing(db, managed, weeks):
+    _rider(managed, 500)
+    _balance(managed, -1)
+    for week in weeks[:3]:
+        _assess(week)
+    _assess(weeks[3])                           # the fourth strike: lost
+
+    again = _assess(weeks[3])
+
+    assert again.written == 0
+    assert again.opened == [] and again.lost == []
+    assert SolvencyCheck.objects.filter(team=managed).count() == 4
+
+
+def test_forced_listing_counts_before_payday(db, managed, weeks):
+    rider = _rider(managed, 500)
+    _balance(managed, -1)
+    rider.team = None                           # a forced sale happened mid-week
+    rider.save()
+
+    _assess(weeks[0])
+
+    assert SolvencyCheck.objects.get(team=managed).shortfall == 0

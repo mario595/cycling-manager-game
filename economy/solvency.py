@@ -17,7 +17,10 @@ from dataclasses import dataclass
 from datetime import datetime
 
 
+from django.db import IntegrityError, transaction
+
 from schedule.models import Week
+from teams.models import Team
 
 from .models import MERCHANDISE_FANBASE_PER_CREDIT, SolvencyCheck
 from .services import active_contract, balance_for, fanbase_for, payroll_for
@@ -129,3 +132,56 @@ def solvency_status(team, season, *, trainer_salary: int, squad_cost: int) -> So
         outgoings=outgoings, income=income, strikes=check.strikes,
         paydays_left=paydays_left, deadline=deadline,
     )
+
+
+def assess_solvency(
+    week, *, salary_by_team: dict[int, int], squad_cost_by_team: dict[int, int],
+) -> SolvencyOutcome:
+    """Assess every managed team's solvency at `week`'s payday.
+
+    Called once per crossed week from `world.services.tick()` after the week's
+    money has moved. A row is written only for a team that is negative now or
+    whose case is still open (so the recovery row exists); the strike rules
+    are the table in `specs/insolvency-ladder-plan.md`, decision 4.
+
+    Exactly-once: the (team, week) constraint backs the `WeekTransition` row,
+    and a team already assessed for `week` is skipped without being reported
+    as opened or lost — which is what stops a re-run tick releasing a team
+    twice. One atomic() per create, never one around the loop.
+    """
+    opened: list[int] = []
+    lost: list[int] = []
+    written = 0
+    for team in Team.objects.filter(manager__isnull=False).order_by("pk"):
+        # A catch-up tick can cross a boundary that predates a claim; the new
+        # manager is not judged on a week they were not running the team.
+        if team.managed_since is not None and team.managed_since > week.starts_at:
+            continue
+        balance = balance_for(team)
+        # Read BEFORE the create below, or it would see the row just written.
+        previous = open_check(team)
+        if balance >= 0 and previous is None:
+            continue
+        shortfall = weekly_shortfall(
+            team, week.season,
+            trainer_salary=salary_by_team.get(team.pk, 0),
+            squad_cost=squad_cost_by_team.get(team.pk, 0),
+        )
+        if balance >= 0 or shortfall == 0:
+            strikes = 0
+        else:
+            strikes = (previous.strikes if previous is not None else 0) + 1
+        with transaction.atomic():
+            try:
+                SolvencyCheck.objects.create(
+                    team=team, week=week, occurred_at=week.starts_at,
+                    balance=balance, shortfall=shortfall, strikes=strikes,
+                )
+            except IntegrityError:
+                continue          # already assessed; correct outcome, not an error
+        written += 1
+        if balance < 0 and previous is None:
+            opened.append(team.pk)
+        if strikes >= INSOLVENCY_LOSS_STRIKES:
+            lost.append(team.pk)
+    return SolvencyOutcome(opened=opened, lost=lost, written=written)

@@ -575,7 +575,7 @@ Everything except `assess_solvency`. Tests in **new**
 - `test_status_paydays_left_none_when_live_shortfall_zero`
 - `test_cut_so_far_is_target_minus_live_shortfall`
 
-### W3 — `economy/solvency.py`: `assess_solvency`
+### W3 — `economy/solvency.py`: `assess_solvency` — done
 The decision 4 table, as code. Tests in `economy/tests/test_solvency.py`, one per
 row of the table:
 - `test_solvent_team_without_case_writes_nothing`
