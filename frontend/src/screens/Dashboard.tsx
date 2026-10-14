@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { placeBid, type AuctionListing } from '../api'
 import { AuctionCard } from '../components/AuctionCard'
 import { Card, CardHeader, PageBody, PageHeading } from '../components/primitives'
+import { SolvencyBanner } from '../components/SolvencyBanner'
 import { racePath } from '../navigation'
 import { nextRace } from '../nextRace'
 import { seasonLabel } from '../seasonLabel'
@@ -28,6 +29,8 @@ export function Dashboard() {
         title={me ? `Good morning, ${me.display_name}.` : ''}
         subtitle={me?.team?.name ?? ''}
       />
+
+      <SolvencyBanner />
 
       <StandingsSection />
 

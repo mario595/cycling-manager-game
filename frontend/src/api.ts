@@ -375,6 +375,9 @@ export interface AuctionListing {
   min_next_bid: number
   deadline: string
   is_own_listing: boolean
+  /** A forced sale under insolvency (#27): the seller's rider is gone whether
+   * or not anyone bids. */
+  forced: boolean
   bids: Bid[]
 }
 
@@ -397,6 +400,12 @@ export async function getAuctions(): Promise<AuctionMarket> {
 
 export async function listForAuction(riderId: number): Promise<void> {
   return writeJson('/api/transfers/auctions/list/', 'POST', { rider_id: riderId })
+}
+
+/** Sell one of the caller's riders under insolvency (#27). The rider leaves
+ * the roster at once and does not come back, sold or not. */
+export async function forceSell(riderId: number): Promise<void> {
+  return writeJson('/api/transfers/auctions/force/', 'POST', { rider_id: riderId })
 }
 
 export async function placeBid(auctionId: number, amount: number): Promise<void> {
@@ -810,6 +819,34 @@ export interface Finances {
   fanbase_change: number
   weekly_wage_bill: number
   entries: LedgerEntry[]
+}
+
+/** Where the team stands against the insolvency ladder (#27). `shortfall` is
+ * the live weekly gap to close and `target` what it was at the last payday;
+ * `paydays_left` is null when the live shortfall is zero, and `deadline` is
+ * null when the weeks it falls in are not declared yet. */
+export interface Solvency {
+  insolvent: boolean
+  balance: number
+  shortfall: number
+  target: number
+  cut_so_far: number
+  outgoings: number
+  income: number
+  strikes: number
+  paydays_left: number | null
+  deadline: string | null
+  roster_size: number
+  roster_floor: number
+}
+
+export async function getSolvency(): Promise<Solvency> {
+  const response = await fetch('/api/economy/solvency/')
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new Error(body?.detail ?? `solvency request failed: ${response.status}`)
+  }
+  return response.json()
 }
 
 export async function getFinances(): Promise<Finances> {

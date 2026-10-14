@@ -19,7 +19,7 @@ from collections.abc import Iterable
 from datetime import timedelta
 
 from django.db import IntegrityError, transaction
-from django.db.models import QuerySet
+from django.db.models import Exists, OuterRef, QuerySet
 
 from riders.models import Rider
 from riders.services import mark_team_change
@@ -41,6 +41,11 @@ CLAIM_COOLDOWN_WEEKS = 1
 #: Roster ceiling enforced at signing time only (Design decision 4): a
 #: team already over the cap can still race, train and release.
 ROSTER_CAP = 30
+
+#: A forced sale may not take the roster below what a team needs to race.
+#: Equal to racing.models.SQUAD_SIZE, duplicated because transfers/ may not
+#: import racing/ (AGENTS.md); transfers/tests pins the equality.
+FORCED_SALE_ROSTER_FLOOR = 4
 
 #: In-season weeks a free agent may sit unattached before becoming
 #: *eligible* for expiry (Design decision 5). The week count itself is
@@ -89,6 +94,10 @@ class RiderNotOnRoster(TransferError):
     """That rider is not on the caller's team."""
 
 
+class RosterAtFloor(TransferError):
+    """A forced sale would leave fewer riders than a team needs to race."""
+
+
 class AuctionAlreadyExists(TransferError):
     """That rider already has an open auction."""
 
@@ -107,10 +116,15 @@ class SelfBid(TransferError):
 
 def free_agents() -> QuerySet[Rider]:
     """Every active rider with no team — retired riders and development
-    squad riders (#33) are never in it."""
+    squad riders (#33) are never in it. Neither is a rider being sold under
+    insolvency (#27): they have no team while their forced auction runs, and
+    are not signable until it ends unsold."""
+    being_sold = Auction.objects.filter(
+        rider=OuterRef("pk"), status=Auction.Status.OPEN, forced=True,
+    )
     return Rider.objects.active().filter(
         team__isnull=True, development_squad__isnull=True,
-    ).order_by("name")
+    ).exclude(Exists(being_sold)).order_by("name")
 
 
 def release_cost_for(team, rider: Rider, *, weeks_opened: int) -> int:
@@ -176,6 +190,11 @@ def sign_free_agent(team, rider_id: int, *, at, charge=None) -> Rider:
 
         if rider.development_squad_id is not None:
             raise RiderNotAvailable("That rider is not available.")
+
+        if Auction.objects.filter(
+            rider=rider, status=Auction.Status.OPEN, forced=True,
+        ).exists():
+            raise RiderNotAvailable("That rider is being sold.")
 
         # Roster-cap COUNT under the RIDER's lock, not the team's — an
         # accepted narrowing race (Design decision 8): two concurrent
@@ -262,6 +281,59 @@ def list_for_auction(team, rider_id: int, *, at) -> Auction:
                 )
         except IntegrityError:
             raise AuctionAlreadyExists("That rider already has an open auction.")
+    return auction
+
+
+def force_list_for_auction(team, rider_id: int, *, at) -> Auction:
+    """Sell one of `team`'s riders under insolvency (#27): the rider leaves the
+    roster now, so the wage stops now, and is auctioned with no severance.
+    Whether or not anyone bids, they do not come back.
+
+    The rider is left with `team = NULL` while the auction runs (kept out of
+    the free-agent pool by `free_agents()`); `resolve_auction` moves them to
+    the winner, or leaves them a free agent if the auction goes unsold.
+
+    The whole roster is locked, in pk order, BEFORE it is counted: two forced
+    sales from five riders must not both pass the floor check and leave three.
+    pk order means two calls for one team queue rather than deadlock. A rider
+    who already has an open voluntary auction has that auction converted,
+    keeping its reserve, deadline and bids — one_open_auction_per_rider
+    forbids a second row, and cancelling would throw away the seller's bids.
+    """
+    with transaction.atomic():
+        roster = list(Rider.objects.select_for_update().filter(team=team).order_by("pk"))
+        rider = next((r for r in roster if r.pk == rider_id), None)
+        if rider is None:
+            raise RiderNotOnRoster("That rider is not on your team.")
+        if len(roster) <= FORCED_SALE_ROSTER_FLOOR:
+            raise RosterAtFloor(
+                f"A team needs at least {FORCED_SALE_ROSTER_FLOOR} riders to race."
+            )
+
+        auction = (
+            Auction.objects.select_for_update()
+            .filter(rider=rider, status=Auction.Status.OPEN)
+            .first()
+        )
+        if auction is not None:
+            auction.forced = True
+            auction.save(update_fields=["forced", "updated_at"])
+        else:
+            reserve = reserve_price_for(rider)
+            auction = Auction.objects.create(
+                rider=rider,
+                seller_team=team,
+                forced=True,
+                reserve_price=reserve,
+                current_price=reserve,
+                min_increment=min_increment_for(reserve),
+                deadline=at + AUCTION_DURATION,
+                listed_at=at,
+            )
+
+        rider.team = None
+        mark_team_change([rider], team_now=None, at=at)
+        rider.save(update_fields=["team", "updated_at"])
     return auction
 
 
@@ -372,7 +444,14 @@ def resolve_auction(auction, *, at, pay_seller=None, charge_buyer=None) -> Aucti
 
         rider = Rider.objects.select_for_update().get(pk=auction.rider_id)
 
-        if rider.team_id != auction.seller_team_id:
+        # A forced sale takes the rider off the roster at listing (#27), so
+        # "still available" means teamless and not retired, not "still on the
+        # seller's roster".
+        if auction.forced:
+            available = rider.team_id is None and rider.retired_at is None
+        else:
+            available = rider.team_id == auction.seller_team_id
+        if not available:
             auction.status = Auction.Status.CANCELLED
             auction.resolved_at = at
             auction.save(update_fields=["status", "resolved_at", "updated_at"])
@@ -413,6 +492,9 @@ def withdraw_bids(team, *, at) -> int:
     affected auction's current_price to its highest remaining live bid (or the
     reserve if none remain). Returns bids withdrawn. Deadlines are left as
     they are.
+
+    Called when a team is claimed (#30) and when a team becomes insolvent
+    (#27): in both cases the team must not carry an in-progress purchase.
     """
     withdrawn = 0
     with transaction.atomic():
