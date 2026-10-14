@@ -28,7 +28,7 @@ When a manager is released for inactivity, their team keeps its trainer, trainin
 6. At the start of each Season, an unmanaged team signs the steady (low-variance) sponsor from its offer round.
 7. A team released for inactivity keeps its trainer and sponsor, and the AI continues its training.
 8. A claimed team keeps its AI-hired trainer. This is a deliberate exception to "staff is reset on claim" (#46). The sponsor is voided on claim as before.
-9. After a seeded multi-season run, the average unmanaged team's balance is not trending toward zero.
+9. On a seeded season, the average unmanaged team loses no more than about half of what it loses today (about $65,500 a season), measured the same way and recorded in the world README. This feature narrows the gap; it does not close it.
 10. Unmanaged-team hires, training and sponsors appear only where the game already shows a rival's staff or sponsor. No new screens.
 
 ## Out of scope
@@ -40,6 +40,7 @@ When a manager is released for inactivity, their team keeps its trainer, trainin
 - **Matching the human average.** No: it removes the reward for playing well.
 - **Development squads for unmanaged teams.** Later: only if youth proves to matter for how strong AI teams are.
 - **Smarter default for absent human managers.** No: picking squads should stay rewarded.
+- **Fixing the economy-wide wage-to-income deficit.** Not this ticket: it changes human finances too. Needs its own issue.
 - **Market participation.** Already shipped as the AI market (#30); this feature does not change it.
 
 ## Rules and edge cases
@@ -49,7 +50,7 @@ When a manager is released for inactivity, their team keeps its trainer, trainin
 - Hiring and sponsor signing happen once per Season per team; re-running the same step must not hire twice or sign a second sponsor.
 - An unmanaged team never overspends: it hires only when its balance covers the hire fee and a cushion for upcoming wages and salaries. The exact cushion is a plan decision.
 - Sponsorship income is what lets unmanaged teams carry a trainer's salary. Insolvency handling for unmanaged teams (#27) is **not** solved here; that ticket must still decide whether the ladder applies to them. This feature only ensures they have income.
-- The "about $330,000 and roughly three seasons" runway in the world docs was measured before this was checked against prize money, which unmanaged teams do earn. Treat that figure as unverified; the success check in scope item 9 re-measures it.
+- **The deficit is not an AI problem.** A seeded season 1 measured the average unmanaged team at about $14,300 a week in wages against about $8,800 a week in income (prizes and merchandise), a loss of about $5,500 a week, ending the season with about $434,000 rather than the "$330,000" the world docs state. A human team has the same wage and income structure. The steady sponsor (about +$4,200 a week at today's fanbase) and a trainer (about −$1,500 a week plus the hire fee) roughly net out to a smaller loss, not a profit. Closing the gap means rebalancing wages, prizes or sponsor sizes for every team, which is a separate ticket, not this one.
 - Every new player-facing system needs an AI branch or unmanaged teams fall behind in that dimension. This is a standing cost of the game, handled by each new ticket.
 
 ## Decisions taken
@@ -60,6 +61,7 @@ When a manager is released for inactivity, their team keeps its trainer, trainin
 - **Training focus.** Rotate through the specialities the roster holds, weighted by how many riders have each.
 - **Smarter squad pick.** Unmanaged teams only; absent humans keep the naive default.
 - **Claiming a team with an AI-hired trainer.** The trainer stays; the sponsor is voided as before.
+- **Success check (2026-10-14).** Reworded from "not trending toward zero" to "loses no more than about half of today's loss", after a seeded season showed the economy runs a deficit for every average team. The economy-wide deficit is out of scope here.
 - **Docs correction.** Unmanaged teams do earn prize money; the world README and the roadmap are corrected as part of this work.
 
 ## Open questions
