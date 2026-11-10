@@ -492,6 +492,10 @@ def ensure_squads(race: Race) -> None:
     an exception: that is a broken roster (see the spec's Rules and edge
     cases) and it must not stop every other team racing.
 
+    An unmanaged team's squad is picked for the course (course_pick_squad);
+    a human who did not choose gets the naive auto_pick_squad. For a stage
+    race that is stage 1's course.
+
     A stage after the first never auto-picks — its squads are carried from
     stage 1 (D3), so this delegates entirely to _carry_squads and returns.
     """
@@ -502,7 +506,10 @@ def ensure_squads(race: Race) -> None:
     have = set(RaceSquad.objects.filter(race=race).values_list("team_id", flat=True))
     for team in Team.objects.exclude(pk__in=have):
         try:
-            rider_ids, leader_id = auto_pick_squad(team)
+            if team.manager_id is None:
+                rider_ids, leader_id = course_pick_squad(team, race.course)
+            else:
+                rider_ids, leader_id = auto_pick_squad(team)
         except SquadError as exc:
             logger.warning("no squad for %s in %s: %s", team, race, exc)
             continue

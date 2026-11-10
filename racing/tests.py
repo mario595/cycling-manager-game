@@ -835,6 +835,51 @@ def test_course_pick_uses_the_course_training_attribute_thresholds(db, team):
     assert resistance_ids[:2] == [r.pk for r in rouleurs]
 
 
+def test_ensure_squads_picks_for_the_course_only_for_unmanaged_teams(db, team, week):
+    from accounts.models import User
+
+    managed = Team.objects.create(
+        name="Team Managed", code="MAN",
+        manager=User.objects.create_user(email="m@example.com", password="x"),
+    )
+    unmanaged_climbers, _ = _climbers_and_all_rounders(team)
+    _, managed_all_rounders = _climbers_and_all_rounders(managed)
+    race = Race.objects.create(
+        name="Mountain Race", course=MOUNTAIN_COURSE,
+        starts_at=week.starts_at + timedelta(days=1), week=week,
+    )
+
+    ensure_squads(race)
+
+    def squad_ids(t):
+        squad = RaceSquad.objects.get(race=race, team=t)
+        assert squad.is_auto_picked
+        return set(squad.members.values_list("rider_id", flat=True))
+
+    assert squad_ids(team) == {r.pk for r in unmanaged_climbers}
+    assert squad_ids(managed) == {r.pk for r in managed_all_rounders}
+    assert squad_ids(managed) == set(auto_pick_squad(managed)[0])
+
+
+def test_ensure_squads_still_carries_stage_one_for_an_unmanaged_team(db, team, week, stage_race):
+    climbers, all_rounders = _climbers_and_all_rounders(team)
+    stage1 = _stage(stage_race, week, 1)
+    set_squad(stage1, team, [r.pk for r in all_rounders], all_rounders[0].pk)
+    for i, r in enumerate(all_rounders, start=1):
+        RaceResult.objects.create(race=stage1, rider=r, position=i, finish_time=100.0 + i)
+    stage1.status = Race.Status.FINISHED
+    stage1.save(update_fields=["status"])
+    stage2 = _stage(stage_race, week, 2)
+    # A mountain stage 2 would draw the climbers if it were picked afresh.
+    stage2.course = MOUNTAIN_COURSE
+    stage2.save(update_fields=["course"])
+
+    ensure_squads(stage2)
+
+    squad = RaceSquad.objects.get(race=stage2, team=team)
+    assert set(squad.members.values_list("rider_id", flat=True)) == {r.pk for r in all_rounders}
+
+
 def test_previous_squad_ignores_riders_who_left_the_team(db, team, four_riders, week):
     other_team = Team.objects.create(name="Team Beta", code="BET")
     earlier_race = Race.objects.create(

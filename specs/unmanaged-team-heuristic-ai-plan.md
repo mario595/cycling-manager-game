@@ -158,7 +158,7 @@ Add the function and constant. Tests, in `racing/tests.py`:
 - fewer than four riders raises `SquadError`;
 - a 100 km course with no climb ranks sprinters first, a 210 km flat ranks resistance first (uses `course_training_attribute`'s own thresholds).
 
-### W3 — `racing/services.py`: `ensure_squads` uses it for unmanaged teams
+### W3 — `racing/services.py`: `ensure_squads` uses it for unmanaged teams — done
 Change the one pick line. Tests: with one managed and one unmanaged team on identical rosters and a mountain course, the unmanaged squad is the climber squad and the managed one is `auto_pick_squad`'s; a stage 2 still carries stage 1's squad (existing behaviour, assert it did not change).
 **Load-bearing:** the branch must test `team.manager_id`, not call `team_for`/a user lookup. `Team.manager` is already on the instance `ensure_squads` iterates.
 
