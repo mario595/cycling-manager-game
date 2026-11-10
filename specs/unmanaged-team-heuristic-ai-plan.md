@@ -150,7 +150,7 @@ Import the three orchestrators. Edit `tick()` in four places:
 ### W1 — `world/models.py` + migration: two TickRun counters — done
 Add the fields; `makemigrations world`. Test: `world/tests/test_models.py` — a `TickRun` created with no arguments has both counters at 0.
 
-### W2 — `racing/services.py`: `course_pick_squad`
+### W2 — `racing/services.py`: `course_pick_squad` — done
 Add the function and constant. Tests, in `racing/tests.py`:
 - a mountain course picks the four best climbers over four stronger-overall non-climbers when the climb gap is large enough;
 - a flat course does not;
