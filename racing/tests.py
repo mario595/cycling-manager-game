@@ -24,6 +24,7 @@ from racing.services import (
     SquadError,
     auto_pick_squad,
     carried_squad,
+    course_pick_squad,
     course_training_attribute,
     create_race,
     create_stage_race,
@@ -725,6 +726,158 @@ def test_auto_pick_refuses_a_team_of_three(db, team):
 
     with pytest.raises(SquadError):
         auto_pick_squad(team)
+
+
+MOUNTAIN_COURSE = [{"length": 50000.0, "gradient": 3.0}]
+MID_FLAT_COURSE = [{"length": 150000.0, "gradient": 0.0}]
+
+
+def _climbers_and_all_rounders(team):
+    # Climbers: 80 climb, 40 elsewhere (total 240). All-rounders: 55
+    # everywhere (total 275) — stronger overall, weaker uphill.
+    climbers = [
+        Rider.objects.create(
+            name=f"Climber {i}", team=team,
+            climb=80, sprint=40, flat=40, resistance=40, positioning=40,
+        )
+        for i in range(4)
+    ]
+    all_rounders = [
+        Rider.objects.create(
+            name=f"All-rounder {i}", team=team,
+            climb=55, sprint=55, flat=55, resistance=55, positioning=55,
+        )
+        for i in range(4)
+    ]
+    return climbers, all_rounders
+
+
+def test_course_pick_sends_climbers_to_a_mountain_over_stronger_all_rounders(db, team):
+    climbers, all_rounders = _climbers_and_all_rounders(team)
+
+    rider_ids, leader_id = course_pick_squad(team, MOUNTAIN_COURSE)
+
+    assert sorted(rider_ids) == sorted(r.pk for r in climbers)
+    assert leader_id == min(r.pk for r in climbers)
+    # The naive pick would have taken the all-rounders.
+    assert sorted(auto_pick_squad(team)[0]) == sorted(r.pk for r in all_rounders)
+
+
+def test_course_pick_does_not_send_climbers_to_a_flat_course(db, team):
+    climbers, all_rounders = _climbers_and_all_rounders(team)
+
+    rider_ids, _ = course_pick_squad(team, MID_FLAT_COURSE)
+
+    assert sorted(rider_ids) == sorted(r.pk for r in all_rounders)
+
+
+def test_course_pick_ranks_a_tired_climber_behind_an_equal_rested_one(db, team):
+    tired = Rider.objects.create(
+        name="Tired", team=team, freshness=FRESHNESS_FLOOR,
+        climb=80, sprint=40, flat=40, resistance=40, positioning=40,
+    )
+    rested = Rider.objects.create(
+        name="Rested", team=team,
+        climb=80, sprint=40, flat=40, resistance=40, positioning=40,
+    )
+    for i in range(3):
+        Rider.objects.create(
+            name=f"Filler {i}", team=team,
+            climb=79, sprint=40, flat=40, resistance=40, positioning=40,
+        )
+
+    rider_ids, leader_id = course_pick_squad(team, MOUNTAIN_COURSE)
+
+    # The tired rider has the lower pk, so only freshness can put them behind.
+    assert tired.pk < rested.pk
+    assert leader_id == rested.pk
+    assert tired.pk not in rider_ids
+
+
+def test_course_pick_refuses_a_team_of_three(db, team):
+    for i in range(3):
+        Rider.objects.create(
+            name=f"Rider {i}", team=team,
+            climb=50, sprint=50, flat=50, resistance=50, positioning=50,
+        )
+
+    with pytest.raises(SquadError):
+        course_pick_squad(team, MOUNTAIN_COURSE)
+
+
+def test_course_pick_uses_the_course_training_attribute_thresholds(db, team):
+    sprinters = [
+        Rider.objects.create(
+            name=f"Sprinter {i}", team=team,
+            climb=45, sprint=85, flat=45, resistance=45, positioning=45,
+        )
+        for i in range(2)
+    ]
+    rouleurs = [
+        Rider.objects.create(
+            name=f"Rouleur {i}", team=team,
+            climb=45, sprint=45, flat=45, resistance=85, positioning=45,
+        )
+        for i in range(2)
+    ]
+    for i in range(2):
+        Rider.objects.create(
+            name=f"All-rounder {i}", team=team,
+            climb=55, sprint=55, flat=55, resistance=55, positioning=55,
+        )
+    short_flat = [{"length": 100000.0, "gradient": 0.0}]
+    long_flat = [{"length": 210000.0, "gradient": 0.0}]
+
+    sprint_ids, _ = course_pick_squad(team, short_flat)
+    resistance_ids, _ = course_pick_squad(team, long_flat)
+
+    assert sprint_ids[:2] == [r.pk for r in sprinters]
+    assert resistance_ids[:2] == [r.pk for r in rouleurs]
+
+
+def test_ensure_squads_picks_for_the_course_only_for_unmanaged_teams(db, team, week):
+    from accounts.models import User
+
+    managed = Team.objects.create(
+        name="Team Managed", code="MAN",
+        manager=User.objects.create_user(email="m@example.com", password="x"),
+    )
+    unmanaged_climbers, _ = _climbers_and_all_rounders(team)
+    _, managed_all_rounders = _climbers_and_all_rounders(managed)
+    race = Race.objects.create(
+        name="Mountain Race", course=MOUNTAIN_COURSE,
+        starts_at=week.starts_at + timedelta(days=1), week=week,
+    )
+
+    ensure_squads(race)
+
+    def squad_ids(t):
+        squad = RaceSquad.objects.get(race=race, team=t)
+        assert squad.is_auto_picked
+        return set(squad.members.values_list("rider_id", flat=True))
+
+    assert squad_ids(team) == {r.pk for r in unmanaged_climbers}
+    assert squad_ids(managed) == {r.pk for r in managed_all_rounders}
+    assert squad_ids(managed) == set(auto_pick_squad(managed)[0])
+
+
+def test_ensure_squads_still_carries_stage_one_for_an_unmanaged_team(db, team, week, stage_race):
+    climbers, all_rounders = _climbers_and_all_rounders(team)
+    stage1 = _stage(stage_race, week, 1)
+    set_squad(stage1, team, [r.pk for r in all_rounders], all_rounders[0].pk)
+    for i, r in enumerate(all_rounders, start=1):
+        RaceResult.objects.create(race=stage1, rider=r, position=i, finish_time=100.0 + i)
+    stage1.status = Race.Status.FINISHED
+    stage1.save(update_fields=["status"])
+    stage2 = _stage(stage_race, week, 2)
+    # A mountain stage 2 would draw the climbers if it were picked afresh.
+    stage2.course = MOUNTAIN_COURSE
+    stage2.save(update_fields=["course"])
+
+    ensure_squads(stage2)
+
+    squad = RaceSquad.objects.get(race=stage2, team=team)
+    assert set(squad.members.values_list("rider_id", flat=True)) == {r.pk for r in all_rounders}
 
 
 def test_previous_squad_ignores_riders_who_left_the_team(db, team, four_riders, week):

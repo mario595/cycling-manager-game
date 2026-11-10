@@ -174,6 +174,14 @@ class TickRun(models.Model):
         default=0,
         help_text="Auctions opened by unmanaged teams this tick (#30).",
     )
+    ai_trainers_hired = models.PositiveIntegerField(
+        default=0,
+        help_text="Trainers hired by unmanaged teams this tick (#45).",
+    )
+    ai_sponsors_signed = models.PositiveIntegerField(
+        default=0,
+        help_text="Sponsor contracts signed by unmanaged teams this tick (#45).",
+    )
     error = models.TextField(
         blank=True, default="",
         help_text="Traceback if the run failed. Empty on success.",

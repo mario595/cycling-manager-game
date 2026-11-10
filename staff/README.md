@@ -199,14 +199,21 @@ deletes, so it needs no `--yes`: there is no existing game content for it
 to threaten. `--rng-seed` seeds the generator for a reproducible pool,
 mainly useful for demos and manual testing.
 
+## Unmanaged teams' trainers
+
+Unmanaged teams hire from the same pool through the same `hire_trainer`,
+paying the normal fee, and set a weekly focus through `set_focus`: the
+cheapest trainer they can afford, never the best, so humans keep first pick
+of quality. The decisions live in `world/ai_management.py`, because hiring
+needs a balance and `staff/` may not import `economy/`. See `world/README.md`,
+*The AI management (#45)*. A claimed team keeps the trainer the AI hired
+(`teams/README.md`, *Claiming a team*).
+
 ## Future work / possible improvements
 
 - **Physio slot** — once [#41](https://github.com/mario595/cycling-manager/issues/41)
   (injuries) gives it something to affect.
 - **Scout slot** — once transfers/youth intake give it something to narrow.
-- **AI/unmanaged teams hiring a trainer** — belongs to
-  [#45](https://github.com/mario595/cycling-manager/issues/45); unmanaged
-  teams stay unstaffed for now.
 - **Poaching, contract renewal, a trainer quality curve over time** — no
   current plan; a trainer's five scores are fixed for life, and the only
   way to change teams is to be fired back into the pool first.

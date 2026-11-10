@@ -142,8 +142,9 @@ def auto_pick_squad(team: Team) -> tuple[list[int], int]:
     By total engine attributes weighted by freshness
     (riders.services.freshness_multiplier), descending, then by pk
     ascending — the pk tiebreak is what makes this deterministic and so
-    testable. The strongest rider leads. Deliberately course-blind: see
-    specs/squad-selection.md, Out of scope, and #45.
+    testable. The strongest rider leads. Deliberately course-blind: this is
+    the fallback for a human who did not pick (specs/squad-selection.md, Out
+    of scope). Unmanaged teams get course_pick_squad instead.
 
     The weighting is a light preference, not an optimiser — the same
     multiplier the engine penalty uses, so an unmanaged team does not
@@ -162,6 +163,46 @@ def auto_pick_squad(team: Team) -> tuple[list[int], int]:
         riders,
         key=lambda r: (
             -sum(getattr(r, name) for name in ENGINE_ATTRIBUTES)
+            * freshness_multiplier(r.freshness),
+            r.pk,
+        ),
+    )
+    picked = ordered[:SQUAD_SIZE]
+    return [r.pk for r in picked], picked[0].pk
+
+
+#: How much more the course's own attribute counts than a rider's general
+#: strength when an unmanaged team picks a squad. 3 makes it a bit over half
+#: the score: a specialist beats an all-rounder on their terrain, but a
+#: one-dimensional rider never beats a clearly stronger one.
+#: See specs/archive/unmanaged-team-heuristic-ai-plan.md, Design decision 3.
+COURSE_ATTRIBUTE_WEIGHT = 3
+
+
+def course_pick_squad(team: Team, course: list[dict]) -> tuple[list[int], int]:
+    """Four rider ids and the leader's id, chosen for this course.
+
+    Used for unmanaged teams only (ensure_squads). Humans who do not pick
+    keep auto_pick_squad, which stays course-blind. Same shape, same
+    SquadError for a roster under SQUAD_SIZE, same pk tiebreak.
+
+    The course's attribute is course_training_attribute's: the one
+    vocabulary the game already has for which attribute a race rewards.
+    """
+    riders = list(team.riders.all())
+    if len(riders) < SQUAD_SIZE:
+        raise SquadError(
+            f"{team} has only {len(riders)} riders; a squad needs {SQUAD_SIZE}"
+        )
+
+    attribute = course_training_attribute(course)
+    ordered = sorted(
+        riders,
+        key=lambda r: (
+            -(
+                COURSE_ATTRIBUTE_WEIGHT * getattr(r, attribute)
+                + sum(getattr(r, name) for name in ENGINE_ATTRIBUTES)
+            )
             * freshness_multiplier(r.freshness),
             r.pk,
         ),
@@ -451,6 +492,10 @@ def ensure_squads(race: Race) -> None:
     an exception: that is a broken roster (see the spec's Rules and edge
     cases) and it must not stop every other team racing.
 
+    An unmanaged team's squad is picked for the course (course_pick_squad);
+    a human who did not choose gets the naive auto_pick_squad. For a stage
+    race that is stage 1's course.
+
     A stage after the first never auto-picks — its squads are carried from
     stage 1 (D3), so this delegates entirely to _carry_squads and returns.
     """
@@ -461,7 +506,10 @@ def ensure_squads(race: Race) -> None:
     have = set(RaceSquad.objects.filter(race=race).values_list("team_id", flat=True))
     for team in Team.objects.exclude(pk__in=have):
         try:
-            rider_ids, leader_id = auto_pick_squad(team)
+            if team.manager_id is None:
+                rider_ids, leader_id = course_pick_squad(team, race.course)
+            else:
+                rider_ids, leader_id = auto_pick_squad(team)
         except SquadError as exc:
             logger.warning("no squad for %s in %s: %s", team, race, exc)
             continue

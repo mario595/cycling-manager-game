@@ -416,6 +416,13 @@ Keeping them separate makes that delete structurally unable to touch signed
 history: the query that clears a round can never accidentally clear a
 contract, because contracts are not rows in that table.
 
+**Unmanaged teams always sign the steady offer** (#45), from
+`world/ai_management.py`'s `sign_ai_sponsors`: at season open, straight after
+the round is generated, and at any later week boundary for an unmanaged team
+with no contract that season (one released mid-season). It goes through
+`sign_offer` like the API, so nothing here knows the AI exists. See
+`world/README.md`, *The AI management (#45)*.
+
 **A contract copies its terms; it never reads them through its offer.**
 `weekly_base`, `floor_amount`, `ceiling_amount` and `sensitivity` are
 columns on `SponsorContract` itself, copied at signing — `sign_offer`
@@ -569,9 +576,11 @@ string `"racing.Race"`, so nothing in `economy/` imports `racing/`. Likewise
   #23 only has to decide what happens *between* seasons.
 - **A player lever on fanbase** — #21 deliberately has none; nothing lets a
   manager spend or invest in fanbase yet.
-- **Insolvency for unmanaged teams.** #27 assesses managed teams only: an
-  unmanaged team only spends, so it would walk the ladder to the end. Revisit
-  once #45 gives them income.
+- **Insolvency for unmanaged teams.** #27 assesses managed teams only.
+  #45 gives unmanaged teams sponsorship, but it narrows their loss rather
+  than closing it (`world/README.md`, *Balances, measured*), so they would
+  still walk the ladder, only more slowly. Revisit with the economy-wide
+  wage-to-income rebalance.
 - **A full-table read every tick** — `charge_weekly_wages` counts every
   team's riders on each wage run. Fine at dozens of teams; worth a
   `WHERE team.manager IS NOT NULL` or another efficiency when the pool

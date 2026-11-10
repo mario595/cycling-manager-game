@@ -56,6 +56,13 @@ A registered user with no team calls `claim_team(user, name=..., code=..., at=..
    never handed a contract they never agreed to; the API generates them a
    fresh offer round on their first visit to the Sponsors screen.
 
+The claim does **not** touch staff. A trainer the AI hired for the team
+while nobody managed it (#45) stays in the slot, so a new manager is not left
+unstaffed in their first week. This is a deliberate exception to "staff is
+reset on claim" (#46), and it is implemented by the absence of code: a test
+in `teams/tests/test_services.py` is what stops a later "reset staff on
+claim" change from undoing it.
+
 The claim also stamps `Team.managed_since = at` — the moment `release_team`
  (below) reads when the spell it records ends, and clears when the team is
  released. It is also the basis of the transfer claim cooldown: a rider
@@ -100,7 +107,10 @@ indistinguishable from a team that was never managed, because #44's default
 squad selection has to pick it up exactly as it would any other unmanaged
 team. All of the *resetting* — fresh roster, balance, fanbase, voided
 sponsorship, and closing any development squad — happens on the *next*
-claim, the same as it always has; release does none of it.
+claim, the same as it always has; release does none of it. The trainer,
+training focus and sponsor the manager left behind also stay, and the AI
+(`world/README.md`, *The AI management (#45)*) carries on from them: at the
+next week boundary it sets the focus by its own rule.
 
 Leaving the squad open is the visible consequence of that asymmetry, and it
 is deliberate — the spec's *Decisions taken* rules it out explicitly:

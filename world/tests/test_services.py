@@ -39,6 +39,16 @@ def team(db) -> Team:
     return Team.objects.create(name="Team Alpha", code="ALP", primary_colour="#FF0000")
 
 
+def _give_a_manager(team: Team) -> Team:
+    """Make `team` human-managed, so the AI management (#45) leaves its
+    focus and sponsorship to the test, which plays the manager."""
+    team.manager = User.objects.create_user(
+        email=f"{team.code.lower()}-manager@example.com", password="s0meth1ng-good",
+    )
+    team.save(update_fields=["manager"])
+    return team
+
+
 @pytest.fixture
 def managed_team(db) -> Team:
     manager = User.objects.create_user(email="manager@example.com", password="s0meth1ng-good")
@@ -318,6 +328,7 @@ def test_two_ticks_in_the_same_week_apply_growth_once(db, young_rider):
 def test_training_applies_once_per_week(db, team):
     # One week boundary crossed -> exactly one training pass -> one report
     # for the trainer's team, focused on what the manager chose.
+    _give_a_manager(team)
     clock: MockClock = get_clock()
     season = make_season_with_weeks(1, now())
     week_one = season.weeks.get(number=1)
@@ -349,6 +360,7 @@ def test_three_missed_weeks_apply_three_training_weeks(db, team):
     # races), not one collapsed pass for the whole gap. Collapsing back to
     # `apply_weekly_growth(weeks=len(weeks))` leaves exactly one report and
     # this test fails.
+    _give_a_manager(team)
     clock: MockClock = get_clock()
     season = make_season_with_weeks(1, now())
     week_three = season.weeks.get(number=3)
@@ -373,6 +385,7 @@ def test_three_missed_weeks_apply_three_training_weeks(db, team):
 
 
 def test_a_rider_whose_displayed_value_moves_gets_a_snapshot_for_that_week(db, team):
+    _give_a_manager(team)
     clock: MockClock = get_clock()
     season = make_season_with_weeks(1, now())
     week_one = season.weeks.get(number=1)
@@ -501,6 +514,7 @@ def test_rider_on_teamless_squad_still_gains_from_racing(db, team):
 
 
 def test_concurrent_ticks_train_once(db, team):
+    _give_a_manager(team)
     clock: MockClock = get_clock()
     season = make_season_with_weeks(1, now())
     week_one = season.weeks.get(number=1)

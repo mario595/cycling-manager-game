@@ -21,6 +21,8 @@ from racing.models import Race, RaceResult
 from riders.development_squad import open_squad
 from riders.models import DevelopmentSquad, Rider
 from schedule.models import Season
+from staff.models import Trainer
+from staff.services import focus_for, hire_trainer, set_focus, trainer_for
 from teams.models import ManagerialSpell, Team
 from teams.services import ROSTER_SIZE, NoTeamAvailable, claim_team, release_team
 
@@ -339,3 +341,36 @@ def test_release_keeps_development_squad(db, user, team):
     release_team(team, reason=ManagerialSpell.Reason.ADMIN, at=AT)
 
     assert DevelopmentSquad.objects.filter(team=team, level=1).exists()
+
+
+def _trainer() -> Trainer:
+    return Trainer.objects.create(
+        name="Coach", climb=70, sprint=50, flat=50, resistance=50, positioning=50,
+    )
+
+
+def test_claim_keeps_the_ai_hired_trainer_and_voids_the_sponsor(db, user, team, season):
+    # What the AI management (#45) leaves on an unmanaged team.
+    trainer = hire_trainer(team, _trainer().pk)
+    contract = sign_offer(team, ensure_offer_round(team, season, at=AT)[0].pk, at=AT)
+
+    claim_team(user, name="Mountain Goats", code="MGO", at=AT)
+
+    assert trainer_for(team) == trainer
+    contract.refresh_from_db()
+    assert contract.voided_at is not None
+    assert active_contract(team, season) is None
+
+
+def test_release_keeps_trainer_focus_and_sponsor(db, user, team, season):
+    claim_team(user, name="Mountain Goats", code="MGO", at=AT)
+    team.refresh_from_db()
+    trainer = hire_trainer(team, _trainer().pk)
+    set_focus(team, "sprint")
+    contract = sign_offer(team, ensure_offer_round(team, season, at=AT)[0].pk, at=AT)
+
+    release_team(team, reason=ManagerialSpell.Reason.ADMIN, at=AT)
+
+    assert trainer_for(team) == trainer
+    assert focus_for(team) == "sprint"
+    assert active_contract(team, season) == contract

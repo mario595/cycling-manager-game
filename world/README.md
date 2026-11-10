@@ -18,7 +18,9 @@ that finds and processes due work: `world/clocks.py` (`Clock`, `RealClock`,
 `MockClock`), `GameClock`, `TickRun`, and the `tick` and `mock_clock`
 management commands. No calendar. It also owns **the AI market**
 (`world/ai_market.py`): what an unmanaged team bids on and what it lists
-when nobody is managing it — see *The AI market (#30)* below.
+when nobody is managing it — see *The AI market (#30)* below — and **the AI
+management** (`world/ai_management.py`): the trainer it hires, the focus it
+trains on and the sponsor it signs — see *The AI management (#45)*.
 
 The tick also records season and week boundaries as they're crossed, via
 `schedule.services.process_transitions()` and
@@ -93,7 +95,9 @@ reads `now()` once, then finds and processes whatever is due, in six steps:
    `economy/README.md`, *Sponsorship*). `ensure_offer_round` is itself
    idempotent per `(team, season)`, so a tick that runs twice, or catches up
    late, cannot double the round the same way it cannot double-fill the
-   trainer pool.
+   trainer pool. Straight after the round, `world.ai_management.
+   sign_ai_sponsors(season, at)` signs every unmanaged team's **steady**
+   offer, so week 1 already pays it (#45; see *The AI management (#45)*).
 1. **Retiring, ageing, repricing, training and wages** — for every `CLOSED`
    transition `process_transitions` returned, the season close runs in this
    order, and the order is load-bearing:
@@ -135,7 +139,10 @@ reads `now()` once, then finds and processes whatever is due, in six steps:
    `schedule.services.process_week_transitions(at)` records any week
    boundary opened at or before `now()` that hasn't been recorded yet (see
    `schedule/README.md`, *Week transitions*), and each recorded transition
-   is applied **one week at a time**:
+   is applied **one week at a time**. First,
+   `world.ai_management.set_ai_focuses(week)` sets every staffed unmanaged
+   team's training focus for that week (#45) — **before** training, or every
+   week would train on the previous week's choice. Then
    `world.services._apply_training_week(week)` moves every rider along
    their age curve via `riders.services.apply_weekly_growth(weeks=1,
    extra_deltas=...)`, adding that week's training deltas — the trainer's
@@ -314,6 +321,16 @@ count of teams released lands on `TickRun.teams_released`.
      touches a race row, so it runs outside the claim transaction below, the
      same as race simulation does and for the same reason: a full-table
      update must not extend the lock window race claiming holds.
+
+   **After the per-week loop**, on a tick that crossed at least one week,
+   `world.ai_management.hire_ai_trainers(at)` gives each unstaffed unmanaged
+   team a chance to hire, and `sign_ai_sponsors` signs for any unmanaged team
+   still without a contract in the current season (one released mid-season).
+   Hiring is after the loop because the trainer-salary map is built once,
+   before it, on the promise that nobody hires mid-tick; the new trainer's
+   first salary is charged at the next boundary. Counts land on
+   `TickRun.ai_trainers_hired` / `ai_sponsors_signed`
+   (`world/migrations/0021`). See *The AI management (#45)*.
 
 2. **Claim** — inside one transaction, holding a row lock on the due race
    rows themselves (not a clock row — there is no longer one to lock in
@@ -548,14 +565,80 @@ unmanaged team's ledger, before any per-auction guard exists — is caught
 around the whole AI step, so the tick still settles its week, charges wages
 and writes its `TickRun`. Losing a tick to the garnish would be a bad trade.
 
-**Balances, measured.** Unmanaged teams earn no wages, prize money or
-sponsorship; they only spend. A seeded season 1 left the average unmanaged
-team with about **$330,000**, and at roughly `12 × $1,200` a week of wages
-each team owes the market rather than the other way round, that is about
-**three seasons** before AI buying dries up. The fix when it bites is
-[#45](https://github.com/mario595/cycling-manager/issues/45)'s sponsorship,
-not a fatter cushion here: a cushion large enough to matter would also let
-AI teams bid away the human market.
+**Balances, measured.** Every team runs a deficit at today's prices: wages
+outrun prize money and merchandise for managed and unmanaged teams alike.
+#45 narrows the gap for unmanaged teams; it does not close it. Two seeded
+seasons (`seed_teams`, `seed_trainers`, season 1 plus a copy shifted into
+season 2, ticked daily on the mock clock), average per unmanaged team, 15
+teams:
+
+| Ledger kind | Before #45, S1 | Before, S2 | After #45, S1 | After, S2 |
+|---|---|---|---|---|
+| Prize money + GC prizes | 95,967 | 97,500 | 101,400 | 101,134 |
+| Merchandise | 4,599 | 4,423 | 4,627 | 4,565 |
+| Sponsorship | — | — | 51,000 | 50,728 |
+| Trainer hire fee | — | — | −30,040 | — |
+| Trainer salary | — | — | −27,537 | −30,040 |
+| Wages | −157,400 | −164,920 | −168,640 | −166,160 |
+| **Net** | **−56,835** | **−62,997** | **−69,189** | **−39,774** |
+
+Season 2 is the steady state, and its loss falls to **63%** of the
+pre-feature one, short of the spec's "about half". The sponsor came in as
+projected (about $4,200 a week); the trainer did not. The plan assumed the
+cheapest trainer at about $1,500 a week, but fifteen teams each taking the
+cheapest one *left* pay about $2,500 on average. Season 1 is worse than
+before because it carries the one-off hire fee. Better-trained riders add
+only a few thousand in prizes within two seasons. The product owner accepted
+the shortfall (2026-11-10) rather than capping the AI's trainer or skipping
+it, both of which would buy money by making AI teams weaker. At about $40,000
+a season from a starting $500,000, AI buying in the market has roughly a
+decade of runway, not three seasons. Closing the gap is the economy-wide
+wage-to-income rebalance, not a fatter cushion here: a cushion large enough
+to matter would also let AI teams bid away the human market.
+
+## The AI management (#45)
+
+`world/ai_management.py` is the rest of an unmanaged team's week: the
+trainer it hires, the focus it trains on and the sponsor it signs. Same shape
+as the AI market — pure helpers (`dominant_attribute`, `focus_for_week`,
+`cheapest_trainer`, `can_afford_trainer`) and three orchestrators — and it
+lives here for the same reason: hiring needs a balance, and `world/` is the
+only place `staff/` and `economy/` can meet. It goes through the same
+`hire_trainer`, `set_focus` and `sign_offer` a human's API calls use. The
+fourth decision, the squad, is `racing/`'s `course_pick_squad`, because
+squads are picked inside `simulate_race` (`racing/README.md`, *Squads*).
+
+| Orchestrator | When the tick runs it | What it does |
+|---|---|---|
+| `sign_ai_sponsors(season, at)` | Right after the season-open offer round; again after the week loop, for the current season | Signs the **steady** offer (`AI_SPONSOR_PROFILE`) for every unmanaged team with no contract. Calls `ensure_offer_round` first, which gives a round back to a team a claim had cleared. |
+| `set_ai_focuses(week)` | Each crossed week, **before** `_apply_training_week` | For each staffed unmanaged team: one entry per rider, the dominant attribute of their speciality profile, in pk order; the week's focus is `entries[(week.number + team.pk) % len]`. Writes only on change. |
+| `hire_ai_trainers(at)` | After the week loop, on a tick that crossed a week | Each unstaffed unmanaged team, in pk order, takes the **cheapest** remaining pool trainer (hire fee, then pk), never the best. |
+
+**Affordability.** A team hires only if, after the fee, its balance still
+covers `AI_STAFF_RESERVE_WEEKS` (12, a season) of wages plus the trainer's
+salary. A runway check, deliberately separate from the market's
+`AI_CUSHION_FRACTION`, which is a spending fraction. A team that cannot
+afford one, or finds the pool empty, tries again at the next boundary. The
+fee is booked inside `hire_trainer`'s `charge` callback, so a failed hire
+rolls the ledger row back with it.
+
+**Why the hire is after the week loop.** `tick()` builds the
+trainer-salary map once, before the loop, on the promise that nobody hires
+mid-tick. Hiring after it keeps that true; the new trainer's first salary is
+charged at the next boundary.
+
+**Deterministic and blind.** No randomness, so a re-run tick makes the same
+choices, and every step is idempotent: a team with a trainer does not hire,
+a team with a contract does not sign, an unchanged focus is not written. Only
+visible things are read — a rider's speciality, a trainer's price.
+
+**Claim and release.** A claim keeps the AI-hired trainer and voids the
+sponsor (`teams/README.md`). A release keeps trainer, focus and sponsor, and
+the AI sets the focus by its own rule from the next boundary.
+
+**A failing AI management is recorded, never fatal.** Per-team failures are
+caught inside each orchestrator; each call site in `tick()` is also guarded.
+Everything lands on `TickRun.error`, and the tick still settles its week.
 
 ## Running the tick
 
