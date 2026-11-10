@@ -168,7 +168,7 @@ Change the one pick line. Tests: with one managed and one unmanaged team on iden
 ### W5 — `world/ai_management.py`: `hire_ai_trainers` — done
 Tests (DB): an unmanaged team with money hires the cheapest trainer and a `trainer_fee` ledger row of that fee appears; a managed team never hires; a team that cannot afford one hires nothing and is retried (give it money, run again, it hires); two teams and one trainer — only the lower pk hires; running twice does not hire a second trainer or charge twice; a trainer taken by a human between pool read and hire is skipped without an error string.
 
-### W6 — `world/ai_management.py`: `set_ai_focuses` and `sign_ai_sponsors`
+### W6 — `world/ai_management.py`: `set_ai_focuses` and `sign_ai_sponsors` — done
 Tests: focus is applied to unmanaged-with-trainer only, and calling it twice for the same week changes nothing the second time; a team with no trainer is left alone; `sign_ai_sponsors` signs the `steady` offer, a second call signs nothing; a team that already has a contract keeps it; a released team with a voided/absent round gets a fresh round and a steady contract; managed teams are never touched.
 
 ### W7 — `world/services.py`: wire into `tick()` and count

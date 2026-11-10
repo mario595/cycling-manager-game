@@ -14,12 +14,30 @@ from __future__ import annotations
 
 import traceback
 
-from economy.services import balance_for, charge_trainer_fee, payroll_for
+from economy.models import SponsorOffer
+from economy.services import (
+    AlreadySponsored,
+    OfferNotAvailable,
+    active_contract,
+    balance_for,
+    charge_trainer_fee,
+    ensure_offer_round,
+    payroll_for,
+    sign_offer,
+)
 from riders.generation import SPECIALITY_PROFILES
 from riders.models import ENGINE_ATTRIBUTES, Rider
 from staff.models import Trainer
 from staff.pricing import hire_fee, weekly_salary
-from staff.services import SlotOccupied, TrainerNotAvailable, available_trainers, hire_trainer, trainer_for
+from staff.services import (
+    SlotOccupied,
+    TrainerNotAvailable,
+    available_trainers,
+    focus_for,
+    hire_trainer,
+    set_focus,
+    trainer_for,
+)
 from teams.models import Team
 
 #: A season of outgoings — wages plus the new trainer's salary — must still
@@ -120,3 +138,52 @@ def hire_ai_trainers(at) -> tuple[int, str]:
         hired += 1
 
     return hired, error
+
+
+def set_ai_focuses(week) -> int:
+    """Set this week's training focus for every unmanaged team that has a
+    trainer, by the rotation in focus_for_week. Writes only where the focus
+    changes, so a re-run for the same week is a no-op. Returns how many
+    focuses changed.
+    """
+    changed = 0
+    for team in _unmanaged_teams():
+        if trainer_for(team) is None:
+            continue
+        focus = focus_for_week(list(team.riders.all()), week.number, team.pk)
+        if focus is None or focus == focus_for(team):
+            continue
+        set_focus(team, focus)
+        changed += 1
+    return changed
+
+
+def sign_ai_sponsors(season, at) -> tuple[int, str]:
+    """Every unmanaged team without a contract for `season` signs that
+    season's steady offer.
+
+    ensure_offer_round runs first: it no-ops on a team that already has a
+    round, and gives one back to a team whose round a claim cleared before
+    its manager was released. Returns (contracts signed, error text).
+    """
+    signed = 0
+    error = ""
+    for team in _unmanaged_teams():
+        if active_contract(team, season) is not None:
+            continue
+        try:
+            ensure_offer_round(team, season, at=at)
+            offer = SponsorOffer.objects.filter(
+                team=team, season=season, profile=AI_SPONSOR_PROFILE,
+            ).first()
+            if offer is None:
+                continue
+            sign_offer(team, offer.pk, at=at)
+        except (AlreadySponsored, OfferNotAvailable):
+            # Signed or cleared under us since the check. Not an error.
+            continue
+        except Exception:
+            error += f"ai sponsor signing for team {team.pk}:\n{traceback.format_exc()}\n"
+            continue
+        signed += 1
+    return signed, error
