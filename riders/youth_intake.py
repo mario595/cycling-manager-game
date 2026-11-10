@@ -13,6 +13,7 @@ keeps.
 from __future__ import annotations
 
 import random
+from dataclasses import dataclass
 
 from django.db import transaction
 from teams.models import Team
@@ -21,6 +22,7 @@ from .development_squad import squad_for
 from .generation import generate_rider
 from .models import DevelopmentSquad, Rider
 from .services import record_initial_snapshots
+from .youth_triage import free_places
 
 INTAKE_INTERVAL_WEEKS = 4
 INTAKE_BATCH_SIZE = 2
@@ -76,7 +78,20 @@ def generate_youth_rider(level: int, *, rng: random.Random):
     return generate_rider(quality=quality, age=age, potential=potential, rng=rng)
 
 
-def run_intake(*, at, rng: random.Random | None = None) -> int:
+@dataclass(frozen=True)
+class IntakeResult:
+    """What one intake run did, across every open squad: how many riders
+    arrived, and how many were turned away for want of a place.
+
+    `turned_away` is the pair the squad screen warns with before the week
+    arrives, so the count has to be reported rather than inferred.
+    """
+
+    created: int
+    turned_away: int
+
+
+def run_intake(*, at, rng: random.Random | None = None) -> IntakeResult:
     """Give every open development squad one batch of youth riders, dated
     `at` (the intake week's starts_at). world/ decides which weeks; this
     decides who.
@@ -84,9 +99,18 @@ def run_intake(*, at, rng: random.Random | None = None) -> int:
     Every open squad gets a batch, managed or not (plan Design decision 9):
     a team released to the pool keeps its squad and keeps paying for it, so
     it keeps receiving riders too.
+
+    **A batch fills the squad's free places and the remainder is lost.** Only
+    `min(INTAKE_BATCH_SIZE, free_places(squad))` riders are even drawn: a
+    fuller squad means fewer draws, which is equivalent for the odds and
+    simpler than generating the batch and throwing some of it away. A squad
+    with no room records nothing, which is why the (squad, intake_at)
+    idempotency check below would let a re-run try again — the `WeekTransition`
+    row remains the exactly-once guarantee (riders/README.md).
     """
     rng = rng or random.Random()
     created_total = 0
+    turned_away_total = 0
     for team_id in list(DevelopmentSquad.objects.values_list("team_id", flat=True)):
         with transaction.atomic():
             # The same lock close_squad takes, so a close cannot delete the
@@ -97,11 +121,16 @@ def run_intake(*, at, rng: random.Random | None = None) -> int:
                 continue  # closed since we listed it
             if Rider.objects.filter(development_squad=squad, intake_at=at).exists():
                 continue  # second line of defence: this batch already ran
-            batch = [generate_youth_rider(squad.level, rng=rng) for _ in range(INTAKE_BATCH_SIZE)]
+            # Read under the lock, after the idempotency check, so a promotion
+            # or a graduation cannot change the answer between the two.
+            places = free_places(squad)
+            batch_size = min(INTAKE_BATCH_SIZE, places)
+            batch = [generate_youth_rider(squad.level, rng=rng) for _ in range(batch_size)]
             for rider in batch:
                 rider.development_squad = squad
                 rider.intake_at = at
             created = Rider.objects.bulk_create(batch)
             record_initial_snapshots(created)  # baseline for the attribute history
             created_total += len(created)
-    return created_total
+            turned_away_total += INTAKE_BATCH_SIZE - len(created)
+    return IntakeResult(created=created_total, turned_away=turned_away_total)

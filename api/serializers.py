@@ -778,13 +778,23 @@ class SignOfferSerializer(serializers.Serializer):
 class DevelopmentSquadRiderSerializer(serializers.Serializer):
     """One development squad rider as the squad screen shows them: identity,
     speciality, age, the five attributes on the 0-10 display scale, when
-    they arrived and whether they are from the latest batch (#33).
+    they arrived and whether they are from the latest batch (#33), plus how
+    long their spell has left, what they have gained since they arrived, and
+    what promoting them would cost in wages (#34).
 
     Deliberately **not** a RiderSerializer subclass, unlike
     RiderProfileSerializer above — subclassing would inherit weekly_salary,
     market_value, release_cost and final_season, none of which apply to a
     rider who draws no wage and isn't in any market (riders/README.md,
-    *Youth intake*)."""
+    *Youth intake*). `promotion_salary` is the one wage figure that does
+    apply: what they would draw *after* being promoted, not what they draw
+    now.
+
+    **`weeks_left`, `change` and `promotion_salary` come from context maps
+    built once in the view**, never from a per-rider query: the screen asks
+    for one squad, so a query per rider would be a query per prospect for
+    data the view already has.
+    """
 
     id = serializers.IntegerField()
     name = serializers.CharField()
@@ -793,6 +803,9 @@ class DevelopmentSquadRiderSerializer(serializers.Serializer):
     age = serializers.IntegerField()
     arrived = serializers.SerializerMethodField()
     is_new = serializers.SerializerMethodField()
+    weeks_left = serializers.SerializerMethodField()
+    change = serializers.SerializerMethodField()
+    promotion_salary = serializers.SerializerMethodField()
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -811,6 +824,72 @@ class DevelopmentSquadRiderSerializer(serializers.Serializer):
         latest_intake_at = self.context.get("latest_intake_at")
         return latest_intake_at is not None and instance.intake_at == latest_intake_at
 
+    def get_weeks_left(self, instance) -> int:
+        return self.context["weeks_left"][instance.pk]
+
+    def get_change(self, instance) -> dict | None:
+        return _change_since_arrival(instance, self.context.get("baselines"))
+
+    def get_promotion_salary(self, instance) -> int:
+        return self.context["promotion_salaries"][instance.pk]
+
+
+class DevelopmentSquadGraduateSerializer(DevelopmentSquadRiderSerializer):
+    """A rider who has finished their spell and is waiting to be decided
+    about (#34).
+
+    Adds the two figures that only make sense for someone the squad could
+    sell or sign: what they are worth on the market, and whether they are
+    already listed. `weeks_left` is the *decision window* here, not the rest
+    of a spell — the count down to being released to the free-agent pool,
+    after which they are the market's to sign rather than the squad's to
+    manage."""
+
+    market_value = serializers.SerializerMethodField()
+    listed = serializers.SerializerMethodField()
+
+    def get_weeks_left(self, instance) -> int:
+        # The decision window, not the rest of a spell: the count down to
+        # being released to the free-agent pool, after which they are the
+        # market's to sign rather than the squad's to manage.
+        return self.context["graduate_weeks_left"][instance.pk]
+
+    def get_market_value(self, instance) -> int:
+        return self.context["market_values"][instance.pk]
+
+    def get_listed(self, instance) -> bool:
+        return self.context["listed"].get(instance.pk, False)
+
+
+def _change_since_arrival(instance, baselines) -> dict | None:
+    """Current displayed value minus the rider's baseline snapshot: the five
+    attribute keys to signed integers, or None with no baseline (#34,
+    Design decision 15).
+
+    Taken from the display scale on both sides, never from the stored 1-100
+    values — a raw difference would show movement the player cannot see on
+    the bars, which is exactly the number this field exists to replace.
+    """
+    baseline = (baselines or {}).get(instance.pk)
+    if baseline is None:
+        return None
+    return {
+        name: to_display_scale(getattr(instance, name)) - getattr(baseline, name)
+        for name in ENGINE_ATTRIBUTES
+    }
+
+
+class DevelopmentSquadNextIntakeSerializer(serializers.Serializer):
+    """The next intake week and how many of its batch would be lost.
+
+    Its own serializer rather than a reuse of `RetiredSerializer`, which grew
+    a third field here and would otherwise carry a `state` the squad screen
+    has no use for (#34)."""
+
+    season = serializers.IntegerField(allow_null=True)
+    week = serializers.IntegerField(allow_null=True)
+    arrivals_at_risk = serializers.IntegerField()
+
 
 class DevelopmentSquadIntakeSerializer(serializers.Serializer):
     """How often a squad's riders arrive, and when the next batch is due —
@@ -820,10 +899,14 @@ class DevelopmentSquadIntakeSerializer(serializers.Serializer):
 
     every_weeks = serializers.IntegerField()
     batch_size = serializers.IntegerField()
-    # {season, week}, the same shape RetiredSerializer already gives a
-    # nullable season position — null when no further intake week is
-    # declared in the calendar yet.
-    next = RetiredSerializer(allow_null=True)
+    # {season, week, arrivals_at_risk}, the same shape RetiredSerializer gives
+    # a nullable season position — null when no further intake week is
+    # declared in the calendar yet. `arrivals_at_risk` is how many of that
+    # batch would be turned away if nothing changed before it arrives, so the
+    # warning can be given before the week rather than after (#34, Design
+    # decision 14). It is a projection: promoting or discarding a prospect
+    # changes it.
+    next = DevelopmentSquadNextIntakeSerializer(allow_null=True)
 
 
 class DevelopmentSquadLevelSerializer(serializers.Serializer):
@@ -841,6 +924,10 @@ class DevelopmentSquadLevelSerializer(serializers.Serializer):
     squad, and each level above charges its own in full to upgrade into it.
     There is no "current" level's fee, because there is no move onto the level
     already held.
+
+    `places` is how many prospects the level can hold, and it is what
+    decides how much of each intake batch arrives (#34) — shown on every
+    card so the cost and the capacity of a rung are read together.
     """
 
     level = serializers.IntegerField()
@@ -848,6 +935,7 @@ class DevelopmentSquadLevelSerializer(serializers.Serializer):
     weekly_cost = serializers.IntegerField()
     season_cost = serializers.IntegerField()
     fee = serializers.IntegerField()
+    places = serializers.IntegerField()
     action = serializers.ChoiceField(
         choices=["open", "upgrade", "current", "locked"]
     )
@@ -861,13 +949,26 @@ class DevelopmentSquadSerializer(serializers.Serializer):
     the same both-keys-always-present shape StaffSerializer uses — plus the
     squad's own riders and the intake cadence (#33). `riders` is empty and
     `intake` still present while the squad is open with nothing arrived yet;
-    the view sends [] for both keys while the squad is closed, since a
-    closed squad has no riders and nothing due."""
+    the view sends [] for both rider keys and null for `intake` while the
+    squad is closed, since a closed squad has no riders and nothing due.
+
+    **The squad's own state at the top level** (#34): `places` (the current
+    level's, null while closed), `in_squad`, and `roster_count` with
+    `roster_cap` — the last two so the screen can disable Promote without
+    provoking a 409, and so "your roster is full" is a fact on the screen
+    rather than a rejection the player has to provoke first. `riders` is the
+    in-squad prospects and `graduates` those who have finished their spell
+    and are waiting to be promoted, listed or discarded."""
 
     level = serializers.IntegerField(allow_null=True)
     levels = DevelopmentSquadLevelSerializer(many=True)
     balance = serializers.IntegerField()
+    places = serializers.IntegerField(allow_null=True)
+    in_squad = serializers.IntegerField()
+    roster_count = serializers.IntegerField()
+    roster_cap = serializers.IntegerField()
     riders = DevelopmentSquadRiderSerializer(many=True)
+    graduates = DevelopmentSquadGraduateSerializer(many=True)
     intake = DevelopmentSquadIntakeSerializer(allow_null=True)
 
 

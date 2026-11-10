@@ -920,6 +920,9 @@ export interface DevelopmentSquadLevel {
   weekly_cost: number
   season_cost: number
   fee: number
+  /** How many prospects this rung can hold (#34). Shown on every card, so
+   * the cost and the capacity of a level are read together. */
+  places: number
   action: DevelopmentSquadAction
   requires: string | null
 }
@@ -941,6 +944,24 @@ export interface DevelopmentSquadRider {
   positioning: number
   arrived: { season: number | null; week: number | null }
   is_new: boolean
+  /** In-season weeks of their spell still to run (#34). */
+  weeks_left: number
+  /** Displayed movement on each of the five attributes since the rider
+   * arrived, already on the 0-10 scale the bars show. Null for a rider with
+   * no baseline to compare against — never a fabricated zero. */
+  change: Record<string, number> | null
+  /** What they would draw in weekly wages once promoted, not what they draw
+   * now (which is nothing). */
+  promotion_salary: number
+}
+
+/** A squad rider whose spell is done (#34). The same identity and attributes,
+ * but `weeks_left` counts down the *decision window* rather than a spell, and
+ * they carry the two figures that only make sense for someone the squad can
+ * sell or sign. */
+export interface DevelopmentSquadGraduate extends DevelopmentSquadRider {
+  market_value: number
+  listed: boolean
 }
 
 /** How often a squad's riders arrive, and when the next batch is due — the
@@ -949,19 +970,31 @@ export interface DevelopmentSquadRider {
 export interface DevelopmentSquadIntake {
   every_weeks: number
   batch_size: number
-  next: { season: number; week: number } | null
+  /** `arrivals_at_risk` is how much of that batch would be turned away if
+   * nothing changes before the week arrives — a projection, so promoting or
+   * discarding a prospect moves it (#34). */
+  next: { season: number | null; week: number | null; arrivals_at_risk: number } | null
 }
 
 /** The Development squad screen's whole state: `level` is null while the
  * squad is closed (not an error — a state the screen exists to show), and
  * `balance` is here so an action the team cannot afford can be disabled
- * without a second round trip. `riders` and `intake` are empty/null while
- * closed — a closed squad has no riders and nothing due (#33). */
+ * without a second round trip. `riders`, `graduates` and `intake` are
+ * empty/null while closed — a closed squad has no riders and nothing due
+ * (#33). */
 export interface DevelopmentSquad {
   level: number | null
   levels: DevelopmentSquadLevel[]
   balance: number
+  /** The held level's capacity, null while closed; `in_squad` is how many
+   * of those places are used. `roster_count`/`roster_cap` are the *team's*
+   * roster, so Promote can be disabled rather than left to 409 (#34). */
+  places: number | null
+  in_squad: number
+  roster_count: number
+  roster_cap: number
   riders: DevelopmentSquadRider[]
+  graduates: DevelopmentSquadGraduate[]
   intake: DevelopmentSquadIntake | null
 }
 
@@ -986,4 +1019,19 @@ export async function changeDevelopmentSquadLevel(level: number): Promise<void> 
  * already paid stays in the ledger, so nothing here is destroyed. */
 export async function closeDevelopmentSquad(): Promise<void> {
   return writeJson('/api/development-squad/close/', 'POST')
+}
+
+/** Move a prospect or a graduate onto the team roster (#34). The server
+ * refuses at the roster cap or for another team's rider, but the screen
+ * disables the button first — a control that is offered and then rejected
+ * is worse than one that explains itself. */
+export async function promoteSquadRider(riderId: number): Promise<void> {
+  return writeJson(`/api/development-squad/riders/${riderId}/promote/`, 'POST')
+}
+
+/** Discard a prospect or a graduate for good (#34). POST, like every other
+ * action here: the request is an order, not a description of something that
+ * is already gone. A rider with an open listing cannot be discarded. */
+export async function discardSquadRider(riderId: number): Promise<void> {
+  return writeJson(`/api/development-squad/riders/${riderId}/discard/`, 'POST')
 }

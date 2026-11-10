@@ -57,8 +57,21 @@ from riders.services import (
     training_deltas,
 )
 from riders.youth_intake import is_intake_week, run_intake
+from riders.youth_triage import (
+    GRADUATE_WINDOW_WEEKS,
+    SPELL_WEEKS,
+    graduate,
+    release_graduates,
+    squad_development_deltas,
+)
 from schedule.models import SeasonTransition, Week
-from schedule.services import current_position, process_transitions, process_week_transitions, weeks_opened_between
+from schedule.services import (
+    current_position,
+    process_transitions,
+    process_week_transitions,
+    weeks_ago_cutoff,
+    weeks_opened_between,
+)
 from staff.models import Trainer, TrainingWeekReport
 from staff.pricing import weekly_salary
 from staff.services import focus_for, top_up_pool
@@ -266,6 +279,66 @@ def _release_inactive(week) -> tuple[int, str]:
     return released, error
 
 
+def _graduate_squad_riders(week) -> int:
+    """Graduate every squad rider whose spell is complete at this week
+    boundary. Returns how many graduated.
+
+    A spell is SPELL_WEEKS long and is dated from `intake_at`, so the cutoff
+    comes from `weeks_ago_cutoff` rather than a per-rider count. The
+    graduates keep their squad link (`graduated_at` set instead) — they have
+    left the squad's places but not its ownership of them, which is what makes
+    them listable and what the window step then resolves (#34).
+
+    Returns 0 before SPELL_WEEKS weeks have opened, so nobody graduates early
+    in a first season.
+    """
+    cutoff = weeks_ago_cutoff(week.starts_at, SPELL_WEEKS)
+    if cutoff is None:
+        return 0
+    due = list(
+        Rider.objects.filter(
+            development_squad__isnull=False, graduated_at__isnull=True,
+            intake_at__lte=cutoff,
+        ).values_list("pk", flat=True)
+    )
+    return graduate(due, at=week.starts_at)
+
+
+def _release_expired_graduates(week) -> int:
+    """Release every graduate whose window has closed at this boundary, to
+    the free-agent pool stamped `unattached_since`. Returns how many.
+
+    A graduate is left to decide what happens to them for GRADUATE_WINDOW_WEEKS
+    after graduating — promote them, list them, or discard them. The window
+    closing is what makes that a deadline rather than an open-ended limbo: at
+    the boundary, and not before, they go to the market.
+
+    **A listed graduate is skipped.** Their auction decides the outcome — sold
+    means the buyer's roster, unsold means the pool — and releasing them here
+    would put them in the pool mid-auction and cancel the sale at its
+    deadline, which is worse for everyone than letting it finish (#34,
+    Design decision 10).
+    """
+    cutoff = weeks_ago_cutoff(week.starts_at, GRADUATE_WINDOW_WEEKS)
+    if cutoff is None:
+        return 0
+    expired = list(
+        # The squad link is what makes a rider a graduate *now*: `graduated_at`
+        # is never cleared, so without it every rider who ever graduated —
+        # promoted, sold, released — would be a candidate again on every tick.
+        Rider.objects.filter(
+            development_squad__isnull=False,
+            graduated_at__isnull=False, graduated_at__lte=cutoff,
+        )
+        .exclude(
+            pk__in=Auction.objects.filter(status=Auction.Status.OPEN)
+            .values_list("rider_id", flat=True)
+        )
+        .values_list("pk", flat=True)
+    )
+    return len(release_graduates(expired, at=week.starts_at))
+
+
 def _settle_solvency(week, *, salary_by_team, squad_cost_by_team) -> tuple[int, int, str]:
     """Assess every managed team's solvency at this payday, withdraw the live
     bids of a team whose case just opened, and release any team on its
@@ -376,8 +449,10 @@ def _apply_training_week(week) -> int:
     to `week` (the rollover just crossed, preserving
     #58's one-growth-week-per-season-week cadence); the *race* half reads
     the week that just completed, since this week's races have not run
-    yet. Freshness recovery follows the same shape: it runs once per
-    week, excluding riders who started a race in the week being settled
+    yet. Squad riders' own development (#34) is folded in here too,
+    since they have no roster for a trainer to work on. Freshness
+    recovery follows the same shape: it runs once per week, excluding
+    riders who started a race in the week being settled
     — see the plan's Design decision 6, and the broom-wagon-time-cut
     spec's In scope 5 (a rider cut by the time limit costs a race's worth
     of fatigue same as a finisher). Returns how many riders had a
@@ -408,6 +483,19 @@ def _apply_training_week(week) -> int:
             extra[rider.pk] = training_deltas(
                 rider, focus=None, trainer_skill=None, raced_attributes=attrs,
             )
+
+    # Squad riders develop on top of whatever else they earned this week
+    # (#34): they are not on a roster, so no trainer's loop above touched
+    # them, and their extra growth is what a player's spell is paying for.
+    # Merged per attribute rather than assigned, so a squad rider who ever
+    # does pick up another source of extra growth keeps both.
+    for rider in Rider.objects.active().filter(
+        development_squad__isnull=False, graduated_at__isnull=True,
+    ):
+        squad_growth = squad_development_deltas(rider)
+        merged = extra.setdefault(rider.pk, {})
+        for attribute, gain in squad_growth.items():
+            merged[attribute] = merged.get(attribute, 0) + gain
 
     changes = apply_weekly_growth(weeks=1, extra_deltas=extra)
     _write_training_reports(week, changes, focus_by_team)
@@ -579,6 +667,9 @@ def tick() -> TickRun:
     trainer_salary_entries = 0
     development_squad_entries = 0
     youth_intake_riders = 0
+    youth_intake_turned_away = 0
+    youth_graduated = 0
+    youth_graduates_released = 0
     teams_released = 0
     solvency_checks = 0
     teams_lost_to_insolvency = 0
@@ -629,8 +720,19 @@ def tick() -> TickRun:
         # decision 8), and this is what run_intake's idempotency check
         # compares against — dated to week.starts_at, not now(), so a late
         # tick's batch is still found on a second pass.
+        #
+        # Graduation and release run before intake, and the order is
+        # load-bearing (#34): a rider leaving the squad and a batch arriving
+        # at the same boundary must not collide on the last place. Graduation
+        # after growth gives a spell rider exactly SPELL_WEEKS weeks of squad
+        # development; the window's release is before intake for the same
+        # reason.
+        youth_graduated += _graduate_squad_riders(week)
+        youth_graduates_released += _release_expired_graduates(week)
         if is_intake_week(week.number):
-            youth_intake_riders += run_intake(at=week.starts_at)
+            intake = run_intake(at=week.starts_at)
+            youth_intake_riders += intake.created
+            youth_intake_turned_away += intake.turned_away
 
         # Fanbase reads the week that just COMPLETED, not the one opening:
         # this loop runs before _claim()/_execute(), so `week`'s own races
@@ -737,6 +839,9 @@ def tick() -> TickRun:
         trainer_salary_entries=trainer_salary_entries,
         development_squad_entries=development_squad_entries,
         youth_intake_riders=youth_intake_riders,
+        youth_intake_turned_away=youth_intake_turned_away,
+        youth_graduated=youth_graduated,
+        youth_graduates_released=youth_graduates_released,
         teams_released=teams_released,
         solvency_checks=solvency_checks,
         teams_lost_to_insolvency=teams_lost_to_insolvency,

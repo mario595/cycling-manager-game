@@ -4,7 +4,11 @@ import { Link } from 'react-router-dom'
 import {
   changeDevelopmentSquadLevel,
   closeDevelopmentSquad,
+  discardSquadRider,
+  listForAuction,
   openDevelopmentSquad,
+  promoteSquadRider,
+  type DevelopmentSquadGraduate,
   type DevelopmentSquadRider,
 } from '../api'
 import { Button, Card, CardHeader, LabelBar, PageBody, PageHeading } from '../components/primitives'
@@ -87,6 +91,11 @@ export function DevelopmentSquad() {
   const isOpen = squad.level !== null
   const currentName = squad.levels.find((l) => l.action === 'current')?.name
   const intake = squad.intake
+  // Promote writes to the team roster, so a full roster is what stops it —
+  // reported from the payload's own roster_count/roster_cap rather than
+  // discovered by pressing the button and eating a 409 (#34).
+  const rosterFull = squad.roster_count >= squad.roster_cap
+  const atRisk = intake?.next?.arrivals_at_risk ?? 0
 
   const run = async (action: () => Promise<void>, failureMessage: string) => {
     setPending(true)
@@ -99,6 +108,19 @@ export function DevelopmentSquad() {
     } finally {
       setPending(false)
     }
+  }
+
+  /** Discard is the one action on this screen with no undo at all: the rider
+   *  is deleted, not released. `window.confirm` rather than a bespoke modal
+   *  because it is a single yes/no with nothing to render, and the copy has to
+   *  name the rider — "are you sure" about an unnamed row is how the wrong
+   *  prospect gets deleted. */
+  const confirmDiscard = (rider: { id: number; name: string }) => {
+    if (!window.confirm(`Discard ${rider.name}? This is permanent and cannot be undone.`)) return
+    void run(
+      () => discardSquadRider(rider.id),
+      `Could not discard ${rider.name}.`,
+    )
   }
 
   return (
@@ -132,6 +154,18 @@ export function DevelopmentSquad() {
               ? `Next intake: Season ${intake.next.season}, Week ${intake.next.week}`
               : 'No intake scheduled'}
           </div>
+          {/* The warning has to arrive *before* the week does: a projection
+              saying what the batch would cost if nothing changes, so the
+              player can promote or discard in advance rather than discover
+              the arrivals were turned away (#34). Shown only when there is
+              something at risk — a warning that is always there is not one. */}
+          {atRisk > 0 && intake.next ? (
+            <div style={{ fontSize: 12.5, color: color.negative, marginTop: 6 }}>
+              Squad full — {atRisk} arrival{atRisk === 1 ? '' : 's'} in Season{' '}
+              {intake.next.season}, Week {intake.next.week} will be turned away unless you make
+              room.
+            </div>
+          ) : null}
         </Card>
       ) : null}
 
@@ -245,6 +279,9 @@ export function DevelopmentSquad() {
                 />
                 <Figure label="Weekly cost" value={`${formatMoney(level.weekly_cost)}/week`} />
                 <Figure label="Per season" value={formatMoney(level.season_cost)} />
+                {/* Capacity beside cost: a level that costs more to run is
+                    only worth it if it holds more riders (#34). */}
+                <Figure label="Places" value={`${level.places} prospects`} />
               </div>
 
               {kind === 'locked' ? (
@@ -278,7 +315,16 @@ export function DevelopmentSquad() {
 
       {isOpen ? (
         <Card style={{ padding: '15px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <CardHeader title="Squad riders" />
+          <CardHeader
+            title="Squad riders"
+            action={
+              // The held level's places against how many are used — the two
+              // numbers that make "make room" mean something concrete.
+              <span style={{ fontSize: 12, fontFamily: font.mono, color: color.mutedStrong }}>
+                {squad.in_squad} / {squad.places}
+              </span>
+            }
+          />
           {squad.riders.length === 0 ? (
             <div style={{ fontSize: 12.5, color: color.muted }}>
               No riders yet — the first intake arrives
@@ -324,6 +370,7 @@ export function DevelopmentSquad() {
                     {ATTR_KEYS.map(({ key, label }) => (
                       <div key={key} style={{ flex: 1, minWidth: 0 }}>
                         <LabelBar label={label} value={rider[key]} />
+                        <ChangeReadout change={rider.change ? rider.change[key] : null} />
                       </div>
                     ))}
                   </div>
@@ -358,10 +405,179 @@ export function DevelopmentSquad() {
                       </span>
                     ) : null}
                   </div>
+                  <div
+                    style={{
+                      flex: '0 0 auto',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'flex-end',
+                      gap: 5,
+                    }}
+                  >
+                    <span style={{ fontSize: 11, color: color.muted }}>
+                      Graduates in {rider.weeks_left} week{rider.weeks_left === 1 ? '' : 's'}
+                    </span>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <Button
+                        variant="secondary"
+                        onClick={() =>
+                          run(
+                            () => promoteSquadRider(rider.id),
+                            `Could not promote ${rider.name}.`,
+                          )
+                        }
+                        disabled={rosterFull || pending}
+                        style={{ opacity: rosterFull || pending ? 0.6 : 1, padding: '6px 12px' }}
+                      >
+                        Promote
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => confirmDiscard(rider)}
+                        disabled={pending}
+                        style={{ opacity: pending ? 0.6 : 1, padding: '6px 12px' }}
+                      >
+                        Discard
+                      </Button>
+                    </div>
+                    {rosterFull ? (
+                      <span style={{ fontSize: 11, color: color.negative }}>
+                        Your roster is full
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
               ))}
             </div>
           )}
+        </Card>
+      ) : null}
+
+      {/* Graduates are a different decision from prospects, so they get their
+          own card rather than a second section in the one above: their spell
+          is over, they no longer hold a place, and the questions are what to
+          pay them, what the market would give, or whether to keep them at
+          all (#34). Hidden entirely when there are none. */}
+      {isOpen && squad.graduates.length > 0 ? (
+        <Card style={{ padding: '15px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <CardHeader
+            title="Graduates"
+            action={
+              <span style={{ fontSize: 12, fontFamily: font.mono, color: color.mutedStrong }}>
+                {squad.graduates.length}
+              </span>
+            }
+          />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {squad.graduates.map((rider: DevelopmentSquadGraduate) => (
+              <div
+                key={rider.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  paddingBottom: 10,
+                  borderBottom: `1px solid ${color.divider}`,
+                }}
+              >
+                <div style={{ flex: '0 0 160px', minWidth: 0 }}>
+                  <Link
+                    to={riderPath(rider.id)}
+                    style={{
+                      fontSize: 13.5,
+                      fontWeight: 600,
+                      letterSpacing: '-0.2px',
+                      color: color.ink,
+                      textDecoration: 'none',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      display: 'block',
+                    }}
+                  >
+                    {rider.name}
+                  </Link>
+                  <div style={{ fontSize: 11, color: color.mutedStrong, fontFamily: font.mono }}>
+                    {rider.speciality.toUpperCase()} · {rider.age} yrs
+                  </div>
+                </div>
+                <div style={{ flex: '1 1 auto', display: 'flex', gap: 10, minWidth: 0 }}>
+                  {ATTR_KEYS.map(({ key, label }) => (
+                    <div key={key} style={{ flex: 1, minWidth: 0 }}>
+                      <LabelBar label={label} value={rider[key]} />
+                      <ChangeReadout change={rider.change ? rider.change[key] : null} />
+                    </div>
+                  ))}
+                </div>
+                <div
+                  style={{
+                    flex: '0 0 auto',
+                    fontSize: 11,
+                    color: color.mutedStrong,
+                    fontFamily: font.mono,
+                    textAlign: 'right',
+                  }}
+                >
+                  <div>Decide within {rider.weeks_left} week{rider.weeks_left === 1 ? '' : 's'}</div>
+                  <div style={{ marginTop: 3 }}>
+                    Salary {formatMoney(rider.promotion_salary)} · Value{' '}
+                    {formatMoney(rider.market_value)}
+                  </div>
+                </div>
+                <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {/* A listed graduate's sale is the auction's to resolve, so
+                      List and Discard are replaced by a note rather than
+                      offered: the server refuses both while a listing is
+                      open, and a control that cannot do what it says is worse
+                      than none. Promote stays — keeping the rider over the
+                      bids is exactly the decision a manager is here to make,
+                      and the server ends the sale when they take it. */}
+                  {rider.listed ? (
+                    <span style={{ fontSize: 11.5, color: color.muted }}>
+                      Listed on the transfer market
+                    </span>
+                  ) : (
+                    <>
+                      <Button
+                        variant="secondary"
+                        onClick={() =>
+                          run(
+                            () => listForAuction(rider.id),
+                            `Could not list ${rider.name} for sale.`,
+                          )
+                        }
+                        disabled={pending}
+                        style={{ opacity: pending ? 0.6 : 1, padding: '6px 12px' }}
+                      >
+                        List for sale
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => confirmDiscard(rider)}
+                        disabled={pending}
+                        style={{ opacity: pending ? 0.6 : 1, padding: '6px 12px' }}
+                      >
+                        Discard
+                      </Button>
+                    </>
+                  )}
+                  <Button
+                    variant="secondary"
+                    onClick={() =>
+                      run(
+                        () => promoteSquadRider(rider.id),
+                        `Could not promote ${rider.name}.`,
+                      )
+                    }
+                    disabled={rosterFull || pending}
+                    style={{ opacity: rosterFull || pending ? 0.6 : 1, padding: '6px 12px' }}
+                  >
+                    Promote
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
         </Card>
       ) : null}
 
@@ -388,6 +604,33 @@ export function DevelopmentSquad() {
         </Card>
       ) : null}
     </PageBody>
+  )
+}
+
+/** The movement on one attribute since the rider arrived, signed and on the
+ *  same 0-10 scale as the bar above it (#34).
+ *
+ *  Three states, all deliberate: `null` (no baseline to compare against)
+ *  prints nothing at all rather than a zero, a real `0` prints muted so the
+ *  row reads as "not moved" instead of shouting at every unmoved attribute,
+ *  and a gain prints in the positive colour. A negative is printed too — an
+ *  attribute can fall, and hiding that would be the dishonest option — in the
+ *  muted tone rather than the alarming one, since a youth rider losing a
+ *  point of flat over a fortnight is not news. */
+function ChangeReadout({ change }: { change: number | null | undefined }) {
+  if (change === null || change === undefined) return null
+  const moved = change !== 0
+  return (
+    <div
+      style={{
+        fontSize: 10.5,
+        fontFamily: font.mono,
+        marginTop: 3,
+        color: moved ? (change > 0 ? color.positive : color.mutedStrong) : color.muted,
+      }}
+    >
+      {change > 0 ? `+${change}` : change}
+    </div>
   )
 }
 

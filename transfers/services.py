@@ -23,6 +23,7 @@ from django.db.models import Exists, OuterRef, QuerySet
 
 from riders.models import Rider
 from riders.services import mark_team_change
+from riders.youth_triage import belongs_to, lock_rider, release_graduates
 
 from .models import Auction, Bid
 from .pricing import (
@@ -247,7 +248,7 @@ def release_rider(team, rider_id: int, *, at, weeks_opened: int, charge=None) ->
 def list_for_auction(team, rider_id: int, *, at) -> Auction:
     """Create an OPEN auction for one of `team`'s own riders.
 
-    Locks the rider row and re-checks team ownership under the lock
+    Locks the rider row and re-checks ownership under the lock
     (mirrors release_rider's ownership check), computes and freezes
     reserve_price and min_increment from the rider's CURRENT
     market_value_for — never recomputed after this point (Design decision
@@ -255,14 +256,18 @@ def list_for_auction(team, rider_id: int, *, at) -> Auction:
     final guard against a race with a second concurrent listing of the
     same rider: the create runs in its own nested transaction so an
     IntegrityError there does not poison the row lock's transaction.
+
+    **Ownership is `belongs_to`, not `team_id` (#34), so a graduate can be
+    auctioned**: they belong to the squad that developed them, not to any
+    roster. A rider still mid-development is refused for the same reason a
+    rival's rider is — they are not the seller's to sell.
     """
     with transaction.atomic():
-        try:
-            rider = Rider.objects.select_for_update().get(pk=rider_id)
-        except Rider.DoesNotExist:
+        rider = lock_rider(rider_id)
+        if rider is None:
             raise RiderNotOnRoster("That rider is not on your team.")
 
-        if rider.team_id != team.pk:
+        if not belongs_to(rider, team):
             raise RiderNotOnRoster("That rider is not on your team.")
 
         reserve = reserve_price_for(rider)
@@ -412,20 +417,24 @@ def resolve_auction(auction, *, at, pay_seller=None, charge_buyer=None) -> Aucti
     this lock, in which case this is a no-op: the auction is due again on
     a later tick, once its new deadline actually passes.
 
-    Then locks the Rider row and re-checks it is still on the seller's
-    roster: a release or forced sale can have moved it away first, in
-    which case the auction is CANCELLED and no money moves (whichever
-    mechanism moves the rider first wins — spec's *Rules and edge
-    cases*).
+    Then locks the Rider row and re-checks it still belongs to the seller:
+    a release or forced sale can have moved it away first, in which case
+    the auction is CANCELLED and no money moves (whichever mechanism moves
+    the rider first wins — spec's *Rules and edge cases*). Ownership is
+    `belongs_to`, so a graduate is the seller's while they remain in the
+    squad and a listed graduate's auction survives the window step (#34).
 
     With no bids, the auction goes UNSOLD — no callback calls, rider
-    untouched (spec item 11). With a winning bid (the highest amount,
-    ties broken by latest `placed_at` — can't happen today, since each
-    bid must clear the last by `min_increment`, but the ordering is
-    fixed either way), the winner's roster is re-checked against
-    ROSTER_CAP under the same lock (Design decision 7): if they are at or
-    over it by now, the auction goes UNSOLD rather than violating the
-    cap, exactly as if nobody had bid.
+    untouched (spec item 11), except that a graduate is released to the
+    free-agent pool on the way out: an unsold listing must not leave them
+    invisible on the squad screen. The same release runs on the other
+    UNSOLD path, the winner's roster being full (Design decision 9). With
+    a winning bid (the highest amount, ties broken by latest `placed_at`
+    — can't happen today, since each bid must clear the last by
+    `min_increment`, but the ordering is fixed either way), the winner's
+    roster is re-checked against ROSTER_CAP under the same lock (Design
+    decision 7): if they are at or over it by now, the auction goes
+    UNSOLD rather than violating the cap, exactly as if nobody had bid.
 
     Otherwise charge_buyer(winner, amount) runs before pay_seller(seller,
     amount) — buyer debited before seller credited, so a charge_buyer
@@ -435,6 +444,10 @@ def resolve_auction(auction, *, at, pay_seller=None, charge_buyer=None) -> Aucti
     `transfers/` may not import `economy/`, so both callbacks are
     injected by the caller (world/), the same shape sign_free_agent's
     `charge` callback uses.
+
+    A SOLD graduate joins the winner's roster and leaves the squad in the
+    one save that sets `team`; `development_squad` is cleared alongside it
+    (#34), which is a no-op for a roster rider.
     """
     with transaction.atomic():
         auction = Auction.objects.select_for_update().get(pk=auction.pk)
@@ -442,15 +455,19 @@ def resolve_auction(auction, *, at, pay_seller=None, charge_buyer=None) -> Aucti
         if auction.status != Auction.Status.OPEN or auction.deadline > at:
             return auction
 
-        rider = Rider.objects.select_for_update().get(pk=auction.rider_id)
+        rider = lock_rider(auction.rider_id)
 
-        # A forced sale takes the rider off the roster at listing (#27), so
-        # "still available" means teamless and not retired, not "still on the
-        # seller's roster".
-        if auction.forced:
+        # A missing rider is unreachable — Auction.rider is CASCADE, so the
+        # auction could not outlive it — but cancel rather than crash if the
+        # database ever says otherwise. A forced sale takes the rider off the
+        # roster at listing (#27), so "still available" means teamless and not
+        # retired; anything else must still belong to the seller (#34).
+        if rider is None:
+            available = False
+        elif auction.forced:
             available = rider.team_id is None and rider.retired_at is None
         else:
-            available = rider.team_id == auction.seller_team_id
+            available = belongs_to(rider, auction.seller_team)
         if not available:
             auction.status = Auction.Status.CANCELLED
             auction.resolved_at = at
@@ -459,16 +476,12 @@ def resolve_auction(auction, *, at, pay_seller=None, charge_buyer=None) -> Aucti
 
         winning_bid = auction.bids.live().order_by("-amount", "-placed_at").first()
         if winning_bid is None:
-            auction.status = Auction.Status.UNSOLD
-            auction.resolved_at = at
-            auction.save(update_fields=["status", "resolved_at", "updated_at"])
+            _resolve_unsold(auction, rider, at)
             return auction
 
         winner = winning_bid.bidder_team
         if Rider.objects.filter(team=winner).count() >= ROSTER_CAP:
-            auction.status = Auction.Status.UNSOLD
-            auction.resolved_at = at
-            auction.save(update_fields=["status", "resolved_at", "updated_at"])
+            _resolve_unsold(auction, rider, at)
             return auction
 
         amount = winning_bid.amount
@@ -478,13 +491,31 @@ def resolve_auction(auction, *, at, pay_seller=None, charge_buyer=None) -> Aucti
             pay_seller(auction.seller_team, amount)
 
         rider.team = winner
+        rider.development_squad = None
         mark_team_change([rider], team_now=winner, at=at)
-        rider.save(update_fields=["team", "updated_at"])
+        rider.save(update_fields=["team", "development_squad", "updated_at"])
 
         auction.status = Auction.Status.SOLD
         auction.resolved_at = at
         auction.save(update_fields=["status", "resolved_at", "updated_at"])
     return auction
+
+
+def _resolve_unsold(auction, rider, at) -> None:
+    """Close one auction UNSOLD, releasing the rider first if they are a
+    graduate (#34) so an unsold listing cannot strand them.
+
+    Both UNSOLD paths share this: no bids, and a winner's full roster. The
+    release goes through `release_graduates` — the same stamped,
+    idempotent call `close_squad` makes — rather than repeating the
+    bookkeeping, and it runs before the auction is saved so a failure
+    leaves the auction OPEN for the next tick to retry.
+    """
+    if rider.team_id is None and rider.development_squad_id is not None:
+        release_graduates([rider.pk], at=at)
+    auction.status = Auction.Status.UNSOLD
+    auction.resolved_at = at
+    auction.save(update_fields=["status", "resolved_at", "updated_at"])
 
 
 def withdraw_bids(team, *, at) -> int:
@@ -545,3 +576,28 @@ def cancel_open_auctions(rider_ids: Iterable[int], *, at) -> int:
     return Auction.objects.filter(
         rider_id__in=list(rider_ids), status=Auction.Status.OPEN,
     ).update(status=Auction.Status.CANCELLED, resolved_at=at)
+
+
+def cancel_unowned_listings(seller_team, *, at) -> int:
+    """Cancel every OPEN auction `seller_team` holds whose rider no longer
+    belongs to it. Returns auctions cancelled.
+
+    Called after closing the development squad (#34). Without it, a released
+    graduate's auction stays biddable until its deadline — managers would keep
+    bidding on a rider who is already in the free-agent pool, and the winner
+    would be cancelled at resolve time by the same ownership check that would
+    have caught it weeks earlier.
+
+    **Forced sales are left alone** (#27): their rider is teamless by design
+    while the auction runs, so `belongs_to` is false for them, yet the team is
+    still owed the sale. A claim does not come here — it cancels every listing
+    the team holds, forced or not, through `cancel_listings` (#114).
+    """
+    stale = [
+        auction.rider_id
+        for auction in Auction.objects.filter(
+            seller_team=seller_team, status=Auction.Status.OPEN, forced=False,
+        ).select_related("rider__development_squad")
+        if not belongs_to(auction.rider, seller_team)
+    ]
+    return cancel_open_auctions(stale, at=at)

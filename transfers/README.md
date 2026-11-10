@@ -46,10 +46,13 @@ ordered by name. Retired riders are never returned, and neither are
 development squad riders (#33) — a `team = NULL` rider with
 `development_squad` set is still in a squad, not the market, and
 `sign_free_agent` refuses one under the rider lock the same way it refuses a
-retired rider. A squad rider only enters the pool once their squad closes,
-which stamps `unattached_since` on the way out (`riders/README.md`, *Youth
-intake*) — the same stamp every other released or unsigned rider carries, so
-a youth nobody wants expires by the same rule as anyone else. Two actions
+retired rider. A squad rider reaches the pool one way only, and only having
+served their full spell: as a **graduate**, released by a closing squad, a
+lapsed decision window or an unsold auction, each of which stamps
+`unattached_since` on the way out (`riders/README.md`, *Youth triage*) — the
+same stamp every other released or unsigned rider carries, so a youth nobody
+wants expires by the same rule as anyone else. A rider still *in* the squad is
+never in the pool: closing discards them. Two actions
 move riders in and out of the pool, both
 row-locked write paths in `transfers/services.py` that charge an **injected**
 `charge(rider, fee)` callback the way `hire_trainer` does — `transfers/` may
@@ -100,6 +103,24 @@ this app that persists across ticks, hence `transfers/`'s first
 `models.py` and migration. A manager lists any rider on their own roster;
 other managers bid over a few real days; the highest bid at the deadline
 buys the rider.
+
+**"Own" is `belongs_to(rider, team)`, not `rider.team == team` (#34).** The
+sale side was written when the only thing a manager could sell was a rider on
+their senior roster, so the roster check *was* the ownership check. A squad
+graduate (`riders/README.md`, *Youth triage*) is sellable and is **not** on
+that roster — they carry `development_squad` and no `team` — so the comparison
+is now `riders.youth_triage.belongs_to`, which is true for a roster rider
+*and* for a graduate of the team that owns them. Every caller that used to ask
+"is this rider on that team?" asks `belongs_to` instead: `list_for_auction`
+and `resolve_auction`. `transfers -> riders` is allowed, so this is an import,
+not a callback.
+
+**A graduate can therefore be listed without occupying a roster place.** This
+was the point of the split: the squad's `places` are for riders it is still
+developing, and a finished rider who is taking one is blocking the intake
+that would replace them. Listing a rider *in* a squad is still refused — they
+are not a product yet, and `belongs_to` is false for them, which is the same
+rule doing the work rather than a new check.
 
 - **`Auction`** — `rider`, `seller_team`, `status` (`open` / `sold` /
   `unsold` / `cancelled`), `reserve_price`, `current_price`,
@@ -188,6 +209,14 @@ buys the rider.
   rider, and marks the auction `SOLD`. `transfers/` may not import
   `economy/`, so both callbacks are injected exactly the way
   `sign_free_agent`'s `charge` is — `world/README.md` has the wiring.
+  **A `SOLD` graduate leaves the squad**: the sale gives them a team, so
+  `development_squad` is cleared rather than left pointing at a squad that no
+  longer owns them. An `UNSOLD` one is the interesting case — the auction ends
+  and the rider is still the squad's, so a graduate whose decision window has
+  since closed is released to the free-agent pool in the same step
+  (`riders.youth_triage.release_graduates`), stamped `unattached_since` like
+  any other expiry. A graduate still **inside** their window goes back to
+  being listed-or-not as the manager left them.
 - **Why resolution is not a week-boundary step.** Every other per-week
   economic step in the tick (`world/README.md`, *How a tick works*) is
   keyed to a crossed `Week`. An auction's deadline is deliberately
@@ -220,13 +249,42 @@ buys the rider.
   bidding — until its deadline. Both functions run in one transaction with
   the retirement itself, so there is no window in which the rider has left
   and the auction is still open.
+- **`cancel_unowned_listings(seller_team, *, at)`** — cancellation for the
+  case where the team can no longer sell what it listed, rather than where the
+  *rider* has gone
+  ([#34](https://github.com/mario595/cycling-manager/issues/34)). It cancels
+  every `OPEN` auction the team is selling whose rider no longer passes
+  `belongs_to` for that team, and nothing else: a listing of a rider the team
+  still owns is left alone.
 
-  There are now **two callers** of cancellation, and they differ only in what
-  they key on: `cancel_open_auctions(rider_ids, *, at)` for retirement, and
-  `cancel_listings(team, *, at)` for a claim — see *Withdrawal and
-  cancellation on claim* below. Both are one conditional UPDATE moving no
-  money, so every reader that filters on an `OPEN` auction drops the cancelled
-  ones without any further change.
+  Its one caller is **closing a development squad**, which releases the
+  squad's graduates to the pool. Their auctions would otherwise stay biddable
+  until the deadline — managers would keep bidding on a rider already in the
+  free-agent pool, and the winner would be refused at resolve time by the very
+  ownership check that would have caught it days earlier.
+
+  **Forced sales are excluded** (`forced=False` in its query). A forced sale
+  takes the rider off the roster at listing (#27), so `belongs_to` is false
+  for them by design; without the exclusion, closing a squad would cancel a
+  sale the insolvent team is owed.
+
+  A **claim** does not come here. It cancels every listing the team holds —
+  graduates', roster riders' and forced sales alike — through
+  `cancel_listings`, which keys on `seller_team` alone
+  ([#114](https://github.com/mario595/cycling-manager/issues/114); see
+  *Withdrawal and cancellation on claim* below). #34 originally fixed #114 a
+  second time, by calling `cancel_unowned_listings` from the claim too; the
+  two fixes met in the merge with master and the claim kept `cancel_listings`,
+  the one that also catches forced sales. No money moves here either, so an
+  auction cancelled with bids standing refunds nothing — the same property as
+  `cancel_open_auctions`.
+
+  There are **three callers** of cancellation, differing only in what they
+  key on: `cancel_open_auctions(rider_ids, *, at)` for retirement,
+  `cancel_listings(team, *, at)` for a claim, and
+  `cancel_unowned_listings(seller_team, *, at)` for a squad close. All end in
+  one conditional UPDATE moving no money, so every reader that filters on an
+  `OPEN` auction drops the cancelled ones without any further change.
 
 ## Withdrawal and cancellation on claim
 

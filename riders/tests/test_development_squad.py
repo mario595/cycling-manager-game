@@ -26,6 +26,7 @@ from riders.development_squad import (
     weekly_cost,
 )
 from riders.models import DevelopmentSquad, Rider
+from riders.youth_triage import SquadClosure
 
 #: The game time every test opens a squad at. Game time, not wall clock.
 OPENED_AT = datetime(2027, 3, 1, tzinfo=dt_timezone.utc)
@@ -64,7 +65,7 @@ def _open(team, level):
     return DevelopmentSquad.objects.create(team=team, level=level, opened_at=OPENED_AT)
 
 
-def test_levels_rise_strictly_in_both_columns():
+def test_levels_rise_strictly_in_every_column():
     """Load-bearing, not a balance note. The ladder is climbed for a fee at
     every rung, so the top has to be the most expensive thing to enter and to
     run — otherwise a player would rationally stop short of it, or climb to a
@@ -73,6 +74,9 @@ def test_levels_rise_strictly_in_both_columns():
     This is no longer about an upgrade undercutting a direct opening, which
     was the original reason: there is no way to open above the lowest level
     at all now, so that side door is shut structurally.
+
+    `places` (#34) is in here for the same reason: a higher level has to buy
+    more than it costs, or the level buys nothing a manager wants.
     """
     levels = [LEVELS[level] for level in sorted(LEVELS)]
 
@@ -80,6 +84,7 @@ def test_levels_rise_strictly_in_both_columns():
     for cheaper, dearer in zip(levels, levels[1:]):
         assert dearer.opening_fee > cheaper.opening_fee
         assert dearer.weekly_cost > cheaper.weekly_cost
+        assert dearer.places > cheaper.places
 
 
 def test_weekly_cost_reads_the_table():
@@ -328,40 +333,76 @@ def test_change_to_an_unknown_level_raises(team):
     assert squad_for(team).level == 2
 
 
-def test_close_deletes_and_returns_true(team):
+def test_close_deletes_the_row_and_reports_what_it_did(team):
     _open(team, 2)
 
-    assert close_squad(team, at=OPENED_AT) is True
+    assert close_squad(team, at=OPENED_AT) == SquadClosure(discarded=0, released=[])
     assert not DevelopmentSquad.objects.filter(team=team).exists()
 
 
-def test_close_when_closed_returns_false(team):
-    assert close_squad(team, at=OPENED_AT) is False
+def test_close_when_closed_returns_none(team):
+    assert close_squad(team, at=OPENED_AT) is None
 
 
-def test_close_releases_squad_riders_to_pool_with_unattached_since(team):
-    """This is the test that catches D6: skip the stamp and a released youth
-    rider would never be treated as long-unattached, so they would sit in
-    the free-agent pool forever."""
+def test_close_discards_riders_still_in_the_squad(team):
+    """A rider pulled mid-development is not worth a place in the market:
+    they are deleted outright, the same as a rider who never raced (#34,
+    reversing #33's rule)."""
     squad = _open(team, 1)
     rider = Rider.objects.create(
         name="Youth One", development_squad=squad,
         climb=20, sprint=20, flat=20, resistance=20, positioning=20,
     )
+
+    assert close_squad(team, at=OPENED_AT) == SquadClosure(discarded=1, released=[])
+
+    assert not Rider.objects.filter(pk=rider.pk).exists()
+
+
+def test_close_releases_graduates_to_the_pool_with_unattached_since(team):
+    """The test that catches D6, now for graduates: skip the stamp and a
+    released graduate would never be treated as long-unattached, so they
+    would sit in the free-agent pool forever."""
+    squad = _open(team, 1)
+    graduate = Rider.objects.create(
+        name="Graduated One", development_squad=squad,
+        intake_at=OPENED_AT, graduated_at=OPENED_AT,
+        climb=20, sprint=20, flat=20, resistance=20, positioning=20,
+    )
     release_at = datetime(2027, 4, 1, tzinfo=dt_timezone.utc)
 
-    assert close_squad(team, at=release_at) is True
-    rider.refresh_from_db()
+    result = close_squad(team, at=release_at)
+    graduate.refresh_from_db()
 
-    assert rider.team_id is None
-    assert rider.development_squad_id is None
-    assert rider.unattached_since == release_at
+    assert result == SquadClosure(discarded=0, released=[graduate.pk])
+    assert graduate.team_id is None
+    assert graduate.development_squad_id is None
+    assert graduate.unattached_since == release_at
+
+
+def test_close_discards_the_squad_and_releases_its_graduates(team):
+    squad = _open(team, 1)
+    still_here = Rider.objects.create(
+        name="Still Here", development_squad=squad,
+        climb=20, sprint=20, flat=20, resistance=20, positioning=20,
+    )
+    graduated = Rider.objects.create(
+        name="Graduated", development_squad=squad,
+        intake_at=OPENED_AT, graduated_at=OPENED_AT,
+        climb=20, sprint=20, flat=20, resistance=20, positioning=20,
+    )
+
+    result = close_squad(team, at=OPENED_AT)
+
+    assert result.discarded == 1
+    assert result.released == [graduated.pk]
+    assert not Rider.objects.filter(pk=still_here.pk).exists()
 
 
 def test_close_with_no_riders_still_closes(team):
     _open(team, 1)
 
-    assert close_squad(team, at=OPENED_AT) is True
+    assert close_squad(team, at=OPENED_AT) == SquadClosure(discarded=0, released=[])
     assert not DevelopmentSquad.objects.filter(team=team).exists()
 
 

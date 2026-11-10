@@ -111,6 +111,18 @@ class TickRun(models.Model):
         default=0,
         help_text="Riders generated into development squads by youth intake this tick (#33).",
     )
+    youth_intake_turned_away = models.PositiveIntegerField(
+        default=0,
+        help_text="Youth riders a squad had no place for and lost this tick (#34).",
+    )
+    youth_graduated = models.PositiveIntegerField(
+        default=0,
+        help_text="Squad riders who finished their spell this tick (#34).",
+    )
+    youth_graduates_released = models.PositiveIntegerField(
+        default=0,
+        help_text="Graduates whose decision window closed, sent to the free-agent pool this tick (#34).",
+    )
     fanbase_entries = models.PositiveIntegerField(
         default=0,
         help_text="Fanbase change entries written this tick (#21).",

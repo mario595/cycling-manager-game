@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import timedelta
 
 import pytest
 from django.core.management import call_command
@@ -280,7 +281,6 @@ def test_load_season_creates_stage_races(db, tmp_path):
     assert [s.name for s in stages] == [
         "Alpine Tour — Stage 1", "Alpine Tour — Stage 2", "Alpine Tour — Stage 3",
     ]
-    from datetime import timedelta
     assert stages[1].starts_at == stages[0].starts_at + timedelta(days=1)
 
 
@@ -304,3 +304,23 @@ def test_example_season_file_loads(db):
 
     assert Season.objects.filter(number=1).exists()
     assert StageRace.objects.exists()
+
+
+def test_season_2_example_loads_after_season_1(db):
+    """seasons/season-2.example.json exists because graduation cannot be seen
+    in a single declared season (#34): a rider arriving on week 4 graduates on
+    week 18, which is six weeks into season 2. So the second example has to
+    load *after* the first, and butt up against it rather than overlapping —
+    the loader refuses an overlap, so a drifting date here would break seeding
+    rather than quietly produce a gap."""
+    call_command("load_season", "seasons/season-1.example.json")
+    call_command("load_season", "seasons/season-2.example.json")
+
+    first = Season.objects.get(number=1)
+    second = Season.objects.get(number=2)
+    assert second.starts_at == first.ends_at
+    assert second.starts_at.isoformat() == "2027-05-24T00:00:00+00:00"
+    assert Week.objects.filter(season=second).count() == 12
+    # A rider who arrived on week 4 of season 1 graduates inside this one,
+    # which is the whole reason the file is here.
+    assert first.ends_at > second.starts_at - timedelta(weeks=12)
