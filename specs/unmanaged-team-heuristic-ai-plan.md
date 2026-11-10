@@ -165,7 +165,7 @@ Change the one pick line. Tests: with one managed and one unmanaged team on iden
 ### W4 — `world/ai_management.py`: pure helpers — done
 `dominant_attribute`, `focus_for_week`, `cheapest_trainer`, `can_afford_trainer`, constants. Tests in a new `world/tests/test_ai_management.py` using unsaved instances: dominant attribute per speciality equals the expected five; a roster of 3 climbers and 1 sprinter yields `climb` on three of four consecutive weeks and `sprint` on one; same inputs give the same answer; `focus_for_week([], …)` is `None`; `cheapest_trainer` breaks fee ties by pk and returns `None` for an empty pool; `can_afford_trainer` is false exactly at the boundary minus one.
 
-### W5 — `world/ai_management.py`: `hire_ai_trainers`
+### W5 — `world/ai_management.py`: `hire_ai_trainers` — done
 Tests (DB): an unmanaged team with money hires the cheapest trainer and a `trainer_fee` ledger row of that fee appears; a managed team never hires; a team that cannot afford one hires nothing and is retried (give it money, run again, it hires); two teams and one trainer — only the lower pk hires; running twice does not hire a second trainer or charge twice; a trainer taken by a human between pool read and hire is skipped without an error string.
 
 ### W6 — `world/ai_management.py`: `set_ai_focuses` and `sign_ai_sponsors`

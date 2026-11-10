@@ -12,10 +12,15 @@ a rider's speciality and the hire from a trainer's price, both visible.
 
 from __future__ import annotations
 
+import traceback
+
+from economy.services import balance_for, charge_trainer_fee, payroll_for
 from riders.generation import SPECIALITY_PROFILES
 from riders.models import ENGINE_ATTRIBUTES, Rider
 from staff.models import Trainer
 from staff.pricing import hire_fee, weekly_salary
+from staff.services import SlotOccupied, TrainerNotAvailable, available_trainers, hire_trainer, trainer_for
+from teams.models import Team
 
 #: A season of outgoings — wages plus the new trainer's salary — must still
 #: be covered after the hire fee is paid. A runway check, deliberately not
@@ -65,3 +70,53 @@ def can_afford_trainer(balance: int, payroll: int, trainer: Trainer) -> bool:
     of wages plus this trainer's salary?"""
     reserve = AI_STAFF_RESERVE_WEEKS * (payroll + weekly_salary(trainer))
     return balance - hire_fee(trainer) >= reserve
+
+
+def _unmanaged_teams():
+    return Team.objects.filter(manager__isnull=True).order_by("pk")
+
+
+def hire_ai_trainers(at) -> tuple[int, str]:
+    """Every unmanaged team without a trainer hires the cheapest one left in
+    the pool, if it can afford to. Team-pk order, one trainer each, so the
+    outcome is deterministic and a short pool leaves the later teams to try
+    again at the next week boundary.
+
+    The fee is booked inside hire_trainer's charge callback, so a failed
+    hire rolls the ledger row back with it. Returns (hires, error text).
+    """
+    hired = 0
+    error = ""
+    pool = list(available_trainers())
+
+    for team in _unmanaged_teams():
+        if trainer_for(team) is not None:
+            continue
+        trainer = cheapest_trainer(pool)
+        if trainer is None:
+            break
+        if not can_afford_trainer(balance_for(team), payroll_for(team), trainer):
+            continue
+
+        def charge(picked, team=team):
+            charge_trainer_fee(
+                team, amount=-hire_fee(picked), at=at, description=f"Hired {picked.name}",
+            )
+
+        try:
+            hire_trainer(team, trainer.pk, charge=charge)
+        except TrainerNotAvailable:
+            # A human hired them since the pool was read. A normal outcome,
+            # not an error; the next team tries the next cheapest.
+            pool.remove(trainer)
+            continue
+        except SlotOccupied:
+            # The slot filled under us; the trainer is still in the pool.
+            continue
+        except Exception:
+            error += f"ai trainer hire for team {team.pk}:\n{traceback.format_exc()}\n"
+            continue
+        pool.remove(trainer)
+        hired += 1
+
+    return hired, error
