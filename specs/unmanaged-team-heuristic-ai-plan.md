@@ -162,7 +162,7 @@ Add the function and constant. Tests, in `racing/tests.py`:
 Change the one pick line. Tests: with one managed and one unmanaged team on identical rosters and a mountain course, the unmanaged squad is the climber squad and the managed one is `auto_pick_squad`'s; a stage 2 still carries stage 1's squad (existing behaviour, assert it did not change).
 **Load-bearing:** the branch must test `team.manager_id`, not call `team_for`/a user lookup. `Team.manager` is already on the instance `ensure_squads` iterates.
 
-### W4 — `world/ai_management.py`: pure helpers
+### W4 — `world/ai_management.py`: pure helpers — done
 `dominant_attribute`, `focus_for_week`, `cheapest_trainer`, `can_afford_trainer`, constants. Tests in a new `world/tests/test_ai_management.py` using unsaved instances: dominant attribute per speciality equals the expected five; a roster of 3 climbers and 1 sprinter yields `climb` on three of four consecutive weeks and `sprint` on one; same inputs give the same answer; `focus_for_week([], …)` is `None`; `cheapest_trainer` breaks fee ties by pk and returns `None` for an empty pool; `can_afford_trainer` is false exactly at the boundary minus one.
 
 ### W5 — `world/ai_management.py`: `hire_ai_trainers`
