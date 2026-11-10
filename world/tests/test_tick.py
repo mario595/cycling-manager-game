@@ -20,11 +20,12 @@ from racing.models import Race, RaceMarker, RaceResult, RaceSquad, RaceSquadRide
 from racing.services import simulate_race as _real_simulate_race
 from riders.development_squad import change_level
 from riders.models import ENGINE_ATTRIBUTES, DevelopmentSquad, Rider
-from staff.services import set_focus
+from staff.services import focus_for, set_focus
 from schedule.models import SEASON_WEEKS, Season, Week
 from staff.models import Trainer, TrainingWeekReport
 from staff.pricing import weekly_salary
-from teams.models import Team
+from teams.models import ManagerialSpell, Team
+from teams.services import release_team
 from transfers.models import Auction
 from transfers.services import list_for_auction
 from world.ai_management import focus_for_week
@@ -1287,3 +1288,22 @@ def test_a_failing_ai_hire_is_recorded_and_the_tick_still_charges_wages(db, monk
     assert "ai management" in run.error
     assert "boom" in run.error
     assert LedgerEntry.objects.filter(team=team, kind=LedgerEntry.Kind.WAGES, week=week_one).exists()
+
+
+def test_after_a_release_the_next_week_boundary_sets_the_ai_focus(db):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_one = season.weeks.get(number=1)
+    team = _ai_team("AIA", speciality=Rider.Speciality.SPRINTER)
+    _give_a_manager(team)
+    Trainer.objects.create(
+        name="Coach", team=team, climb=70, sprint=50, flat=50, resistance=50, positioning=50,
+    )
+    set_focus(team, "positioning")
+    release_team(team, reason=ManagerialSpell.Reason.ADMIN, at=now())
+    clock.set(week_one.starts_at + timedelta(hours=1))
+
+    tick()
+
+    assert focus_for(team) == "sprint"
+    assert TrainingWeekReport.objects.get(team=team, week=week_one).attribute == "sprint"

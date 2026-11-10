@@ -174,7 +174,7 @@ Tests: focus is applied to unmanaged-with-trainer only, and calling it twice for
 ### W7 — `world/services.py`: wire into `tick()` and count — done
 Tests, in `world/tests/test_tick.py`: a tick that opens a season leaves every unmanaged team with an active steady contract and pays it for week 1; a tick that crosses a week hires for a funded unmanaged team and `TickRun.ai_trainers_hired` equals the count; the trainer's salary is **not** charged on the tick that hired and **is** charged on the next; the focus set for a week is in `TrainingWeekReport.attribute` for that week; a failure injected into `hire_ai_trainers` (monkeypatch to raise) lands on `TickRun.error` and the tick still writes wages. **Load-bearing:** `set_ai_focuses` runs before `_apply_training_week`; the report-attribute assertion is what catches the wrong order.
 
-### W8 — claim and release behaviour
+### W8 — claim and release behaviour — done
 Tests only, no production change. In `teams/tests/`: claiming an unmanaged team that has an AI-hired trainer leaves the trainer on it and voids its sponsor; releasing a managed team with a trainer, focus and sponsor leaves all three. In `world/tests/test_tick.py`: after a release, the next week boundary sets the focus by the AI rule.
 
 ### W9 — docs and measurement
