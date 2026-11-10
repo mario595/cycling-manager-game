@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import random
 import statistics
-from datetime import datetime, timezone as dt_timezone
+from datetime import datetime, timedelta, timezone as dt_timezone
 
 from riders.development_squad import LEVELS
 from riders.generation import generate_rider
 from riders.models import DevelopmentSquad, Rider, RiderAttributeSnapshot
 from riders.pricing import strength
+from riders.youth_triage import graduates, in_squad
 from riders.youth_intake import (
     BAND_WEIGHTS,
     INTAKE_AGE_RANGE,
@@ -89,9 +90,10 @@ def test_elite_mean_potential_above_regional(db):
 def test_run_intake_adds_batch_to_every_open_squad(team):
     DevelopmentSquad.objects.create(team=team, level=1, opened_at=AT)
 
-    created = run_intake(at=AT, rng=random.Random(6))
+    result = run_intake(at=AT, rng=random.Random(6))
 
-    assert created == INTAKE_BATCH_SIZE
+    assert result.created == INTAKE_BATCH_SIZE
+    assert result.turned_away == 0
     assert Rider.objects.filter(development_squad__team=team).count() == INTAKE_BATCH_SIZE
 
 
@@ -106,9 +108,7 @@ def test_run_intake_riders_have_no_team_and_carry_intake_at(team):
 
 
 def test_run_intake_skips_team_without_squad(team):
-    created = run_intake(at=AT, rng=random.Random(8))
-
-    assert created == 0
+    assert run_intake(at=AT, rng=random.Random(8)).created == 0
 
 
 def test_run_intake_twice_same_at_is_idempotent(team):
@@ -117,8 +117,8 @@ def test_run_intake_twice_same_at_is_idempotent(team):
     first = run_intake(at=AT, rng=random.Random(9))
     second = run_intake(at=AT, rng=random.Random(10))
 
-    assert first == INTAKE_BATCH_SIZE
-    assert second == 0
+    assert first.created == INTAKE_BATCH_SIZE
+    assert second.created == 0
     assert Rider.objects.filter(development_squad__team=team).count() == INTAKE_BATCH_SIZE
 
 
@@ -131,3 +131,57 @@ def test_run_intake_writes_baseline_snapshots(team):
     assert riders.count() == INTAKE_BATCH_SIZE
     for rider in riders:
         assert RiderAttributeSnapshot.objects.filter(rider=rider, week=None).exists()
+
+
+def test_run_intake_into_a_full_squad_turns_the_whole_batch_away(team):
+    """A squad with no free places gets nothing, and the loss is reported:
+    the squad screen warns with the same number before the week arrives."""
+    squad = DevelopmentSquad.objects.create(team=team, level=1, opened_at=AT)
+    for index in range(LEVELS[squad.level].places):
+        Rider.objects.create(
+            name=f"Incumbent {index}", development_squad=squad,
+            climb=20, sprint=20, flat=20, resistance=20, positioning=20,
+        )
+
+    result = run_intake(at=AT, rng=random.Random(20))
+
+    assert result.created == 0
+    assert result.turned_away == INTAKE_BATCH_SIZE
+    assert in_squad(squad).count() == LEVELS[squad.level].places
+
+
+def test_run_intake_into_a_squad_with_one_place_fills_only_that_place(team):
+    """A partial batch: one rider arrives and one is lost, rather than the
+    first being bumped for the second."""
+    squad = DevelopmentSquad.objects.create(team=team, level=1, opened_at=AT)
+    for index in range(LEVELS[squad.level].places - 1):
+        Rider.objects.create(
+            name=f"Incumbent {index}", development_squad=squad,
+            climb=20, sprint=20, flat=20, resistance=20, positioning=20,
+        )
+
+    result = run_intake(at=AT, rng=random.Random(21))
+
+    assert result.created == 1
+    assert result.turned_away == 1
+    assert in_squad(squad).count() == LEVELS[squad.level].places
+
+
+def test_run_intake_does_not_count_graduates_against_the_places(team):
+    """A graduate has left the squad and freed their place, so a batch lands
+    in full even when the squad is full of graduates."""
+    squad = DevelopmentSquad.objects.create(team=team, level=1, opened_at=AT)
+    earlier = AT - timedelta(weeks=4)
+    for index in range(LEVELS[squad.level].places):
+        Rider.objects.create(
+            name=f"Graduate {index}", development_squad=squad,
+            intake_at=earlier, graduated_at=earlier,
+            climb=20, sprint=20, flat=20, resistance=20, positioning=20,
+        )
+
+    result = run_intake(at=AT, rng=random.Random(22))
+
+    assert result.created == INTAKE_BATCH_SIZE
+    assert result.turned_away == 0
+    assert in_squad(squad).count() == INTAKE_BATCH_SIZE
+    assert graduates(squad).count() == LEVELS[squad.level].places

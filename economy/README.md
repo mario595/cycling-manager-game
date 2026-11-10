@@ -534,11 +534,12 @@ forced sale mid-week has already lowered it by payday.
 
 **The embargo lives in `api/`.** `is_embargoed(team)` is `open_check(team)
 is not None`. The views that add cost or spend cash — signing a free agent,
-bidding, hiring a trainer, opening or upgrading a development squad — return
+bidding, hiring a trainer, opening or upgrading a development squad, promoting
+a squad rider or graduate onto the roster (#34) — return
 409 with `EMBARGO_MESSAGE`, next to the existing affordability checks, because
 `transfers/`, `staff/` and `riders/` may not import `economy/`. Signing a
-sponsor, firing, closing, releasing and ordinary listing stay open: each cuts
-cost or adds income. The embargo outlasts the escalation: it lifts only when a
+sponsor, firing, closing, releasing, ordinary listing and discarding a squad
+rider stay open: each cuts cost, adds income, or adds nothing. The embargo outlasts the escalation: it lifts only when a
 payday ends with a balance of zero or more.
 
 **Status for the screens.** `solvency_status` is the read model behind

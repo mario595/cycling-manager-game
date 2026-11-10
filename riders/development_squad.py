@@ -18,9 +18,9 @@ holds which level a team runs at and nothing else.
 an injected `charge` callback rather than writing the fee themselves — the
 pattern `staff.services.hire_trainer` establishes.
 
-Closing releases every rider then sitting in the squad as a free agent
-(#33) — see `close_squad`'s own docstring for why the release must happen
-before the row is deleted.
+Closing discards every rider still sitting in the squad and releases every
+graduate to the free-agent pool (#33, #34) — see `close_squad`'s own
+docstring for why the release must happen before the row is deleted.
 """
 
 from __future__ import annotations
@@ -32,27 +32,30 @@ from django.db import IntegrityError, transaction
 from teams.models import Team
 
 from .models import DevelopmentSquad, Rider
-from .services import mark_team_change
 
 
 @dataclass(frozen=True)
 class LevelTerms:
-    """What one level costs: the one-off fee to open at it, and what it costs
-    every week while it runs."""
+    """What one level buys and costs: the one-off fee to open at it, what it
+    costs every week while it runs, and how many riders it can develop at once.
+    """
 
     level: int
     name: str
     opening_fee: int
     weekly_cost: int
+    places: int
 
 
 #: The three levels, cheapest first, forming a ladder climbed one rung at a
 #: time: `level_status` opens the lowest and unlocks the next only once the one
-#: below is open. Both columns rise strictly with level so the ladder is a
+#: below is open. Both price columns rise strictly with level so the ladder is a
 #: ladder — the top is the most expensive thing to enter *and* to run, and no
 #: level is ever worth less than the one below it. (The original reason for
 #: that, that an upgrade could undercut opening directly, cannot arise: there
-#: is no way to open above the lowest level.)
+#: is no way to open above the lowest level.) `places` — how many riders the
+#: squad can develop at once (#34) — rises with them too, so a higher level
+#: buys room as well as better odds of a good arrival.
 #:
 #: The numbers are tunable; the ordering is not, and a test enforces it.
 #:
@@ -63,9 +66,9 @@ class LevelTerms:
 #: over a season — 65% of a starting balance, so Elite is a decision a team
 #: makes with prize money and sponsorship behind it, not a default.
 LEVELS: dict[int, LevelTerms] = {
-    1: LevelTerms(1, DevelopmentSquad.Level.REGIONAL.label, 30_000, 1_500),
-    2: LevelTerms(2, DevelopmentSquad.Level.NATIONAL.label, 75_000, 3_500),
-    3: LevelTerms(3, DevelopmentSquad.Level.ELITE.label, 150_000, 6_000),
+    1: LevelTerms(1, DevelopmentSquad.Level.REGIONAL.label, 30_000, 1_500, 6),
+    2: LevelTerms(2, DevelopmentSquad.Level.NATIONAL.label, 75_000, 3_500, 8),
+    3: LevelTerms(3, DevelopmentSquad.Level.ELITE.label, 150_000, 6_000, 10),
 }
 
 #: The one level a squad can be *opened* at, and therefore the base of the
@@ -316,10 +319,9 @@ def change_level(team, level: int, *, charge=None) -> DevelopmentSquad:
     return squad
 
 
-def close_squad(team, *, at) -> bool:
-    """Close `team`'s development squad if it has one, releasing every
-    rider then in it as a free agent. Returns whether there was one to
-    close.
+def close_squad(team, *, at) -> "SquadClosure | None":
+    """Close `team`'s development squad if it has one. Returns None when
+    there was nothing to close.
 
     The row is deleted rather than flagged, and nothing is refunded or
     written to the ledger. Closing is the only way to reduce the weekly cost,
@@ -328,25 +330,40 @@ def close_squad(team, *, at) -> bool:
     resort for a team that cannot afford to run one rather than a cheaper
     rung to step down to.
 
-    Riders are released **before** the row is deleted (#33's plan, Design
-    decision 6) — every squad rider is stamped `unattached_since = at` via
-    the existing `mark_team_change`, then has `development_squad` cleared,
-    and only then is the squad row deleted. Deleting first would let
-    `development_squad`'s SET_NULL unlink them silently with no stamp, and a
-    rider with a null `unattached_since` is never treated as long-unattached
-    by the free-agent pool's expiry rule — it would sit in the market
+    **Riders still in the squad are discarded; graduates are released to the
+    free-agent pool** (#34). A rider who served their full spell is a
+    plausible signing and goes to the market; one pulled mid-development is
+    not, and deleting them is the same treatment a never-raced rider gets. The
+    split is the spec's *Decisions taken*.
+
+    The release happens **before** the squad row is deleted, and the delete
+    of in-squad riders happens after it (#33's plan, Design decision 6).
+    Deleting first would let `development_squad`'s `SET_NULL` unlink the
+    graduates silently with no `unattached_since`, and a free agent with a
+    null stamp is never treated as long-unattached by the pool's expiry rule
+    (transfers/README.md, *Free agents*) — they would sit in the market
     forever. `at` is game time, required so this stamp is never skipped.
 
-    `teams.services.claim_team` calls this and ignores the return; the API
-    turns False into a 409.
+    `teams.services.claim_team` calls this and ignores the result; the API
+    turns None into a 409.
     """
+    # Lazily, inside the body: youth_triage reads LEVELS from this module for
+    # `free_places`, so importing it at module scope is a cycle. The same
+    # entry-point pattern teams -> economy and schedule's load_season use
+    # (AGENTS.md).
+    from .youth_triage import SquadClosure, graduates, in_squad, release_graduates
+
     with transaction.atomic():
         _lock_team(team)
         squad = squad_for(team)
         if squad is None:
-            return False
-        riders = list(Rider.objects.filter(development_squad=squad))
-        mark_team_change(riders, team_now=None, at=at)
-        Rider.objects.filter(pk__in=[r.pk for r in riders]).update(development_squad=None)
+            return None
+        released = release_graduates(
+            graduates(squad).values_list("pk", flat=True), at=at,
+        )
+        _, discarded_by_model = in_squad(squad).delete()
         squad.delete()
-    return True
+    return SquadClosure(
+        discarded=discarded_by_model.get(Rider._meta.label, 0),
+        released=released,
+    )

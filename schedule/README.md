@@ -85,6 +85,7 @@ started.
 ```bash
 manage.py load_season seasons/season-1.example.json
 manage.py load_season seasons/season-1.example.json --replace
+manage.py load_season seasons/season-2.example.json
 ```
 
 The file is JSON: `number` (int, starting at 1), `starts_at` (ISO 8601,
@@ -92,6 +93,16 @@ must resolve to a Monday 00:00:00 UTC), and optional `races` and
 `stage_races` lists. The command creates the `Season`, its twelve `Week`
 rows and any declared races and stage races in one transaction — a
 malformed entry anywhere in the file creates none of it, season included.
+
+**There are two example seasons, and they abut.** `season-1.example.json`
+opens 2027-03-01 and `season-2.example.json` opens 2027-05-24 — exactly
+where season 1 ends, because `load_season` refuses an overlap and a
+drifting date would break seeding outright. Season 2 is not there for its
+races: it is what makes a **development squad's whole arc** visible in one
+database (#34). A rider who arrives on week 4 graduates on week 18, which
+is six weeks *into season 2*, so with only season 1 declared the
+graduation, the decision window and the release to the free-agent pool can
+never all be seen. Load both when working on that.
 
 A season that has already started (`starts_at <= now()`) can never be
 touched again — `load_season` refuses outright, with no `--replace`

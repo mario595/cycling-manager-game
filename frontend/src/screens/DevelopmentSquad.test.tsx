@@ -1,12 +1,23 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { DevelopmentSquad as SquadPayload, DevelopmentSquadRider, Me } from '../api'
+import type {
+  DevelopmentSquad as SquadPayload,
+  DevelopmentSquadGraduate,
+  DevelopmentSquadRider,
+  Me,
+} from '../api'
+import { discardSquadRider, listForAuction } from '../api'
 import { useAuth } from '../useAuth'
 import { useDevelopmentSquad } from '../useDevelopmentSquad'
 import { DevelopmentSquad } from './DevelopmentSquad'
 
+vi.mock('../api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../api')>()),
+  discardSquadRider: vi.fn(),
+  listForAuction: vi.fn(),
+}))
 vi.mock('../useAuth', () => ({ useAuth: vi.fn() }))
 vi.mock('../useDevelopmentSquad', () => ({ useDevelopmentSquad: vi.fn() }))
 
@@ -23,6 +34,7 @@ const manager: Me = {
 const NAMES = { 1: 'Regional', 2: 'National', 3: 'Elite' }
 const FEES = { 1: 30_000, 2: 75_000, 3: 150_000 }
 const WEEKLY_COSTS = { 1: 1_500, 2: 3_500, 3: 6_000 }
+const PLACES = { 1: 6, 2: 8, 3: 10 }
 
 function developmentSquadRider(overrides: Partial<DevelopmentSquadRider> = {}): DevelopmentSquadRider {
   return {
@@ -38,6 +50,25 @@ function developmentSquadRider(overrides: Partial<DevelopmentSquadRider> = {}): 
     positioning: 2,
     arrived: { season: 1, week: 4 },
     is_new: false,
+    // #34: the whole spell ahead, and movement only on one attribute, so a
+    // test that cares about a sign has something to assert against.
+    weeks_left: 14,
+    change: { climb: 2, sprint: 0, flat: 0, resistance: 1, positioning: 0 },
+    promotion_salary: 4_000,
+    ...overrides,
+  }
+}
+
+/** A graduate is a rider whose spell is done: the same identity and
+ * attributes, but counting down the decision window rather than a spell, and
+ * carrying the two figures that only make sense for a sale or a signing. */
+function developmentSquadGraduate(
+  overrides: Partial<DevelopmentSquadGraduate> = {},
+): DevelopmentSquadGraduate {
+  return {
+    ...developmentSquadRider({ id: 2, name: 'Graduated Rider', weeks_left: 2 }),
+    market_value: 52_000,
+    listed: false,
     ...overrides,
   }
 }
@@ -49,7 +80,7 @@ function developmentSquadRider(overrides: Partial<DevelopmentSquadRider> = {}): 
 function payload(
   current: number | null,
   balance = 500_000,
-  overrides: Partial<Pick<SquadPayload, 'riders' | 'intake'>> = {},
+  overrides: Partial<Pick<SquadPayload, 'riders' | 'graduates' | 'intake'>> = {},
 ): SquadPayload {
   return {
     level: current,
@@ -77,12 +108,23 @@ function payload(
         weekly_cost: WEEKLY_COSTS[level],
         season_cost: WEEKLY_COSTS[level] * 12,
         fee: FEES[level],
+        // Capacity rises with the rung: 6 / 8 / 10 (riders/README.md,
+        // *Development squad*).
+        places: PLACES[level],
         action,
         requires: action === 'locked' ? lockedNote : null,
       }
     }),
-    riders: current === null ? [] : [],
-    intake: current === null ? null : { every_weeks: 4, batch_size: 2, next: { season: 1, week: 8 } },
+    places: current === null ? null : PLACES[current],
+    in_squad: overrides.riders?.length ?? 0,
+    roster_count: 4,
+    roster_cap: 30,
+    riders: [],
+    graduates: [],
+    intake:
+      current === null
+        ? null
+        : { every_weeks: 4, batch_size: 2, next: { season: 1, week: 8, arrivals_at_risk: 0 } },
     ...overrides,
   }
 }
@@ -108,6 +150,8 @@ function mockSquad(squad: SquadPayload) {
 }
 
 beforeEach(() => {
+  vi.mocked(discardSquadRider).mockReset()
+  vi.mocked(listForAuction).mockReset()
   mockUseAuth.mockReturnValue({
     me: manager,
     loading: false,
@@ -188,7 +232,12 @@ describe('DevelopmentSquad', () => {
   })
 
   it('shows the next intake week, and the empty state when no riders have arrived', () => {
-    mockSquad(payload(1, 500_000, { riders: [], intake: { every_weeks: 4, batch_size: 2, next: { season: 1, week: 4 } } }))
+    mockSquad(
+      payload(1, 500_000, {
+        riders: [],
+        intake: { every_weeks: 4, batch_size: 2, next: { season: 1, week: 4, arrivals_at_risk: 0 } },
+      }),
+    )
 
     renderScreen()
 
@@ -304,6 +353,267 @@ describe('DevelopmentSquad', () => {
     // With no downgrade to fall back on, the cost of closing is the thing a
     // manager has to weigh: nothing back, and the whole climb again.
     expect(screen.getByText(/reopening starts at\s+Regional again/i)).toBeInTheDocument()
+  })
+
+  // --- #34: the triage half of the screen -------------------------------------------------
+
+  it('shows each level\'s places, and how much of them is used', () => {
+    mockSquad(
+      payload(2, 500_000, {
+        riders: [developmentSquadRider({ id: 1 }), developmentSquadRider({ id: 2 })],
+      }),
+    )
+
+    renderScreen()
+
+    // Capacity sits with the cost on the same card: a rung that costs more is
+    // only worth it if it holds more.
+    expect(screen.getAllByText('Places')).toHaveLength(3)
+    expect(screen.getByText('6 prospects')).toBeInTheDocument()
+    expect(screen.getByText('8 prospects')).toBeInTheDocument()
+    expect(screen.getByText('10 prospects')).toBeInTheDocument()
+    // And the card header says how much of the held level is in use.
+    expect(screen.getByText('2 / 8')).toBeInTheDocument()
+  })
+
+  it('warns about arrivals at risk, and stays quiet when there is room', () => {
+    mockSquad(
+      payload(1, 500_000, {
+        riders: [developmentSquadRider({ id: 1 })],
+        intake: {
+          every_weeks: 4,
+          batch_size: 2,
+          next: { season: 1, week: 8, arrivals_at_risk: 1 },
+        },
+      }),
+    )
+
+    const first = renderScreen()
+
+    // The warning has to land before the week does, so the player can free a
+    // place in advance rather than finding out the arrival was turned away.
+    expect(
+      screen.getByText(
+        'Squad full — 1 arrival in Season 1, Week 8 will be turned away unless you make room.',
+      ),
+    ).toBeInTheDocument()
+
+    // Unmounted between the two states: testing-library cleans up between
+    // tests, not between renders, so the first tree's warning would otherwise
+    // still be on the page for the "stays quiet" half to find.
+    first.unmount()
+
+    mockSquad(
+      payload(1, 500_000, {
+        riders: [developmentSquadRider({ id: 1 })],
+        intake: {
+          every_weeks: 4,
+          batch_size: 2,
+          next: { season: 1, week: 8, arrivals_at_risk: 0 },
+        },
+      }),
+    )
+    renderScreen()
+
+    expect(screen.queryByText(/will be turned away/)).not.toBeInTheDocument()
+  })
+
+  it('pluralises the warning for a whole batch at risk', () => {
+    mockSquad(
+      payload(1, 500_000, {
+        riders: [developmentSquadRider({ id: 1 })],
+        intake: {
+          every_weeks: 4,
+          batch_size: 2,
+          next: { season: 1, week: 8, arrivals_at_risk: 2 },
+        },
+      }),
+    )
+
+    renderScreen()
+
+    expect(screen.getByText(/2 arrivals in Season 1, Week 8/)).toBeInTheDocument()
+  })
+
+  it('renders movement since arrival signed, and nothing at all without a baseline', () => {
+    mockSquad(
+      payload(1, 500_000, {
+        riders: [
+          developmentSquadRider({
+            id: 1,
+            change: { climb: 2, sprint: -1, flat: 0, resistance: 0, positioning: 0 },
+          }),
+        ],
+      }),
+    )
+
+    const moved = renderScreen()
+
+    expect(screen.getByText('+2')).toBeInTheDocument()
+    // A fall is printed rather than hidden: an attribute can drop, and
+    // showing only gains would be the dishonest option.
+    expect(screen.getByText('-1')).toBeInTheDocument()
+    // The unmoved attributes print their own muted zero rather than nothing,
+    // so the row still reads as five bars with five readouts.
+    expect(screen.getAllByText('0')).toHaveLength(3)
+
+    // No baseline is not a claim that nothing moved, so it prints nothing.
+    moved.unmount()
+    mockSquad(
+      payload(1, 500_000, {
+        riders: [developmentSquadRider({ id: 1, change: null })],
+      }),
+    )
+    renderScreen()
+
+    expect(screen.queryByText('+2')).not.toBeInTheDocument()
+  })
+
+  it('gives every prospect a countdown and both actions', () => {
+    mockSquad(
+      payload(1, 500_000, {
+        riders: [developmentSquadRider({ id: 1, weeks_left: 14 })],
+      }),
+    )
+
+    renderScreen()
+
+    expect(screen.getByText('Graduates in 14 weeks')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Promote' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Discard' })).toBeEnabled()
+  })
+
+  it('disables Promote at the roster cap and says why', () => {
+    mockSquad({
+      ...payload(1, 500_000, { riders: [developmentSquadRider({ id: 1 })] }),
+      roster_count: 30,
+      roster_cap: 30,
+    })
+
+    renderScreen()
+
+    // A full roster is what stops a promotion, so the button says so rather
+    // than offering an action the server would refuse with a 409. Discard is
+    // unaffected — making room is the other half of this row.
+    expect(screen.getByRole('button', { name: 'Promote' })).toBeDisabled()
+    expect(screen.getByText(/your roster is full/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Discard' })).toBeEnabled()
+  })
+
+  it('asks before discarding, and does nothing when the answer is no', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const discard = vi.mocked(discardSquadRider)
+    mockSquad(
+      payload(1, 500_000, {
+        riders: [developmentSquadRider({ id: 7, name: 'Old Batch' })],
+      }),
+    )
+
+    renderScreen()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
+
+    // Naming the rider is the point: "are you sure" against an unnamed row is
+    // how the wrong prospect gets deleted.
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('Old Batch'))
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringMatching(/permanent/i))
+    expect(discard).not.toHaveBeenCalled()
+
+    confirmSpy.mockReturnValue(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
+
+    expect(discard).toHaveBeenCalledWith(7)
+
+    confirmSpy.mockRestore()
+  })
+
+  it('lists graduates with their window, salary and value', () => {
+    mockSquad(
+      payload(1, 500_000, {
+        graduates: [developmentSquadGraduate({ id: 5, name: 'Graduate', weeks_left: 1 })],
+      }),
+    )
+
+    renderScreen()
+
+    expect(screen.getByText('Graduate')).toBeInTheDocument()
+    expect(screen.getByText('Decide within 1 week')).toBeInTheDocument()
+    // Both figures are money, so both carry the $ (AGENTS.md).
+    expect(screen.getByText(/Salary \$4,000/)).toBeInTheDocument()
+    expect(screen.getByText(/Value \$52,000/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'List for sale' })).toBeEnabled()
+  })
+
+  it('pluralises the remaining window, so a single week does not read "1 weeks"',
+    () => {
+      mockSquad(
+        payload(1, 500_000, {
+          graduates: [developmentSquadGraduate({ id: 5, name: 'Graduate', weeks_left: 2 })],
+        }),
+      )
+
+      renderScreen()
+
+      expect(screen.getByText('Decide within 2 weeks')).toBeInTheDocument()
+    })
+
+  it('hides the graduates card when there are none', () => {
+    mockSquad(payload(1, 500_000, { graduates: [] }))
+
+    renderScreen()
+
+    expect(screen.queryByText('Graduates')).not.toBeInTheDocument()
+  })
+
+  it('gives a listed graduate no List or Discard, because the auction is the buyer\'s business now', () => {
+    mockSquad(
+      payload(1, 500_000, {
+        graduates: [developmentSquadGraduate({ id: 5, listed: true })],
+      }),
+    )
+
+    renderScreen()
+
+    expect(screen.getByText('Listed on the transfer market')).toBeInTheDocument()
+    // Offering either would be a control that cannot do what it says: the
+    // server refuses both while a listing is open.
+    expect(screen.queryByRole('button', { name: 'List for sale' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Discard' })).not.toBeInTheDocument()
+    // Promote stays, and is the manager choosing the rider over the bids —
+    // the server cancels the auction when they press it.
+    expect(screen.getByRole('button', { name: 'Promote' })).toBeEnabled()
+  })
+
+  it('lists a graduate for sale through the existing auction call', async () => {
+    const listForAuctionMock = vi.mocked(listForAuction)
+    listForAuctionMock.mockResolvedValue(undefined)
+    mockSquad(
+      payload(1, 500_000, { graduates: [developmentSquadGraduate({ id: 9 })] }),
+    )
+
+    renderScreen()
+
+    fireEvent.click(screen.getByRole('button', { name: 'List for sale' }))
+
+    // The same list-for-auction call the roster and transfers screens use —
+    // a graduate is sellable by the same route as any other rider.
+    expect(listForAuctionMock).toHaveBeenCalledWith(9)
+  })
+
+  it('never states an odds figure or a potential', () => {
+    mockSquad(
+      payload(1, 500_000, {
+        riders: [developmentSquadRider({ id: 1 })],
+        graduates: [developmentSquadGraduate({ id: 2 })],
+      }),
+    )
+
+    renderScreen()
+
+    const copy = document.body.textContent ?? ''
+    expect(copy).not.toMatch(/\d+\s*%/)
+    expect(copy).not.toMatch(/potential/i)
+    expect(copy).not.toMatch(/odds of \d/i)
   })
 
   it('says so plainly when the manager has no team', () => {

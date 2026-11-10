@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from bisect import bisect_right
+
 import brotli
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
@@ -80,11 +82,28 @@ from riders.development_squad import (
 # unaliased above, and the two are unrelated classes. Catching the wrong one
 # turns a 409 the player should see into a 500.
 from riders.development_squad import InsufficientFunds as SquadInsufficientFunds
-from riders.models import ENGINE_ATTRIBUTES, DevelopmentSquad, Rider
-from riders.pricing import strength
+from riders.models import (
+    ENGINE_ATTRIBUTES,
+    DevelopmentSquad,
+    Rider,
+    RiderAttributeSnapshot,
+)
+from riders.pricing import strength, weekly_salary_for
 from riders.youth_intake import INTAKE_BATCH_SIZE, INTAKE_INTERVAL_WEEKS, is_intake_week
+from riders.youth_triage import (
+    GRADUATE_WINDOW_WEEKS,
+    SPELL_WEEKS,
+    NotYourProspect,
+    ProspectListed,
+    RosterFull as SquadRosterFull,
+    TriageError,
+    discard,
+    graduates,
+    in_squad,
+    promote,
+)
 from schedule.models import SEASON_WEEKS, Week
-from schedule.services import current_position, weeks_opened_between
+from schedule.services import current_position, weeks_ago_cutoff, weeks_opened_between
 from staff.pricing import hire_fee, weekly_salary
 from staff.services import (
     InsufficientFunds,
@@ -104,6 +123,7 @@ from teams.services import NoTeamAvailable, claim_team
 from transfers.models import Auction, Bid
 from transfers.pricing import market_value_for
 from transfers.services import (
+    ROSTER_CAP,
     AuctionAlreadyExists,
     AuctionNotOpen,
     BidTooLow,
@@ -115,6 +135,8 @@ from transfers.services import (
     RosterFull,
     SelfBid,
     cancel_listings,
+    cancel_open_auctions,
+    cancel_unowned_listings,
     force_list_for_auction,
     free_agents,
     list_for_auction,
@@ -495,6 +517,8 @@ class ClaimTeamView(APIView):
                     at=at,
                 )
                 withdraw_bids(team, at=at)
+                # Every listing goes, the squad's released graduates' with
+                # the rest: they all carry this team as seller (#114, #34).
                 cancel_listings(team, at=at)
         except NoTeamAvailable as exc:
             return Response({"detail": str(exc)}, status=409)
@@ -1355,18 +1379,23 @@ def _squad_charge(team):
     return charge
 
 
-def _next_intake(at) -> dict | None:
-    """{season, week} of the first declared Week after `at` that is an
-    intake week, or None when no such week is declared yet — a season not
-    yet loaded past this point, or no season at all. At most a few dozen
-    Week rows exist, so a Python-side is_intake_week filter over one ordered
-    query is simpler than reimplementing `% INTAKE_INTERVAL_WEEKS` in SQL,
-    and it keeps the rule in the one place riders.youth_intake owns it."""
+def _next_intake_week(at):
+    """The first declared Week after `at` that is an intake week, or None when
+    no such week is declared yet — a season not yet loaded past this point, or
+    no season at all. At most a few dozen Week rows exist, so a Python-side
+    is_intake_week filter over one ordered query is simpler than
+    reimplementing `% INTAKE_INTERVAL_WEEKS` in SQL, and it keeps the rule in
+    the one place riders.youth_intake owns it.
+
+    The Week row itself rather than its `{season, week}` position: the squad
+    payload needs how many of that batch would be turned away, which is a
+    count of free places and nothing else (#34).
+    """
     for week in Week.objects.select_related("season").filter(
         starts_at__gt=at,
     ).order_by("starts_at"):
         if is_intake_week(week.number):
-            return {"season": week.season.number, "week": week.number}
+            return week
     return None
 
 
@@ -1423,6 +1452,7 @@ class DevelopmentSquadView(APIView):
                     # number on the card is the number that would be charged,
                     # and reaching the top means paying every fee on the way.
                     "fee": squad_level_fee(terms.level),
+                    "places": terms.places,
                     "action": status.action,
                     # Why a locked level is locked, and null for every other
                     # action. Server-owned for the same reason the 409
@@ -1433,19 +1463,55 @@ class DevelopmentSquadView(APIView):
             )
 
         at = now()
+        # One map per derived value, built once for the whole squad and handed
+        # to the serializers through context: this endpoint is asked about one
+        # squad of at most ten riders, and a query per rider per figure is how
+        # a squad screen ends up issuing thirty of them (#34).
+        weeks_left = {}
+        graduate_weeks_left = {}
+        promotion_salaries = {}
+        market_values = {}
+        listed = {}
+
         if squad is not None:
-            riders = sorted(
-                Rider.objects.filter(development_squad=squad),
-                key=strength, reverse=True,
+            prospects = sorted(in_squad(squad), key=strength, reverse=True)
+            finished = sorted(graduates(squad), key=strength, reverse=True)
+            opened = _week_starts_since(
+                [r.intake_at for r in prospects] + [r.graduated_at for r in finished], at,
             )
+            for rider in prospects:
+                weeks_left[rider.pk] = _weeks_left(rider.intake_at, SPELL_WEEKS, opened)
+            for rider in finished:
+                graduate_weeks_left[rider.pk] = _weeks_left(
+                    rider.graduated_at, GRADUATE_WINDOW_WEEKS, opened,
+                )
+                promotion_salaries[rider.pk] = weekly_salary_for(rider)
+                market_values[rider.pk] = market_value_for(rider)
+            for rider in prospects:
+                promotion_salaries[rider.pk] = weekly_salary_for(rider)
+            listed = {
+                rider_id: True
+                for rider_id in Auction.objects.filter(
+                    status=Auction.Status.OPEN,
+                    rider__in=list(prospects) + list(finished),
+                ).values_list("rider_id", flat=True)
+            }
+            baselines = {
+                snapshot.rider_id: snapshot
+                for snapshot in RiderAttributeSnapshot.objects.filter(
+                    rider__in=list(prospects) + list(finished), week__isnull=True,
+                )
+            }
             intake = {
                 "every_weeks": INTAKE_INTERVAL_WEEKS,
                 "batch_size": INTAKE_BATCH_SIZE,
-                "next": _next_intake(at),
+                "next": _next_intake_payload(at, squad),
             }
             latest_intake_at = _latest_intake_at(at)
         else:
-            riders = []
+            prospects = []
+            finished = []
+            baselines = {}
             intake = None
             latest_intake_at = None
 
@@ -1453,9 +1519,98 @@ class DevelopmentSquadView(APIView):
             "level": current_level,
             "levels": levels,
             "balance": balance_for(team),
-            "riders": riders,
+            "places": LEVELS[current_level].places if squad is not None else None,
+            "in_squad": len(prospects),
+            "roster_count": team.riders.count(),
+            "roster_cap": ROSTER_CAP,
+            "riders": prospects,
+            "graduates": finished,
             "intake": intake,
-        }, context={"latest_intake_at": latest_intake_at}).data)
+        }, context={
+            "latest_intake_at": latest_intake_at,
+            "weeks_left": weeks_left,
+            "graduate_weeks_left": graduate_weeks_left,
+            "promotion_salaries": promotion_salaries,
+            "market_values": market_values,
+            "listed": listed,
+            "baselines": baselines,
+        }).data)
+
+
+def _week_starts_since(started: list, at) -> list:
+    """Sorted `starts_at` of every declared week that opened after the
+    earliest of `started` and no later than `at` — one query for the whole
+    squad, which `_weeks_left` then counts per rider in memory. Empty when
+    nothing has started."""
+    known = [value for value in started if value is not None]
+    if not known:
+        return []
+    return list(
+        Week.objects.filter(starts_at__gt=min(known), starts_at__lte=at)
+        .order_by("starts_at")
+        .values_list("starts_at", flat=True)
+    )
+
+
+def _weeks_left(started_at, total: int, opened: list) -> int:
+    """Week boundaries still to come before a wait of `total` in-season weeks,
+    begun at `started_at`, ends — floored at 1 (#34, Design decision 16).
+
+    A count rather than a `{season, week}` position on purpose: the next
+    season is often not declared yet, which would leave every rider a
+    position-less "unknown" exactly when the player needs to know how long
+    they have.
+
+    **It counts the boundaries crossed *after* the start**, `started_at <
+    starts_at <= at`, never the start's own week. A prospect arriving at, or a
+    graduate stamped at, week N's boundary is graduated or released by the
+    tick at week N + `total`: `total` boundaries remain for the whole of week
+    N, `total - 1` for week N+1, and so on. Counting `[started_at, at)`
+    instead includes week N itself the moment the clock is past its opening —
+    which a player always is, since the screen is read between ticks — and
+    shows a two-week window as "1 week" for both of its weeks. The floor keeps
+    a rider shown at 1 rather than 0 in the race between a boundary's tick and
+    the screen reading it.
+
+    `opened` is `_week_starts_since`'s list, so the whole squad costs one query.
+    """
+    if started_at is None:
+        return total
+    crossed = len(opened) - bisect_right(opened, started_at)
+    return max(1, total - crossed)
+
+
+def _next_intake_payload(at, squad) -> dict | None:
+    """The next intake week with how many of its batch would be turned away,
+    or None when no intake week is declared yet.
+
+    `arrivals_at_risk` is a projection, not a forecast: it says what happens
+    if nothing changes before the week arrives, so promoting or discarding a
+    prospect changes the number the player is warned with (#34, Design
+    decision 14).
+
+    **Riders who graduate by then are counted as gone**, because they will be:
+    the tick graduates before it runs intake at the same boundary. Graduations
+    land two weeks before an intake with a 14-week spell and a four-week
+    interval, so leaving them out would warn a full squad about a batch that
+    will in fact arrive — every cycle — and push the manager into discarding a
+    rider for nothing. The cutoff is `schedule.services.weeks_ago_cutoff`
+    taken at that week's boundary, the same call `world/` graduates with, so
+    the warning and the tick cannot disagree about who has left.
+    """
+    week = _next_intake_week(at)
+    if week is None:
+        return None
+    occupied = in_squad(squad)
+    cutoff = weeks_ago_cutoff(week.starts_at, SPELL_WEEKS)
+    if cutoff is not None:
+        occupied = occupied.exclude(intake_at__lte=cutoff)
+    free = max(0, LEVELS[squad.level].places - occupied.count())
+    return {
+        "season": week.season.number,
+        "week": week.number,
+        "arrivals_at_risk": max(0, INTAKE_BATCH_SIZE - free),
+    }
 
 
 class OpenDevelopmentSquadView(APIView):
@@ -1547,18 +1702,116 @@ class CloseDevelopmentSquadView(APIView):
 
     Closing an already-closed squad is a 409 rather than a silent 204, so the
     SPA's post-close refresh is the only thing that reports success.
+
+    **Any listing the team can no longer sell is cancelled in the same
+    transaction** (#34). A released graduate's auction would otherwise stay
+    biddable until its deadline, and a winner at that point would be refused
+    by the very ownership check that would have caught it three days earlier.
+    `close_squad` returning a falsy value — None, or a closure that did
+    nothing — is a 409.
     """
     def post(self, request):
         team = team_for(request.user)
         if team is None:
             return Response({"detail": "You do not manage a team."}, status=403)
 
-        if not close_squad(team, at=now()):
-            return Response(
-                {"detail": "Your team has no development squad."}, status=409
-            )
+        at = now()
+        with transaction.atomic():
+            closed = close_squad(team, at=at)
+            if not closed:
+                return Response(
+                    {"detail": "Your team has no development squad."}, status=409
+                )
+            cancel_unowned_listings(team, at=at)
 
         return Response(status=204)
+
+
+class PromoteSquadRiderView(APIView):
+    """Promote one of the caller's squad's riders onto the roster (#34).
+
+    Works on a prospect *and* on a graduate: both are the team's to decide
+    about, and promoting a graduate early is a legitimate choice rather than
+    a loophole — the alternative the spec weighs is refusing it, and the
+    league of consequences is worse than a manager paying a wage early.
+
+    A roster at `ROSTER_CAP` is a 409 `RosterFull` rather than a refusal
+    after the fact; the screen disables the button first, using the same
+    `roster_count`/`roster_cap` the GET sends.
+
+    **Promoting a listed graduate cancels their auction in the same
+    transaction.** The squad screen keeps Promote on a listed rider — the
+    sale is what a listing takes away, not the option of keeping them — so
+    this is the button's only honest reading: the manager is choosing the
+    rider over the bids, and the sale ends. Without it the auction would sit
+    open over a rider now on the roster, and the winner at its deadline would
+    take a player the team is also paying and fielding. This departs from
+    the plan's Design decision 9, which let the sale proceed: that holds for
+    `resolve_auction` itself, but the screen offers Promote on a listed
+    graduate as "keep them", so the API ends the sale.
+
+    Refused with the embargo's 409 while the team is insolvent, because
+    promotion starts a salary (#27).
+    """
+
+    def post(self, request, rider_id: int):
+        team = team_for(request.user)
+        if team is None:
+            return Response({"detail": "You do not manage a team."}, status=403)
+
+        # Promotion starts a salary, so an insolvent team is refused like any
+        # other view that adds cost (#27, economy/README.md). Discard stays
+        # open: it adds nothing.
+        embargoed = _embargo_response(team)
+        if embargoed is not None:
+            return embargoed
+
+        at = now()
+        try:
+            with transaction.atomic():
+                promote(team, rider_id, at=at, roster_cap=ROSTER_CAP)
+                cancel_open_auctions([rider_id], at=at)
+        except (NotYourProspect, SquadRosterFull) as error:
+            return Response({"detail": str(error)}, status=409)
+
+        return Response(status=204)
+
+
+class DiscardSquadRiderView(APIView):
+    """Discard one of the caller's squad's riders — a prospect or a graduate
+    (#34). POST, like every other action here: the request is an order, not
+    a description of a resource that is already gone.
+
+    A rider with an OPEN auction cannot be discarded: the buyer has money on
+    the table and the auction will resolve on its own terms. The check is
+    injected rather than looked up inside the service, so `riders/` needs no
+    knowledge of the auction market (#34's plan, Design decision 8) — the
+    same shape `promote`'s `roster_cap` argument takes the cap from the
+    caller.
+    """
+
+    def post(self, request, rider_id: int):
+        team = team_for(request.user)
+        if team is None:
+            return Response({"detail": "You do not manage a team."}, status=403)
+
+        try:
+            discard(team, rider_id, check=_not_listed)
+        except TriageError as error:
+            return Response({"detail": str(error)}, status=409)
+
+        return Response(status=204)
+
+
+def _not_listed(rider) -> None:
+    """The discard guard: refuse a rider whose auction is still open.
+
+    Raised rather than returned so `discard`'s signature matches `promote`'s
+    — a check that returns a verdict can be forgotten by the caller, while
+    one that raises cannot be ignored silently.
+    """
+    if Auction.objects.filter(rider=rider, status=Auction.Status.OPEN).exists():
+        raise ProspectListed("Your listing for this rider is still open.")
 
 
 class TrainingView(APIView):

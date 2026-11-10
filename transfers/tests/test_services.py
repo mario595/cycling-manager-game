@@ -7,6 +7,7 @@ import pytest
 
 from riders.development_squad import close_squad
 from riders.models import DevelopmentSquad, Rider
+from riders.youth_triage import promote
 from teams.models import Team
 from transfers.models import Auction, Bid
 from transfers.pricing import min_increment_for, reserve_price_for, severance_fee_for
@@ -26,6 +27,7 @@ from transfers.services import (
     SelfBid,
     cancel_listings,
     cancel_open_auctions,
+    cancel_unowned_listings,
     force_list_for_auction,
     free_agents,
     list_for_auction,
@@ -109,18 +111,29 @@ def test_sign_squad_rider_raises_not_available(db, claimed_at):
     assert rider.development_squad_id == squad.pk
 
 
-def test_released_squad_rider_is_signable(db, claimed_at):
+def test_released_graduate_is_signable(db, claimed_at):
+    """A graduate released by a squad close is a normal free agent and can be
+    signed; a rider still mid-development is deleted instead and never
+    reaches the market (#34)."""
     team = Team.objects.create(name="Team Alpha", code="ALP", managed_since=claimed_at)
     other_team = Team.objects.create(name="Team Beta", code="BET")
     squad = DevelopmentSquad.objects.create(
         team=other_team, level=1, opened_at=claimed_at,
     )
-    rider = _rider(name="Youth One", team=None, development_squad=squad)
+    graduate = _rider(
+        name="Graduate One", team=None, development_squad=squad,
+        intake_at=claimed_at, graduated_at=claimed_at,
+    )
+    in_development = _rider(
+        name="Youth One", team=None, development_squad=squad,
+        intake_at=claimed_at,
+    )
 
     close_squad(other_team, at=claimed_at)
-    signed = sign_free_agent(team, rider.pk, at=claimed_at, charge=Mock())
+    signed = sign_free_agent(team, graduate.pk, at=claimed_at, charge=Mock())
 
     assert signed.team_id == team.pk
+    assert not Rider.objects.filter(pk=in_development.pk).exists()
 
 
 def test_signing_a_retired_rider_raises_not_available(db, claimed_at):
@@ -704,6 +717,178 @@ def test_cancel_open_auctions_keeps_bid_history(db, claimed_at):
     assert auction.bids.count() == 1
     assert auction.bids.get().amount == auction.reserve_price
     assert auction.bids.get().bidder_team_id == bidder.pk
+
+
+# --- Graduates on the market (#34) ------------------------------------------------
+#
+# A graduate has no team but still belongs to the squad that developed them,
+# so they are the seller's to list; a rider mid-development is not, and
+# selling them would let a squad be emptied for profit rather than by choice.
+
+
+def _graduate(team, *, name="Graduate", at=None):
+    """A rider who has served their spell in `team`'s development squad."""
+    at = at or datetime(2027, 3, 1, tzinfo=dt_timezone.utc)
+    squad = DevelopmentSquad.objects.create(team=team, level=1, opened_at=at)
+    return _rider(
+        name=name, team=None, development_squad=squad,
+        intake_at=at, graduated_at=at,
+    )
+
+
+def test_list_for_auction_accepts_a_graduate(db, claimed_at):
+    team = Team.objects.create(name="Team Alpha", code="ALP")
+    graduate = _graduate(team, at=claimed_at)
+
+    auction = list_for_auction(team, graduate.pk, at=claimed_at)
+
+    assert auction.status == Auction.Status.OPEN
+    assert auction.seller_team_id == team.pk
+
+
+def test_list_for_auction_refuses_a_rider_still_in_the_squad(db, claimed_at):
+    """The squad's own prospects are not for sale until they graduate."""
+    team = Team.objects.create(name="Team Alpha", code="ALP")
+    squad = DevelopmentSquad.objects.create(team=team, level=1, opened_at=claimed_at)
+    prospect = _rider(
+        name="Prospect", team=None, development_squad=squad, intake_at=claimed_at,
+    )
+
+    with pytest.raises(RiderNotOnRoster):
+        list_for_auction(team, prospect.pk, at=claimed_at)
+
+    assert Auction.objects.filter(rider=prospect).count() == 0
+
+
+def test_list_for_auction_refuses_another_teams_graduate(db, claimed_at):
+    """A rival's graduate is as untouchable as a rival's roster rider."""
+    mine = Team.objects.create(name="Team Alpha", code="ALP")
+    theirs = Team.objects.create(name="Team Bravo", code="BRA")
+    theirs_graduate = _graduate(theirs, at=claimed_at)
+
+    with pytest.raises(RiderNotOnRoster):
+        list_for_auction(mine, theirs_graduate.pk, at=claimed_at)
+
+
+def test_resolve_sold_graduate_moves_to_buyer_and_leaves_the_squad(db, claimed_at):
+    seller = Team.objects.create(name="Team Alpha", code="ALP")
+    bidder = Team.objects.create(name="Team Bravo", code="BRA")
+    graduate = _graduate(seller, at=claimed_at)
+    auction = list_for_auction(seller, graduate.pk, at=claimed_at)
+    place_bid(auction.pk, bidder, auction.reserve_price, at=claimed_at)
+
+    resolved = resolve_auction(auction, at=auction.deadline)
+
+    assert resolved.status == Auction.Status.SOLD
+    graduate.refresh_from_db()
+    assert graduate.team_id == bidder.pk
+    assert graduate.development_squad_id is None
+
+
+def test_resolve_unsold_graduate_drops_them_into_the_pool(db, claimed_at):
+    """An unsold listing must not strand a graduate: they leave the squad and
+    join the free-agent market stamped, rather than sitting invisible on the
+    squad screen with nothing left to do about them."""
+    seller = Team.objects.create(name="Team Alpha", code="ALP")
+    graduate = _graduate(seller, at=claimed_at)
+    auction = list_for_auction(seller, graduate.pk, at=claimed_at)
+
+    resolved = resolve_auction(auction, at=auction.deadline)
+
+    assert resolved.status == Auction.Status.UNSOLD
+    graduate.refresh_from_db()
+    assert graduate.development_squad_id is None
+    assert graduate.team_id is None
+    assert graduate.unattached_since == auction.deadline
+
+
+def test_resolve_released_graduate_to_a_full_buyer_also_drops_them_in_the_pool(
+    db, claimed_at,
+):
+    """The other UNSOLD path releases a graduate too — the buyer's roster is
+    full, so the sale falls through exactly as if nobody had bid."""
+    seller = Team.objects.create(name="Team Alpha", code="ALP")
+    bidder = Team.objects.create(name="Team Bravo", code="BRA")
+    graduate = _graduate(seller, at=claimed_at)
+    auction = list_for_auction(seller, graduate.pk, at=claimed_at)
+    place_bid(auction.pk, bidder, auction.reserve_price, at=claimed_at)
+    for i in range(ROSTER_CAP):
+        _rider(name=f"Filler {i}", team=bidder)
+
+    resolved = resolve_auction(auction, at=auction.deadline)
+
+    assert resolved.status == Auction.Status.UNSOLD
+    graduate.refresh_from_db()
+    assert graduate.development_squad_id is None
+    assert graduate.unattached_since == auction.deadline
+
+
+def test_resolve_auction_still_sells_a_graduate_promoted_mid_auction(db, claimed_at):
+    """`resolve_auction`'s own rule: promotion moves a graduate onto the
+    roster, and `belongs_to` is true both before and after, so the service
+    does not void the sale.
+
+    The API never reaches this state — `PromoteSquadRiderView` cancels the
+    listing in the same transaction as the promotion (api/README.md). This
+    pins the service, so a promotion from any other path still resolves as a
+    sale rather than being cancelled as a lost rider."""
+    seller = Team.objects.create(name="Team Alpha", code="ALP")
+    buyer = Team.objects.create(name="Team Bravo", code="BRA")
+    graduate = _graduate(seller, at=claimed_at)
+    auction = list_for_auction(seller, graduate.pk, at=claimed_at)
+    place_bid(auction.pk, buyer, auction.reserve_price, at=claimed_at)
+    promote(seller, graduate.pk, at=claimed_at, roster_cap=ROSTER_CAP)
+    graduate.refresh_from_db()
+    assert graduate.team_id == seller.pk
+    assert graduate.development_squad_id is None
+
+    resolved = resolve_auction(auction, at=auction.deadline)
+
+    assert resolved.status == Auction.Status.SOLD
+    graduate.refresh_from_db()
+    assert graduate.team_id == buyer.pk
+
+
+def test_cancel_unowned_listings_cancels_only_listings_the_team_has_lost(db, claimed_at):
+    """Called after a squad close: a released graduate's auction and a
+    departed roster rider's both go, while a listing the team still owns is
+    left running (#34)."""
+    team = Team.objects.create(name="Team Alpha", code="ALP")
+    bidder = Team.objects.create(name="Team Bravo", code="BRA")
+    graduate = _graduate(team, at=claimed_at)
+    roster_rider = _rider(name="Roster", team=team)
+    kept_rider = _rider(name="Kept", team=team)
+    graduate_auction = list_for_auction(team, graduate.pk, at=claimed_at)
+    roster_auction = list_for_auction(team, roster_rider.pk, at=claimed_at)
+    kept_auction = list_for_auction(team, kept_rider.pk, at=claimed_at)
+    for auction in (graduate_auction, roster_auction, kept_auction):
+        place_bid(auction.pk, bidder, auction.reserve_price, at=claimed_at)
+    # Both riders leave the team: the graduate by the squad close that
+    # releases them, the roster rider by being released. Before either, the
+    # graduate's listing is still the team's and must survive.
+    assert cancel_unowned_listings(team, at=claimed_at) == 0
+    close_squad(team, at=claimed_at)
+    release_rider(team, roster_rider.pk, at=claimed_at, weeks_opened=1)
+
+    cancelled = cancel_unowned_listings(team, at=claimed_at)
+
+    assert cancelled == 2
+    assert Auction.objects.get(pk=graduate_auction.pk).status == Auction.Status.CANCELLED
+    assert Auction.objects.get(pk=roster_auction.pk).status == Auction.Status.CANCELLED
+    assert Auction.objects.get(pk=kept_auction.pk).status == Auction.Status.OPEN
+
+
+def test_cancel_unowned_listings_leaves_a_forced_sale_running(db, claimed_at):
+    """A forced sale's rider is teamless by design (#27), so `belongs_to` is
+    false for them — but the team is still owed the sale, and closing the
+    squad must not cancel it."""
+    team = Team.objects.create(name="Team Alpha", code="ALP")
+    riders = [_rider(name=f"Roster {i}", team=team) for i in range(FORCED_SALE_ROSTER_FLOOR + 1)]
+    forced = force_list_for_auction(team, riders[0].pk, at=claimed_at)
+
+    assert cancel_unowned_listings(team, at=claimed_at) == 0
+    forced.refresh_from_db()
+    assert forced.status == Auction.Status.OPEN
 
 
 def test_cancel_listings_cancels_the_teams_open_listings(db, claimed_at):

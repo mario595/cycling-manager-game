@@ -138,6 +138,31 @@ def test_retired_rider_cannot_be_in_squad(rider, team):
             rider.save()
 
 
+def test_graduated_requires_intake(rider):
+    """A graduate is a rider who came through intake and served a squad
+    spell, so graduated_at without intake_at is a state no code path can
+    produce — the constraint says so rather than trusting it."""
+    rider.graduated_at = datetime(2027, 3, 1, tzinfo=dt_timezone.utc)
+
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            rider.save()
+
+
+def test_a_squad_rider_can_have_both_intake_at_and_graduated_at(rider, team):
+    squad = DevelopmentSquad.objects.create(
+        team=team, level=DevelopmentSquad.Level.REGIONAL,
+        opened_at=datetime(2027, 3, 1, tzinfo=dt_timezone.utc),
+    )
+    rider.team = None
+    rider.development_squad = squad
+    rider.intake_at = datetime(2027, 2, 1, tzinfo=dt_timezone.utc)
+    rider.graduated_at = datetime(2027, 3, 1, tzinfo=dt_timezone.utc)
+    rider.save()
+
+    assert rider.graduated_at is not None
+
+
 def test_age_17_is_valid(rider):
     rider.age = 17
     # training_affinity isn't set by the `rider` fixture (blank=False, but
