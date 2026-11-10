@@ -413,3 +413,56 @@ class SalaryReviewReport(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.team}, {self.season}"
+
+class SolvencyCheck(TimeStampedModel):
+    """One weekly assessment of a managed team that is, or was, insolvent.
+
+    A row is written only when it matters — a negative balance after payday,
+    or the recovery row that closes a case — so "the latest row has a negative
+    balance" is the whole state machine (economy/README.md, *Insolvency*).
+    There is deliberately no flag on `Team`: a cached flag drifts from the
+    ledger it summarises, the way a cached balance would.
+
+    `week` is a string reference so economy/models.py needs no import of
+    schedule/ (AGENTS.md), the same pattern SalaryReviewReport uses.
+    """
+
+    team = models.ForeignKey(
+        "teams.Team",
+        on_delete=models.CASCADE,
+        related_name="solvency_checks",
+        help_text="A deleted team's assessments go with it.",
+    )
+    week = models.ForeignKey(
+        "schedule.Week",
+        on_delete=models.CASCADE,
+        related_name="solvency_checks",
+        help_text="The week whose payday this assessed.",
+    )
+    occurred_at = models.DateTimeField(
+        help_text="Game time: the week's own starts_at. What the current-spell filter compares against.",
+    )
+    balance = models.BigIntegerField(
+        help_text="The team's balance at assessment. Negative means the case is open.",
+    )
+    shortfall = models.PositiveIntegerField(
+        help_text="Weekly regular outgoings minus regular income at assessment, floored at 0.",
+    )
+    strikes = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Consecutive paydays with the target unmet, this one included.",
+    )
+
+    class Meta:
+        ordering = ["-occurred_at", "-pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["team", "week"], name="one_solvency_check_per_team_per_week",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["team", "-occurred_at"], name="solvency_team_recent_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.team} — week {self.week_id}, {self.strikes} strike(s)"

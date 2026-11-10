@@ -28,6 +28,11 @@ from, on the same discipline as the ledger (`#21`; see *Fanbase is derived
 too* below). Merchandise income is the point of fanbase: a team's weekly
 `LedgerEntry` is floor-divided out of its current fanbase.
 
+`SolvencyCheck` — the weekly assessment of a managed team that is, or was,
+insolvent (`#27`; see *Insolvency* below). A row exists only when it
+matters, so the latest row of the current managerial spell is the whole
+state.
+
 `SponsorOffer` and `SponsorContract` — a team's sponsorship (`#22`; see
 *Sponsorship* below). A team picks one of three fanbase-sized offers each
 season, and its weekly payment then swings with race results inside a
@@ -479,6 +484,70 @@ matters because `_season_average_points` reads settled `FanbaseEntry` rows;
 by the time sponsorship pays, this week's own fanbase row already exists
 but is excluded (`week__number__lt`), so only genuinely prior weeks count.
 
+## Insolvency
+
+A managed team is **insolvent** when its balance is negative after a week's
+payday (#27; `specs/archive/insolvency-ladder.md` for the product story).
+This section is the load-bearing rules a future change must not break. The
+code is `economy/solvency.py`.
+
+**State is rows, not a flag.** `SolvencyCheck` — one row per `(team, week)`,
+backed by a unique constraint — is written only when it matters: a managed
+team whose balance is negative after payday, or whose open case needs its
+closing recovery row. A solvent team with no open case gets nothing. "Is this
+team insolvent?" is therefore *the latest check in its current spell has a
+negative balance* (`open_check`). There is deliberately no `is_insolvent` on
+`Team`: a cached flag drifts from the ledger it summarises, the way a cached
+balance would, and `teams/` would have to learn about insolvency.
+
+**A claim clears it for free.** Only checks with `occurred_at >=
+team.managed_since` count, so a claimed team's older checks fall out of scope
+with no write in `claim_team`. The assessment also skips a team claimed after
+the boundary it is judging, so a catch-up tick never holds a new manager to a
+week they did not run. A team with no `managed_since` counts every check.
+
+**Strikes** are consecutive paydays with the target unmet, the opening payday
+included:
+
+| previous (this spell) | balance | row | strikes |
+|---|---|---|---|
+| none / non-negative | `>= 0` | none | — |
+| none / non-negative | `< 0` | case opens | 1, or 0 with no shortfall |
+| open | `< 0` | written | previous + 1, or 0 with no shortfall |
+| open | `>= 0` | recovery row, case closes | 0 |
+
+`INSOLVENCY_LOSS_STRIKES` (4) strikes loses the team. `world/` reads
+`assess_solvency`'s `lost` list and releases the team; `economy/` never
+imports `teams.services`. The previous check must be read **before** the new
+row is created, or every case looks already open.
+
+**The target.** `weekly_shortfall` is regular outgoings minus regular income,
+floored at 0. Outgoings are the roster's payroll, the trainer's salary and the
+squad's weekly cost; income is merchandise plus the signed sponsor's *base*
+payment. Prize money is left out because it is irregular, and the
+results-driven swing of a sponsor is left out because the base is the
+promised figure. The trainer salary and squad cost arrive as plain numbers
+from the caller — `economy/` may not read `staff/` or `riders/`'s price
+tables, the same inversion `charge_trainer_salaries` uses. The target is
+computed from the roster **as it stands**, not from the last wage row, so a
+forced sale mid-week has already lowered it by payday.
+
+**The embargo lives in `api/`.** `is_embargoed(team)` is `open_check(team)
+is not None`. The views that add cost or spend cash — signing a free agent,
+bidding, hiring a trainer, opening or upgrading a development squad — return
+409 with `EMBARGO_MESSAGE`, next to the existing affordability checks, because
+`transfers/`, `staff/` and `riders/` may not import `economy/`. Signing a
+sponsor, firing, closing, releasing and ordinary listing stay open: each cuts
+cost or adds income. The embargo outlasts the escalation: it lifts only when a
+payday ends with a balance of zero or more.
+
+**Status for the screens.** `solvency_status` is the read model behind
+`GET /api/economy/solvency/`: the live shortfall, `target` (the shortfall at
+the last payday), `cut_so_far` (`target` minus the live shortfall, so it resets
+every payday), `paydays_left` (null once the live shortfall is zero) and
+`deadline` (the start of the week that payday falls in, or null when that week
+is not declared yet). Nothing about the deadline is stored.
+
 ## What `economy/` may import
 
 `core`, `teams`, `riders`, `schedule` — matching `AGENTS.md`'s dependency
@@ -499,8 +568,9 @@ string `"racing.Race"`, so nothing in `economy/` imports `racing/`. Likewise
   #23 only has to decide what happens *between* seasons.
 - **A player lever on fanbase** — #21 deliberately has none; nothing lets a
   manager spend or invest in fanbase yet.
-- **Insolvency** — #27, what happens when a balance goes and stays deeply
-  negative. This ticket only flags a negative balance, never acts on it.
+- **Insolvency for unmanaged teams.** #27 assesses managed teams only: an
+  unmanaged team only spends, so it would walk the ladder to the end. Revisit
+  once #45 gives them income.
 - **A full-table read every tick** — `charge_weekly_wages` counts every
   team's riders on each wage run. Fine at dozens of teams; worth a
   `WHERE team.manager IS NOT NULL` or another efficiency when the pool

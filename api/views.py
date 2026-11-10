@@ -47,6 +47,7 @@ from economy.services import (
     payroll_for,
     sign_offer,
 )
+from economy.solvency import EMBARGO_MESSAGE, SolvencyStatus, is_embargoed, solvency_status
 from economy.sponsors import PROFILES_BY_KEY
 from racing.models import (
     SQUAD_SIZE,
@@ -73,6 +74,7 @@ from riders.development_squad import (
     level_status as squad_level_status,
     open_squad,
     squad_for,
+    weekly_cost as squad_weekly_cost,
 )
 # Aliased, not shadowed: staff.services.InsufficientFunds is imported
 # unaliased above, and the two are unrelated classes. Catching the wrong one
@@ -83,7 +85,7 @@ from riders.pricing import strength
 from riders.youth_intake import INTAKE_BATCH_SIZE, INTAKE_INTERVAL_WEEKS, is_intake_week
 from schedule.models import SEASON_WEEKS, Week
 from schedule.services import current_position, weeks_opened_between
-from staff.pricing import hire_fee
+from staff.pricing import hire_fee, weekly_salary
 from staff.services import (
     InsufficientFunds,
     NoTrainerHired,
@@ -105,12 +107,15 @@ from transfers.services import (
     AuctionAlreadyExists,
     AuctionNotOpen,
     BidTooLow,
+    FORCED_SALE_ROSTER_FLOOR,
     InsufficientFunds as TransferInsufficientFunds,
     RiderNotAvailable,
     RiderNotOnRoster,
+    RosterAtFloor,
     RosterFull,
     SelfBid,
     cancel_listings,
+    force_list_for_auction,
     free_agents,
     list_for_auction,
     place_bid,
@@ -150,6 +155,7 @@ from .serializers import (
     SquadSerializer,
     SquadWriteSerializer,
     SignOfferSerializer,
+    SolvencySerializer,
     SponsorsSerializer,
     StaffSerializer,
     StandingsSerializer,
@@ -171,6 +177,29 @@ def team_for(user):
         return user.team
     except Team.DoesNotExist:
         return None
+
+
+def _embargo_response(team) -> Response | None:
+    """The 409 an insolvent team gets for any action that adds cost or spends
+    cash (#27), or None when the team is free to act. Checked here rather than
+    in the services because transfers/, staff/ and riders/ may not import
+    economy/ — the same reason the affordability checks live in api/. Callers
+    run it before validating the payload, so the refusal never depends on its
+    shape."""
+    if is_embargoed(team):
+        return Response({"detail": EMBARGO_MESSAGE}, status=409)
+    return None
+
+
+def _regular_costs(team) -> tuple[int, int]:
+    """(trainer weekly salary, development squad weekly cost) for one team —
+    the two regular outgoings economy/ may not look up itself."""
+    trainer = trainer_for(team)
+    squad = squad_for(team)
+    return (
+        weekly_salary(trainer) if trainer is not None else 0,
+        squad_weekly_cost(squad.level) if squad is not None else 0,
+    )
 
 
 class ClockView(APIView):
@@ -588,6 +617,10 @@ class SignFreeAgentView(APIView):
         if team is None:
             return Response({"detail": "You do not manage a team."}, status=403)
 
+        embargoed = _embargo_response(team)
+        if embargoed is not None:
+            return embargoed
+
         serializer = SignFreeAgentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         at = now()
@@ -691,6 +724,7 @@ class AuctionMarketView(APIView):
                 "min_next_bid": min_next_bid,
                 "deadline": auction.deadline,
                 "is_own_listing": auction.seller_team_id == team.pk,
+                "forced": auction.forced,
                 "bids": [
                     {
                         "team_name": bid.bidder_team.name,
@@ -727,6 +761,32 @@ class ListForAuctionView(APIView):
         return Response(status=204)
 
 
+class ForceSellView(APIView):
+    """Sell one of the caller's own riders under insolvency (#27): the rider
+    leaves the roster now, so the wage stops now, and is auctioned with no
+    severance — a sale pays the team, no sale makes the rider a free agent.
+    Only an insolvent team may; a solvent one has the ordinary listing and
+    release. 409 for everything the world's state refuses, as elsewhere."""
+
+    def post(self, request):
+        team = team_for(request.user)
+        if team is None:
+            return Response({"detail": "You do not manage a team."}, status=403)
+
+        serializer = ListForAuctionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        if not is_embargoed(team):
+            return Response({"detail": "Only an insolvent team can force a sale."}, status=409)
+
+        try:
+            force_list_for_auction(team, serializer.validated_data["rider_id"], at=now())
+        except (RiderNotOnRoster, RosterAtFloor) as exc:
+            return Response({"detail": str(exc)}, status=409)
+
+        return Response(status=204)
+
+
 class PlaceBidView(APIView):
     """Place a bid on an open auction. Balance checked here (Design
     decision 8) against economy.services.balance_for BEFORE calling
@@ -737,6 +797,10 @@ class PlaceBidView(APIView):
         team = team_for(request.user)
         if team is None:
             return Response({"detail": "You do not manage a team."}, status=403)
+
+        embargoed = _embargo_response(team)
+        if embargoed is not None:
+            return embargoed
 
         serializer = PlaceBidSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -1229,6 +1293,10 @@ class HireTrainerView(APIView):
         if team is None:
             return Response({"detail": "You do not manage a team."}, status=403)
 
+        embargoed = _embargo_response(team)
+        if embargoed is not None:
+            return embargoed
+
         serializer = HireTrainerSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -1407,6 +1475,10 @@ class OpenDevelopmentSquadView(APIView):
         if team is None:
             return Response({"detail": "You do not manage a team."}, status=403)
 
+        embargoed = _embargo_response(team)
+        if embargoed is not None:
+            return embargoed
+
         serializer = DevelopmentSquadLevelChoiceSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -1441,6 +1513,10 @@ class ChangeDevelopmentSquadLevelView(APIView):
         team = team_for(request.user)
         if team is None:
             return Response({"detail": "You do not manage a team."}, status=403)
+
+        embargoed = _embargo_response(team)
+        if embargoed is not None:
+            return embargoed
 
         serializer = DevelopmentSquadLevelChoiceSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -1566,6 +1642,37 @@ class FinancesView(APIView):
             "weekly_wage_bill": payroll_for(team),
             "entries": entries,
         }).data)
+
+
+class SolvencyView(APIView):
+    """The caller's team against the insolvency ladder (#27): whether it is
+    insolvent, the weekly shortfall to close, how much has been cut, and the
+    deadline. A user with no team gets the solvent shape with zeros rather than
+    a 403, matching FinancesView."""
+
+    def get(self, request):
+        team = team_for(request.user)
+        if team is None:
+            return Response(SolvencySerializer(_solvency_payload(None, 0)).data)
+
+        position = current_position(now())
+        trainer_salary, squad_cost = _regular_costs(team)
+        status = solvency_status(
+            team, position.season, trainer_salary=trainer_salary, squad_cost=squad_cost,
+        )
+        return Response(SolvencySerializer(
+            _solvency_payload(status, team.riders.count())
+        ).data)
+
+
+def _solvency_payload(status: SolvencyStatus | None, roster_size: int) -> dict:
+    base = dict(
+        insolvent=False, balance=0, shortfall=0, target=0, cut_so_far=0, outgoings=0,
+        income=0, strikes=0, paydays_left=None, deadline=None,
+    )
+    if status is not None:
+        base.update(vars(status))
+    return {**base, "roster_size": roster_size, "roster_floor": FORCED_SALE_ROSTER_FLOOR}
 
 
 def _offer_payload(offer) -> dict:

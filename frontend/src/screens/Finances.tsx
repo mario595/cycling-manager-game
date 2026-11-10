@@ -1,9 +1,11 @@
 import { type LedgerEntry } from '../api'
 import { Card, CardHeader, PageBody, PageHeading, StatTile } from '../components/primitives'
+import { SolvencyBanner } from '../components/SolvencyBanner'
 import { formatMoney } from '../format'
 import { color, font } from '../theme'
 import { useAuth } from '../useAuth'
 import { useFinances } from '../useFinances'
+import { useSolvency } from '../useSolvency'
 
 /** `occurred_at` is an ISO game-time string; render it as a calendar date. */
 function formatDate(occurredAt: string | null): string {
@@ -40,6 +42,7 @@ export function Finances() {
   const hasTeam = me?.team != null
 
   const { finances, loading, error } = useFinances()
+  const { solvency } = useSolvency()
 
   if (authLoading || loading) return null
 
@@ -65,7 +68,9 @@ export function Finances() {
     )
   }
 
-  const negative = finances.balance < 0
+  // The insolvency banner owns the story once a payday has found the balance
+  // negative; this card is the mid-week case, before any assessment.
+  const negative = finances.balance < 0 && !solvency?.insolvent
 
   return (
     <PageBody gap={18} paddingTop={26}>
@@ -100,10 +105,12 @@ export function Finances() {
         }
       />
 
+      <SolvencyBanner />
+
       {negative ? (
         <Card style={{ padding: '12px 16px', borderColor: color.negative }}>
           <div style={{ fontSize: 13, color: color.negative }}>
-            Your balance is negative. Wages are still paid in full — nothing is blocked yet.
+            Your balance is negative. If it is still negative at payday, your team becomes insolvent.
           </div>
         </Card>
       ) : null}

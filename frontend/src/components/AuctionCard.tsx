@@ -4,7 +4,7 @@ import type { AuctionListing, Bid } from '../api'
 import { formatCountdown } from '../countdown'
 import { formatMoney } from '../format'
 import { color, font } from '../theme'
-import { Button, Card, LabelBar } from './primitives'
+import { Button, Card, ForcedSaleTag, LabelBar } from './primitives'
 
 type AttrKey = 'climb' | 'sprint' | 'flat' | 'resistance' | 'positioning'
 
@@ -91,6 +91,7 @@ export function AuctionCard({
           <div style={{ fontSize: 11, color: color.mutedStrong, fontFamily: font.mono }}>
             {rider.speciality.toUpperCase()} · {rider.age} yrs
           </div>
+          {auction.forced ? <ForcedSaleTag /> : null}
         </div>
       </div>
 

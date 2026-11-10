@@ -60,6 +60,13 @@ class Auction(TimeStampedModel):
     resolved_at = models.DateTimeField(
         null=True, blank=True, help_text="Game time this auction left OPEN. Null while open.",
     )
+    forced = models.BooleanField(
+        default=False,
+        help_text=(
+            "A forced sale under insolvency (#27): the rider left the seller's "
+            "roster at listing, and an unsold auction makes them a free agent."
+        ),
+    )
 
     class Meta:
         ordering = ["-listed_at", "-pk"]
