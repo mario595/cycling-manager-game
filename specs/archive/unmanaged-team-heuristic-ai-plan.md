@@ -1,6 +1,6 @@
 # Unmanaged teams: simple heuristic AI — Implementation Plan
 
-**Spec:** `specs/unmanaged-team-heuristic-ai.md` · **Issue:** #45 · **Status:** proposed
+**Spec:** `specs/unmanaged-team-heuristic-ai.md` · **Issue:** #45 · **Status:** implemented
 **Apps touched:** `world/` (most of it), `racing/`, `teams/` (docs and tests only), `staff/` (docs only), `economy/` (docs only)
 
 ## Context you need
@@ -177,7 +177,7 @@ Tests, in `world/tests/test_tick.py`: a tick that opens a season leaves every un
 ### W8 — claim and release behaviour — done
 Tests only, no production change. In `teams/tests/`: claiming an unmanaged team that has an AI-hired trainer leaves the trainer on it and voids its sponsor; releasing a managed team with a trainer, focus and sponsor leaves all three. In `world/tests/test_tick.py`: after a release, the next week boundary sets the focus by the AI rule.
 
-### W9 — docs and measurement
+### W9 — docs and measurement — done
 See *Documentation update*. Run the *Verification* measurement on the finished branch and record its numbers.
 
 ## Execution order

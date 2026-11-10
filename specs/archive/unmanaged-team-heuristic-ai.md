@@ -1,6 +1,6 @@
 # Unmanaged teams: simple heuristic AI
 
-**Status:** approved
+**Status:** implemented
 **Domain(s):** `world/`, `racing/`, `staff/`, `economy/`, `teams/`
 **One-liner:** Teams nobody manages choose their squads by the course, hire a trainer, train, and sign a sponsor, so they stay solvent and competitive instead of decaying.
 

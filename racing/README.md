@@ -459,8 +459,24 @@ itself, `auto_pick_squad`, is deliberately naive — by total engine attributes
 descending, each rider's raw total weighted by their `freshness_multiplier`
 (tired riders rank behind equally strong rested ones; [#59]), then by pk as a
 tiebreak, with the strongest rider leading — and is meant
-to lose to a manager who chooses deliberately (#45 covers a smarter fallback
-later; #39 and #44 will share this same mechanism rather than duplicate it).
+to lose to a manager who chooses deliberately (#39 and #44 will share this
+same mechanism rather than duplicate it). That naive pick is for **human**
+teams whose manager did not choose, and only them.
+
+**Unmanaged teams pick for the course** (#45). For a team with no manager,
+`ensure_squads` calls `course_pick_squad(team, race.course)` instead: the
+same shape, `SquadError` and pk tiebreak, but each rider scores
+`(COURSE_ATTRIBUTE_WEIGHT × their value in course_training_attribute(course)
++ their five-attribute total) × freshness_multiplier`, with
+`COURSE_ATTRIBUTE_WEIGHT = 3`. A climber-heavy team sends its climbers up a
+mountain and its sprinters to a short flat race; a one-dimensional rider
+never beats a clearly stronger one. It reuses `course_training_attribute`,
+the one course classifier the game has, rather than inventing a second. A
+stage race picks against stage 1's course and carries the squad as before.
+Both picks write `is_auto_picked=True`: the flag means "no manager chose",
+which is true for the AI too. `auto_pick_squad` does not take a course on
+purpose — the human fallback must stay course-blind, so absent managers do
+not get a smarter pick than they earned.
 A team with fewer than four riders is skipped with a warning, not an
 exception — that is a broken roster (enforcing the floor belongs to whichever
 feature lets riders leave one), and it must not stop every other team racing.

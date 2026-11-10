@@ -59,7 +59,7 @@ behave the way it claims to.
 
 | Order | Issue | Why | Blocked by |
 |---|---|---|---|
-| 3 | [#45](https://github.com/mario595/cycling-manager/issues/45) unmanaged teams: simple heuristic AI | **Moved out of the pyramid block — it now has a clock on it.** `world/README.md` measures it: unmanaged teams pay wages and earn prize money but no sponsorship, so a seeded season 1 leaves the average one with about **$330,000 and roughly three seasons** before AI buying in the market dries up. It names [#45](https://github.com/mario595/cycling-manager/issues/45)'s sponsorship as the fix. [#30](https://github.com/mario595/cycling-manager/issues/30) already covered the market half of this ticket; what remains is squad choice by course, a training focus, a trainer, and signing a sponsor. | [#28](https://github.com/mario595/cycling-manager/issues/28) ✅ · [#36](https://github.com/mario595/cycling-manager/issues/36) ✅ |
+| 3 | [#45](https://github.com/mario595/cycling-manager/issues/45) unmanaged teams: simple heuristic AI ✅ | **Built** — unmanaged teams pick squads for the course, hire the cheapest affordable trainer, rotate a training focus by roster speciality and sign the steady sponsor. It narrows their loss rather than closing it; see `world/README.md`, *Balances, measured*. Original note: **Moved out of the pyramid block — it now has a clock on it.** `world/README.md` measures it: unmanaged teams pay wages and earn prize money but no sponsorship, so a seeded season 1 leaves the average one with about **$330,000 and roughly three seasons** before AI buying in the market dries up. It names [#45](https://github.com/mario595/cycling-manager/issues/45)'s sponsorship as the fix. [#30](https://github.com/mario595/cycling-manager/issues/30) already covered the market half of this ticket; what remains is squad choice by course, a training focus, a trainer, and signing a sponsor. | [#28](https://github.com/mario595/cycling-manager/issues/28) ✅ · [#36](https://github.com/mario595/cycling-manager/issues/36) ✅ |
 | 4 | [#27](https://github.com/mario595/cycling-manager/issues/27) insolvency ladder ✅ | **Built, for managed teams only** — unmanaged teams are excluded until [#45](https://github.com/mario595/cycling-manager/issues/45) gives them income, so that decision no longer gates it. Original note: now fully unblocked — [#28](https://github.com/mario595/cycling-manager/issues/28) gives forced sales somewhere to sell. **Needs one decision it did not have before:** unmanaged teams only spend, so if the ladder applies to them, every one of them eventually walks it. Either it excludes unmanaged teams, or [#45](https://github.com/mario595/cycling-manager/issues/45) lands first so they have income. That is the reason for this order. | [#25](https://github.com/mario595/cycling-manager/issues/25) ✅ · [#62](https://github.com/mario595/cycling-manager/issues/62) ✅ · [#28](https://github.com/mario595/cycling-manager/issues/28) ✅ |
 
 The expiry named for [#45](https://github.com/mario595/cycling-manager/issues/45) was *the first full Season played with real
@@ -123,7 +123,7 @@ The chains that still constrain order:
 
 #33 intake ✅ ──→ #34 triage ──→ (#40 scout)
 
-#28 market ✅ ──→ #45 heuristic AI ──┬──→ #27 insolvency ✅ (managed teams only; unmanaged wait for #45)
+#28 market ✅ ──→ #45 heuristic AI ✅ ─┬──→ #27 insolvency ✅ (managed teams only; unmanaged wait for #45)
                                     └──→ #13 promotion/relegation ←── #10
 
 #70 markers ✅ ──→ #16 sprint ✅ / #17 mountain ──┐

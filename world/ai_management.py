@@ -2,9 +2,9 @@
 
 Pure helpers first (a roster in, a decision out), then orchestrators the tick
 calls. Same shape as ai_market.py and for the same reason: world/ is the only
-place staff/ and economy/ can meet. See `specs/unmanaged-team-heuristic-ai.md`
-and `specs/unmanaged-team-heuristic-ai-plan.md` for the reasoning behind each
-rule.
+place staff/ and economy/ can meet. See
+`specs/archive/unmanaged-team-heuristic-ai.md` and its plan for the reasoning
+behind each rule.
 
 Like the market, nothing here reads a hidden rider trait: the focus comes from
 a rider's speciality and the hire from a trainer's price, both visible.

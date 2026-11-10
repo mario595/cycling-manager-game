@@ -175,7 +175,7 @@ def auto_pick_squad(team: Team) -> tuple[list[int], int]:
 #: strength when an unmanaged team picks a squad. 3 makes it a bit over half
 #: the score: a specialist beats an all-rounder on their terrain, but a
 #: one-dimensional rider never beats a clearly stronger one.
-#: See specs/unmanaged-team-heuristic-ai-plan.md, Design decision 3.
+#: See specs/archive/unmanaged-team-heuristic-ai-plan.md, Design decision 3.
 COURSE_ATTRIBUTE_WEIGHT = 3
 
 
