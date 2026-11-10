@@ -171,7 +171,7 @@ Tests (DB): an unmanaged team with money hires the cheapest trainer and a `train
 ### W6 — `world/ai_management.py`: `set_ai_focuses` and `sign_ai_sponsors` — done
 Tests: focus is applied to unmanaged-with-trainer only, and calling it twice for the same week changes nothing the second time; a team with no trainer is left alone; `sign_ai_sponsors` signs the `steady` offer, a second call signs nothing; a team that already has a contract keeps it; a released team with a voided/absent round gets a fresh round and a steady contract; managed teams are never touched.
 
-### W7 — `world/services.py`: wire into `tick()` and count
+### W7 — `world/services.py`: wire into `tick()` and count — done
 Tests, in `world/tests/test_tick.py`: a tick that opens a season leaves every unmanaged team with an active steady contract and pays it for week 1; a tick that crosses a week hires for a funded unmanaged team and `TickRun.ai_trainers_hired` equals the count; the trainer's salary is **not** charged on the tick that hired and **is** charged on the next; the focus set for a week is in `TrainingWeekReport.attribute` for that week; a failure injected into `hire_ai_trainers` (monkeypatch to raise) lands on `TickRun.error` and the tick still writes wages. **Load-bearing:** `set_ai_focuses` runs before `_apply_training_week`; the report-attribute assertion is what catches the wrong order.
 
 ### W8 — claim and release behaviour

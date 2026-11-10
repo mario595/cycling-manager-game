@@ -58,7 +58,7 @@ from riders.services import (
 )
 from riders.youth_intake import is_intake_week, run_intake
 from schedule.models import SeasonTransition, Week
-from schedule.services import process_transitions, process_week_transitions, weeks_opened_between
+from schedule.services import current_position, process_transitions, process_week_transitions, weeks_opened_between
 from staff.models import Trainer, TrainingWeekReport
 from staff.pricing import weekly_salary
 from staff.services import focus_for, top_up_pool
@@ -76,6 +76,7 @@ from transfers.services import (
     withdraw_bids,
 )
 
+from .ai_management import hire_ai_trainers, set_ai_focuses, sign_ai_sponsors
 from .ai_market import list_ai_riders, place_ai_bids
 from .clocks import Clock
 from .models import GameClock, TickRun
@@ -551,10 +552,23 @@ def tick() -> TickRun:
     # One offer round per team per crossed season open — ensure_offer_round
     # is idempotent per (team, season) itself (economy/README.md, D8), so a
     # tick that runs twice, or catches up late, cannot double-generate.
+    #
+    # Unmanaged teams sign straight after, so week 1 already pays them
+    # (#45). Guarded like the AI market: a failed AI signing is not worth
+    # losing the tick for.
     opened = [t for t in transitions if t.kind == SeasonTransition.Kind.OPENED]
+    ai_sponsors_signed = 0
+    ai_trainers_hired = 0
+    ai_management_error = ""
     for transition in opened:
         for team in Team.objects.all():
             ensure_offer_round(team, transition.season, at=at)
+        try:
+            signed, error = sign_ai_sponsors(transition.season, at)
+            ai_sponsors_signed += signed
+            ai_management_error += error
+        except Exception:
+            ai_management_error += f"ai sponsors at season open:\n{traceback.format_exc()}\n"
 
     weeks = process_week_transitions(at)
     riders_trained = 0
@@ -574,7 +588,8 @@ def tick() -> TickRun:
     inactivity_error = ""
 
     # Built once, outside the loop: a trainer's skill does not move between
-    # weeks within one tick (no hires happen mid-tick), so the same salary
+    # weeks within one tick (no hires happen mid-tick — the AI hires after
+    # the loop, see below, for exactly this reason), so the same salary
     # map is correct for every missed week. The *charge* still happens
     # inside the loop, one dated row per week.
     salary_by_team = {
@@ -594,6 +609,12 @@ def tick() -> TickRun:
     }
     for transition in weeks:            # per week, NOT weeks=len(weeks)
         week = transition.week
+        # Before training: the focus set here is the one this week trains
+        # on. After it, every week would train on last week's choice.
+        try:
+            set_ai_focuses(week)
+        except Exception:
+            ai_management_error += f"ai focus for week {week.pk}:\n{traceback.format_exc()}\n"
         riders_trained += _apply_training_week(week)
         wage_entries += charge_weekly_wages(week)
         trainer_salary_entries += charge_trainer_salaries(
@@ -651,6 +672,24 @@ def tick() -> TickRun:
         agents_retired += retired
         agents_expired += expired
 
+    # The AI's hires after the week loop, so salary_by_team stayed true for
+    # every week above and a new trainer's first salary is charged at the
+    # next boundary. Retried at every boundary, so a team that could not
+    # afford one, or found the pool empty, picks one up when it can. A team
+    # with no sponsor this season (a manager released mid-season) signs here.
+    if weeks:
+        try:
+            hired, error = hire_ai_trainers(at)
+            ai_trainers_hired += hired
+            ai_management_error += error
+            position = current_position(at)
+            if position.state == "in_season":
+                signed, error = sign_ai_sponsors(position.season, at)
+                ai_sponsors_signed += signed
+                ai_management_error += error
+        except Exception:
+            ai_management_error += f"ai management:\n{traceback.format_exc()}\n"
+
     reclaimed = _reclaim_unfinished()
     claimed = _claim(limit=max(0, max_races - len(reclaimed)), at=at)
     capped = len(reclaimed) + len(claimed) >= max_races
@@ -707,7 +746,12 @@ def tick() -> TickRun:
         auctions_unsold=auctions_unsold,
         ai_bids_placed=ai_bids_placed,
         ai_listings_created=ai_listings_created,
-        error=inactivity_error + solvency_error + auction_error + ai_market_error,
+        ai_trainers_hired=ai_trainers_hired,
+        ai_sponsors_signed=ai_sponsors_signed,
+        error=(
+            inactivity_error + solvency_error + auction_error + ai_market_error
+            + ai_management_error
+        ),
     )
     _execute(reclaimed + claimed, run, at=at)
     run.capped = capped

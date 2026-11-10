@@ -14,7 +14,7 @@ from economy.models import (
     LedgerEntry,
     SponsorOffer,
 )
-from economy.services import ensure_opening_balance, sign_offer
+from economy.services import active_contract, ensure_opening_balance, sign_offer
 from competitions.models import RacePoints
 from racing.models import Race, RaceMarker, RaceResult, RaceSquad, RaceSquadRider, StageRace
 from racing.services import simulate_race as _real_simulate_race
@@ -22,11 +22,12 @@ from riders.development_squad import change_level
 from riders.models import ENGINE_ATTRIBUTES, DevelopmentSquad, Rider
 from staff.services import set_focus
 from schedule.models import SEASON_WEEKS, Season, Week
-from staff.models import Trainer
+from staff.models import Trainer, TrainingWeekReport
 from staff.pricing import weekly_salary
 from teams.models import Team
 from transfers.models import Auction
 from transfers.services import list_for_auction
+from world.ai_management import focus_for_week
 from world.ai_market import AI_LISTING_EVERY_WEEKS
 from world.clocks import MockClock
 from world.services import get_clock, now, tick
@@ -48,6 +49,16 @@ def make_season_with_weeks(number: int, starts_at) -> Season:
 @pytest.fixture
 def team(db) -> Team:
     return Team.objects.create(name="Team Alpha", code="ALP", primary_colour="#FF0000")
+
+
+def _give_a_manager(team: Team) -> Team:
+    """Make `team` human-managed, so the AI management (#45) leaves its
+    focus and sponsorship to the test, which plays the manager."""
+    team.manager = User.objects.create_user(
+        email=f"{team.code.lower()}-manager@example.com", password="s0meth1ng-good",
+    )
+    team.save(update_fields=["manager"])
+    return team
 
 
 @pytest.fixture
@@ -955,6 +966,7 @@ def test_tick_run_counts_fanbase_and_merchandise_entries(db, team, riders):
 
 
 def test_tick_generates_offer_rounds_on_season_open(db, team, riders):
+    _give_a_manager(team)
     clock: MockClock = get_clock()
     season = make_season_with_weeks(1, now())
     week_one = season.weeks.get(number=1)
@@ -966,6 +978,7 @@ def test_tick_generates_offer_rounds_on_season_open(db, team, riders):
 
 
 def test_offer_rounds_are_not_duplicated_by_a_second_tick(db, team, riders):
+    _give_a_manager(team)
     clock: MockClock = get_clock()
     season = make_season_with_weeks(1, now())
     week_two = season.weeks.get(number=2)
@@ -979,6 +992,7 @@ def test_offer_rounds_are_not_duplicated_by_a_second_tick(db, team, riders):
 
 
 def test_tick_pays_sponsorship_for_contracted_teams(db, team, riders):
+    _give_a_manager(team)
     clock: MockClock = get_clock()
     season = make_season_with_weeks(1, now())
     week_one = season.weeks.get(number=1)
@@ -998,6 +1012,7 @@ def test_tick_pays_sponsorship_for_contracted_teams(db, team, riders):
 
 
 def test_catch_up_tick_pays_each_week_separately(db, team, riders):
+    _give_a_manager(team)
     clock: MockClock = get_clock()
     season = make_season_with_weeks(1, now())
     week_one = season.weeks.get(number=1)
@@ -1171,3 +1186,104 @@ def test_ai_won_auction_moves_rider_and_money_end_to_end(db):
     assert LedgerEntry.objects.filter(
         team=seller, kind=LedgerEntry.Kind.TRANSFER_FEE, amount=auction.reserve_price,
     ).exists()
+
+
+# --- The AI management (#45) -------------------------------------------------
+
+
+def _ai_team(code: str, *, speciality: str = Rider.Speciality.ROULEUR) -> Team:
+    team = Team.objects.create(name=f"{code} AI Team", code=code)
+    ensure_opening_balance(team, at=now())
+    give_starting_fanbase(team, now())
+    for i in range(4):
+        Rider.objects.create(
+            name=f"{code} Rider {i}", team=team, speciality=speciality,
+            climb=60, sprint=60, flat=60, resistance=60, positioning=60,
+            weekly_salary=1000,
+        )
+    return team
+
+
+def test_season_open_signs_every_unmanaged_team_steady_and_pays_week_one(db):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_one = season.weeks.get(number=1)
+    ai_teams = [_ai_team("AIA"), _ai_team("AIB")]
+    human = managed_seller("HUM")
+    clock.set(week_one.starts_at + timedelta(hours=1))
+
+    run = tick()
+
+    assert run.ai_sponsors_signed == 2
+    for team in ai_teams:
+        assert active_contract(team, season).profile == "steady"
+        assert LedgerEntry.objects.filter(
+            team=team, kind=LedgerEntry.Kind.SPONSORSHIP, week=week_one,
+        ).exists()
+    assert active_contract(human, season) is None
+
+
+def test_week_boundary_hires_and_the_salary_starts_the_week_after(db):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_one = season.weeks.get(number=1)
+    week_two = season.weeks.get(number=2)
+    team = _ai_team("AIA")
+    trainer = Trainer.objects.create(
+        name="Coach", climb=70, sprint=50, flat=50, resistance=50, positioning=50,
+    )
+    clock.set(week_one.starts_at + timedelta(hours=1))
+
+    run = tick()
+
+    assert run.ai_trainers_hired == 1
+    trainer.refresh_from_db()
+    assert trainer.team == team
+    assert LedgerEntry.objects.filter(team=team, kind=LedgerEntry.Kind.TRAINER_FEE).count() == 1
+    assert not LedgerEntry.objects.filter(team=team, kind=LedgerEntry.Kind.TRAINER_SALARY).exists()
+
+    clock.set(week_two.starts_at + timedelta(hours=1))
+    second = tick()
+
+    assert second.ai_trainers_hired == 0
+    salary = LedgerEntry.objects.get(team=team, kind=LedgerEntry.Kind.TRAINER_SALARY)
+    assert salary.week == week_two
+    assert salary.amount == -weekly_salary(trainer)
+    assert LedgerEntry.objects.filter(team=team, kind=LedgerEntry.Kind.TRAINER_FEE).count() == 1
+
+
+def test_the_ai_focus_is_the_one_that_week_trains_on(db):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_one = season.weeks.get(number=1)
+    team = _ai_team("AIA", speciality=Rider.Speciality.SPRINTER)
+    Trainer.objects.create(
+        name="Coach", team=team, climb=70, sprint=50, flat=50, resistance=50, positioning=50,
+    )
+    expected = focus_for_week(list(team.riders.all()), week_one.number, team.pk)
+    # Not the default focus, or a focus set after training would still pass.
+    assert expected == "sprint"
+    clock.set(week_one.starts_at + timedelta(hours=1))
+
+    tick()
+
+    assert TrainingWeekReport.objects.get(team=team, week=week_one).attribute == expected
+
+
+def test_a_failing_ai_hire_is_recorded_and_the_tick_still_charges_wages(db, monkeypatch):
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    week_one = season.weeks.get(number=1)
+    team = _ai_team("AIA")
+
+    def _raise(at):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("world.services.hire_ai_trainers", _raise)
+    clock.set(week_one.starts_at + timedelta(hours=1))
+
+    run = tick()
+
+    assert "ai management" in run.error
+    assert "boom" in run.error
+    assert LedgerEntry.objects.filter(team=team, kind=LedgerEntry.Kind.WAGES, week=week_one).exists()
