@@ -135,6 +135,14 @@ class TickRun(models.Model):
         default=0,
         help_text="Teams released for inactivity this tick (#63).",
     )
+    solvency_checks = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Insolvency assessments written this tick (#27).",
+    )
+    teams_lost_to_insolvency = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Teams released for insolvency this tick (#27). teams_released is inactivity only.",
+    )
     agents_expired = models.PositiveSmallIntegerField(
         default=0,
         help_text=(

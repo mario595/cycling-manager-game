@@ -284,5 +284,6 @@ command is an entry point, and `teams/`'s library code (`models.py`,
 - **What happens when a player abandons a team.** **Done** — see *Releasing
   a team* and *Managerial spells* above (#62). What is still missing is
   anything that actually *decides when*: #63 (inactivity) and #27
-  (insolvency) are the tickets expected to call `release_team`; until
-  either lands, only the `release_team` management command can.
+  (insolvency) both now call `release_team`, with `Reason.INACTIVITY` and
+  `Reason.INSOLVENCY` respectively, from `world/`'s weekly loop. The
+  `release_team` management command remains the manual path.

@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
-import { listForAuction, releaseRider, type Rider, type SalaryReview } from '../api'
+import { forceSell, listForAuction, releaseRider, type Rider, type SalaryReview } from '../api'
 import { Bar, Button, Card, CardHeader, Chip, ChipLabel, FinalSeasonTag, LabelBar, PageBody, PageHeading, StatTile } from '../components/primitives'
 import { formatMoney } from '../format'
 import { riderPath } from '../navigation'
 import { barColor, color, font } from '../theme'
 import { useAuth } from '../useAuth'
 import { useRoster } from '../useRoster'
+import { useSolvency } from '../useSolvency'
 
 type AttrKey = 'climb' | 'sprint' | 'flat' | 'resistance' | 'positioning'
 
@@ -55,6 +56,7 @@ export function Roster() {
   const hasTeam = me?.team != null
 
 const { riders, squadValue, salaryReview, loading, error, refresh } = useRoster()
+  const { solvency, refresh: refreshSolvency } = useSolvency()
   const [filter, setFilter] = useState<'All' | string>('All')
   const [sort, setSort] = useState<SortKey>('name')
   const [picked, setPicked] = useState<number | null>(null)
@@ -125,6 +127,21 @@ const { riders, squadValue, salaryReview, loading, error, refresh } = useRoster(
       refresh()
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Could not list that rider for auction.')
+    } finally {
+      setPending(false)
+    }
+  }
+
+  const handleForceSell = async (rider: Rider) => {
+    setPending(true)
+    setActionError(null)
+    try {
+      await forceSell(rider.id)
+      setPicked(null)
+      refresh()
+      refreshSolvency()
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Could not sell that rider.')
     } finally {
       setPending(false)
     }
@@ -211,6 +228,8 @@ const { riders, squadValue, salaryReview, loading, error, refresh } = useRoster(
             onClose={() => setPicked(null)}
             onRelease={() => handleRelease(selected)}
             onListForAuction={() => handleListForAuction(selected)}
+            forceSale={solvency?.insolvent ? solvency : null}
+            onForceSell={() => handleForceSell(selected)}
           />
         ) : null}
       </div>
@@ -330,13 +349,21 @@ function RiderPanel({
   onClose,
   onRelease,
   onListForAuction,
+  forceSale,
+  onForceSell,
 }: {
   rider: Rider
   pending: boolean
   onClose: () => void
   onRelease: () => void
   onListForAuction: () => void
+  /** Present only while the team is insolvent (#27): the roster numbers the
+   * button needs to know whether a sale would take the team below the floor. */
+  forceSale: { roster_size: number; roster_floor: number } | null
+  onForceSell: () => void
 }) {
+  const [confirmingForceSale, setConfirmingForceSale] = useState(false)
+  const atFloor = forceSale !== null && forceSale.roster_size <= forceSale.roster_floor
   const facts: Array<[string, string]> = [
     ['Age', `${rider.age} yrs`],
     ['Height', `${rider.height_cm} cm`],
@@ -542,6 +569,45 @@ function RiderPanel({
             List for auction
           </Button>
         </div>
+        {forceSale ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 10,
+              }}
+            >
+              <span style={{ fontSize: 12, color: color.negative, fontFamily: font.mono }}>
+                Force sale
+              </span>
+              <Button
+                onClick={() => setConfirmingForceSale(true)}
+                disabled={pending || atFloor}
+                style={{ opacity: pending || atFloor ? 0.6 : 1 }}
+              >
+                Force sale
+              </Button>
+            </div>
+            {atFloor ? (
+              <div style={{ fontSize: 11.5, color: color.muted }}>
+                A team needs at least {forceSale.roster_floor} riders to race.
+              </div>
+            ) : null}
+            {confirmingForceSale ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ fontSize: 11.5, color: color.muted }}>
+                  {rider.name} leaves your team now and does not come back, whether or not anyone
+                  bids. No severance is charged, and their wage stops at once.
+                </div>
+                <Button onClick={onForceSell} disabled={pending} style={{ opacity: pending ? 0.6 : 1 }}>
+                  Confirm force sale
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </div>
   )

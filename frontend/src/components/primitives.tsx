@@ -320,6 +320,31 @@ export function FinalSeasonTag() {
   )
 }
 
+/** The pill that marks an auction a team is running under insolvency (#27):
+ * the seller's rider is gone whether or not anyone bids, which a bidder is
+ * owed knowing — it explains an unusually keen reserve. */
+export function ForcedSaleTag() {
+  return (
+    <span
+      title="Sold under insolvency: the rider has already left their team"
+      style={{
+        alignSelf: 'flex-start',
+        marginTop: 4,
+        fontSize: 10.5,
+        letterSpacing: '1px',
+        fontFamily: font.mono,
+        color: color.negative,
+        background: color.accentWash,
+        borderRadius: 6,
+        padding: '2px 7px',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      FORCED SALE
+    </span>
+  )
+}
+
 /** The standard content wrapper: page padding and max width. */
 export function PageBody({
   children,

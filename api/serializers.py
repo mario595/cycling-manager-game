@@ -264,6 +264,7 @@ class AuctionSerializer(serializers.Serializer):
     min_next_bid = serializers.IntegerField()
     deadline = serializers.DateTimeField()
     is_own_listing = serializers.BooleanField()
+    forced = serializers.BooleanField()
     bids = BidSerializer(many=True)
 
 
@@ -977,3 +978,27 @@ class DevelopmentSquadLevelChoiceSerializer(serializers.Serializer):
     still guard with UnknownLevel rather than relying on it."""
 
     level = serializers.ChoiceField(choices=DevelopmentSquad.Level.choices)
+
+
+class SolvencySerializer(serializers.Serializer):
+    """Where a team stands against the insolvency ladder (#27).
+
+    `shortfall` is the live weekly gap between regular outgoings and regular
+    income; `target` is what it was at the last payday, so `cut_so_far` is the
+    progress since. `paydays_left` is null when the live shortfall is zero (the
+    target is met for now) and `deadline` is null when the weeks it falls in are
+    not declared yet — the SPA then says "in N paydays".
+    """
+
+    insolvent = serializers.BooleanField()
+    balance = serializers.IntegerField()
+    shortfall = serializers.IntegerField()
+    target = serializers.IntegerField()
+    cut_so_far = serializers.IntegerField()
+    outgoings = serializers.IntegerField()
+    income = serializers.IntegerField()
+    strikes = serializers.IntegerField()
+    paydays_left = serializers.IntegerField(allow_null=True)
+    deadline = serializers.DateTimeField(allow_null=True)
+    roster_size = serializers.IntegerField()
+    roster_floor = serializers.IntegerField()

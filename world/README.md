@@ -253,6 +253,20 @@ reads `now()` once, then finds and processes whatever is due, in six steps:
    `TickRun.fanbase_entries` / `TickRun.merchandise_entries` /
    `TickRun.sponsorship_entries` counters. A team with no active contract
    gets no sponsorship row for the week at all — not a zero-amount one.
+   After the week's money has moved, and before inactivity,
+   `world.services._settle_solvency(week, ...)` assesses every managed team
+   (#27; `economy/README.md`, *Insolvency*). It writes a `SolvencyCheck` for
+   each team that is negative or has an open case, withdraws the live bids of a
+   team whose case just **opened** (via `transfers.services.withdraw_bids` — the
+   embargo stops new ones, so only the opening payday has any), and releases a
+   team on its fourth unmet payday with `ManagerialSpell.Reason.INSOLVENCY`,
+   dated to `week.starts_at`. It runs before `_release_inactive` so a team due
+   for both is lost to the more specific cause, and a team already released
+   here is simply skipped by the next week's assessment. Counts land on
+   `TickRun.solvency_checks` and `TickRun.teams_lost_to_insolvency`;
+   `teams_released` stays inactivity only, so the two causes are
+   distinguishable. A raise is caught onto `TickRun.error` like every other
+   per-item guard in this loop.
    Last in the same per-week loop, after the economy calls:
    `world.services._release_inactive(week)` releases the team of every
    manager who has gone `INACTIVITY_WEEKS` (ten) in-season game-weeks

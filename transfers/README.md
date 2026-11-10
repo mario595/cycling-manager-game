@@ -137,6 +137,8 @@ rule doing the work rather than a new check.
   There is no FK to a winning team: the winner is derivable as the highest
   `Bid` on a `SOLD` auction, the same "don't cache what you can derive"
   reasoning `economy/README.md` gives for never storing a balance.
+- **`forced`** (#27) is a flag on `Auction`: a sale under insolvency (see
+  *Forced sales* below). Existing listings are all `False`.
 - **`Bid`** — `auction`, `bidder_team`, `amount`, `placed_at`,
   `withdrawn_at`. Append-only **except** that one field: a claim stamps
   `withdrawn_at` and never clears it, so a withdrawn bid stays in the
@@ -255,33 +257,34 @@ rule doing the work rather than a new check.
   `belongs_to` for that team, and nothing else: a listing of a rider the team
   still owns is left alone.
 
-  Its two callers are the two events that end a team's ownership in one
-  stroke. **Closing a development squad** releases its graduates, so their
-  auctions would otherwise stay biddable until the deadline — managers would
-  keep bidding on a rider already in the free-agent pool, and the winner would
-  be refused at resolve time by the very ownership check that would have caught
-  it days earlier. **Being claimed over** releases the whole roster to the
-  pool (`teams/README.md`, *Claiming a team*), so the same call also closes
-  [#114](https://github.com/mario595/cycling-manager/issues/114): before #34 a
-  claim withdrew the claimed team's *bids* but left its *listings* standing,
-  pointing `seller_team` at the team that had just released the rider. The new
-  manager saw it on the market screen as their own listing for a rider they no
-  longer had, and `world.ai_market` — which filters on
-  `seller_team__manager__isnull=False` — treated it as a *human* listing and
-  bid the reserve on it, tying up an AI team's headroom for up to three days.
+  Its one caller is **closing a development squad**, which releases the
+  squad's graduates to the pool. Their auctions would otherwise stay biddable
+  until the deadline — managers would keep bidding on a rider already in the
+  free-agent pool, and the winner would be refused at resolve time by the very
+  ownership check that would have caught it days earlier.
 
-  Fixing #114 here rather than with a `rider__team=team` query is deliberate:
-  that narrower query would need a special case to *not* cancel a claimed team's
-  own still-owned listings, which is a special case in the wrong direction. No
-  money moves here either, so an auction cancelled with bids standing refunds
-  nothing — the same property as `cancel_open_auctions`.
+  **Forced sales are excluded** (`forced=False` in its query). A forced sale
+  takes the rider off the roster at listing (#27), so `belongs_to` is false
+  for them by design; without the exclusion, closing a squad would cancel a
+  sale the insolvent team is owed.
 
-  There are now **two callers** of cancellation, and they differ only in what
-  they key on: `cancel_open_auctions(rider_ids, *, at)` for retirement, and
-  `cancel_listings(team, *, at)` for a claim — see *Withdrawal and
-  cancellation on claim* below. Both are one conditional UPDATE moving no
-  money, so every reader that filters on an `OPEN` auction drops the cancelled
-  ones without any further change.
+  A **claim** does not come here. It cancels every listing the team holds —
+  graduates', roster riders' and forced sales alike — through
+  `cancel_listings`, which keys on `seller_team` alone
+  ([#114](https://github.com/mario595/cycling-manager/issues/114); see
+  *Withdrawal and cancellation on claim* below). #34 originally fixed #114 a
+  second time, by calling `cancel_unowned_listings` from the claim too; the
+  two fixes met in the merge with master and the claim kept `cancel_listings`,
+  the one that also catches forced sales. No money moves here either, so an
+  auction cancelled with bids standing refunds nothing — the same property as
+  `cancel_open_auctions`.
+
+  There are **three callers** of cancellation, differing only in what they
+  key on: `cancel_open_auctions(rider_ids, *, at)` for retirement,
+  `cancel_listings(team, *, at)` for a claim, and
+  `cancel_unowned_listings(seller_team, *, at)` for a squad close. All end in
+  one conditional UPDATE moving no money, so every reader that filters on an
+  `OPEN` auction drops the cancelled ones without any further change.
 
 ## Withdrawal and cancellation on claim
 
@@ -332,6 +335,44 @@ transaction**, so a claim that fails cancels nothing.
 runs on fresh teams with no listings, `release_team` touches nothing but the
 manager link by design, and `teams/` may not import `transfers/`. Those notes
 live with the claim itself, in `teams/README.md`.
+
+## Forced sales
+
+A team under the insolvency ladder (`economy/README.md`, *Insolvency*) can sell
+a rider it cannot afford (#27). `force_list_for_auction(team, rider_id, *,
+at)` is the write path; `api/`'s `ForceSellView` gates it on the team being
+embargoed.
+
+- **The rider leaves the roster at listing.** `team` becomes `NULL` at once,
+  so the wage stops at once (`charge_weekly_wages` sums by `team`) and every
+  roster-shaped query drops the rider with no other change. The alternative —
+  keeping the rider on the roster and excluding them from payroll — needs every
+  such query to remember the exclusion, and one that forgot would charge or
+  race a rider the manager has already given up.
+- **A limbo rider is not a free agent.** `free_agents()` excludes any rider
+  with an open forced auction, and `sign_free_agent` refuses one under its lock
+  ("That rider is being sold"). Once the auction stops being `OPEN`, an unsold
+  rider is an ordinary free agent.
+- **`resolve_auction` has one forced branch.** "Still available" means
+  `team IS NULL and not retired`, instead of "still on the seller's roster".
+  Sold, the buyer is charged, the seller paid, and the rider moves; unsold
+  (no bid, or the winner at `ROSTER_CAP`) touches no rider.
+- **No severance, and no way back.** There is no charge callback at all, and
+  the listing cannot be withdrawn. This is the point: an unsold rider is a
+  sale at zero, so a desperate manager always has a lever, and one cannot list
+  their best rider hoping for a rescue bid.
+- **A rider already on voluntary auction is converted**, not duplicated: the
+  existing row gets `forced = True`, keeping its reserve, deadline and bids.
+  `one_open_auction_per_rider` forbids a second row, and cancelling would
+  throw away the seller's bids.
+- **The roster floor.** A forced sale is refused (`RosterAtFloor`) when the
+  roster is at `FORCED_SALE_ROSTER_FLOOR` (4) or fewer. It equals
+  `racing.models.SQUAD_SIZE`, duplicated because `transfers/` may not import
+  `racing/`; a test pins the equality. The whole roster is locked, in pk
+  order, **before** it is counted: two concurrent forced sales from five riders
+  must not both pass and leave three.
+- `withdraw_bids` is also called when a case opens (`world/`), so an insolvent
+  team never carries an in-progress purchase.
 
 ## Value vs salary
 
@@ -416,8 +457,9 @@ follows.
 Market value was built to serve four consumers; auctions (#28) is the
 second to land, after free agents, and AI bidding (#30) the third:
 
-- **Forced sales under insolvency.** [#27](https://github.com/mario595/cycling-manager/issues/27)
-  needs a price when there is no auction to discover one.
+- **Forced sales under insolvency.** **Done** — see *Forced sales* above
+  (#27). They run as auctions with the ordinary reserve, so no separate price
+  was needed.
 - **Season-boundary salary renegotiation.** [#26](https://github.com/mario595/cycling-manager/issues/26)
   needs a value to renegotiate a rider's salary against.
 

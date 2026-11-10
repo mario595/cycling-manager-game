@@ -11,6 +11,7 @@ from economy.models import (
     FanbaseEntry,
     LedgerEntry,
     SalaryReviewReport,
+    SolvencyCheck,
     SponsorContract,
     SponsorOffer,
 )
@@ -346,3 +347,29 @@ def test_one_salary_review_per_team_per_season(db, team, season):
             SalaryReviewReport.objects.create(
                 team=team, season=season, changes=[], payroll_before=14_400, payroll_after=15_600,
             )
+
+
+def test_solvency_check_unique_per_team_per_week(db, team, week):
+    SolvencyCheck.objects.create(
+        team=team, week=week, occurred_at=week.starts_at, balance=-1, shortfall=10, strikes=1,
+    )
+    with pytest.raises(IntegrityError), transaction.atomic():
+        SolvencyCheck.objects.create(
+            team=team, week=week, occurred_at=week.starts_at, balance=-2, shortfall=10, strikes=2,
+        )
+
+
+def test_solvency_checks_order_newest_first(db, team, season):
+    weeks = [
+        Week.objects.create(
+            season=season, number=n,
+            starts_at=season.starts_at + timedelta(weeks=n - 1),
+            ends_at=season.starts_at + timedelta(weeks=n),
+        )
+        for n in (1, 2)
+    ]
+    for w in weeks:
+        SolvencyCheck.objects.create(
+            team=team, week=w, occurred_at=w.starts_at, balance=-1, shortfall=1, strikes=w.number,
+        )
+    assert [c.strikes for c in SolvencyCheck.objects.filter(team=team)] == [2, 1]

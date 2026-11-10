@@ -2,20 +2,44 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { Me, Rider } from '../api'
-import { listForAuction, releaseRider } from '../api'
+import type { Me, Rider, Solvency } from '../api'
+import { forceSell, listForAuction, releaseRider } from '../api'
 import { useAuth } from '../useAuth'
 import { useRoster } from '../useRoster'
+import { useSolvency } from '../useSolvency'
 import { Roster } from './Roster'
 
 vi.mock('../useAuth', () => ({ useAuth: vi.fn() }))
 vi.mock('../useRoster', () => ({ useRoster: vi.fn() }))
-vi.mock('../api', () => ({ releaseRider: vi.fn(), listForAuction: vi.fn() }))
+vi.mock('../useSolvency', () => ({ useSolvency: vi.fn() }))
+vi.mock('../api', () => ({ releaseRider: vi.fn(), listForAuction: vi.fn(), forceSell: vi.fn() }))
 
 const mockUseAuth = vi.mocked(useAuth)
 const mockUseRoster = vi.mocked(useRoster)
 const mockReleaseRider = vi.mocked(releaseRider)
 const mockListForAuction = vi.mocked(listForAuction)
+const mockForceSell = vi.mocked(forceSell)
+const mockUseSolvency = vi.mocked(useSolvency)
+
+const solvent: Solvency = {
+  insolvent: false,
+  balance: 100_000,
+  shortfall: 0,
+  target: 0,
+  cut_so_far: 0,
+  outgoings: 0,
+  income: 0,
+  strikes: 0,
+  paydays_left: null,
+  deadline: null,
+  roster_size: 12,
+  roster_floor: 4,
+}
+const insolvent: Solvency = { ...solvent, insolvent: true, shortfall: 5_000, target: 5_000, paydays_left: 3 }
+
+function showSolvency(solvency: Solvency) {
+  mockUseSolvency.mockReturnValue({ solvency, loading: false, error: false, refresh: vi.fn() })
+}
 
 const manager: Me = {
   authenticated: true,
@@ -65,6 +89,17 @@ const riders: Rider[] = [
   },
 ]
 
+function rosterWith(refresh = vi.fn()) {
+  mockUseRoster.mockReturnValue({
+    riders,
+    squadValue: 135_000,
+    salaryReview: null,
+    loading: false,
+    error: false,
+    refresh,
+  })
+}
+
 function renderRoster() {
   return render(
     <MemoryRouter>
@@ -74,6 +109,7 @@ function renderRoster() {
 }
 
 beforeEach(() => {
+  showSolvency(solvent)
   mockUseAuth.mockReturnValue({
     me: manager,
     loading: false,
@@ -254,6 +290,62 @@ describe('Roster', () => {
 
     await waitFor(() => expect(list).toHaveBeenCalledWith(1))
     await waitFor(() => expect(refresh).toHaveBeenCalled())
+  })
+
+  it('offers no force sale to a solvent team', () => {
+    renderRoster()
+
+    fireEvent.click(screen.getByText('Alba Sanchez'))
+
+    expect(screen.queryByRole('button', { name: 'Force sale' })).not.toBeInTheDocument()
+  })
+
+  it('asks for confirmation, then force-sells and refetches both screens', async () => {
+    const refresh = vi.fn()
+    const refreshSolvency = vi.fn()
+    rosterWith(refresh)
+    mockUseSolvency.mockReturnValue({
+      solvency: insolvent, loading: false, error: false, refresh: refreshSolvency,
+    })
+    const sell = mockForceSell.mockResolvedValue(undefined)
+
+    renderRoster()
+
+    fireEvent.click(screen.getByText('Alba Sanchez'))
+    fireEvent.click(screen.getByRole('button', { name: 'Force sale' }))
+    expect(sell).not.toHaveBeenCalled()
+    expect(screen.getByText(/does not come back/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm force sale' }))
+
+    await waitFor(() => expect(sell).toHaveBeenCalledWith(1))
+    await waitFor(() => expect(refresh).toHaveBeenCalled())
+    await waitFor(() => expect(refreshSolvency).toHaveBeenCalled())
+  })
+
+  it('disables the force sale at the roster floor', () => {
+    rosterWith()
+    showSolvency({ ...insolvent, roster_size: 4, roster_floor: 4 })
+
+    renderRoster()
+
+    fireEvent.click(screen.getByText('Alba Sanchez'))
+
+    expect(screen.getByRole('button', { name: 'Force sale' })).toBeDisabled()
+    expect(screen.getByText('A team needs at least 4 riders to race.')).toBeInTheDocument()
+  })
+
+  it('shows the refusal when the server rejects the force sale', async () => {
+    rosterWith()
+    showSolvency(insolvent)
+    mockForceSell.mockRejectedValue(new Error('A team needs at least 4 riders to race.'))
+
+    renderRoster()
+
+    fireEvent.click(screen.getByText('Alba Sanchez'))
+    fireEvent.click(screen.getByRole('button', { name: 'Force sale' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm force sale' }))
+
+    expect(await screen.findByText('A team needs at least 4 riders to race.')).toBeInTheDocument()
   })
 
   it('renders the salary review panel with the wage bill and one row per change', () => {

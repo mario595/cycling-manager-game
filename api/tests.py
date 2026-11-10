@@ -3055,7 +3055,7 @@ def test_auction_market_shows_full_bid_history_with_team_identity(
     assert response.status_code == 200
     entry = response.data["auctions"][0]
     assert set(entry) == {
-        "id", "rider", "current_price", "min_next_bid", "deadline", "is_own_listing", "bids",
+        "id", "rider", "current_price", "min_next_bid", "deadline", "is_own_listing", "forced", "bids",
     }
     assert entry["bids"] == [
         {"team_name": bidder_team.name, "amount": auction.reserve_price, "placed_at": entry["bids"][0]["placed_at"]},
@@ -4521,3 +4521,226 @@ def test_promote_cancels_a_listed_graduate_auction(dev_squad_client, dev_squad_t
     assert Auction.objects.get(pk=auction.pk).status == Auction.Status.CANCELLED
     graduate.refresh_from_db()
     assert graduate.team_id == dev_squad_team.pk
+
+
+# --- Insolvency (#27) ---------------------------------------------------------
+
+
+@pytest.fixture
+def insolvent_week(db) -> Week:
+    season = Season.objects.create(number=1, starts_at=datetime(2027, 3, 1, 0, 0, tzinfo=dt_timezone.utc))
+    return Week.objects.create(
+        season=season, number=1, starts_at=season.starts_at,
+        ends_at=season.starts_at + timedelta(weeks=1),
+    )
+
+
+@pytest.fixture
+def broke_manager(db) -> User:
+    return User.objects.create_user(email="broke@example.com", password="s0meth1ng-good")
+
+
+@pytest.fixture
+def broke_team(db, broke_manager) -> Team:
+    """A managed team with a wage bill and nothing to pay it with — not yet
+    assessed; `_make_insolvent` opens the case."""
+    team = Team.objects.create(name="Broke Team", code="BRK", manager=broke_manager)
+    for i in range(6):
+        _market_rider(f"Broke Rider {i}", team=team, weekly_salary=4_000)
+    return team
+
+
+@pytest.fixture
+def broke_client(broke_manager) -> APIClient:
+    client = APIClient()
+    client.force_authenticate(user=broke_manager)
+    return client
+
+
+def _make_insolvent(team, week, *, strikes=1, shortfall=24_000):
+    from economy.models import SolvencyCheck
+    SolvencyCheck.objects.create(
+        team=team, week=week, occurred_at=week.starts_at,
+        balance=-1_000, shortfall=shortfall, strikes=strikes,
+    )
+
+
+def test_embargo_blocks_signing(broke_client, broke_team, insolvent_week):
+    _make_insolvent(broke_team, insolvent_week)
+    free = _market_rider("Free Agent")
+
+    response = broke_client.post("/api/transfers/free-agents/sign/", {"rider_id": free.pk})
+
+    assert response.status_code == 409
+    assert "insolvent" in response.data["detail"]
+    free.refresh_from_db()
+    assert free.team_id is None
+
+
+def test_embargo_blocks_bidding(broke_client, broke_team, insolvent_week):
+    _make_insolvent(broke_team, insolvent_week)
+    seller = Team.objects.create(name="Seller", code="SEL")
+    listed = _market_rider("Listed", team=seller)
+    from transfers.services import list_for_auction
+    auction = list_for_auction(seller, listed.pk, at=now())
+
+    response = broke_client.post(
+        f"/api/transfers/auctions/{auction.pk}/bid/", {"amount": auction.reserve_price},
+    )
+
+    assert response.status_code == 409
+    assert Bid.objects.count() == 0
+
+
+def test_embargo_blocks_hiring(broke_client, broke_team, insolvent_week, pool_trainer):
+    _make_insolvent(broke_team, insolvent_week)
+    make_ledger_entry(broke_team, "starting_balance", STARTING_BALANCE, now(), "Test")
+
+    response = broke_client.post("/api/staff/trainer/hire/", {"trainer_id": pool_trainer.pk})
+
+    assert response.status_code == 409
+    pool_trainer.refresh_from_db()
+    assert pool_trainer.team_id is None
+
+
+def test_embargo_blocks_opening_a_development_squad(broke_client, broke_team, insolvent_week):
+    _make_insolvent(broke_team, insolvent_week)
+    make_ledger_entry(broke_team, "starting_balance", STARTING_BALANCE, now(), "Test")
+
+    response = broke_client.post("/api/development-squad/open/", {"level": 1})
+
+    assert response.status_code == 409
+    assert not DevelopmentSquad.objects.filter(team=broke_team).exists()
+
+
+def test_embargo_blocks_upgrading_a_development_squad(broke_client, broke_team, insolvent_week):
+    _make_insolvent(broke_team, insolvent_week)
+    make_ledger_entry(broke_team, "starting_balance", STARTING_BALANCE, now(), "Test")
+    DevelopmentSquad.objects.create(team=broke_team, level=1, opened_at=now())
+
+    response = broke_client.post("/api/development-squad/level/", {"level": 2})
+
+    assert response.status_code == 409
+    assert DevelopmentSquad.objects.get(team=broke_team).level == 1
+
+
+def test_embargo_allows_levers_that_cut_cost_or_add_income(
+    broke_client, broke_team, insolvent_week, pool_trainer,
+):
+    _make_insolvent(broke_team, insolvent_week)
+    pool_trainer.team = broke_team
+    pool_trainer.save()
+    DevelopmentSquad.objects.create(team=broke_team, level=1, opened_at=now())
+    rider = broke_team.riders.first()
+
+    assert broke_client.post("/api/staff/trainer/fire/").status_code == 204
+    assert broke_client.post("/api/development-squad/close/").status_code == 204
+    assert broke_client.post("/api/transfers/riders/release/", {"rider_id": rider.pk}).status_code == 204
+    other = broke_team.riders.first()
+    assert broke_client.post("/api/transfers/auctions/list/", {"rider_id": other.pk}).status_code == 204
+
+
+def test_embargo_allows_signing_a_sponsor(broke_client, broke_team, insolvent_week):
+    from economy.services import ensure_offer_round, offers_for
+    _make_insolvent(broke_team, insolvent_week)
+    with override_settings(GAME_CLOCK_CLASS="world.clocks.MockClock"):
+        world_services._clock = None
+        try:
+            ensure_offer_round(broke_team, insolvent_week.season, at=now())
+            offer = offers_for(broke_team, insolvent_week.season).first()
+            response = broke_client.post("/api/economy/sponsors/sign/", {"offer_id": offer.pk})
+        finally:
+            world_services._clock = None
+
+    assert response.status_code == 204
+
+
+def test_solvency_view_solvent_shape(broke_client, broke_team):
+    response = broke_client.get("/api/economy/solvency/")
+
+    assert response.status_code == 200
+    assert response.data["insolvent"] is False
+    assert response.data["paydays_left"] is None
+    assert response.data["deadline"] is None
+    assert response.data["roster_size"] == 6
+    assert response.data["roster_floor"] == 4
+    assert response.data["shortfall"] == 24_000
+
+
+def test_solvency_view_insolvent_shape(broke_client, broke_team, insolvent_week):
+    _make_insolvent(broke_team, insolvent_week, strikes=2, shortfall=30_000)
+
+    response = broke_client.get("/api/economy/solvency/")
+
+    assert response.data["insolvent"] is True
+    assert response.data["strikes"] == 2
+    assert response.data["target"] == 30_000
+    assert response.data["shortfall"] == 24_000
+    assert response.data["cut_so_far"] == 6_000
+    assert response.data["paydays_left"] == 2
+
+
+def test_solvency_view_without_a_team_is_the_solvent_shape(db):
+    user = User.objects.create_user(email="nobody@example.com", password="s0meth1ng-good")
+    client = APIClient()
+    client.force_authenticate(user=user)
+
+    response = client.get("/api/economy/solvency/")
+
+    assert response.status_code == 200
+    assert response.data["insolvent"] is False
+
+
+def test_force_sell_requires_insolvency(broke_client, broke_team):
+    rider = broke_team.riders.first()
+
+    response = broke_client.post("/api/transfers/auctions/force/", {"rider_id": rider.pk})
+
+    assert response.status_code == 409
+    rider.refresh_from_db()
+    assert rider.team_id == broke_team.pk
+
+
+def test_force_sell_at_floor_is_409(broke_client, broke_team, insolvent_week):
+    _make_insolvent(broke_team, insolvent_week)
+    for rider in list(broke_team.riders.all())[:2]:
+        rider.delete()                          # leaves four
+
+    response = broke_client.post(
+        "/api/transfers/auctions/force/", {"rider_id": broke_team.riders.first().pk},
+    )
+
+    assert response.status_code == 409
+    assert broke_team.riders.count() == 4
+
+
+def test_force_sell_success_returns_204_and_lowers_payroll(broke_client, broke_team, insolvent_week):
+    from economy.services import payroll_for
+    _make_insolvent(broke_team, insolvent_week)
+    rider = broke_team.riders.first()
+    before = payroll_for(broke_team)
+
+    response = broke_client.post("/api/transfers/auctions/force/", {"rider_id": rider.pk})
+
+    assert response.status_code == 204
+    assert payroll_for(broke_team) == before - 4_000
+    assert Auction.objects.get(rider=rider).forced is True
+    assert not LedgerEntry.objects.filter(team=broke_team, kind="transfer_fee").exists()
+
+
+def test_force_sell_requires_a_team(db):
+    user = User.objects.create_user(email="nobody2@example.com", password="s0meth1ng-good")
+    client = APIClient()
+    client.force_authenticate(user=user)
+
+    assert client.post("/api/transfers/auctions/force/", {"rider_id": 1}).status_code == 403
+
+
+def test_auction_market_reports_forced(broke_client, broke_team, insolvent_week):
+    _make_insolvent(broke_team, insolvent_week)
+    rider = broke_team.riders.first()
+    broke_client.post("/api/transfers/auctions/force/", {"rider_id": rider.pk})
+
+    response = broke_client.get("/api/transfers/auctions/")
+
+    assert [a["forced"] for a in response.data["auctions"]] == [True]

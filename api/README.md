@@ -370,25 +370,15 @@ Since #29 each rider also carries `release_cost`
   world with no unmanaged team left, both return 409 — the request is
   well-formed but the world's state refuses it. A malformed code or a name
   already taken returns 400. See `teams/README.md`, *Claiming a team*.
-<<<<<<< HEAD
-  The claim and `transfers.services.withdraw_bids(team, at=at)` run inside
-  **one** `transaction.atomic()`, with the `except` clauses outside it, so a
-  new manager never inherits the team's standing bids and no tick can resolve
-  one of them to them in between (#30; see `transfers/README.md`,
-  *Withdrawal on claim*). Since #34 the same block calls
-  `transfers.services.cancel_unowned_listings(team, at=at)`, so a claim also
-  ends the team's **listings** — a claim releases its roster to the free-agent
-  pool, and an auction left open would show the new manager their own "listing"
-  for a rider they no longer have ([#114](https://github.com/mario595/cycling-manager/issues/114);
-  see `transfers/README.md`, *Auction ownership*).
-=======
   The claim, `transfers.services.withdraw_bids(team, at=at)` and
   `transfers.services.cancel_listings(team, at=at)` run inside **one**
   `transaction.atomic()`, with the `except` clauses outside it, so a new
   manager inherits neither the team's standing bids (#30) nor its open
   listings (#114), and no tick can resolve one of them to them in between (see
-  `transfers/README.md`, *Withdrawal and cancellation on claim*).
->>>>>>> origin/master
+  `transfers/README.md`, *Withdrawal and cancellation on claim*). Since #34 a
+  claim also closes the team's squad; the graduates it releases are still
+  listed with this team as seller, so the same `cancel_listings` call ends
+  their auctions too.
 - `GET /api/staff/` (`StaffSerializer`, `StaffView`) — the **caller's own**
   team's staff: `trainer` (null when the slot is empty), `pool` (every
   unemployed trainer, but only populated when the slot is empty — a team
@@ -606,6 +596,28 @@ Since #29 each rider also carries `release_cost`
   a second call (or a lost network response resent) against an
   already-acknowledged spell also 404s, rather than double-writing or
   erroring.
+
+- `GET /api/economy/solvency/` (`SolvencySerializer`, `SolvencyView`) — the
+  caller's standing against the insolvency ladder (#27): `insolvent`,
+  `balance`, the live weekly `shortfall`, `target` (the shortfall at the last
+  payday), `cut_so_far`, `strikes`, `paydays_left` and `deadline` (both null
+  when the live shortfall is zero, and `deadline` also when the week it falls
+  in is not declared yet), plus `roster_size` and `roster_floor` for the
+  force-sale button. A caller with no team gets the solvent shape with zeros,
+  matching `FinancesView`. See `economy/README.md`, *Insolvency*.
+- `POST /api/transfers/auctions/force/` (`ForceSellView`) — body
+  `{rider_id}`. Sells one of the caller's riders under insolvency: the rider
+  leaves the roster now and is auctioned with no severance
+  (`transfers/README.md`, *Forced sales*). `204` on success. `409` when the
+  team is not insolvent, the rider is not on the roster, or the sale would
+  take the roster to the floor (`RosterAtFloor`); `403` with no team.
+- **The embargo.** While a team is insolvent, `POST` to free-agent signing,
+  bidding, trainer hire, development-squad open and development-squad level
+  change all return `409` with the same `detail`, checked before the payload is
+  validated. Not blocked: sponsor signing, trainer fire, squad close, rider
+  release and ordinary listing — each cuts cost or adds income.
+- `GET /api/transfers/auctions/` carries `forced` on each auction (#27), so
+  the market can label a sale made under insolvency.
 
 ## URL ordering
 
