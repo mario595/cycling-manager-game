@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from bisect import bisect_right
+
 import brotli
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
@@ -1474,11 +1476,14 @@ class DevelopmentSquadView(APIView):
         if squad is not None:
             prospects = sorted(in_squad(squad), key=strength, reverse=True)
             finished = sorted(graduates(squad), key=strength, reverse=True)
+            opened = _week_starts_since(
+                [r.intake_at for r in prospects] + [r.graduated_at for r in finished], at,
+            )
             for rider in prospects:
-                weeks_left[rider.pk] = _weeks_left(rider.intake_at, SPELL_WEEKS, at)
+                weeks_left[rider.pk] = _weeks_left(rider.intake_at, SPELL_WEEKS, opened)
             for rider in finished:
                 graduate_weeks_left[rider.pk] = _weeks_left(
-                    rider.graduated_at, GRADUATE_WINDOW_WEEKS, at,
+                    rider.graduated_at, GRADUATE_WINDOW_WEEKS, opened,
                 )
                 promotion_salaries[rider.pk] = weekly_salary_for(rider)
                 market_values[rider.pk] = market_value_for(rider)
@@ -1532,30 +1537,47 @@ class DevelopmentSquadView(APIView):
         }).data)
 
 
-def _weeks_left(started_at, total: int, at) -> int:
-    """In-season weeks of `total` still to run from `started_at`, floored at
-    1 (#34, Design decision 16).
+def _week_starts_since(started: list, at) -> list:
+    """Sorted `starts_at` of every declared week that opened after the
+    earliest of `started` and no later than `at` — one query for the whole
+    squad, which `_weeks_left` then counts per rider in memory. Empty when
+    nothing has started."""
+    known = [value for value in started if value is not None]
+    if not known:
+        return []
+    return list(
+        Week.objects.filter(starts_at__gt=min(known), starts_at__lte=at)
+        .order_by("starts_at")
+        .values_list("starts_at", flat=True)
+    )
+
+
+def _weeks_left(started_at, total: int, opened: list) -> int:
+    """Week boundaries still to come before a wait of `total` in-season weeks,
+    begun at `started_at`, ends — floored at 1 (#34, Design decision 16).
 
     A count rather than a `{season, week}` position on purpose: the next
     season is often not declared yet, which would leave every rider a
     position-less "unknown" exactly when the player needs to know how long
     they have.
 
-    It is `total` **less the weeks that have already opened**, matching the
-    rules that end each wait: a prospect graduates and a graduate is released
-    at the boundary where that count reaches `total`, so this is the number of
-    boundaries before that happens — no more. The plan wrote `total + 1`, which
-    is one too many for both, because the week a rider arrives in is the week
-    whose opening has already been counted for them and the week they spend
-    their arrival developing nothing (#33's rule that a newcomer first grows at
-    the *next* boundary). The floor keeps a rider shown at 1 rather than 0 in
-    the rare race between a boundary's tick and the screen reading it.
+    **It counts the boundaries crossed *after* the start**, `started_at <
+    starts_at <= at`, never the start's own week. A prospect arriving at, or a
+    graduate stamped at, week N's boundary is graduated or released by the
+    tick at week N + `total`: `total` boundaries remain for the whole of week
+    N, `total - 1` for week N+1, and so on. Counting `[started_at, at)`
+    instead includes week N itself the moment the clock is past its opening —
+    which a player always is, since the screen is read between ticks — and
+    shows a two-week window as "1 week" for both of its weeks. The floor keeps
+    a rider shown at 1 rather than 0 in the race between a boundary's tick and
+    the screen reading it.
 
-    schedule/ owns week counting (AGENTS.md); world/ just asks.
+    `opened` is `_week_starts_since`'s list, so the whole squad costs one query.
     """
     if started_at is None:
         return total
-    return max(1, total - weeks_opened_between(started_at, at))
+    crossed = len(opened) - bisect_right(opened, started_at)
+    return max(1, total - crossed)
 
 
 def _next_intake_payload(at, squad) -> dict | None:

@@ -4249,7 +4249,7 @@ def test_prospect_payload_carries_weeks_left_change_and_promotion_salary(
 
     assert len(data["riders"]) == 2
     rider = data["riders"][0]
-    assert rider["weeks_left"] == 13  # a 14-week spell, one week opened
+    assert rider["weeks_left"] == 14  # arrived at this boundary: all 14 ahead
     assert rider["promotion_salary"] > 0
     # Change is measured against the baseline snapshot the intake wrote, so it
     # is zero on arrival rather than null (no snapshot to compare against).
@@ -4298,7 +4298,7 @@ def test_graduate_payload_carries_window_value_and_listed_state(
     assert len(data["graduates"]) == 1
     row = data["graduates"][0]
     assert row["id"] == graduate.pk
-    assert row["weeks_left"] == 1  # one week of the two-week window opened
+    assert row["weeks_left"] == 2  # stamped at this boundary: both weeks ahead
     assert row["market_value"] > 0
     assert row["promotion_salary"] > 0
     assert row["listed"] is False
@@ -4339,6 +4339,29 @@ def test_weeks_left_reads_the_full_wait_at_the_boundary_it_starts(
 
     assert data["graduates"][0]["weeks_left"] == 2
     assert data["riders"][0]["weeks_left"] == 14
+
+
+def test_weeks_left_counts_down_one_per_boundary_mid_week(
+    dev_squad_client, dev_squad_team, squad_season,
+):
+    """Read between ticks, as a player always does: a day into the start's own
+    week the whole wait is still ahead, and a day into the next week one
+    boundary has gone. The tick releases a week-1 graduate at week 3 and
+    graduates a week-1 arrival at week 15, so these are the boundaries left."""
+    clock, season_start = squad_season
+    _open_squad(dev_squad_team, 1)
+    run_intake(at=season_start)
+    _graduate(_first_prospect(dev_squad_team))
+
+    clock.set(season_start + timedelta(days=1))
+    week_one = dev_squad_client.get("/api/development-squad/").data
+    clock.set(season_start + timedelta(weeks=1, days=1))
+    week_two = dev_squad_client.get("/api/development-squad/").data
+
+    assert week_one["graduates"][0]["weeks_left"] == 2
+    assert week_one["riders"][0]["weeks_left"] == 14
+    assert week_two["graduates"][0]["weeks_left"] == 1
+    assert week_two["riders"][0]["weeks_left"] == 13
 
 
 def test_arrivals_at_risk_counts_the_batch_a_full_squad_cannot_take(

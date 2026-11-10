@@ -321,7 +321,11 @@ def _release_expired_graduates(week) -> int:
     if cutoff is None:
         return 0
     expired = list(
+        # The squad link is what makes a rider a graduate *now*: `graduated_at`
+        # is never cleared, so without it every rider who ever graduated —
+        # promoted, sold, released — would be a candidate again on every tick.
         Rider.objects.filter(
+            development_squad__isnull=False,
             graduated_at__isnull=False, graduated_at__lte=cutoff,
         )
         .exclude(
