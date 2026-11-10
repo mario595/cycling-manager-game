@@ -147,7 +147,7 @@ Import the three orchestrators. Edit `tick()` in four places:
 
 ## Work items
 
-### W1 — `world/models.py` + migration: two TickRun counters
+### W1 — `world/models.py` + migration: two TickRun counters — done
 Add the fields; `makemigrations world`. Test: `world/tests/test_models.py` — a `TickRun` created with no arguments has both counters at 0.
 
 ### W2 — `racing/services.py`: `course_pick_squad`
