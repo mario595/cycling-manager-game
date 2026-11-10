@@ -1,11 +1,11 @@
 # Roadmap
 
-**Status:** agreed 2026-09-11, last revised 2026-09-29
+**Status:** agreed 2026-09-11, last revised 2026-11-10 (rollout milestones)
 **Scope:** ordering only. This file says *what to build next, in what order, and
 what blocks what*. It does not say what any feature does — that is each issue,
 and later each spec.
 
-28 open issues.
+30 open issues.
 
 ## The question this roadmap answers
 
@@ -40,6 +40,29 @@ coming back to.
 AI trading in it, youth intake, retirement and salary renegotiation, all since
 2026-09-24. A roster is now something a manager builds, sells from, develops
 and watches age out, rather than something they were handed.
+
+---
+
+# Part 0 — Rollout: staging, production, beta
+
+Agreed 2026-11-10. **Rollout runs alongside Part 2, and its gates win.**
+Each phase is a GitHub milestone: a release gate, i.e. what has to be true
+before that phase starts. Milestones are used for nothing else. Labels carry
+the domain, the board's Status carries spec → plan → code, and this file
+carries order and reasons. Game features (Part 2) get no milestone unless a
+beta finding makes one block a phase.
+
+| Milestone | Issues | Why it gates the phase |
+|---|---|---|
+| **1 — Staging beta (LLM managers)** | [#128](https://github.com/mario595/cycling-manager/issues/128) production-ready image · [#129](https://github.com/mario595/cycling-manager/issues/129) staging world on an accelerated clock · [#130](https://github.com/mario595/cycling-manager/issues/130) API tokens and OpenAPI docs · [#131](https://github.com/mario595/cycling-manager/issues/131) report a problem · [#132](https://github.com/mario595/cycling-manager/issues/132) LLM manager harness · [#125](https://github.com/mario595/cycling-manager/issues/125) weekly deficit | Staging runs the **production image** with a single difference, `staging.py` on `MockClock`, advanced so that one game day passes per real hour. A season then lasts about 84 hours, so season closes get exercised several times a week. LLM agents play through the API on a game-time cadence and report through the in-game channel. [#125](https://github.com/mario595/cycling-manager/issues/125) comes first: otherwise every agent reports the same deficit, and in a 3.5-day season teams walk the insolvency ladder before anything else is tested. |
+| **2 — Production launch** | [#133](https://github.com/mario595/cycling-manager/issues/133) production deploy and CI deploy step | The same image on the **real** clock, with the hourly tick, backups and monitoring live. It follows a clean staging season. The email provider is chosen here, which unblocks [#51](https://github.com/mario595/cycling-manager/issues/51). |
+| **3 — Real-time beta (humans and LLMs)** | [#134](https://github.com/mario595/cycling-manager/issues/134) invite-only registration and an agent flag · [#51](https://github.com/mario595/cycling-manager/issues/51) account self-service · [#65](https://github.com/mario595/cycling-manager/issues/65) unique display names | A few human testers join the LLM managers in the production world. Humans need to be able to recover a lost password, and names need to be unique once strangers share a table. |
+| **4 — The pyramid** | [#10](https://github.com/mario595/cycling-manager/issues/10) · [#11](https://github.com/mario595/cycling-manager/issues/11) · [#13](https://github.com/mario595/cycling-manager/issues/13) · [#14](https://github.com/mario595/cycling-manager/issues/14) · [#56](https://github.com/mario595/cycling-manager/issues/56) | Only makes sense once there are enough players to fill more than one Group, so it follows the beta. Order within it is in 2.4. |
+
+The order inside milestone 1: [#128](https://github.com/mario595/cycling-manager/issues/128) → [#129](https://github.com/mario595/cycling-manager/issues/129) → [#132](https://github.com/mario595/cycling-manager/issues/132), with [#130](https://github.com/mario595/cycling-manager/issues/130) and
+[#131](https://github.com/mario595/cycling-manager/issues/131) in parallel, since neither depends on the infrastructure. Bugs found
+by the staging agents go into milestone 1 if they block a clean staging season,
+and into milestone 3 if they only block humans.
 
 ---
 
