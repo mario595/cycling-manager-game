@@ -676,20 +676,23 @@ now the shortfall is real and reported. `run_intake` returns an
 `TickRun` counters, and the squad screen's next-intake payload carries
 `arrivals_at_risk` — how much of the *next* batch would be lost if nothing
 changes — so the warning arrives **before** the week rather than after it.
-Discarding a prospect or promoting one into the senior roster frees a place,
-which is why the figure is a projection rather than a promise.
+Riders who will have graduated by that week are counted as gone, since the
+tick graduates before it runs intake at the same boundary; `api/` and
+`world/` take the cutoff from the same `schedule.services.weeks_ago_cutoff`,
+so the warning cannot disagree with the tick about who has left. Discarding a
+prospect or promoting one into the senior roster frees a place, which is why
+the figure is a projection rather than a promise.
 
-**Closing releases the squad's *prospects*, and the release must stamp
-`unattached_since` before the row disappears.** `close_squad(team, *, at)`
-takes a required `at`: every **prospect** is stamped
-`unattached_since = at` via the existing `mark_team_change(riders,
-team_now=None, at=at)`, then has `development_squad` cleared, and only then
-is the squad row deleted. A **graduate** is deleted rather than released
-(*Youth triage*, below). Deleting first would let the FK's `SET_NULL` unlink
-them silently with a null `unattached_since` — and a free agent with a null
-`unattached_since` is never treated as long-unattached by the pool's expiry
-rule (`transfers/README.md`, *Free agents*), so an unwanted 17-year-old would
-sit in the market forever.
+**Closing discards the squad's *prospects* and releases its *graduates*, and
+the release must stamp `unattached_since` before the row disappears.**
+`close_squad(team, *, at)` takes a required `at`: every **graduate** is
+stamped `unattached_since = at` and unlinked through `release_graduates`,
+then every **prospect** still in the squad is deleted, and only then is the
+squad row deleted (*Youth triage*, below). Deleting the row first would let
+the FK's `SET_NULL` unlink the graduates silently with a null
+`unattached_since` — and a free agent with a null `unattached_since` is never
+treated as long-unattached by the pool's expiry rule (`transfers/README.md`,
+*Free agents*), so an unwanted 17-year-old would sit in the market forever.
 
 **Squad riders grow like any other rider, but draw no wage and get no
 trainer focus.** Growth is free: `apply_weekly_growth` and

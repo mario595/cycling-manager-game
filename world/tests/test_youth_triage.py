@@ -7,7 +7,7 @@ is 2, and a boundary is when each fires. A test that called
 `_graduate_squad_riders` directly would prove the query works and say nothing
 about whether it fires on the week the player expects.
 
-`_weeks_ago_cutoff` counts a season's weeks, so most of these declare two
+`schedule.services.weeks_ago_cutoff` counts a season's weeks, so most of these declare two
 seasons: SPELL_WEEKS is 14 and a season is 12, so no single season is long
 enough for anyone to graduate.
 """

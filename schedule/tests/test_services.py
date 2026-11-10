@@ -5,7 +5,12 @@ from datetime import datetime, timedelta, timezone as dt_timezone
 import pytest
 
 from schedule.models import SEASON_WEEKS, Season, SeasonTransition, Week, WeekTransition
-from schedule.services import current_position, process_transitions, process_week_transitions
+from schedule.services import (
+    current_position,
+    process_transitions,
+    process_week_transitions,
+    weeks_ago_cutoff,
+)
 
 MONDAY = datetime(2027, 3, 1, 0, 0, 0, tzinfo=dt_timezone.utc)
 
@@ -155,3 +160,31 @@ def test_occurred_at_is_the_weeks_own_start_not_the_tick_time(db):
 
     assert written[0].occurred_at == week_one.starts_at
     assert written[0].occurred_at != late_tick_time
+
+
+def test_weeks_ago_cutoff_is_the_nth_newest_week_before_the_boundary(db):
+    season = make_season_with_weeks(1, MONDAY)
+    boundary = season.starts_at + timedelta(weeks=5)  # week 6 opens
+
+    # Weeks 1-5 opened before week 6: the newest is week 5, the third newest week 3.
+    assert weeks_ago_cutoff(boundary, 1) == season.starts_at + timedelta(weeks=4)
+    assert weeks_ago_cutoff(boundary, 3) == season.starts_at + timedelta(weeks=2)
+
+
+def test_weeks_ago_cutoff_is_none_until_n_weeks_have_opened(db):
+    season = make_season_with_weeks(1, MONDAY)
+    boundary = season.starts_at + timedelta(weeks=5)
+
+    assert weeks_ago_cutoff(boundary, 5) == season.starts_at
+    assert weeks_ago_cutoff(boundary, 6) is None
+
+
+def test_weeks_ago_cutoff_skips_the_off_season(db):
+    """Counted in declared weeks, so the gap between seasons adds nothing."""
+    first = make_season_with_weeks(1, MONDAY)
+    second = make_season_with_weeks(2, MONDAY + timedelta(weeks=SEASON_WEEKS + 4))
+
+    # Two weeks back from season 2's first boundary are season 1's last two.
+    assert weeks_ago_cutoff(second.starts_at, 2) == first.starts_at + timedelta(
+        weeks=SEASON_WEEKS - 2,
+    )

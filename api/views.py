@@ -96,13 +96,12 @@ from riders.youth_triage import (
     RosterFull as SquadRosterFull,
     TriageError,
     discard,
-    free_places,
     graduates,
     in_squad,
     promote,
 )
 from schedule.models import SEASON_WEEKS, Week
-from schedule.services import current_position, weeks_opened_between
+from schedule.services import current_position, weeks_ago_cutoff, weeks_opened_between
 from staff.pricing import hire_fee, weekly_salary
 from staff.services import (
     InsufficientFunds,
@@ -1567,15 +1566,28 @@ def _next_intake_payload(at, squad) -> dict | None:
     if nothing changes before the week arrives, so promoting or discarding a
     prospect changes the number the player is warned with (#34, Design
     decision 14).
+
+    **Riders who graduate by then are counted as gone**, because they will be:
+    the tick graduates before it runs intake at the same boundary. Graduations
+    land two weeks before an intake with a 14-week spell and a four-week
+    interval, so leaving them out would warn a full squad about a batch that
+    will in fact arrive — every cycle — and push the manager into discarding a
+    rider for nothing. The cutoff is `schedule.services.weeks_ago_cutoff`
+    taken at that week's boundary, the same call `world/` graduates with, so
+    the warning and the tick cannot disagree about who has left.
     """
     week = _next_intake_week(at)
     if week is None:
         return None
-    places = free_places(squad)
+    occupied = in_squad(squad)
+    cutoff = weeks_ago_cutoff(week.starts_at, SPELL_WEEKS)
+    if cutoff is not None:
+        occupied = occupied.exclude(intake_at__lte=cutoff)
+    free = max(0, LEVELS[squad.level].places - occupied.count())
     return {
         "season": week.season.number,
         "week": week.number,
-        "arrivals_at_risk": max(0, INTAKE_BATCH_SIZE - places),
+        "arrivals_at_risk": max(0, INTAKE_BATCH_SIZE - free),
     }
 
 
@@ -1711,13 +1723,26 @@ class PromoteSquadRiderView(APIView):
     this is the button's only honest reading: the manager is choosing the
     rider over the bids, and the sale ends. Without it the auction would sit
     open over a rider now on the roster, and the winner at its deadline would
-    take a player the team is also paying and fielding.
+    take a player the team is also paying and fielding. This departs from
+    the plan's Design decision 9, which let the sale proceed: that holds for
+    `resolve_auction` itself, but the screen offers Promote on a listed
+    graduate as "keep them", so the API ends the sale.
+
+    Refused with the embargo's 409 while the team is insolvent, because
+    promotion starts a salary (#27).
     """
 
     def post(self, request, rider_id: int):
         team = team_for(request.user)
         if team is None:
             return Response({"detail": "You do not manage a team."}, status=403)
+
+        # Promotion starts a salary, so an insolvent team is refused like any
+        # other view that adds cost (#27, economy/README.md). Discard stays
+        # open: it adds nothing.
+        embargoed = _embargo_response(team)
+        if embargoed is not None:
+            return embargoed
 
         at = now()
         try:

@@ -823,9 +823,15 @@ def test_resolve_released_graduate_to_a_full_buyer_also_drops_them_in_the_pool(
     assert graduate.unattached_since == auction.deadline
 
 
-def test_graduate_promoted_mid_auction_still_sells(db, claimed_at):
-    """Promotion moves a graduate onto the roster, which is no reason to void
-    a sale the seller is owed: `belongs_to` is true both before and after."""
+def test_resolve_auction_still_sells_a_graduate_promoted_mid_auction(db, claimed_at):
+    """`resolve_auction`'s own rule: promotion moves a graduate onto the
+    roster, and `belongs_to` is true both before and after, so the service
+    does not void the sale.
+
+    The API never reaches this state — `PromoteSquadRiderView` cancels the
+    listing in the same transaction as the promotion (api/README.md). This
+    pins the service, so a promotion from any other path still resolves as a
+    sale rather than being cancelled as a lost rider."""
     seller = Team.objects.create(name="Team Alpha", code="ALP")
     buyer = Team.objects.create(name="Team Bravo", code="BRA")
     graduate = _graduate(seller, at=claimed_at)

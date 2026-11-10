@@ -503,9 +503,11 @@ Since #29 each rider also carries `release_cost`
   rider would turn one squad screen into thirty queries, and the endpoint is
   asked about at most ten riders. `intake.next` also carries
   `arrivals_at_risk`: how much of that batch would be turned away if nothing
-  changes before the week, computed from `free_places`, so the warning can be
-  given **before** the week rather than after. It is a projection — promoting
-  or discarding a prospect moves it.
+  changes before the week, so the warning can be given **before** the week
+  rather than after. It counts as gone every prospect who will have graduated
+  by that week's boundary (`schedule.services.weeks_ago_cutoff`, the cutoff
+  `world/` graduates with), because the tick graduates before it runs intake.
+  It is a projection — promoting or discarding a prospect moves it.
 - `POST /api/development-squad/open/` (`OpenDevelopmentSquadView`) — open the
   squad at `{level}`, debiting that level's fee. `204`; `409` if a squad is
   already open, if `level` is not the entry level (`LevelLocked` — however rich
@@ -548,7 +550,15 @@ Since #29 each rider also carries `release_cost`
   listing takes away the *sale*, not the option of keeping them — so this is
   the only honest reading of the button: the manager is choosing the rider over
   the bids, and the sale ends. Left alone, the auction would sit open over a
-  player the team is now paying and fielding.
+  player the team is now paying and fielding. **This departs from #34's plan**
+  (Design decision 9), which let the sale proceed. That rule still holds for
+  `transfers.services.resolve_auction` itself, which sells a promoted graduate
+  if it ever meets one; it is the endpoint that ends the sale, because the
+  screen offers Promote on a listed graduate as "keep them".
+
+  Refused with the embargo's `409` while the team is insolvent: promotion
+  starts a salary, and every view that adds cost is embargoed (#27,
+  `economy/README.md`). Discard is not — it adds nothing.
 - `POST /api/development-squad/riders/<id>/discard/`
   (`DiscardSquadRiderView`, #34) — discard a prospect or a graduate for good;
   they leave the game rather than joining the free-agent pool. `204`; `409`

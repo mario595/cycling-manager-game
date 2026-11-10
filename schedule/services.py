@@ -130,3 +130,28 @@ def weeks_opened_between(start: datetime, end: datetime) -> int:
     dependency direction).
     """
     return Week.objects.filter(starts_at__gte=start, starts_at__lt=end).count()
+
+
+def weeks_ago_cutoff(boundary: datetime, n: int) -> datetime | None:
+    """The `starts_at` of the n-th newest in-season week opening before
+    `boundary`, or None if fewer than n weeks have opened by then.
+
+    "At least n in-season weeks have opened in `[since, boundary)`" is
+    monotone in `since`, so it has a single cutoff: a date qualifies iff it
+    is at or before this one. One query answers it for every rider at once,
+    where counting per rider would be a COUNT each.
+
+    Public because two apps must agree on it exactly (#34): `world/` uses it
+    to graduate squad riders and close graduates' windows at a boundary, and
+    `api/` to project who will have graduated by the next intake week. Two
+    copies of the rule would be two answers to "has this rider graduated by
+    then", and the squad screen's warning would drift from what the tick does.
+    """
+    opened = list(
+        Week.objects.filter(starts_at__lt=boundary)
+        .order_by("-starts_at")
+        .values_list("starts_at", flat=True)[:n]
+    )
+    if len(opened) < n:
+        return None
+    return opened[n - 1]

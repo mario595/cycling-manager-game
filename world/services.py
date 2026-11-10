@@ -65,7 +65,12 @@ from riders.youth_triage import (
     squad_development_deltas,
 )
 from schedule.models import SeasonTransition, Week
-from schedule.services import process_transitions, process_week_transitions, weeks_opened_between
+from schedule.services import (
+    process_transitions,
+    process_week_transitions,
+    weeks_ago_cutoff,
+    weeks_opened_between,
+)
 from staff.models import Trainer, TrainingWeekReport
 from staff.pricing import weekly_salary
 from staff.services import focus_for, top_up_pool
@@ -272,35 +277,12 @@ def _release_inactive(week) -> tuple[int, str]:
     return released, error
 
 
-def _weeks_ago_cutoff(boundary, n: int) -> datetime | None:
-    """The `starts_at` of the n-th newest in-season week opening before
-    `boundary`, or None if fewer than n weeks have opened by then.
-
-    "At least n in-season weeks have opened in `[since, boundary)`" is
-    monotone in `since`, so it has a single cutoff: a date qualifies iff it
-    is at or before this one. One query answers it for every rider at once,
-    where counting per rider would be a COUNT each.
-
-    Extracted from `_expire_free_agents`, which spells the same thing out
-    inline for EXPIRY_WEEKS — deliberately left alone there: rewriting an
-    untouched expiry path is extra review surface for no behaviour change.
-    """
-    opened = list(
-        Week.objects.filter(starts_at__lt=boundary)
-        .order_by("-starts_at")
-        .values_list("starts_at", flat=True)[:n]
-    )
-    if len(opened) < n:
-        return None
-    return opened[n - 1]
-
-
 def _graduate_squad_riders(week) -> int:
     """Graduate every squad rider whose spell is complete at this week
     boundary. Returns how many graduated.
 
     A spell is SPELL_WEEKS long and is dated from `intake_at`, so the cutoff
-    comes from `_weeks_ago_cutoff` rather than a per-rider count. The
+    comes from `weeks_ago_cutoff` rather than a per-rider count. The
     graduates keep their squad link (`graduated_at` set instead) — they have
     left the squad's places but not its ownership of them, which is what makes
     them listable and what the window step then resolves (#34).
@@ -308,7 +290,7 @@ def _graduate_squad_riders(week) -> int:
     Returns 0 before SPELL_WEEKS weeks have opened, so nobody graduates early
     in a first season.
     """
-    cutoff = _weeks_ago_cutoff(week.starts_at, SPELL_WEEKS)
+    cutoff = weeks_ago_cutoff(week.starts_at, SPELL_WEEKS)
     if cutoff is None:
         return 0
     due = list(
@@ -335,7 +317,7 @@ def _release_expired_graduates(week) -> int:
     deadline, which is worse for everyone than letting it finish (#34,
     Design decision 10).
     """
-    cutoff = _weeks_ago_cutoff(week.starts_at, GRADUATE_WINDOW_WEEKS)
+    cutoff = weeks_ago_cutoff(week.starts_at, GRADUATE_WINDOW_WEEKS)
     if cutoff is None:
         return 0
     expired = list(

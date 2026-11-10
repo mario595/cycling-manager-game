@@ -4365,6 +4365,47 @@ def test_arrivals_at_risk_counts_the_batch_a_full_squad_cannot_take(
     assert data["intake"]["next"]["arrivals_at_risk"] == 2
 
 
+def test_arrivals_at_risk_counts_riders_graduating_before_the_intake_as_gone(
+    dev_squad_client, dev_squad_team, squad_season,
+):
+    """A full squad whose oldest rider graduates before the next intake has a
+    place for that batch: the tick graduates before it runs intake.
+
+    One rider arrived at season 1, week 4; five arrived at season 2, week 4.
+    At season 2, week 4 the squad is 6/6. The veteran graduates at season 2,
+    week 6 — two weeks before the week-8 intake — so one of that batch has a
+    place and only one is at risk, not both."""
+    clock, season_start = squad_season
+    season_2_start = season_start + timedelta(weeks=SEASON_WEEKS)
+    season_2 = Season.objects.create(number=2, starts_at=season_2_start)
+    for week_number in range(1, SEASON_WEEKS + 1):
+        week_start = season_2_start + timedelta(weeks=week_number - 1)
+        Week.objects.create(
+            season=season_2, number=week_number,
+            starts_at=week_start, ends_at=week_start + timedelta(weeks=1),
+        )
+    squad_row = DevelopmentSquad.objects.create(
+        team=dev_squad_team, level=1, opened_at=season_start,
+    )
+    veteran_arrival = season_start + timedelta(weeks=3)
+    recent_arrival = season_2_start + timedelta(weeks=3)
+    arrivals = [veteran_arrival] + [recent_arrival] * (LEVELS[1].places - 1)
+    for index, intake_at in enumerate(arrivals):
+        Rider.objects.create(
+            name=f"Prospect {index}", development_squad=squad_row,
+            intake_at=intake_at, climb=40, sprint=40, flat=40,
+            resistance=40, positioning=40,
+        )
+    clock.set(recent_arrival + timedelta(days=1))
+
+    data = dev_squad_client.get("/api/development-squad/").data
+
+    assert data["in_squad"] == LEVELS[1].places
+    assert data["graduates"] == []
+    assert (data["intake"]["next"]["season"], data["intake"]["next"]["week"]) == (2, 8)
+    assert data["intake"]["next"]["arrivals_at_risk"] == 1
+
+
 def test_promote_endpoint_moves_a_prospect_to_the_roster(dev_squad_client, dev_squad_team):
     _open_squad(dev_squad_team, 1)
     run_intake(at=now())
@@ -4622,6 +4663,38 @@ def test_embargo_blocks_upgrading_a_development_squad(broke_client, broke_team, 
 
     assert response.status_code == 409
     assert DevelopmentSquad.objects.get(team=broke_team).level == 1
+
+
+def test_embargo_blocks_promoting_a_squad_rider(broke_client, broke_team, insolvent_week):
+    """Promotion starts a salary, so it is a cost like signing (#27, #34)."""
+    _make_insolvent(broke_team, insolvent_week)
+    squad_row = DevelopmentSquad.objects.create(team=broke_team, level=1, opened_at=now())
+    prospect = Rider.objects.create(
+        name="Prospect", development_squad=squad_row, intake_at=now(),
+        climb=40, sprint=40, flat=40, resistance=40, positioning=40,
+    )
+
+    response = broke_client.post(f"/api/development-squad/riders/{prospect.pk}/promote/")
+
+    assert response.status_code == 409
+    assert "insolvent" in response.data["detail"]
+    prospect.refresh_from_db()
+    assert prospect.team_id is None
+    assert prospect.development_squad_id == squad_row.pk
+
+
+def test_embargo_allows_discarding_a_squad_rider(broke_client, broke_team, insolvent_week):
+    _make_insolvent(broke_team, insolvent_week)
+    squad_row = DevelopmentSquad.objects.create(team=broke_team, level=1, opened_at=now())
+    prospect = Rider.objects.create(
+        name="Prospect", development_squad=squad_row, intake_at=now(),
+        climb=40, sprint=40, flat=40, resistance=40, positioning=40,
+    )
+
+    response = broke_client.post(f"/api/development-squad/riders/{prospect.pk}/discard/")
+
+    assert response.status_code == 204
+    assert not Rider.objects.filter(pk=prospect.pk).exists()
 
 
 def test_embargo_allows_levers_that_cut_cost_or_add_income(
