@@ -1,6 +1,6 @@
 # The beta world: Implementation Plan
 
-**Spec:** `specs/beta-world.md` · **Issue:** #139 · **Status:** approved
+**Spec:** `specs/archive/beta-world.md` · **Issue:** #139 · **Status:** implemented
 **Apps touched:** `schedule/` (command option), `racing/` (calendar check), `world/` (seed_world, add_season, wipe), `config/settings/`, `seasons/` (new calendar file)
 
 ## Context you need
@@ -139,7 +139,7 @@ Tests: `world/tests/test_world_setup.py`.
 
 ### W4: `seasons/world.json`
 Write the calendar, run `check_calendar --seeds 1,2,3 --jobs 4`, and tune
-until it passes. Record the result in `world/README.md`. Test:
+until it passes (rouleurs need one win a season, the rest two; see the spec's *Decisions taken*). Record the result in `world/README.md`. Test:
 `test_the_world_calendar_loads`.
 
 ### W5: docs

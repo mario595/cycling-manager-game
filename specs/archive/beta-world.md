@@ -1,6 +1,6 @@
 # The beta world
 
-**Status:** approved
+**Status:** implemented
 **Domain(s):** `schedule/`, `racing/`, `world/`, `teams/`, `staff/`
 **Issue:** #139
 **One-liner:** a real season calendar with named races and courses, and one command that builds a clean, playable world for staging or production.
@@ -55,9 +55,9 @@ a fresh team in the new world.
    (except the week a stage race fills), plus the two stage races, about 21
    race days a season.
 3. **Every winning speciality has races it wins.** In a simulated season with a
-   freshly generated field, climbers, sprinters, rouleurs and puncheurs each
-   win at least two race days, and no speciality wins more than about 40% of
-   them. The check can be re-run by the operator or a developer, and its result
+   freshly generated field, climbers, sprinters and puncheurs each win at
+   least two race days, rouleurs at least one (see *Decisions taken*), and
+   no speciality wins more than about 40% of them. The check can be re-run by the operator or a developer, and its result
    is written down next to the calendar.
 4. **Courses use course markers** (sprints with weights, climbs with
    categories, finish-line climbs) so the points competition has something to
@@ -129,6 +129,12 @@ a fresh team in the new world.
 - What does "every speciality can win" mean? **Climbers, sprinters, rouleurs
   and puncheurs each win at least two race days, none more than ~40%.**
   Domestiques don't need wins.
+- Rouleurs can't meet the two-win rule (found while tuning). The engine has
+  no time trial, echelon or breakaway, so they won about one flat day in
+  eight. **Their minimum is one a season**, with three rouleur-shaped days
+  in the calendar, and their full share waits for time trials (#89, #90).
+  This was the recommended option. The alternatives were tuning the engine
+  inside this ticket, or shipping no rouleur days at all.
 - World size? **16 teams in both worlds, all claimable, and a trainer pool of
   24.**
 - Start date? **Set by the operator. The production world gets a week of lead
@@ -145,4 +151,5 @@ None.
 ## Deferred
 
 - Rotating calendars, if a repeated season turns out to feel stale in beta.
-- A course with a time trial, once #89 and #90 exist.
+- A course with a time trial, once #89 and #90 exist, which is also when
+  the rouleur minimum goes back up to two.
