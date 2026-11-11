@@ -54,6 +54,19 @@ def test_round_is_one_offer_per_profile(db, team, season):
     assert {o.profile for o in offers} == {"steady", "balanced", "demanding"}
 
 
+def test_offer_round_at_starting_fanbase_pays_the_calibrated_baseline(db, team, season):
+    # #125 sized sponsorship so the average team breaks even (economy/
+    # README.md, *Balance targets*). Changing the rate must be a visible
+    # edit here, not a silent drift.
+    ensure_starting_fanbase(team, at=season.starts_at)
+    assert STARTING_FANBASE == 10_000
+
+    offers = ensure_offer_round(team, season, at=season.starts_at)
+
+    bases = {o.profile: o.weekly_base for o in offers}
+    assert bases == {"steady": 10_625, "balanced": 12_500, "demanding": 15_625}
+
+
 def test_round_is_idempotent(db, team, season):
     first = ensure_offer_round(team, season, at=season.starts_at)
     second = ensure_offer_round(team, season, at=season.starts_at)

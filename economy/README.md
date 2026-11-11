@@ -435,7 +435,7 @@ go blind, or worse, silently repriced, the moment that row is gone.
 
 **The floor and ceiling are stored, not recomputed at payment time.** The
 range shown at signing is a promise; recomputing it later from
-`SPONSOR_FANBASE_PER_CREDIT` or a profile's fractions would let a constant
+`SPONSOR_CREDITS_PER_THOUSAND_FANS` or a profile's fractions would let a constant
 tuning change silently reprice a contract someone already signed against a
 different number.
 
