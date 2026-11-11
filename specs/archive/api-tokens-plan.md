@@ -1,6 +1,6 @@
 # API tokens and API docs — Implementation Plan
 
-**Spec:** `specs/api-tokens.md` · **Issue:** #130 · **Status:** proposed
+**Spec:** `specs/archive/api-tokens.md` · **Issue:** #130 · **Status:** implemented
 **Apps touched:** `accounts/`, `api/`, `config/` (settings, urls), `requirements.txt`
 
 ## Context you need

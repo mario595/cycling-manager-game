@@ -1,6 +1,6 @@
 # API tokens and API docs
 
-**Status:** approved
+**Status:** implemented
 **Domain(s):** `accounts/`, `api/`, `world/` (inactivity), `config/`
 **Issue:** [#130](https://github.com/mario595/cycling-manager/issues/130)
 **One-liner:** A manager can play the game through its API with a personal

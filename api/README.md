@@ -7,6 +7,10 @@ DRF routers and serializers that aggregate other apps' data for the SPA.
 
 ## What exists
 
+- `GET /api/schema/` and `GET /api/docs/`: the OpenAPI schema and its
+  rendered docs page, for any authenticated caller (#130). See *Schema and
+  docs*, below. Every endpoint here also accepts an API token
+  (`Authorization: Bearer <key>`), see *Authentication*.
 - `GET /api/world/clock/` — the game's current time (`ClockSerializer`,
   `ClockView`, serializing `world.services.now()` directly — there is no
   model instance behind this response, since in production there is
@@ -669,3 +673,84 @@ enforces CSRF like every other authenticated write, and the SPA sends
 token itself comes from the `csrftoken` cookie, which `GET
 /api/accounts/me/`'s `@ensure_csrf_cookie` guarantees is set before the SPA
 issues its first write — see `frontend/README.md`.
+
+**API tokens (#130).** `DEFAULT_AUTHENTICATION_CLASSES` is
+`[SessionAuthentication, api.authentication.GameTokenAuthentication]`, **in
+that order**, and the order is load-bearing:
+
+- DRF takes the 401-vs-403 choice from the *first* class. Session first keeps
+  every anonymous response a **403**, as above, and a bad, unknown or revoked
+  token is refused with `403 {"detail": "Invalid token."}`. That is always
+  JSON, never a redirect.
+- `SessionAuthentication` enforces CSRF only when it is the class that
+  authenticated, so a token request with no session cookie needs no CSRF
+  token. Nothing is `csrf_exempt`. `api/test_tokens.py` proves it with
+  `APIClient(enforce_csrf_checks=True)`. Without that flag the test client
+  skips CSRF and the test could not fail.
+
+The header is `Authorization: Bearer <key>`. DRF's `Token` keyword is not
+accepted. A token request **stamps `last_seen_at`** in game time
+(`touch_last_seen`), at most once per game hour (`LAST_SEEN_RESOLUTION`), so a
+token-only agent counts as seen by the inactivity release exactly as a human
+who logs in does, and without an `UPDATE` on every read.
+
+**Throttling.** `api.throttling.TokenRateThrottle`, at
+`DEFAULT_THROTTLE_RATES["token"] = "60/min"`, counts only requests whose
+`request.auth` is an `ApiToken`, so browser sessions are never limited. It is
+keyed per **user**, so reissuing a token does not reset it. Over the limit is
+a `429` with `Retry-After`. The count lives in the default cache, which is
+per-process `LocMemCache`: with N workers the real ceiling is N × 60. That is
+accepted for the beta. A shared cache is the fix if it ever matters. Tests
+that touch the throttle clear the cache (`api/test_tokens.py`'s autouse
+fixture).
+
+## Schema and docs
+
+`GET /api/schema/` (OpenAPI 3, drf-spectacular) and `GET /api/docs/` (Redoc,
+rendered from the schema), both `IsAuthenticated` through
+`SPECTACULAR_SETTINGS["SERVE_PERMISSIONS"]`, by session or token. They are
+what an LLM manager reads to learn the API, so:
+
+- `SPECTACULAR_SETTINGS["DESCRIPTION"]` (`config/settings/base.py`) holds the
+  conventions every endpoint shares: auth, "your team" is always the caller's
+  own, the rate limit, whole-unit money, the 0–10 display scale, game time,
+  and what 400/403/404/409 mean.
+- **Every view method carries `@extend_schema`** with an explicit
+  `operation_id` (a verb, which agents use as a tool name), a `tag`, a
+  `summary`, a `description` **in game terms** (what it changes, what it
+  costs, when it is refused), `request=` (the serializer the view validates
+  with, or `None`) and `responses=` (`api.schema.refused(r403=…, r409=…)`
+  builds the `{"detail": …}` refusals). Fee percentages and caps are
+  interpolated from their constants (`_pct(SIGNING_FEE_RATE)`, `ROSTER_CAP`),
+  so the text cannot drift from the rule.
+- A `SerializerMethodField` needs `@extend_schema_field`, or the schema
+  types it as a string (`SalaryReviewSerializer` and `TrainingWeekSerializer`
+  exist only for this).
+- `api/test_schema.py` fails the build if any operation lacks a summary or a
+  description of at least 40 characters, if any `operationId` is
+  auto-generated or duplicated, if any operation does not accept the bearer
+  scheme, or if `manage.py spectacular --validate --fail-on-warn` warns. **A
+  new endpoint is not done until it passes.**
+- `api/schema.py` registers the bearer scheme for `GameTokenAuthentication`
+  (imported from `ApiConfig.ready()`).
+
+## Browser assumptions (audit, #130)
+
+Every endpoint was checked for anything a non-browser client trips on:
+
+- **Unknown `/api/` paths, including a missing trailing slash**, used to fall
+  through to the SPA catch-all and answer `200 text/html`. **Fixed:**
+  `api/urls.py` ends with `api_not_found`, a JSON 404 inside the `api/`
+  include, so it can't swallow SPA paths. It must stay last.
+- **`GET /api/accounts/me/`**'s `@ensure_csrf_cookie` sets a cookie a token
+  client can ignore. Harmless.
+- **Register and login** start a session (`login()`). A token client can
+  ignore the cookie. Register is still how an agent's account is made, and
+  the token is then issued by command.
+- **Logout** ends the session and never touches a token. Revoking is the
+  operator's `revoke_api_token`. This is documented on the operation.
+- **`GET /api/racing/races/<id>/log/`** negotiates on `Accept-Encoding`: send
+  `br` to get brotli bytes with `Content-Encoding: br`, otherwise plain NDJSON.
+  Documented on the operation as binary.
+- Nothing else redirects, renders HTML or reads the session directly.
+  Errors are DRF JSON throughout.

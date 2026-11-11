@@ -245,7 +245,7 @@ game time.
 does not exist, and a `409` that the world's current state refuses it. Each
 carries a human-readable `detail` (or per-field messages for a `400`). Every
 path ends with a slash; an unknown path gets a JSON `404`.
-""",
+""".strip(),
     "SERVE_INCLUDE_SCHEMA": False,
     "SERVE_PERMISSIONS": ["rest_framework.permissions.IsAuthenticated"],
     "COMPONENT_SPLIT_REQUEST": True,
