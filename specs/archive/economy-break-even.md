@@ -1,6 +1,6 @@
 # Economy: the average team breaks even
 
-**Status:** approved
+**Status:** implemented
 **Issue:** #125
 **Domain(s):** `economy/`, `competitions/`, `world/`
 **One-liner:** A team that races about as well as the field average, with a sponsor and a trainer, ends a season slightly ahead instead of steadily losing money.

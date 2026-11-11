@@ -1,6 +1,6 @@
 # Economy: the average team breaks even — Implementation Plan
 
-**Spec:** `specs/economy-break-even.md` · **Issue:** #125 · **Status:** approved
+**Spec:** `specs/archive/economy-break-even.md` · **Issue:** #125 · **Status:** implemented
 **Apps touched:** `economy/`, `competitions/`, `world/` (docs only), `scripts/`
 
 ## Context you need
@@ -45,12 +45,13 @@ repeatable measurement, and write the targets down.
 
 ## Design decisions
 
-1. **Sponsorship grows ×2.5.** The divisor `SPONSOR_FANBASE_PER_CREDIT = 2`
-   becomes a rate, `SPONSOR_CREDITS_PER_THOUSAND_FANS = 1_250` (the old divisor
+1. **Sponsorship grows ×2.2.** The divisor `SPONSOR_FANBASE_PER_CREDIT = 2`
+   becomes a rate, `SPONSOR_CREDITS_PER_THOUSAND_FANS = 1_100` (the old divisor
    is 500 on this scale), and `offer_terms` computes
    `fanbase × rate // 1000 × multiplier`, so the result stays whole credits.
-   At the starting fanbase a steady offer goes from $4,250 to $10,625 a week,
-   about +$73k a season, most of the gap. A divisor can only express
+   At the starting fanbase a steady offer goes from $4,250 to $9,350 a week,
+   about +$61k a season, most of the gap. (First set at 1,250, ×2.5; see
+   *Verification* for why it came down.) A divisor can only express
    ×2 (divisor 1) or ×1, and ×2 (+$49k) would have pushed about $34k, a 37%
    rise, onto prizes, against the spec's "most from sponsorship". The
    profiles' relative shape (0.85 / 1.0 / 1.25 base, their floors and
@@ -62,7 +63,7 @@ repeatable measurement, and write the targets down.
    for the average team, more for the top teams. One-day: 22,000 / 16,500 /
    13,200 / 11,000 / 8,800 / 6,600 / 4,400 / 3,300 / 2,200 / 1,100. Stage: half
    of that. GC: double it. This keeps both ratios the tests enforce.
-3. **Projected result:** −68.5k + 73k + 9k ≈ **+$14k**, mid-band. The bottom
+3. **Projected result** (at the first rate, 1,250): −68.5k + 73k + 9k ≈ **+$14k**, mid-band. It measured +$28k; see *Verification*, *Outcome*. The bottom
    quarter comes in near −$60k a season, about eight seasons of a starting
    balance (spec item 3), and the top quarter near +$140k (item 2). Merchandise and the AI's trainer choice add noise of a few thousand,
    so the measurement decides. If it lands above +$20k, lower the rate (1,200 is about −$5k a season). If it lands below +$10k, report back rather than inventing a third lever.
@@ -85,8 +86,8 @@ repeatable measurement, and write the targets down.
 first and record the baseline output in the PR.
 
 **W2 — Retune the constants.** `economy/models.py`: replace
-`SPONSOR_FANBASE_PER_CREDIT` with `SPONSOR_CREDITS_PER_THOUSAND_FANS = 1_250`
-and rewrite its comment (at the starting fanbase a balanced offer is $12,500 a
+`SPONSOR_FANBASE_PER_CREDIT` with `SPONSOR_CREDITS_PER_THOUSAND_FANS = 1_100`
+and rewrite its comment (at the starting fanbase a balanced offer is $11,000 a
 week). `economy/sponsors.py`: `offer_terms` takes `credits_per_thousand_fans`.
 `economy/tests/test_sponsor_maths.py` passes `credits_per_thousand_fans=500`,
 the old divisor's equivalent, so its expectations are unchanged. `competitions/scoring.py`: the three prize tables, +10%.
@@ -96,7 +97,7 @@ Tests:
 - `economy/tests/test_sponsorship.py`: add
   `test_offer_round_at_starting_fanbase_pays_the_calibrated_baseline`. It
   generates a round for a team at `STARTING_FANBASE` through the service and
-  asserts steady = 10,625, balanced = 12,500 and demanding = 15,625, so a
+  asserts steady = 9,350, balanced = 11,000 and demanding = 13,750, so a
   future divisor change is a visible test edit, not a silent drift.
 
 **W3 — Measure and document.** Run the script. If the average falls outside
@@ -119,10 +120,21 @@ W1 → W2 → W3 → W4. One commit each.
 The evidence is the script's before and after output, not a passing test: a
 test cannot show the average team breaks even. Paste both outputs into the PR.
 
+**Outcome.** Three runs, season 2 average net per team: rate 1,250 →
++$28,159 (median +$9,614); 1,150 → +$26,228 (median +$23,742); 1,100 →
++$10,818 (median +$11,816, bottom quarter −$89,820, top quarter +$151,394).
+Prize totals are close to fixed (the pot is shared by 16 teams). The noise
+is wages, the trainer each team ends up with (−$28k to −$38k a season) and
+fanbase, about ±$8k between runs, which is bigger than the 1,250-to-1,150 step.
+1,100 was chosen to centre the band across the runs rather than to fit one.
+The top quarter is about 14× the average surplus. That is above the
+"ten times" sanity line in *Risks*, but only because the average is small.
+In money terms (+$150k a season against a $500k start) it is not absurd.
+
 ## Risks
 
 | Risk | Mitigation |
 |---|---|
-| A demanding sponsor's ceiling grows too (about $34k a week at the starting fanbase), so a top team on a hot streak earns a lot. | That is spec item 2 ("a clear profit"). Check that the top-quarter line isn't absurd, meaning more than about ten times the average surplus. |
+| A demanding sponsor's ceiling grows too (about $30k a week at the starting fanbase), so a top team on a hot streak earns a lot. | That is spec item 2 ("a clear profit"). Check that the top-quarter line isn't absurd, meaning more than about ten times the average surplus. |
 | Merchandise and the trainer pool make the average jitter by a few thousand between runs. | The band is $10k wide. Run once, and run again only if the result sits within $2k of an edge. |
 | Fanbase drifts up for winners, so their next season's offers grow. | That already happens today, and the bigger rate only makes it proportionally more visible. Accepted: fanbase is meant to matter more (spec, Decisions). |
