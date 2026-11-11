@@ -200,8 +200,8 @@ kind of rider does each course reward?** The `check_calendar` command runs
 every race and every stage through the engine against freshly generated
 fields, one field per seed, and reports the winner's speciality per race
 day. It then applies the beta world's rule (`specs/archive/beta-world.md`):
-climbers, sprinters, rouleurs and puncheurs each win at least two race days
-a season, and none wins more than 40%. It exits non-zero when the rule
+climbers, sprinters and puncheurs each win at least two race days a season,
+rouleurs at least one until time trials exist, and none wins more than 40%. It exits non-zero when the rule
 fails.
 
 ```bash

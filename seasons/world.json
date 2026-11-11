@@ -1,0 +1,839 @@
+{
+  "number": 1,
+  "starts_at": "2027-03-01T00:00:00Z",
+  "races": [
+    {
+      "week": 1,
+      "day": "sunday",
+      "time": "14:00",
+      "name": "Scheldt Coast Classic",
+      "course": [
+        {
+          "length": 150000,
+          "gradient": 0.0
+        }
+      ],
+      "markers": [
+        {
+          "kind": "sprint",
+          "name": "Harbour Sprint",
+          "distance": 60000,
+          "weight": "minor"
+        },
+        {
+          "kind": "sprint",
+          "name": "Dyke Sprint",
+          "distance": 110000,
+          "weight": "standard"
+        },
+        {
+          "kind": "sprint",
+          "name": "Promenade Finish",
+          "distance": 150000,
+          "weight": "major"
+        }
+      ]
+    },
+    {
+      "week": 2,
+      "day": "sunday",
+      "time": "14:00",
+      "name": "Brabant Hills Trophy",
+      "course": [
+        {
+          "length": 156500,
+          "gradient": 0.0
+        },
+        {
+          "length": 3000,
+          "gradient": 4.0
+        },
+        {
+          "length": 500,
+          "gradient": 0.0
+        }
+      ],
+      "markers": [
+        {
+          "kind": "sprint",
+          "name": "Market Square",
+          "distance": 80000,
+          "weight": "standard"
+        },
+        {
+          "kind": "mountain",
+          "name": "Chapel Hill",
+          "distance": 159500,
+          "category": "cat3"
+        },
+        {
+          "kind": "sprint",
+          "name": "Chapel Finish",
+          "distance": 160000,
+          "weight": "standard"
+        }
+      ]
+    },
+    {
+      "week": 3,
+      "day": "sunday",
+      "time": "14:00",
+      "name": "Loire Long Road",
+      "course": [
+        {
+          "length": 143000,
+          "gradient": 0.0
+        },
+        {
+          "length": 6000,
+          "gradient": 2.5
+        },
+        {
+          "length": 1000,
+          "gradient": 0.0
+        }
+      ],
+      "markers": [
+        {
+          "kind": "sprint",
+          "name": "Château Sprint",
+          "distance": 75000,
+          "weight": "standard"
+        },
+        {
+          "kind": "mountain",
+          "name": "Vineyard Rise",
+          "distance": 149000,
+          "category": "cat3"
+        },
+        {
+          "kind": "sprint",
+          "name": "Loire Finish",
+          "distance": 150000,
+          "weight": "standard"
+        }
+      ]
+    },
+    {
+      "week": 4,
+      "day": "sunday",
+      "time": "14:00",
+      "name": "Polder Dyke Race",
+      "course": [
+        {
+          "length": 163000,
+          "gradient": 0.0
+        },
+        {
+          "length": 6000,
+          "gradient": 2.5
+        },
+        {
+          "length": 1000,
+          "gradient": 0.0
+        }
+      ],
+      "markers": [
+        {
+          "kind": "sprint",
+          "name": "Windmill Sprint",
+          "distance": 70000,
+          "weight": "minor"
+        },
+        {
+          "kind": "mountain",
+          "name": "Great Dyke",
+          "distance": 169000,
+          "category": "cat3"
+        },
+        {
+          "kind": "sprint",
+          "name": "Seawall Finish",
+          "distance": 170000,
+          "weight": "standard"
+        }
+      ],
+      "wind": {
+        "band": "moderate"
+      }
+    },
+    {
+      "week": 5,
+      "day": "sunday",
+      "time": "14:00",
+      "name": "Vercors Classic",
+      "course": [
+        {
+          "length": 50000,
+          "gradient": 0.0
+        },
+        {
+          "length": 12000,
+          "gradient": 5.0
+        },
+        {
+          "length": 6000,
+          "gradient": -5.0
+        },
+        {
+          "length": 15000,
+          "gradient": 2.0
+        },
+        {
+          "length": 9000,
+          "gradient": 7.0
+        },
+        {
+          "length": 5000,
+          "gradient": -7.0
+        },
+        {
+          "length": 3000,
+          "gradient": 6.0
+        },
+        {
+          "length": 4000,
+          "gradient": -3.0
+        },
+        {
+          "length": 6000,
+          "gradient": 0.0
+        }
+      ],
+      "markers": [
+        {
+          "kind": "mountain",
+          "name": "Col de la Combe",
+          "distance": 62000,
+          "category": "cat1"
+        },
+        {
+          "kind": "mountain",
+          "name": "Mur des Gorges",
+          "distance": 92000,
+          "category": "cat1"
+        },
+        {
+          "kind": "mountain",
+          "name": "Côte Finale",
+          "distance": 100000,
+          "category": "cat2"
+        }
+      ]
+    },
+    {
+      "week": 6,
+      "day": "sunday",
+      "time": "14:00",
+      "name": "Eifel Ramp Classic",
+      "course": [
+        {
+          "length": 151500,
+          "gradient": 0.0
+        },
+        {
+          "length": 3000,
+          "gradient": 4.0
+        },
+        {
+          "length": 500,
+          "gradient": 0.0
+        }
+      ],
+      "markers": [
+        {
+          "kind": "sprint",
+          "name": "Crater Lake Sprint",
+          "distance": 75000,
+          "weight": "standard"
+        },
+        {
+          "kind": "mountain",
+          "name": "Eifel Ramp",
+          "distance": 154500,
+          "category": "cat3"
+        },
+        {
+          "kind": "sprint",
+          "name": "Eifel Finish",
+          "distance": 155000,
+          "weight": "standard"
+        }
+      ]
+    },
+    {
+      "week": 8,
+      "day": "sunday",
+      "time": "14:00",
+      "name": "Ardèche Walls",
+      "course": [
+        {
+          "length": 146500,
+          "gradient": 0.0
+        },
+        {
+          "length": 3000,
+          "gradient": 4.0
+        },
+        {
+          "length": 500,
+          "gradient": 0.0
+        }
+      ],
+      "markers": [
+        {
+          "kind": "sprint",
+          "name": "Gorge Road Sprint",
+          "distance": 75000,
+          "weight": "standard"
+        },
+        {
+          "kind": "mountain",
+          "name": "Wall of Vallon",
+          "distance": 149500,
+          "category": "cat3"
+        },
+        {
+          "kind": "sprint",
+          "name": "Vallon Finish",
+          "distance": 150000,
+          "weight": "standard"
+        }
+      ]
+    },
+    {
+      "week": 9,
+      "day": "sunday",
+      "time": "14:00",
+      "name": "Mont Lozère Summit",
+      "course": [
+        {
+          "length": 65000,
+          "gradient": 1.0
+        },
+        {
+          "length": 15000,
+          "gradient": 4.0
+        },
+        {
+          "length": 10000,
+          "gradient": -2.0
+        },
+        {
+          "length": 22000,
+          "gradient": -4.0
+        },
+        {
+          "length": 13000,
+          "gradient": 8.1
+        }
+      ],
+      "markers": [
+        {
+          "kind": "sprint",
+          "name": "Causse Sprint",
+          "distance": 40000,
+          "weight": "minor"
+        },
+        {
+          "kind": "mountain",
+          "name": "Col de Finiels",
+          "distance": 80000,
+          "category": "cat2"
+        },
+        {
+          "kind": "mountain",
+          "name": "Mont Lozère",
+          "distance": 125000,
+          "category": "hc"
+        }
+      ]
+    },
+    {
+      "week": 10,
+      "day": "sunday",
+      "time": "14:00",
+      "name": "Queen of the Cévennes",
+      "course": [
+        {
+          "length": 44000,
+          "gradient": 1.0
+        },
+        {
+          "length": 14000,
+          "gradient": 6.5
+        },
+        {
+          "length": 10000,
+          "gradient": -6.5
+        },
+        {
+          "length": 15000,
+          "gradient": 0.0
+        },
+        {
+          "length": 17000,
+          "gradient": 7.0
+        },
+        {
+          "length": 8000,
+          "gradient": -7.0
+        },
+        {
+          "length": 13000,
+          "gradient": 2.0
+        },
+        {
+          "length": 9000,
+          "gradient": 8.0
+        }
+      ],
+      "markers": [
+        {
+          "kind": "sprint",
+          "name": "Valley Sprint",
+          "distance": 30000,
+          "weight": "minor"
+        },
+        {
+          "kind": "mountain",
+          "name": "Col du Bougès",
+          "distance": 58000,
+          "category": "hc"
+        },
+        {
+          "kind": "mountain",
+          "name": "Mont Aigoual",
+          "distance": 130000,
+          "category": "hc"
+        }
+      ]
+    },
+    {
+      "week": 11,
+      "day": "sunday",
+      "time": "14:00",
+      "name": "Montferrat Hill Race",
+      "course": [
+        {
+          "length": 151500,
+          "gradient": 0.0
+        },
+        {
+          "length": 3000,
+          "gradient": 4.0
+        },
+        {
+          "length": 500,
+          "gradient": 0.0
+        }
+      ],
+      "markers": [
+        {
+          "kind": "sprint",
+          "name": "Vineyard Sprint",
+          "distance": 80000,
+          "weight": "standard"
+        },
+        {
+          "kind": "mountain",
+          "name": "Castle Ramp",
+          "distance": 154500,
+          "category": "cat3"
+        },
+        {
+          "kind": "sprint",
+          "name": "Castle Finish",
+          "distance": 155000,
+          "weight": "standard"
+        }
+      ]
+    },
+    {
+      "week": 12,
+      "day": "sunday",
+      "time": "14:00",
+      "name": "Po Valley Championship",
+      "course": [
+        {
+          "length": 200000,
+          "gradient": 0.0
+        }
+      ],
+      "markers": [
+        {
+          "kind": "sprint",
+          "name": "Rice Fields Sprint",
+          "distance": 70000,
+          "weight": "minor"
+        },
+        {
+          "kind": "sprint",
+          "name": "River Sprint",
+          "distance": 140000,
+          "weight": "standard"
+        },
+        {
+          "kind": "sprint",
+          "name": "Championship Finish",
+          "distance": 200000,
+          "weight": "major"
+        }
+      ]
+    }
+  ],
+  "stage_races": [
+    {
+      "name": "Three Days of the Jura",
+      "week": 4,
+      "start_day": "wednesday",
+      "time": "14:00",
+      "stages": [
+        {
+          "name": "Lakeside Sprint",
+          "course": [
+            {
+              "length": 150000,
+              "gradient": 0.0
+            }
+          ],
+          "markers": [
+            {
+              "kind": "sprint",
+              "name": "Shore Sprint",
+              "distance": 80000,
+              "weight": "standard"
+            },
+            {
+              "kind": "sprint",
+              "name": "Lakeside Finish",
+              "distance": 150000,
+              "weight": "major"
+            }
+          ]
+        },
+        {
+          "name": "Watch Valley Wall",
+          "course": [
+            {
+              "length": 136500,
+              "gradient": 0.0
+            },
+            {
+              "length": 3000,
+              "gradient": 4.0
+            },
+            {
+              "length": 500,
+              "gradient": 0.0
+            }
+          ],
+          "markers": [
+            {
+              "kind": "sprint",
+              "name": "Clockmakers' Sprint",
+              "distance": 70000,
+              "weight": "standard"
+            },
+            {
+              "kind": "mountain",
+              "name": "Watchmakers' Wall",
+              "distance": 139500,
+              "category": "cat3"
+            },
+            {
+              "kind": "sprint",
+              "name": "Watch Valley Finish",
+              "distance": 140000,
+              "weight": "standard"
+            }
+          ]
+        },
+        {
+          "name": "Summit of the Crêt",
+          "course": [
+            {
+              "length": 60000,
+              "gradient": 1.0
+            },
+            {
+              "length": 15000,
+              "gradient": 4.0
+            },
+            {
+              "length": 10000,
+              "gradient": -2.0
+            },
+            {
+              "length": 22000,
+              "gradient": -4.0
+            },
+            {
+              "length": 13000,
+              "gradient": 8.1
+            }
+          ],
+          "markers": [
+            {
+              "kind": "mountain",
+              "name": "Col du Marchairuz",
+              "distance": 75000,
+              "category": "cat2"
+            },
+            {
+              "kind": "mountain",
+              "name": "Crêt de la Neige",
+              "distance": 120000,
+              "category": "hc"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Tour of the Three Ranges",
+      "week": 7,
+      "start_day": "monday",
+      "time": "14:00",
+      "stages": [
+        {
+          "name": "Garonne Flats",
+          "course": [
+            {
+              "length": 160000,
+              "gradient": 0.0
+            }
+          ],
+          "markers": [
+            {
+              "kind": "sprint",
+              "name": "Canal Sprint",
+              "distance": 90000,
+              "weight": "standard"
+            },
+            {
+              "kind": "sprint",
+              "name": "Garonne Finish",
+              "distance": 160000,
+              "weight": "major"
+            }
+          ]
+        },
+        {
+          "name": "Gascony Drag",
+          "course": [
+            {
+              "length": 150000,
+              "gradient": 0.0
+            },
+            {
+              "length": 20000,
+              "gradient": 1.5
+            }
+          ],
+          "markers": [
+            {
+              "kind": "sprint",
+              "name": "Armagnac Sprint",
+              "distance": 80000,
+              "weight": "standard"
+            },
+            {
+              "kind": "sprint",
+              "name": "Bastide Rise",
+              "distance": 170000,
+              "weight": "major"
+            }
+          ]
+        },
+        {
+          "name": "Limousin Ramp",
+          "course": [
+            {
+              "length": 146500,
+              "gradient": 0.0
+            },
+            {
+              "length": 3000,
+              "gradient": 4.0
+            },
+            {
+              "length": 500,
+              "gradient": 0.0
+            }
+          ],
+          "markers": [
+            {
+              "kind": "sprint",
+              "name": "Chestnut Sprint",
+              "distance": 75000,
+              "weight": "standard"
+            },
+            {
+              "kind": "mountain",
+              "name": "Limousin Ramp",
+              "distance": 149500,
+              "category": "cat3"
+            },
+            {
+              "kind": "sprint",
+              "name": "Limousin Finish",
+              "distance": 150000,
+              "weight": "standard"
+            }
+          ]
+        },
+        {
+          "name": "Pyrenean Passes",
+          "course": [
+            {
+              "length": 39000,
+              "gradient": 1.0
+            },
+            {
+              "length": 14000,
+              "gradient": 6.5
+            },
+            {
+              "length": 10000,
+              "gradient": -6.5
+            },
+            {
+              "length": 15000,
+              "gradient": 0.0
+            },
+            {
+              "length": 17000,
+              "gradient": 7.0
+            },
+            {
+              "length": 8000,
+              "gradient": -7.0
+            },
+            {
+              "length": 13000,
+              "gradient": 2.0
+            },
+            {
+              "length": 9000,
+              "gradient": 8.0
+            }
+          ],
+          "markers": [
+            {
+              "kind": "mountain",
+              "name": "Col de Peyresourde-Haut",
+              "distance": 53000,
+              "category": "hc"
+            },
+            {
+              "kind": "mountain",
+              "name": "Pic de l'Ours",
+              "distance": 125000,
+              "category": "hc"
+            }
+          ]
+        },
+        {
+          "name": "Landes Pine Road",
+          "course": [
+            {
+              "length": 170000,
+              "gradient": 0.0
+            }
+          ],
+          "markers": [
+            {
+              "kind": "sprint",
+              "name": "Pine Forest Sprint",
+              "distance": 90000,
+              "weight": "standard"
+            },
+            {
+              "kind": "sprint",
+              "name": "Landes Finish",
+              "distance": 170000,
+              "weight": "major"
+            }
+          ]
+        },
+        {
+          "name": "Summit of Pic Blanc",
+          "course": [
+            {
+              "length": 70000,
+              "gradient": 1.0
+            },
+            {
+              "length": 15000,
+              "gradient": 4.0
+            },
+            {
+              "length": 10000,
+              "gradient": -2.0
+            },
+            {
+              "length": 22000,
+              "gradient": -4.0
+            },
+            {
+              "length": 13000,
+              "gradient": 8.1
+            }
+          ],
+          "markers": [
+            {
+              "kind": "mountain",
+              "name": "Col d'Aspin-Bas",
+              "distance": 85000,
+              "category": "cat2"
+            },
+            {
+              "kind": "mountain",
+              "name": "Pic Blanc",
+              "distance": 130000,
+              "category": "hc"
+            }
+          ]
+        },
+        {
+          "name": "Basque Hills Finale",
+          "course": [
+            {
+              "length": 126500,
+              "gradient": 0.0
+            },
+            {
+              "length": 3000,
+              "gradient": 4.0
+            },
+            {
+              "length": 500,
+              "gradient": 0.0
+            }
+          ],
+          "markers": [
+            {
+              "kind": "sprint",
+              "name": "Fishing Port Sprint",
+              "distance": 60000,
+              "weight": "standard"
+            },
+            {
+              "kind": "mountain",
+              "name": "Lighthouse Ramp",
+              "distance": 129500,
+              "category": "cat3"
+            },
+            {
+              "kind": "sprint",
+              "name": "Boulevard Finish",
+              "distance": 130000,
+              "weight": "major"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

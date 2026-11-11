@@ -104,3 +104,49 @@ def test_judge_averages_wins_over_seasons():
                     + ["rouleur"] * 3 + ["puncheur"]]
 
     assert any("puncheur" in f for f in judge(results).failures)
+
+
+def test_judge_asks_rouleurs_for_one_win_a_season():
+    # Until time trials exist, a rouleur's minimum is one (see MIN_WINS_BY_SPECIALITY).
+    results = [_result(s) for s in ["climber"] * 3 + ["sprinter"] * 3
+               + ["puncheur"] * 3 + ["rouleur"]]
+
+    assert judge(results).ok
+
+
+def _write(tmp_path, races):
+    import json
+
+    path = tmp_path / "season.json"
+    path.write_text(json.dumps({"number": 1, "starts_at": "2027-03-01T00:00:00Z", "races": races}))
+    return str(path)
+
+
+def test_command_fails_an_unbalanced_calendar(tmp_path, capsys):
+    import pytest
+    from django.core.management import call_command
+    from django.core.management.base import CommandError
+
+    path = _write(tmp_path, [
+        {"week": 1, "day": "sunday", "time": "14:00", "name": "Only Race", "course": FLAT},
+    ])
+
+    with pytest.raises(CommandError, match="not balanced"):
+        call_command("check_calendar", path, "--seeds", "1")
+
+    out = capsys.readouterr().out
+    assert "Only Race" in out
+
+
+def test_command_only_runs_matching_days_and_skips_the_verdict(tmp_path, capsys):
+    from django.core.management import call_command
+
+    path = _write(tmp_path, [
+        {"week": 1, "day": "sunday", "time": "14:00", "name": "Keep Me", "course": FLAT},
+        {"week": 2, "day": "sunday", "time": "14:00", "name": "Skip Me", "course": FLAT},
+    ])
+
+    call_command("check_calendar", path, "--seeds", "1", "--only", "keep")
+
+    out = capsys.readouterr().out
+    assert "Keep Me" in out and "Skip Me" not in out

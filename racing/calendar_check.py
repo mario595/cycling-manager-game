@@ -1,6 +1,6 @@
 """Who wins each race of a season file, against a freshly generated field.
 
-The balance check for a calendar (specs/beta-world.md, In scope 3): does
+The balance check for a calendar (specs/archive/beta-world.md, In scope 3): does
 every winning speciality have races it wins, and does none win too many?
 It runs every race and every stage of a season declaration through the
 engine against a seeded field of generated teams, picks each team's squad
@@ -35,7 +35,7 @@ from .models import SQUAD_SIZE
 from .services import course_pick_order, group_times
 
 #: The four specialities a calendar must give wins to. Domestiques are
-#: support riders and are not expected to win (specs/beta-world.md,
+#: support riders and are not expected to win (specs/archive/beta-world.md,
 #: Decisions taken).
 WINNING_SPECIALITIES = (
     Rider.Speciality.CLIMBER,
@@ -45,6 +45,12 @@ WINNING_SPECIALITIES = (
 )
 #: Each winning speciality must win at least this many race days a season...
 MIN_WINS = 2
+#: ...except rouleurs. The engine has no time trial, echelon or breakaway,
+#: the three places a rouleur's flat power decides a race, so on today's
+#: engine they win about one flat day in eight and lose the rest to
+#: sprinters in the final. Their full share waits for time trials
+#: (#89, #90). Decided on #139; see specs/archive/beta-world.md.
+MIN_WINS_BY_SPECIALITY = {Rider.Speciality.ROULEUR: 1}
 #: ...and no speciality may win more than this share of them.
 MAX_SHARE = 0.40
 
@@ -224,7 +230,9 @@ class Verdict:
 
 def judge(results: list[DayResult]) -> Verdict:
     """Apply the spec's rule to the results, averaged per season (seed):
-    each winning speciality at least MIN_WINS, none above MAX_SHARE."""
+    each winning speciality at least its minimum (MIN_WINS, or
+    MIN_WINS_BY_SPECIALITY's lower figure for rouleurs), none above
+    MAX_SHARE."""
     seeds = sorted({r.field_seed for r in results})
     wins = Counter(r.winner_speciality for r in results)
     total = len(results)
@@ -232,9 +240,10 @@ def judge(results: list[DayResult]) -> Verdict:
     failures = []
     for speciality in WINNING_SPECIALITIES:
         per_season = wins[speciality] / len(seeds) if seeds else 0
-        if per_season < MIN_WINS:
+        needed = MIN_WINS_BY_SPECIALITY.get(speciality, MIN_WINS)
+        if per_season < needed:
             failures.append(
-                f"{speciality} wins {per_season:.1f} race days a season (needs {MIN_WINS})"
+                f"{speciality} wins {per_season:.1f} race days a season (needs {needed})"
             )
     for speciality, count in wins.items():
         share = count / total

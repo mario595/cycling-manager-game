@@ -18,9 +18,9 @@ class Command(BaseCommand):
     help = (
         "Simulate every race day of a season file against freshly generated "
         "fields, one per seed, and report which speciality wins each — the "
-        "calendar balance check (specs/beta-world.md). Writes nothing to the "
+        "calendar balance check (specs/archive/beta-world.md). Writes nothing to the "
         "database. Exits non-zero when a winning speciality wins fewer than "
-        "two race days a season, or any speciality more than 40% of them."
+        "two race days a season (rouleurs: one, until time trials exist), or any speciality more than 40% of them."
     )
 
     def add_arguments(self, parser):
