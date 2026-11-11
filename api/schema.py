@@ -21,3 +21,32 @@ class GameTokenScheme(OpenApiAuthenticationExtension):
             "scheme": "bearer",
             "description": "An API token issued by the game's operator.",
         }
+
+
+# --- Shared pieces for the @extend_schema decorators in api/views.py ---------
+
+from drf_spectacular.utils import OpenApiResponse  # noqa: E402
+from rest_framework import serializers  # noqa: E402
+
+
+class DetailSerializer(serializers.Serializer):
+    """The body of every refusal: one human-readable sentence."""
+
+    detail = serializers.CharField()
+
+
+NO_TEAM = "You do not manage a team. Claim one first (`POST /api/teams/claim/`)."
+
+
+def refused(**codes: str) -> dict:
+    """`refused(r403=..., r409=...)` → responses for each refusal, each a
+    `{"detail": ...}` body with the given game-terms explanation."""
+    return {
+        int(code[1:]): OpenApiResponse(response=DetailSerializer, description=text)
+        for code, text in codes.items()
+    }
+
+
+def _pct(rate: float) -> int:
+    """A fee rate as a whole percentage, for descriptions."""
+    return round(rate * 100)

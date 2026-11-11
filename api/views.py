@@ -11,6 +11,9 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiResponse, extend_schema, inline_serializer
+from rest_framework import serializers
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -121,8 +124,9 @@ from staff.services import (
 from teams.models import ManagerialSpell, Team
 from teams.services import NoTeamAvailable, claim_team
 from transfers.models import Auction, Bid
-from transfers.pricing import market_value_for
+from transfers.pricing import RESERVE_RATE, SEVERANCE_FEE_RATE, SIGNING_FEE_RATE, market_value_for
 from transfers.services import (
+    AUCTION_DURATION,
     ROSTER_CAP,
     AuctionAlreadyExists,
     AuctionNotOpen,
@@ -151,6 +155,9 @@ from accounts.views import LoginView as AccountsLoginView
 
 from .rider_profile import rider_profile
 from .services import touch_last_seen
+from accounts.serializers import LoginSerializer
+
+from .schema import NO_TEAM, _pct, refused
 from .serializers import (
     AuctionMarketSerializer,
     CalendarSerializer,
@@ -228,6 +235,17 @@ class ClockView(APIView):
     """The game's current time. Requires a session: the game exposes nothing
     to a visitor who is not logged in — see api/README.md, *Authentication*."""
 
+    @extend_schema(
+        operation_id="get_clock",
+        tags=["World"],
+        summary="Read the game clock",
+        description=(
+            "The world's current game time. Everything in the game — race starts, "
+            "week boundaries, auction deadlines — is measured on this clock, not on "
+            "real time. On the staging world the clock runs faster than real time."
+        ),
+        responses=ClockSerializer,
+    )
     def get(self, request):
         return Response(ClockSerializer({"current": now()}).data)
 
@@ -238,6 +256,19 @@ class PositionView(APIView):
     exposes nothing to a visitor who is not logged in — see api/README.md,
     *Authentication*."""
 
+    @extend_schema(
+        operation_id="get_season_position",
+        tags=["World"],
+        summary="Where the world is in its season",
+        description=(
+            '`state` is `in_season` (with the season, the current week number and '
+            'when that week ends), `off_season` (the season that just finished, no '
+            'week), or `no_season` (no season has ever been declared). Weekly events '
+            '— wages, training, youth intake, sponsor payments — happen when a week '
+            'ends.'
+        ),
+        responses=PositionSerializer,
+    )
     def get(self, request):
         position = current_position(now())
         return Response(PositionSerializer({
@@ -294,6 +325,20 @@ class CalendarView(APIView):
     session: the game exposes nothing to a visitor who is not logged in —
     see api/README.md, *Authentication*."""
 
+    @extend_schema(
+        operation_id="get_calendar",
+        tags=["World"],
+        summary="The current season's race calendar",
+        description=(
+            "All twelve weeks of the current season, each with its races (at most one "
+            "a day). Each race has an id, name, start time, distance and `status` "
+            "(`scheduled`, `running`, `finished`, `failed`). A stage race's stages "
+            "each carry `stage_race` with the tour's name, the stage number and the "
+            "stage count. Pick your squad for a race before it starts. Outside a "
+            "season `weeks` is empty."
+        ),
+        responses=CalendarSerializer,
+    )
     def get(self, request):
         position = current_position(now())
         if position.season is None or position.state != "in_season":
@@ -334,6 +379,18 @@ class LoginView(AccountsLoginView):
     view that actually serves POST /api/accounts/login/.
     """
 
+    @extend_schema(
+        operation_id="login",
+        tags=["Account"],
+        summary="Log in with email and password (browser session)",
+        description=(
+            'Starts a browser session. API clients do not need this: send your token '
+            'instead. A wrong email and a wrong password get the same 400, so the '
+            'answer never reveals whether an email is registered.'
+        ),
+        request=LoginSerializer,
+        responses={200: inline_serializer("DisplayName", {"display_name": serializers.CharField()}), **refused(r400="Email or password is wrong.")},
+    )
     def post(self, request):
         response = super().post(request)
         if response.status_code == 200 and request.user.is_authenticated:
@@ -356,6 +413,19 @@ class MeView(APIView):
     permission_classes = [AllowAny]
 
     @method_decorator(ensure_csrf_cookie)
+    @extend_schema(
+        operation_id="get_me",
+        tags=["Account"],
+        summary="Who you are and which team you manage",
+        description=(
+            'Your display name and the team you manage (`id`, `name`, `code`), or '
+            '`team: null` if you manage none. If you lost a team — released for '
+            'inactivity or insolvency — and have not claimed another, `lost_team` '
+            'says which and why until you acknowledge it. Readable without logging '
+            'in: then `authenticated` is false.'
+        ),
+        responses=MeSerializer,
+    )
     def get(self, request):
         user = request.user
         team = team_for(user)
@@ -433,6 +503,22 @@ class SquadView(APIView):
     specs/player-accounts-plan.md, D8.
     """
 
+    @extend_schema(
+        operation_id="get_squad",
+        tags=["Racing"],
+        summary="Your squad for a race",
+        description=(
+            "The riders your team will send to this race. `saved` is false when you "
+            "have not picked yet: the squad shown is then only a suggestion. If you "
+            "never save one, the game auto-picks a naive squad (strongest, freshest "
+            "riders) when the race starts. `candidates` is your whole roster, "
+            "each flagged `selected` and `is_leader`, with attributes and freshness "
+            "on the 0–10 scale. Tired riders (low freshness) perform worse. For stage "
+            "2 onwards of a stage race the squad is the one carried from stage 1, "
+            "minus riders who did not finish, and `editable` is false."
+        ),
+        responses={200: SquadSerializer, **refused(r403=NO_TEAM, r404="No such race.")},
+    )
     def get(self, request, race_id: int):
         race = get_object_or_404(Race, pk=race_id)
         team = team_for(request.user)
@@ -467,6 +553,20 @@ class SquadView(APIView):
         payload = _squad_payload(race, team, rider_ids, leader_id, saved=saved)
         return Response(SquadSerializer(payload).data)
 
+    @extend_schema(
+        operation_id="set_squad",
+        tags=["Racing"],
+        summary="Pick your squad for a race",
+        description=(
+            f"Replace your squad for this race: exactly {SQUAD_SIZE} of your own "
+            f"riders in `rider_ids`, one of whom is `leader_id`. The team works for "
+            f"its leader during the race. Allowed only before the race starts, and "
+            f"only for a one-day race or stage 1 of a stage race (later stages carry "
+            f"stage 1's squad). Returns the saved squad."
+        ),
+        request=SquadWriteSerializer,
+        responses={200: SquadSerializer, **refused(r400="Wrong number of riders, a rider not on your team, a leader not in the squad, a race already started, or a later stage.", r403=NO_TEAM, r404="No such race.")},
+    )
     def put(self, request, race_id: int):
         race = get_object_or_404(Race, pk=race_id)
         team = team_for(request.user)
@@ -501,6 +601,20 @@ class ClaimTeamView(APIView):
     malformed name or code.
     """
 
+    @extend_schema(
+        operation_id="claim_team",
+        tags=["Account"],
+        summary="Claim an unmanaged team",
+        description=(
+            "Take over one of the teams nobody manages, renamed to `name` and recoded "
+            "to the three-letter `code` you choose. The team's balance and fanbase "
+            "are reset to the starting values, and any bids or auction listings it "
+            "had are cancelled. For a short cooldown after claiming, releasing an "
+            "inherited rider costs no severance. You can manage only one team."
+        ),
+        request=ClaimTeamSerializer,
+        responses={201: MeTeamSerializer, **refused(r400="The name or code is malformed, or the name is taken.", r409="You already manage a team, or no unmanaged team is left.")},
+    )
     def post(self, request):
         if team_for(request.user) is not None:
             return Response({"detail": "You already manage a team."}, status=409)
@@ -540,6 +654,18 @@ class AcknowledgeSpellView(APIView):
     confirm the row exists.
     """
 
+    @extend_schema(
+        operation_id="acknowledge_lost_team",
+        tags=["Account"],
+        summary="Dismiss the lost-team message",
+        description=(
+            'Mark the lost-team message from `GET /api/accounts/me/` '
+            '(`lost_team.spell`) as seen, so it is not shown again. Repeating it is '
+            'harmless.'
+        ),
+        request=None,
+        responses={204: None, **refused(r404="No such message, or it is not yours.")},
+    )
     def post(self, request, spell_id: int):
         updated = ManagerialSpell.objects.filter(
             pk=spell_id, manager=request.user, acknowledged_at__isnull=True
@@ -559,6 +685,21 @@ class RiderListView(APIView):
     IsAuthenticated — do not re-add AllowAny.
     """
 
+    @extend_schema(
+        operation_id="get_roster",
+        tags=["Riders"],
+        summary="Your roster",
+        description=(
+            f"Your team's riders, with age, speciality, attributes and freshness on "
+            f"the 0–10 scale, weekly salary, market value and what releasing them "
+            f"would cost. `final_season` is true for a rider who will retire at this "
+            f"season's close. `squad_value` is the roster's total market value. "
+            f"`salary_review` is the last season-end salary review: wages are repriced "
+            f"at every season close from each rider's strength. Your roster holds at "
+            f"most {ROSTER_CAP} riders."
+        ),
+        responses={200: RosterSerializer, **refused(r403=NO_TEAM)},
+    )
     def get(self, request):
         team = team_for(request.user)
         if team is None:
@@ -583,6 +724,17 @@ class RiderProfileView(APIView):
     "this is your rider" branch. See specs/rider-detail-view-plan.md, D1-D2.
     """
 
+    @extend_schema(
+        operation_id="get_rider",
+        tags=["Riders"],
+        summary="Any rider's profile",
+        description=(
+            "One rider's full profile, for any rider in the game: team, age, "
+            "freshness, salary, market value, attributes (0–10), how they have "
+            "changed over time, and their race history and career totals."
+        ),
+        responses={200: RiderProfileSerializer, **refused(r404="No such rider.")},
+    )
     def get(self, request, rider_id: int):
         rider = get_object_or_404(
             Rider.objects.select_related("team", "development_squad__team"), pk=rider_id,
@@ -616,6 +768,18 @@ class FreeAgentsView(APIView):
     is the caller's.
     """
 
+    @extend_schema(
+        operation_id="list_free_agents",
+        tags=["Transfers"],
+        summary="The free-agent pool",
+        description=(
+            f'Every rider with no team, each with attributes, salary, market value and '
+            f'the fee to sign them ({_pct(SIGNING_FEE_RATE)}% of market value), plus '
+            f'your current balance. Long-unattached weak riders leave the pool over '
+            f'time.'
+        ),
+        responses={200: FreeAgentPoolSerializer, **refused(r403=NO_TEAM)},
+    )
     def get(self, request):
         team = team_for(request.user)
         if team is None:
@@ -636,6 +800,20 @@ class SignFreeAgentView(APIView):
     HireTrainerView document.
     """
 
+    @extend_schema(
+        operation_id="sign_free_agent",
+        tags=["Transfers"],
+        summary="Sign a free agent",
+        description=(
+            f"Sign `rider_id` from the free-agent pool onto your roster. The signing "
+            f"fee ({_pct(SIGNING_FEE_RATE)}% of market value) is debited now, and the "
+            f"rider's weekly salary is paid from the next payday. Refused if the rider "
+            f"is no longer free, your roster is full, you cannot afford it, or your "
+            f"team is insolvent."
+        ),
+        request=SignFreeAgentSerializer,
+        responses={204: None, **refused(r403=NO_TEAM, r409="Rider not available, roster full, not enough money, or your team is insolvent.")},
+    )
     def post(self, request):
         team = team_for(request.user)
         if team is None:
@@ -681,6 +859,20 @@ class ReleaseRiderView(APIView):
     the roster change; the charge entry simply records what is owed).
     """
 
+    @extend_schema(
+        operation_id="release_rider",
+        tags=["Transfers"],
+        summary="Release one of your riders",
+        description=(
+            f"Send `rider_id` from your roster to the free-agent pool. You pay "
+            f"severance ({_pct(SEVERANCE_FEE_RATE)}% of market value), except for "
+            f"riders inherited with a team you claimed within the cooldown, who leave "
+            f"for free. Severance is charged even if it takes your balance negative. "
+            f"The roster's `release_cost` shows the price first."
+        ),
+        request=ReleaseRiderSerializer,
+        responses={204: None, **refused(r403=NO_TEAM, r409="That rider is not on your roster.")},
+    )
     def post(self, request):
         team = team_for(request.user)
         if team is None:
@@ -718,6 +910,19 @@ class AuctionMarketView(APIView):
     cases*): every listing carries its full bid history, newest first,
     each with the bidding team's name."""
 
+    @extend_schema(
+        operation_id="list_auctions",
+        tags=["Transfers"],
+        summary="The auction market",
+        description=(
+            "Every open auction: the rider, the current price, the minimum next bid, "
+            "the deadline, whether it is your own listing, and the full bid history "
+            "(bids are public, with the bidding team's name). Plus your current "
+            "balance. A bid in the last moments before the deadline extends it, so "
+            "there is no sniping."
+        ),
+        responses={200: AuctionMarketSerializer, **refused(r403=NO_TEAM)},
+    )
     def get(self, request):
         team = team_for(request.user)
         if team is None:
@@ -769,6 +974,20 @@ class ListForAuctionView(APIView):
     RiderNotOnRoster (request well-formed, world state refuses it — same
     split as SignFreeAgentView)."""
 
+    @extend_schema(
+        operation_id="list_rider_for_auction",
+        tags=["Transfers"],
+        summary="Put one of your riders up for auction",
+        description=(
+            f'Open an auction for `rider_id`, a rider your team owns: on your roster, '
+            f'or a development squad graduate. The reserve is {_pct(RESERVE_RATE)}% of '
+            f'market value, and bidding runs for {AUCTION_DURATION.days} days of game '
+            f'time. If it sells, the price is paid to you and the rider leaves. If '
+            f'not, a roster rider stays. The rider keeps racing for you while listed.'
+        ),
+        request=ListForAuctionSerializer,
+        responses={204: None, **refused(r403=NO_TEAM, r409="Already listed, or not a rider your team owns.")},
+    )
     def post(self, request):
         team = team_for(request.user)
         if team is None:
@@ -792,6 +1011,19 @@ class ForceSellView(APIView):
     Only an insolvent team may; a solvent one has the ordinary listing and
     release. 409 for everything the world's state refuses, as elsewhere."""
 
+    @extend_schema(
+        operation_id="force_sell_rider",
+        tags=["Transfers"],
+        summary="Force-sell a rider while insolvent",
+        description=(
+            'Only for an insolvent team. The rider leaves your roster now, so their '
+            'wage stops now, and is auctioned with no severance. A sale pays you. '
+            'With no sale the rider becomes a free agent. Use it to close the weekly '
+            'shortfall shown by `GET /api/economy/solvency/`.'
+        ),
+        request=ListForAuctionSerializer,
+        responses={204: None, **refused(r403=NO_TEAM, r409="Your team is not insolvent, the rider is not on your roster, they are already listed, or selling would leave fewer riders than a team needs to race.")},
+    )
     def post(self, request):
         team = team_for(request.user)
         if team is None:
@@ -817,6 +1049,19 @@ class PlaceBidView(APIView):
     transfers.services.place_bid — no charge happens yet, so there is no
     injected charge callback on this path, unlike sign_free_agent."""
 
+    @extend_schema(
+        operation_id="place_bid",
+        tags=["Transfers"],
+        summary="Bid on an auction",
+        description=(
+            "Bid `amount` on an open auction. It must be at least the auction's "
+            "`min_next_bid`, and no more than your balance. Nothing is charged until "
+            "the auction is won: the winning bid is debited when it resolves. You "
+            "cannot bid on your own listing. A late bid extends the deadline."
+        ),
+        request=PlaceBidSerializer,
+        responses={204: None, **refused(r403=NO_TEAM, r409="No such open auction, bid below the minimum, your own listing, not enough money, or your team is insolvent.")},
+    )
     def post(self, request, auction_id):
         team = team_for(request.user)
         if team is None:
@@ -853,6 +1098,17 @@ class MyBidsView(APIView):
     Transfers screens both poll every 30s.
     """
 
+    @extend_schema(
+        operation_id="list_my_bids",
+        tags=["Transfers"],
+        summary="Auctions you are bidding on",
+        description=(
+            'Every open auction your team has bid on: your last bid, the current '
+            'price, and `is_high_bidder`. If you have been outbid, `is_high_bidder` '
+            'is false. Bid again or let it go.'
+        ),
+        responses={200: MyBidStatusSerializer(many=True), **refused(r403=NO_TEAM)},
+    )
     def get(self, request):
         team = team_for(request.user)
         if team is None:
@@ -909,6 +1165,18 @@ class RaceDetailView(APIView):
     any authenticated manager may read any race, including one their team
     did not start. See specs/race-detail-view-plan.md, D1."""
 
+    @extend_schema(
+        operation_id="get_race",
+        tags=["Racing"],
+        summary="A race's details and course",
+        description=(
+            "One race's facts, for any race in the game: name, status, start time, "
+            "distance, and the course profile (segments with length and gradient, "
+            "plus sprint and climb markers). Use it to choose riders suited to the "
+            "course: climbers for mountains, sprinters for flat finishes."
+        ),
+        responses={200: RaceDetailSerializer, **refused(r404="No such race.")},
+    )
     def get(self, request, race_id: int):
         race = get_object_or_404(Race, pk=race_id)
         # A stage uses the reduced stage table; a one-day race the
@@ -995,6 +1263,19 @@ class RaceLogView(APIView):
     signed URL — a change to this one view.
     """
 
+    @extend_schema(
+        operation_id="get_race_log",
+        tags=["Racing"],
+        summary="A finished race's replay log",
+        description=(
+            "The race's recorded tick-by-tick positions, as newline-delimited JSON: a "
+            "header line, then sampled ticks. Large (hundreds of KB). Sent "
+            "brotli-compressed with `Content-Encoding: br` if you send "
+            "`Accept-Encoding: br`, otherwise as plain NDJSON. Results are easier to "
+            "read from the results endpoint."
+        ),
+        responses={(200, "application/x-ndjson"): OpenApiTypes.BINARY, **refused(r404="No such race, it has not finished, or it has no log.")},
+    )
     def get(self, request, race_id: int):
         race = get_object_or_404(Race, pk=race_id)
         if race.status != Race.Status.FINISHED:
@@ -1069,6 +1350,19 @@ class RaceResultsView(APIView):
     points are computed from.
     """
 
+    @extend_schema(
+        operation_id="get_race_results",
+        tags=["Racing"],
+        summary="A finished race's results",
+        description=(
+            "The finishing order, finish and group times, which riders did not "
+            "finish, the points and prize money each team earned, and the sprint and "
+            "mountain points taken at the course markers. A stage race's final stage "
+            "also carries the general classification. A race that has not finished "
+            "has no results: 404."
+        ),
+        responses={200: RaceResultsSerializer, **refused(r404="No such race, or it has not finished.")},
+    )
     def get(self, request, race_id: int):
         race = get_object_or_404(Race, pk=race_id)
         if race.status != Race.Status.FINISHED:
@@ -1253,6 +1547,17 @@ class StandingsView(APIView):
     no_season (before any season has ever been declared).
     """
 
+    @extend_schema(
+        operation_id="get_standings",
+        tags=["Racing"],
+        summary="The season's league table",
+        description=(
+            "Every team's season points, ranked, with the race, sprint and mountain "
+            "components kept apart. Same `state` as the season position: `in_season`, "
+            "`off_season` (the final table of the season just ended) or `no_season`."
+        ),
+        responses=StandingsSerializer,
+    )
     def get(self, request):
         position = current_position(now())
         if position.season is None:
@@ -1289,6 +1594,18 @@ class StaffView(APIView):
     would invite the SPA to offer a hire the API would reject.
     """
 
+    @extend_schema(
+        operation_id="get_staff",
+        tags=["Staff"],
+        summary="Your trainer, or the trainers you can hire",
+        description=(
+            'Your team has one trainer slot. If it is filled, this shows the trainer '
+            'and their weekly salary. If it is empty, it lists the pool of hireable '
+            'trainers, each with a speciality (the attribute they train best), hire '
+            'fee and weekly salary. Without a trainer your riders do not train.'
+        ),
+        responses={200: StaffSerializer, **refused(r403=NO_TEAM)},
+    )
     def get(self, request):
         team = team_for(request.user)
         if team is None:
@@ -1312,6 +1629,19 @@ class HireTrainerView(APIView):
     it — the same split ClaimTeamView documents.
     """
 
+    @extend_schema(
+        operation_id="hire_trainer",
+        tags=["Staff"],
+        summary="Hire a trainer",
+        description=(
+            'Hire `trainer_id` from the pool into your empty slot. The hire fee is '
+            'debited now, and the weekly salary is paid every payday after that. '
+            'Refused if the slot is filled, the trainer has been taken, or you cannot '
+            'afford the fee.'
+        ),
+        request=HireTrainerSerializer,
+        responses={204: None, **refused(r403=NO_TEAM, r409="Slot already filled, trainer not available, not enough money, or your team is insolvent.")},
+    )
     def post(self, request):
         team = team_for(request.user)
         if team is None:
@@ -1347,6 +1677,17 @@ class FireTrainerView(APIView):
     """Return the caller's trainer to the shared pool. POST, not DELETE —
     nothing is destroyed; the trainer survives in the pool."""
 
+    @extend_schema(
+        operation_id="fire_trainer",
+        tags=["Staff"],
+        summary="Let your trainer go",
+        description=(
+            'Return your trainer to the shared pool, emptying your slot. No refund of '
+            'the hire fee. Their salary stops.'
+        ),
+        request=None,
+        responses={204: None, **refused(r403=NO_TEAM, r409="You have no trainer.")},
+    )
     def post(self, request):
         team = team_for(request.user)
         if team is None:
@@ -1430,6 +1771,21 @@ class DevelopmentSquadView(APIView):
     reached and one already climbed past need different words.
     """
 
+    @extend_schema(
+        operation_id="get_development_squad",
+        tags=["Development squad"],
+        summary="Your development squad",
+        description=(
+            "Your youth squad: the level it runs at (`null` if closed), each level's "
+            "opening fee, weekly cost and number of places, and what you may do with "
+            "each (`action`, with `requires` explaining a locked level). Lists the "
+            "riders in the squad (prospects aged 17–19, who arrive every four weeks "
+            "and develop for 14 weeks) and the graduates. A graduate has two weeks: "
+            "promote them to the roster or list them for auction, or they are "
+            "released to the free-agent pool. Includes your roster count and cap."
+        ),
+        responses={200: DevelopmentSquadSerializer, **refused(r403=NO_TEAM)},
+    )
     def get(self, request):
         team = team_for(request.user)
         if team is None:
@@ -1625,6 +1981,19 @@ class OpenDevelopmentSquadView(APIView):
     ChoiceField, before this view runs.
     """
 
+    @extend_schema(
+        operation_id="open_development_squad",
+        tags=["Development squad"],
+        summary="Open a development squad",
+        description=(
+            "Open your development squad at the entry level, paying that level's fee "
+            "now. It then costs its weekly fee every payday. Only the bottom level "
+            "can be opened: higher levels are reached by upgrading one step at a "
+            "time."
+        ),
+        request=DevelopmentSquadLevelChoiceSerializer,
+        responses={204: None, **refused(r400="Unknown level.", r403=NO_TEAM, r409="Already open, level locked, not enough money, or your team is insolvent.")},
+    )
     def post(self, request):
         team = team_for(request.user)
         if team is None:
@@ -1664,6 +2033,18 @@ class ChangeDevelopmentSquadLevelView(APIView):
     instead), and the level already held a 409 `SameLevel` — all three from
     the service, none of them special-cased here.
     """
+    @extend_schema(
+        operation_id="upgrade_development_squad",
+        tags=["Development squad"],
+        summary="Upgrade your development squad",
+        description=(
+            "Move your open squad up exactly one level, paying that level's full fee. "
+            "Higher levels have more places and better odds of a talented intake. "
+            "There is no downgrade: close the squad instead."
+        ),
+        request=DevelopmentSquadLevelChoiceSerializer,
+        responses={204: None, **refused(r400="Unknown level.", r403=NO_TEAM, r409="No squad, the level you already hold, a skipped level, a downgrade, not enough money, or your team is insolvent.")},
+    )
     def post(self, request):
         team = team_for(request.user)
         if team is None:
@@ -1710,6 +2091,19 @@ class CloseDevelopmentSquadView(APIView):
     `close_squad` returning a falsy value — None, or a closure that did
     nothing — is a 409.
     """
+    @extend_schema(
+        operation_id="close_development_squad",
+        tags=["Development squad"],
+        summary="Close your development squad",
+        description=(
+            'Close the squad. Its weekly cost stops, the riders still in it are '
+            'discarded, graduates are released to the free-agent pool, and their '
+            'auction listings are cancelled. Fees already paid are not refunded, and '
+            'the level is forgotten: a reopened squad starts at the bottom.'
+        ),
+        request=None,
+        responses={204: None, **refused(r403=NO_TEAM, r409="Your team has no development squad.")},
+    )
     def post(self, request):
         team = team_for(request.user)
         if team is None:
@@ -1754,6 +2148,18 @@ class PromoteSquadRiderView(APIView):
     promotion starts a salary (#27).
     """
 
+    @extend_schema(
+        operation_id="promote_squad_rider",
+        tags=["Development squad"],
+        summary="Promote a youth rider to the roster",
+        description=(
+            'Move a prospect or graduate from your development squad onto the roster, '
+            'where they race and draw a weekly salary. Promoting a listed graduate '
+            'cancels their auction. Refused if the roster is full.'
+        ),
+        request=None,
+        responses={204: None, **refused(r403=NO_TEAM, r409="Not a rider in your squad, roster full, or your team is insolvent.")},
+    )
     def post(self, request, rider_id: int):
         team = team_for(request.user)
         if team is None:
@@ -1790,6 +2196,17 @@ class DiscardSquadRiderView(APIView):
     caller.
     """
 
+    @extend_schema(
+        operation_id="discard_squad_rider",
+        tags=["Development squad"],
+        summary="Discard a youth rider",
+        description=(
+            'Remove a prospect or graduate from your development squad for good, '
+            'freeing their place. Not allowed while they have an open auction.'
+        ),
+        request=None,
+        responses={204: None, **refused(r403=NO_TEAM, r409="Not a rider in your squad, or the rider has an open auction.")},
+    )
     def post(self, request, rider_id: int):
         team = team_for(request.user)
         if team is None:
@@ -1825,6 +2242,18 @@ class TrainingView(APIView):
     `has_trainer = false` on GET.
     """
 
+    @extend_schema(
+        operation_id="get_training",
+        tags=["Staff"],
+        summary="Your weekly training focus",
+        description=(
+            "The attribute your trainer is focusing on this week (`focus`), the "
+            "options, whether you have a trainer, and last week's visible attribute "
+            "changes per rider. Training happens at each week boundary. Age also "
+            "moves attributes: young riders grow, older riders decline."
+        ),
+        responses={200: TrainingSerializer, **refused(r403=NO_TEAM)},
+    )
     def get(self, request):
         team = team_for(request.user)
         if team is None:
@@ -1837,6 +2266,18 @@ class TrainingView(APIView):
             "last_week": latest_report(team),
         }).data)
 
+    @extend_schema(
+        operation_id="set_training_focus",
+        tags=["Staff"],
+        summary="Set your weekly training focus",
+        description=(
+            'Choose which engine attribute (`climb`, `sprint`, `flat`, `resistance`, '
+            '`positioning`) your trainer focuses on from the next week boundary. It '
+            'stays until you change it. Needs a trainer.'
+        ),
+        request=TrainingFocusSerializer,
+        responses={204: None, **refused(r403=NO_TEAM, r409="You have no trainer.")},
+    )
     def put(self, request):
         team = team_for(request.user)
         if team is None:
@@ -1870,6 +2311,20 @@ class FinancesView(APIView):
     oldest entry's `balance_after` must equal the starting balance.
     """
 
+    @extend_schema(
+        operation_id="get_finances",
+        tags=["Economy"],
+        summary="Your balance and ledger",
+        description=(
+            "Your team's balance and every money movement, newest first, each with "
+            "the balance after it: wages, trainer salary and fee, prize money, "
+            "merchandise income, sponsorship, transfers, development squad costs. "
+            "Wages and other weekly costs are paid at each week boundary (payday). "
+            "Also your fanbase, which grows with results and drives merchandise "
+            "income. Without a team, an empty ledger."
+        ),
+        responses=FinancesSerializer,
+    )
     def get(self, request):
         team = team_for(request.user)
         if team is None:
@@ -1903,6 +2358,20 @@ class SolvencyView(APIView):
     deadline. A user with no team gets the solvent shape with zeros rather than
     a 403, matching FinancesView."""
 
+    @extend_schema(
+        operation_id="get_solvency",
+        tags=["Economy"],
+        summary="Whether your team is insolvent",
+        description=(
+            'If your balance is negative after a payday the team is insolvent: '
+            'transfers into the team are embargoed, and you must cut the weekly '
+            'shortfall shown here (by releasing or force-selling riders, or cutting '
+            'costs) before the deadline. Each payday you stay negative is a strike, '
+            'and on the fourth you lose the team. Without a team, the solvent shape '
+            'with zeros.'
+        ),
+        responses=SolvencySerializer,
+    )
     def get(self, request):
         team = team_for(request.user)
         if team is None:
@@ -1973,6 +2442,19 @@ class SponsorsView(APIView):
     "no_season", season=None, and there is nothing to offer yet).
     """
 
+    @extend_schema(
+        operation_id="get_sponsors",
+        tags=["Economy"],
+        summary="Your sponsor contract, or this season's offers",
+        description=(
+            'Each season your team picks one of three sponsor offers, sized to your '
+            'fanbase, ranging from steady to performance-heavy. Once signed, the '
+            'contract pays weekly within its promised range, swinging with race '
+            'results. This shows the signed contract, or the offers to choose from if '
+            'you have not signed yet.'
+        ),
+        responses=SponsorsSerializer,
+    )
     def get(self, request):
         team = team_for(request.user)
         if team is None:
@@ -2004,6 +2486,17 @@ class SignOfferView(APIView):
     HireTrainerView documents.
     """
 
+    @extend_schema(
+        operation_id="sign_sponsor_offer",
+        tags=["Economy"],
+        summary="Sign a sponsor offer",
+        description=(
+            "Sign `offer_id`, one of your current offers, as this season's contract. "
+            "One contract a season, and it cannot be changed once signed."
+        ),
+        request=SignOfferSerializer,
+        responses={204: None, **refused(r403=NO_TEAM, r409="Offer not available, or you already have a sponsor this season.")},
+    )
     def post(self, request):
         team = team_for(request.user)
         if team is None:

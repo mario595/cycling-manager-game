@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from django.contrib.auth import authenticate, login, logout
+from drf_spectacular.utils import OpenApiResponse, extend_schema, inline_serializer
+from rest_framework import serializers
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -17,6 +19,18 @@ class RegisterView(APIView):
 
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        operation_id="register",
+        tags=["Account"],
+        summary="Create an account",
+        description=(
+            "Create a player account with an email, password and public display name, "
+            "and start a browser session. To play through the API you also need a "
+            "token, which the game's operator issues for the account."
+        ),
+        request=RegisterSerializer,
+        responses={201: inline_serializer("RegisteredName", {"display_name": serializers.CharField()}), 400: OpenApiResponse(description="Email already registered, or a field is invalid.")},
+    )
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -53,6 +67,17 @@ class LogoutView(APIView):
 
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        operation_id="logout",
+        tags=["Account"],
+        summary="End the browser session",
+        description=(
+            "Ends a browser session. It does nothing to an API token: a token is "
+            "revoked only by the game's operator. Always 204."
+        ),
+        request=None,
+        responses={204: None},
+    )
     def post(self, request):
         logout(request)
         return Response(status=204)
