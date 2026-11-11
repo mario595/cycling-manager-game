@@ -159,6 +159,7 @@ up front — an empty app is just noise. The table below marks which exist.
 | `economy/` | Economy | **built**, `README.md` | The append-only ledger: every team's balance is the sum of its `LedgerEntry` rows — starting balance, weekly wages (the sum of each rider's own weekly salary), race prize money, trainer hire fee and weekly trainer salary, merchandise income, sponsorship, claim takeover, and a development squad's per-level fee (paid on opening and on each upgrade) and weekly cost — and its fanbase, the sum of its `FanbaseEntry` rows. A team picks one of three fanbase-sized sponsor offers per season; its weekly payment then swings with race results inside a promised range. It also owns the season-end `SalaryReviewReport` (one per managed team per closed season), which records what repricing did to a team's wage bill. Since #27 it also owns insolvency: a weekly `SolvencyCheck` per managed team that is, or was, negative after payday, counting strikes toward losing the team, and the shortfall target a manager must cut. Budgets still to come. |
 | `staff/` | Staff | **built**, `README.md` | Trainers hireable from a shared pool into one fixed slot per team at a speciality-derived hire fee plus a weekly salary, plus the team's weekly training focus and its rollover report. Physios and scouts still to come. |
 | `world/` | World Simulation | **built**, `README.md` | The game clock and the tick (which charges each team its weekly wages, its trainer salary and its development squad's weekly cost, then per week **graduates, releases expired graduates and runs youth intake in that order** — intake last, or a batch would be turned away from a place about to open — adjusting fanbase, paying merchandise income and sponsorship, generating each team's sponsor offer round on season open, retires riders who have reached their retirement age at each season close — and cancels any auction of theirs — releases the team of any manager inactive for ten in-season weeks, resolves due auctions, counting intake, turnaways, graduations and releases on `TickRun` for diagnosis, #33/#34, and assesses managed teams' solvency each payday — releasing a team on its fourth unmet one, #27). It also owns **the AI market** (`world/ai_market.py`): unmanaged teams bid the reserve on human listings they want, and list surplus or ageing riders on staggered weeks — and **the AI management** (`world/ai_management.py`, #45): unmanaged teams sign the steady sponsor at season open, set a weekly training focus rotated by their roster's specialities, and hire the cheapest pool trainer they can afford; their squads are picked for the course by `racing/`'s `course_pick_squad`. |
+| `feedback/` | Feedback | **built**, `README.md` | Beta testers' reports of problems (#131): a `Report` with category, text and a **snapshot** of its context — team, season and week by the game clock, game time and real time, the screen it was sent from — capped at 20 per account per 24 real hours, listed back to its own reporter with its outcome, and triaged by staff in Django admin (new, triaged with a GitHub issue link, dismissed, plus a private note the reporter never sees). The context is worked out in `api/` and passed in, so this app imports neither `world/` nor `schedule/`. |
 | `api/` | API | **built**, `README.md` | DRF routers aggregating each app's serializers and views. |
 | `frontend/` | Frontend/UI | **built**, `README.md` | The React SPA. Built to `frontend/dist/`, served by Django. Thirteen real screens (dashboard, roster, training, staff, development squad, sponsors, calendar, results, league table, finances, transfers, rider profile, race replay) plus squad selection, all from the API, no fixture data. Unknown paths redirect to `/`; every route requires a session. |
 
@@ -177,6 +178,7 @@ schedule      -> core
 racing        -> riders, teams, race_engine, schedule
 competitions  -> core, racing, teams, schedule
 economy       -> core, teams, riders, schedule
+feedback      -> core, accounts, teams   (string FKs only)
 world, api    -> everything (orchestration / presentation)
 ```
 
@@ -252,8 +254,10 @@ cycling-manager/
 │   └── README.md          # codes, colours, claiming an unmanaged team
 ├── transfers/
 │   └── README.md          # market value, value vs salary, what may import
-└── staff/
-    └── README.md          # the trainer pool, the one-slot rule, hiring
+├── staff/
+│   └── README.md          # the trainer pool, the one-slot rule, hiring
+└── feedback/
+    └── README.md          # report a problem: the snapshot, two clocks, the cap, triage
 ```
 
 ## Development Principles

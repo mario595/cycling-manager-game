@@ -24,6 +24,17 @@ all reading the real API. No screen renders invented data.
 | `/claim` | ClaimTeam | Built — real claim, no fixture data |
 | anything else | — | Redirects to `/` |
 
+**Report a problem** (#131) is not a route: `components/ReportProblem.tsx`
+renders a fixed button in the bottom-right corner of `Layout`, shown only
+when `me.authenticated` — so on every logged-in screen including `/claim`,
+and never on `/login` or `/register`, which render inside the same frame.
+It opens a form over the current screen (category and text) and sends
+`location.pathname + location.search` **as captured when the button was
+pressed**. A failed send keeps the text and shows the server's message, the
+daily cap's included; a sent one closes and shows "Report received" by the
+button for four seconds. The form has no list of past reports yet — that is
+`GET /api/feedback/reports/` only.
+
 `/race/:raceId` is the first **parameterised** route, so it is registered as
 an explicit `<Route>` in `App.tsx` rather than through `SCREENS` — that map
 generates one route per nav item by path, which has nowhere to put a

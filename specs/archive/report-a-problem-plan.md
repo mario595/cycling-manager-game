@@ -1,6 +1,6 @@
 # Report a problem — Implementation Plan
 
-**Spec:** `specs/report-a-problem.md` · **Issue:** #131 · **Status:** approved
+**Spec:** `specs/archive/report-a-problem.md` · **Issue:** #131 · **Status:** implemented
 **Apps touched:** `feedback/` (new), `api/`, `frontend/`, `config/settings/base.py`
 
 ## Context you need

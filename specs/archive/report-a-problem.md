@@ -1,6 +1,6 @@
 # Report a problem
 
-**Status:** approved
+**Status:** implemented
 **Domain(s):** a new `feedback/` domain, `api/`, `frontend/`
 **Issue:** #131
 **One-liner:** Anyone playing the beta, human or LLM, can report a problem from wherever they are in the game, and every report lands in one triage list with the context needed to act on it.

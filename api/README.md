@@ -628,6 +628,20 @@ Since #29 each rider also carries `release_cost`
   release and ordinary listing — each cuts cost or adds income.
 - `GET /api/transfers/auctions/` carries `forced` on each auction (#27), so
   the market can label a sale made under insolvency.
+- `GET` / `POST /api/feedback/reports/` (`ReportsView`, #131) — a beta
+  tester's reports of problems. `POST` takes `{category, text, location?}`:
+  `category` is `bug`, `looks_wrong`, `balance` or `suggestion`; `text` is
+  required and at most 4,000 characters (refused above, never cut);
+  `location` is optional, at most 300, and is whatever the caller says it
+  was looking at — the SPA sends its route. Everything else is worked out
+  here: the caller's team (`team_for`), and the season and week by the game
+  clock, both `null` unless `current_position(now())` is `in_season` —
+  off-season it still names the finished season, which a report must not
+  claim. `201` with the report. `429` with `{detail, retry_at}` past 20
+  reports in 24 **real** hours. `GET` lists the caller's own reports, newest
+  first, at most 100, each with `status` and `github_issue_url`; never
+  `triage_note`, never anyone else's. Plain `IsAuthenticated`, so an API
+  token (#130) works the same as a session. See `feedback/README.md`.
 
 ## URL ordering
 
