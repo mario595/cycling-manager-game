@@ -64,7 +64,7 @@ def test_offer_round_at_starting_fanbase_pays_the_calibrated_baseline(db, team, 
     offers = ensure_offer_round(team, season, at=season.starts_at)
 
     bases = {o.profile: o.weekly_base for o in offers}
-    assert bases == {"steady": 10_625, "balanced": 12_500, "demanding": 15_625}
+    assert bases == {"steady": 9_350, "balanced": 11_000, "demanding": 13_750}
 
 
 def test_round_is_idempotent(db, team, season):

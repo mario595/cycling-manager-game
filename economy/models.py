@@ -40,13 +40,13 @@ FANBASE_PER_POINT = 40
 MERCHANDISE_FANBASE_PER_CREDIT = 25
 #: A sponsor's weekly baseline in credits per thousand fans, before the
 #: profile's own multiplier (economy/sponsors.py). At STARTING_FANBASE
-#: (10,000) a BALANCED offer (multiplier 1.0) pays 10,000 × 1,250 // 1,000 =
-#: 12,500/week and a STEADY one 10,625 — the largest income stream, sized
+#: (10,000) a BALANCED offer (multiplier 1.0) pays 10,000 × 1,100 // 1,000 =
+#: 11,000/week and a STEADY one 9,350 — the largest income stream, sized
 #: (#125) so the average team, with prize money, a steady sponsor and the
 #: cheapest trainer, ends a settled season slightly ahead. See
 #: economy/README.md, *Balance targets*, before changing it. Was 500 (i.e.
 #: fanbase // 2) before #125.
-SPONSOR_CREDITS_PER_THOUSAND_FANS = 1_250
+SPONSOR_CREDITS_PER_THOUSAND_FANS = 1_100
 #: Offers generated per round. Always one of each SponsorProfile (economy/
 #: sponsors.py) so the player sees the full spread of the decision.
 OFFERS_PER_ROUND = 3

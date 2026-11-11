@@ -565,36 +565,16 @@ unmanaged team's ledger, before any per-auction guard exists — is caught
 around the whole AI step, so the tick still settles its week, charges wages
 and writes its `TickRun`. Losing a tick to the garnish would be a bad trade.
 
-**Balances, measured.** Every team runs a deficit at today's prices: wages
-outrun prize money and merchandise for managed and unmanaged teams alike.
-#45 narrows the gap for unmanaged teams; it does not close it. Two seeded
-seasons (`seed_teams`, `seed_trainers`, season 1 plus a copy shifted into
-season 2, ticked daily on the mock clock), average per unmanaged team, 15
-teams:
-
-| Ledger kind | Before #45, S1 | Before, S2 | After #45, S1 | After, S2 |
-|---|---|---|---|---|
-| Prize money + GC prizes | 95,967 | 97,500 | 101,400 | 101,134 |
-| Merchandise | 4,599 | 4,423 | 4,627 | 4,565 |
-| Sponsorship | — | — | 51,000 | 50,728 |
-| Trainer hire fee | — | — | −30,040 | — |
-| Trainer salary | — | — | −27,537 | −30,040 |
-| Wages | −157,400 | −164,920 | −168,640 | −166,160 |
-| **Net** | **−56,835** | **−62,997** | **−69,189** | **−39,774** |
-
-Season 2 is the steady state, and its loss falls to **63%** of the
-pre-feature one, short of the spec's "about half". The sponsor came in as
-projected (about $4,200 a week); the trainer did not. The plan assumed the
-cheapest trainer at about $1,500 a week, but fifteen teams each taking the
-cheapest one *left* pay about $2,500 on average. Season 1 is worse than
-before because it carries the one-off hire fee. Better-trained riders add
-only a few thousand in prizes within two seasons. The product owner accepted
-the shortfall (2026-11-10) rather than capping the AI's trainer or skipping
-it, both of which would buy money by making AI teams weaker. At about $40,000
-a season from a starting $500,000, AI buying in the market has roughly a
-decade of runway, not three seasons. Closing the gap is the economy-wide
-wage-to-income rebalance, not a fatter cushion here: a cushion large enough
-to matter would also let AI teams bid away the human market.
+**Balances, measured.** Since #125 the average team, unmanaged teams
+included, ends a settled season slightly ahead (about +$11,000 in season 2 of
+a seeded run) instead of about $68,000 behind. Unmanaged teams always sign the
+steady sponsor, so they sit at or a little below the average, and AI buying
+power no longer drains over the long run. The bottom quarter still loses
+money slowly. The targets, the before/after table and the
+`scripts/measure_economy.py` command that reproduces them are in
+`economy/README.md`, *Balance targets*. The #45 shortfall recorded there (the
+cheapest trainer *left* averages about $2,500–3,100 a week, not $1,500) still
+holds. It is now counted in the break-even rather than fighting it.
 
 ## The AI management (#45)
 
