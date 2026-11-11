@@ -324,3 +324,48 @@ def test_season_2_example_loads_after_season_1(db):
     # A rider who arrived on week 4 of season 1 graduates inside this one,
     # which is the whole reason the file is here.
     assert first.ends_at > second.starts_at - timedelta(weeks=12)
+
+
+# --- --number and --starts-at (#139): one calendar file, any season --------
+
+
+def test_number_and_starts_at_override_the_file(db, tmp_path):
+    path = write_season_file(tmp_path)
+
+    call_command("load_season", path, "--number", "3", "--starts-at", "2030-01-07")
+
+    season = Season.objects.get()
+    assert season.number == 3
+    assert season.starts_at.isoformat() == "2030-01-07T00:00:00+00:00"
+    assert season.ends_at - season.starts_at == timedelta(weeks=12)
+
+
+def test_starts_at_override_accepts_a_full_timestamp(db, tmp_path):
+    path = write_season_file(tmp_path)
+
+    call_command("load_season", path, "--starts-at", "2030-01-07T00:00:00Z")
+
+    assert Season.objects.get().starts_at.isoformat() == "2030-01-07T00:00:00+00:00"
+
+
+def test_starts_at_override_obeys_the_monday_rule(db, tmp_path):
+    path = write_season_file(tmp_path)
+
+    with pytest.raises(CommandError, match="Monday"):
+        call_command("load_season", path, "--starts-at", "2030-01-08")
+
+    assert not Season.objects.exists()
+
+
+def test_an_overridden_season_places_its_races_against_the_new_start(db, tmp_path):
+    from racing.models import Race
+
+    path = write_season_file(tmp_path, races=[{
+        "week": 2, "day": "sunday", "time": "14:00", "name": "Somewhere",
+        "course": [{"length": 50000, "gradient": 0.0}],
+    }])
+
+    call_command("load_season", path, "--starts-at", "2030-01-07")
+
+    race = Race.objects.get()
+    assert race.starts_at.isoformat() == "2030-01-20T14:00:00+00:00"
