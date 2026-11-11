@@ -48,6 +48,7 @@ LOCAL_APPS = [
     "schedule",
     "racing",
     "competitions",
+    "feedback",
     "world",
     "api",
 ]
