@@ -179,12 +179,25 @@ GAME_CLOCK_CLASS = "world.clocks.RealClock"
 # --- DRF ------------------------------------------------------------------
 
 REST_FRAMEWORK = {
+    # Session first, token second — order is load-bearing. DRF takes the
+    # 401-vs-403 choice from the first class, so an anonymous request stays a
+    # 403 as before; and SessionAuthentication only enforces CSRF when it is
+    # the class that authenticated, so a token request carrying no session
+    # cookie needs no CSRF token. See api/README.md, Authentication (#130).
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.SessionAuthentication",
+        "api.authentication.GameTokenAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    # Only token requests are counted (api/throttling.py).
+    "DEFAULT_THROTTLE_CLASSES": [
+        "api.throttling.TokenRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "token": "60/min",
+    },
 }
 
 
