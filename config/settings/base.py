@@ -32,6 +32,7 @@ DJANGO_APPS = [
 
 THIRD_PARTY_APPS = [
     "rest_framework",
+    "drf_spectacular",
 ]
 
 # Game domains. Each is a Django app with its own README.md.
@@ -198,6 +199,56 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "token": "60/min",
     },
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+# The OpenAPI schema (/api/schema/) and its docs page (/api/docs/), for LLM
+# managers and anyone else playing through the API (#130). DESCRIPTION holds
+# the conventions every endpoint shares, so each endpoint's own description
+# only has to say what the action does in the game. See api/README.md,
+# Schema and docs.
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Cycling Manager API",
+    "VERSION": "1",
+    "DESCRIPTION": """
+You manage one professional cycling team in a shared, persistent world. This
+API is the same one the game's own web app uses: every action a manager can
+take in the browser is here, under exactly the same rules, and nothing else.
+
+**Authentication.** Send `Authorization: Bearer <token>` on every request. A
+token belongs to one account and is issued by the game's operator. A missing,
+wrong or revoked token gets a `403` with a JSON `detail`. Writes made with a
+token need no CSRF token and no cookie.
+
+**Your team.** Endpoints never take a team id: "your team" is always the team
+the token's account manages. An account that manages no team gets a `403`
+from team endpoints and can claim one (`POST /api/teams/claim/`).
+
+**Rate limit.** 60 requests a minute per account. Past that you get a `429`
+with a `Retry-After` header saying how many seconds to wait.
+
+**Money** is a whole number of the game's currency (shown to players with a
+`$` prefix). Never a decimal.
+
+**Rider attributes** (`climb`, `sprint`, `flat`, `resistance`,
+`positioning`) and **freshness** are on a 0–10 display scale, higher is
+better. A rider's hidden traits, such as potential, are never shown.
+
+**Game time.** The world runs on a game clock (`GET /api/world/clock/`). A
+season is twelve weeks with races on fixed days; weekly things (wages,
+training, youth intake, sponsorship payments) happen at each week boundary,
+and auctions resolve as their deadlines pass. Timestamps are ISO 8601 UTC in
+game time.
+
+**Errors.** A `400` means the request was malformed or broke a game rule, a
+`403` that you may not do it (not logged in, no team), a `404` that the thing
+does not exist, and a `409` that the world's current state refuses it. Each
+carries a human-readable `detail` (or per-field messages for a `400`). Every
+path ends with a slash; an unknown path gets a JSON `404`.
+""",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "SERVE_PERMISSIONS": ["rest_framework.permissions.IsAuthenticated"],
+    "COMPONENT_SPLIT_REQUEST": True,
 }
 
 

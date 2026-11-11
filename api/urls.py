@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from django.urls import include, path
+from django.http import JsonResponse
+from django.urls import include, path, re_path
+from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView
 
 from .views import (
     AcknowledgeSpellView,
@@ -42,6 +44,17 @@ from .views import (
 )
 
 app_name = "api"
+
+
+def api_not_found(request, *args, **kwargs):
+    """Every /api/ path that matches nothing above. Without it the SPA's
+    catch-all in config/urls.py answers with index.html and a 200, which
+    tells an API client nothing — and a missing trailing slash would land
+    there too (#130; api/README.md, Browser assumptions)."""
+    return JsonResponse(
+        {"detail": "No such API endpoint. API paths end with a slash."}, status=404,
+    )
+
 
 urlpatterns = [
     # Ahead of the accounts.urls include below: this route must win so
@@ -121,4 +134,10 @@ urlpatterns = [
         name="place-bid",
     ),
     path("transfers/auctions/mine/", MyBidsView.as_view(), name="my-bids"),
+    # OpenAPI schema and its docs page, for authenticated users only
+    # (SPECTACULAR_SETTINGS["SERVE_PERMISSIONS"]).
+    path("schema/", SpectacularAPIView.as_view(), name="schema"),
+    path("docs/", SpectacularRedocView.as_view(url_name="api:schema"), name="docs"),
+    # Must stay last.
+    re_path(r"^.*$", api_not_found),
 ]

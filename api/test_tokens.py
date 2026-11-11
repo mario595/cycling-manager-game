@@ -212,3 +212,45 @@ def test_a_token_only_agent_that_keeps_playing_keeps_its_team(team, key, manager
 
     team.refresh_from_db()
     assert team.manager_id == manager.pk
+
+
+# --- schema, docs page, JSON 404 (W3) ----------------------------------------
+
+
+@pytest.mark.parametrize("path", ["/api/schema/", "/api/docs/"])
+def test_schema_and_docs_need_login(db, path):
+    assert APIClient().get(path).status_code == 403
+
+
+def test_schema_is_served_to_a_token(team, key):
+    response = bearer(key).get("/api/schema/", HTTP_ACCEPT="application/json")
+
+    assert response.status_code == 200
+    schema = response.json()
+    assert schema["components"]["securitySchemes"]["bearerAuth"]["scheme"] == "bearer"
+    assert "/api/riders/" in schema["paths"]
+
+
+def test_docs_page_is_served_to_a_session(manager):
+    client = APIClient()
+    client.force_login(manager)
+
+    response = client.get("/api/docs/")
+
+    assert response.status_code == 200
+    assert b"redoc" in response.content.lower()
+
+
+@pytest.mark.parametrize("path", ["/api/nope/", "/api/riders", "/api/racing/races/1/squad"])
+def test_unknown_api_paths_are_a_json_404(team, key, path):
+    response = bearer(key).get(path)
+
+    assert response.status_code == 404
+    assert response.json()["detail"].startswith("No such API endpoint")
+
+
+def test_non_api_paths_still_reach_the_spa(db):
+    response = APIClient().get("/roster")
+
+    assert response.status_code == 200
+    assert response["Content-Type"].startswith("text/html")
