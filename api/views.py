@@ -51,6 +51,7 @@ from economy.services import (
 )
 from economy.solvency import EMBARGO_MESSAGE, SolvencyStatus, is_embargoed, solvency_status
 from economy.sponsors import PROFILES_BY_KEY
+from feedback.services import DAILY_REPORT_LIMIT, ReportLimitReached, reports_for, submit_report
 from racing.models import (
     SQUAD_SIZE,
     MarkerCrossing,
@@ -170,6 +171,8 @@ from .serializers import (
     RaceDetailSerializer,
     RaceResultsSerializer,
     ReleaseRiderSerializer,
+    ReportCreateSerializer,
+    ReportSerializer,
     RiderProfileSerializer,
     RiderSerializer,
     RosterSerializer,
@@ -2018,3 +2021,50 @@ class SignOfferView(APIView):
             return Response({"detail": str(exc)}, status=409)
 
         return Response(status=204)
+
+
+class ReportsView(APIView):
+    """A beta tester's reports of problems (#131): GET lists the caller's
+    own, POST sends a new one. Plain IsAuthenticated, so it serves the SPA's
+    session and an agent's API token (#130) alike, with no difference in
+    rules.
+
+    The context is worked out here rather than in feedback/, which may not
+    import world/ or schedule/: the team the caller manages now, and where
+    the world is in its season by the game clock. Off-season,
+    current_position() still names the season that just finished, so the
+    season number is gated on the state being in_season — a report sent
+    between seasons is not "season 1".
+    """
+
+    def get(self, request):
+        return Response(ReportSerializer(reports_for(request.user), many=True).data)
+
+    def post(self, request):
+        serializer = ReportCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        at = now()
+        position = current_position(at)
+        in_season = position.state == "in_season"
+        try:
+            report = submit_report(
+                request.user,
+                **serializer.validated_data,
+                team=team_for(request.user),
+                season_number=position.season.number if in_season else None,
+                week_number=position.week.number if in_season and position.week else None,
+                game_time=at,
+            )
+        except ReportLimitReached as limit:
+            retry_at = limit.retry_at
+            return Response(
+                {
+                    "detail": (
+                        f"You have sent {DAILY_REPORT_LIMIT} reports in the last 24 hours. "
+                        f"You can send another after {retry_at:%Y-%m-%d %H:%M} UTC."
+                    ),
+                    "retry_at": retry_at,
+                },
+                status=429,
+            )
+        return Response(ReportSerializer(report).data, status=201)
