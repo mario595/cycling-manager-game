@@ -30,7 +30,9 @@ when `me.authenticated` — so on every logged-in screen including `/claim`,
 and never on `/login` or `/register`, which render inside the same frame.
 It opens a form over the current screen (category and text) and sends
 `location.pathname + location.search` **as captured when the button was
-pressed**. A failed send keeps the text and shows the server's message, the
+pressed**. The draft lives in the button, not the form, so closing the form
+by a click on the backdrop or Escape keeps what was typed; only a successful
+send clears it. A failed send keeps the text and shows the server's message, the
 daily cap's included; a sent one closes and shows "Report received" by the
 button for four seconds. The form has no list of past reports yet — that is
 `GET /api/feedback/reports/` only.

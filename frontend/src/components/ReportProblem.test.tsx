@@ -84,4 +84,41 @@ describe('ReportProblemButton', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(mockCreateReport).not.toHaveBeenCalled()
   })
+
+  it('keeps the typed text when the form is closed by a click outside it', () => {
+    renderAt('/roster')
+    openForm()
+    typeText('Half-written report.')
+
+    fireEvent.click(screen.getByRole('dialog').parentElement!)
+    expect(screen.queryByRole('dialog')).toBeNull()
+    openForm()
+
+    expect(screen.getByRole('textbox')).toHaveValue('Half-written report.')
+  })
+
+  it('closes on Escape and keeps the draft', () => {
+    renderAt('/roster')
+    openForm()
+    typeText('Draft.')
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    openForm()
+
+    expect(screen.getByRole('textbox')).toHaveValue('Draft.')
+  })
+
+  it('starts empty again after a successful send', async () => {
+    mockCreateReport.mockResolvedValue({} as never)
+    renderAt('/roster')
+    openForm()
+    typeText('Sent once.')
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+
+    openForm()
+
+    expect(screen.getByRole('textbox')).toHaveValue('')
+  })
 })

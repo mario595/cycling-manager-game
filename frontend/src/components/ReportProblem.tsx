@@ -30,6 +30,10 @@ export function ReportProblemButton() {
   const { pathname, search } = useLocation()
   const [openedOn, setOpenedOn] = useState<string | null>(null)
   const [thanks, setThanks] = useState(false)
+  // The draft lives here, not in the dialog, so closing the form by a stray
+  // click on the backdrop or Escape keeps what was typed. Only a successful
+  // send clears it.
+  const [draft, setDraft] = useState<ReportDraft>(EMPTY_DRAFT)
 
   useEffect(() => {
     if (!thanks) return
@@ -79,9 +83,12 @@ export function ReportProblemButton() {
       {openedOn !== null ? (
         <ReportProblemDialog
           location={openedOn}
+          draft={draft}
+          onDraftChange={setDraft}
           onClose={() => setOpenedOn(null)}
           onSent={() => {
             setOpenedOn(null)
+            setDraft(EMPTY_DRAFT)
             setThanks(true)
           }}
         />
@@ -90,19 +97,40 @@ export function ReportProblemButton() {
   )
 }
 
+/** What the reporter has typed so far. */
+export interface ReportDraft {
+  category: ReportCategory
+  text: string
+}
+
+const EMPTY_DRAFT: ReportDraft = { category: 'bug', text: '' }
+
 export function ReportProblemDialog({
   location,
+  draft,
+  onDraftChange,
   onClose,
   onSent,
 }: {
   location: string
+  draft: ReportDraft
+  onDraftChange: (draft: ReportDraft) => void
   onClose: () => void
   onSent: () => void
 }) {
-  const [category, setCategory] = useState<ReportCategory>('bug')
-  const [text, setText] = useState('')
+  const { category, text } = draft
+  const setCategory = (value: ReportCategory) => onDraftChange({ ...draft, category: value })
+  const setText = (value: string) => onDraftChange({ ...draft, text: value })
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
 
   const send = async () => {
     setSending(true)
