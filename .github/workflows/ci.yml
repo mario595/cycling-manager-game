@@ -112,3 +112,10 @@ jobs:
           docker run --rm --entrypoint sh cycling-manager:ci -c
           'sed "s|@TICK_SCHEDULE@|0 * * * *|" /app/deploy/crontab > /tmp/crontab && supercronic -test /tmp/crontab'
 
+      # And with the schedule fly.toml deploys (the staging world's 5 minutes).
+      - name: The crontab parses with fly.toml's schedule
+        run: |
+          schedule=$(python3 -c 'import tomllib; print(tomllib.load(open("fly.toml", "rb"))["env"]["TICK_SCHEDULE"])')
+          docker run --rm -e SCHEDULE="$schedule" --entrypoint sh cycling-manager:ci -c \
+            'sed "s|@TICK_SCHEDULE@|$SCHEDULE|" /app/deploy/crontab > /tmp/crontab && supercronic -test /tmp/crontab'
+

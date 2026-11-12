@@ -1,0 +1,65 @@
+name: Deploy
+
+# Every merge to master that passes the whole of CI deploys to Fly
+# (deploy/README.md, "Deploying a new version"; #136). A pull request's CI run
+# never matches: its event is pull_request, not push.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [master]
+
+# One deploy at a time. A newer run queued behind a running one replaces any
+# run still waiting, so a burst of merges deploys the newest.
+concurrency:
+  group: fly-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to Fly
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      # CI runs can finish out of order. If master has moved on, a newer
+      # merge's CI is running and will deploy it, so deploying this older
+      # commit now would overwrite it.
+      # Until the FLY_API_TOKEN repo secret is set (deploy/README.md, "First
+      # deploy"), there is nothing to deploy to, so a merge is not a failure.
+      - name: Still the tip of master?
+        id: tip
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          HAS_TOKEN: ${{ secrets.FLY_API_TOKEN != '' }}
+        run: |
+          tip=$(git ls-remote origin refs/heads/master | cut -f1)
+          if [ "$HAS_TOKEN" != "true" ]; then
+            echo "::notice::FLY_API_TOKEN is not set, so nothing was deployed."
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          elif [ "$tip" = "$SHA" ]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "master is at $tip, not $SHA: a newer merge will deploy instead."
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: superfly/flyctl-actions/setup-flyctl@1.6
+        if: steps.tip.outputs.deploy == 'true'
+
+      # Fly's remote builder builds the allinone target (fly.toml). The deploy
+      # waits for /healthz; if the new machine never passes it, the old
+      # version keeps running and this step fails.
+      - name: flyctl deploy
+        if: steps.tip.outputs.deploy == 'true'
+        run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

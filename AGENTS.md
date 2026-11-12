@@ -81,7 +81,7 @@ HTML. See `design/README.md` before touching a screen's layout or colours.
 - **Backend:** Python 3.12.11 (pinned in `.python-version`, managed with pyenv), Django, Django REST Framework
 - **Frontend:** React, TypeScript (single SPA, served by Django via WhiteNoise)
 - **Database:** PostgreSQL everywhere — production and development alike (local instance via `docker compose`)
-- **Deployment:** one always-on Fly.io machine running the all-in-one image (gunicorn, PostgreSQL and the tick scheduler), with nightly backups to Cloudflare R2. `Dockerfile`, `fly.toml` and the runbook in `deploy/README.md` (#128)
+- **Deployment:** one always-on Fly.io machine running the all-in-one image (gunicorn, PostgreSQL and the tick scheduler), with nightly backups to Cloudflare R2. `Dockerfile`, `fly.toml` and the runbook in `deploy/README.md` (#128). It is the app `velodra` at velodra.fly.dev, running the accelerated staging world until #133, and every merge to master that passes CI deploys it (`.github/workflows/deploy.yml`, #136).
 
 ## Running it
 
