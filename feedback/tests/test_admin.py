@@ -97,3 +97,15 @@ def test_triage_saves_the_outcome_link_and_note_but_not_the_text(staff_client, r
     assert report.github_issue_url.endswith("/issues/999")
     assert report.triage_note == "Same as the deficit reports."
     assert report.text == "Wages look doubled."
+
+
+def test_staff_can_filter_by_reporter(staff_client, reporter):
+    other = User.objects.create_user(email="other@example.com", password="s0meth1ng-good")
+    _report(reporter, text="from the agent")
+    _report(other, text="from someone else")
+
+    response = staff_client.get(CHANGELIST, {"author__id__exact": reporter.pk})
+
+    assert response.status_code == 200
+    assert b"from the agent" in response.content
+    assert b"from someone else" not in response.content

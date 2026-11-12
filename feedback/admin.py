@@ -27,7 +27,7 @@ class ReportAdmin(admin.ModelAdmin):
         "week_number",
         "short_text",
     )
-    list_filter = ("status", "category", "team")
+    list_filter = ("status", "category", "team", "author")
     search_fields = ("text", "author__email", "team_name")
     list_select_related = ("author",)
     readonly_fields = (
