@@ -1,6 +1,6 @@
 # The accelerated staging world — Implementation Plan
 
-**Spec:** `specs/staging-clock.md` · **Issue:** #129 · **Status:** approved
+**Spec:** `specs/archive/staging-clock.md` · **Issue:** #129 · **Status:** implemented
 **Apps touched:** `world/`, `config/settings/`
 
 ## Context you need

@@ -15,7 +15,7 @@ passed, and the world responded.
 
 The single source of truth for what time it is in the game, and the machinery
 that finds and processes due work: `world/clocks.py` (`Clock`, `RealClock`,
-`MockClock`), `GameClock`, `TickRun`, and the `tick` and `mock_clock`
+`MockClock` and staging's `AcceleratedClock`), `GameClock`, `TickRun`, and the `tick` and `mock_clock`
 management commands. No calendar. It also owns **the AI market**
 (`world/ai_market.py`): what an unmanaged team bids on and what it lists
 when nobody is managing it — see *The AI market (#30)* below — and **the AI
@@ -46,6 +46,12 @@ when a check actually ran on the host — real time, regardless of which clock
 the game itself is running on — and is not a stand-in for "is X due?"
 anywhere.
 
+The second is `GameClock.anchored_at`, written with real time by every
+`MockClock` / `AcceleratedClock` write (`world/clocks.py`). It is the real
+moment the stored game time was true, which is what lets the accelerated
+clock count game time forward (*The accelerated clock (#129)*). It answers
+"when was the clock last moved", never "is X due".
+
 There is no automated enforcement of this rule yet. It is a project
 convention, not a constraint the code checks — worth revisiting once there
 is enough timed behaviour elsewhere in the game for the rule to be worth
@@ -60,10 +66,11 @@ cached by `world.services.get_clock()`.
 |---|---|---|
 | `config/settings/base.py` | `world.clocks.RealClock` | The default. No state, no database — `now()` returns `timezone.now()` directly. |
 | `config/settings/dev.py` | `world.clocks.RealClock` | Same as prod by default, so a normal dev session just shows the actual time with no manual resyncing. **Read from the `GAME_CLOCK_CLASS` environment variable** — set it to `world.clocks.MockClock` for a session where you deliberately want to fast-forward a season, e.g. `GAME_CLOCK_CLASS=world.clocks.MockClock manage.py runserver`. |
+| `config/settings/staging.py` | `world.clocks.AcceleratedClock`, `GAME_CLOCK_SPEED = 24` | **The staging world (#129).** Inherits `prod.py` and changes only the clock and `ALLOW_WORLD_RESET`. Set in the module, never read from the environment, for the same reason as `prod.py`. See *The accelerated clock (#129)*. |
 | `config/settings/prod.py` | *(inherits `RealClock` from `base.py`)* | **Deliberately not read from the environment**, unlike `dev.py`. Every other production setting in `prod.py` is env-driven, but the clock is the one exception: a non-real clock must never be a live-game possibility — not disabled, not gated behind a permission, simply not a code path production runs. An environment variable is a code path in `dev.py`, by design; it is not one in `prod.py`, also by design. |
 
 `manage.py mock_clock` refuses to run — raising `CommandError` — unless the
-active clock is `MockClock`. This is the runtime enforcement that a mistaken
+active clock is `MockClock` (which includes its `AcceleratedClock` subclass). This is the runtime enforcement that a mistaken
 invocation cannot move time in an environment running `RealClock`.
 
 **Tests always run against `MockClock`**, regardless of what `GAME_CLOCK_CLASS`
@@ -643,7 +650,88 @@ manage.py tick                              # then process what's now due
 ```
 
 Every `mock_clock` subcommand refuses to run unless `GAME_CLOCK_CLASS` is
-`MockClock`.
+`MockClock` or `AcceleratedClock`. Staging has three more:
+
+```bash
+manage.py mock_clock status    # game time, speed, frozen or not (any mock clock)
+manage.py mock_clock freeze    # accelerated clock only: stop game time
+manage.py mock_clock resume    # accelerated clock only: carry on from the frozen moment
+```
+
+Staging's cron runs only `manage.py tick`, every 5 minutes
+(`TICK_SCHEDULE="*/5 * * * *"` in the image, #128). **`TICK_ADVANCE_BY` stays
+unset there**: the accelerated clock moves by itself, so advancing it as well
+would skip game time.
+
+## The accelerated clock (#129)
+
+`world.clocks.AcceleratedClock` is the staging world's clock: the real game,
+with time flowing at `settings.GAME_CLOCK_SPEED` (24 on staging) times real
+time. One game day passes per real hour, a twelve-week season in about 84
+real hours, and a race roughly every seven. The spec is
+`specs/archive/staging-clock.md`.
+
+- **It is a `MockClock` subclass**, so `mock_clock`, `seed_world --set-clock`
+  and every `isinstance(clock, MockClock)` guard work on staging unchanged.
+  `set` and `advance` still work, and time then flows on from the new value.
+- **The row is an anchor.** `GameClock.current` is the game time at the real
+  moment `GameClock.anchored_at`, and `now()` is
+  `current + (real now − anchored_at) × speed`. Every write first works out
+  the *effective* time under a row lock, then re-anchors. **Never
+  `current += delta` on this clock**, because that drops the time that has
+  flowed since the last write. `MockClock` stamps the anchor too and ignores
+  it, so a world switched between the two clocks flows on from its last
+  write.
+- **Time moves between any two reads**, as on production. Nothing can depend
+  on it standing still, and a tick still reads `now()` once and works with
+  that.
+- **Freeze** (`GameClock.frozen`) stops game time at the moment of freezing:
+  no new races, wages, auction deadlines or inactivity come due. **Resume**
+  carries on from the frozen moment, so no game time is skipped. Both are
+  idempotent. `set` while frozen moves the frozen moment, and the clock stays
+  frozen. The flag is on the row because gunicorn workers and the cron tick
+  are separate processes.
+- **Downtime is caught up, not skipped.** If the machine stops without a
+  freeze, game time keeps running, and at 24× one real day is about 3.5 game
+  weeks. The next ticks then charge every missed week and run the missed
+  races in order, with *The catch-up cap* spreading a long backlog across
+  ticks, exactly as production does after an outage. **Freeze before any
+  planned downtime longer than about three real days.** That is the
+  ten-game-week inactivity release (`INACTIVITY_WEEKS`), and an outage that
+  long would release every manager's team.
+- **What stays on real time:** the report-a-problem cap (20 per 24 real
+  hours, `feedback/`), the API token throttle (60 a real minute, `api/`),
+  login session expiry, and the timestamps that record when the server did
+  something (`TickRun.started_at` / `finished_at`, a report's `created_at`, a
+  lost-team message's `acknowledged_at`). This is expected and none of it
+  decides what is due.
+- **A staging world cannot be promoted to production as it stands.** After two
+  real weeks at 24×, game time is about a year ahead of real time.
+  Production (#133) starts from `seed_world --reset` on the real clock.
+
+What the beta managers are told about all this is in
+[`STAGING_BRIEFING.md`](STAGING_BRIEFING.md), written to go into the LLM
+harness's prompt as it is (#132).
+
+## Automatic seasons
+
+With `settings.AUTO_DECLARE_SEASONS` on (`prod.py`, and so staging), each tick
+begins by declaring the world calendar (`world_setup.WORLD_CALENDAR`) as the
+next season whenever **at most one declared season has not yet ended**, using
+`add_season()`. It declares at most one per tick, so a running world always
+has the season being played plus the next one. A season added this way is
+the same as one added by hand. The count lands on `TickRun.seasons_declared`,
+and a failure (a broken calendar file, say) lands on `TickRun.error` without
+stopping the tick.
+
+- **It runs before `process_transitions`**, so after an outage past the last
+  season's end, the next season exists by the time the close is recorded, and
+  it opens in the same tick.
+- **It is off in `base.py`, and so in development and the test suite.** Their
+  small example calendars and season-crossing tests would otherwise grow
+  seasons nobody declared.
+- **A world with no season at all is left alone.** That is a fresh database,
+  not a running world.
 
 ## Building a world (#139)
 
@@ -694,9 +782,9 @@ different season file.
   season) unless `--reset` is passed. All the seeding runs in one
   transaction, so a broken calendar file leaves nothing half-built.
 - **`add_season`** declares the calendar as the next season number, starting
-  where the last declared season ends. Keeping a long-running world supplied
-  with seasons (calling it from cron, say) belongs to the deployment
-  (#129, #136).
+  where the last declared season ends. In production and staging the tick
+  calls it by itself before the world runs out (*Automatic seasons*), so
+  the command is only needed by hand.
 
 ### The wipe
 
@@ -824,9 +912,12 @@ is a choice worth having.
 
 - **No player control over the clock at all.** No pausing, no skipping, no
   per-player time — the clock is shared world state, moved only by
-  `mock_clock` in development or by cron in production.
+  `mock_clock` in development or by cron in production. Staging's freeze is
+  an operator's command, not a player's.
 - **No in-game admin screen for the mock clock.** A command line tool is
-  enough for now.
+  enough for now, staging's freeze, resume and status included.
+- **No in-game sign that a world is accelerated.** Only LLM managers play on
+  staging, and their briefing tells them.
 - **No parallel race processing.** A tick works through claimed races one at
   a time. Fine while a game day holds at most a handful of races; the
   frugal next step, once that stops being true, is a queue held in the

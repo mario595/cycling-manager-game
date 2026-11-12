@@ -1,6 +1,6 @@
 # The accelerated staging world
 
-**Status:** approved
+**Status:** implemented
 **Domain(s):** `world/`, `schedule/`, `config/`
 **Issue:** #129
 **One-liner:** a world that runs the real game at 24× speed, so one game day passes every real hour and a whole season plays out in about three and a half days.
