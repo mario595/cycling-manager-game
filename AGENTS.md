@@ -81,7 +81,7 @@ HTML. See `design/README.md` before touching a screen's layout or colours.
 - **Backend:** Python 3.12.11 (pinned in `.python-version`, managed with pyenv), Django, Django REST Framework
 - **Frontend:** React, TypeScript (single SPA, served by Django via WhiteNoise)
 - **Database:** PostgreSQL everywhere — production and development alike (local instance via `docker compose`)
-- **Deployment:** TBD (target: low-cost/free hosting)
+- **Deployment:** one always-on Fly.io machine running the all-in-one image (gunicorn, PostgreSQL and the tick scheduler), with nightly backups to Cloudflare R2. `Dockerfile`, `fly.toml` and the runbook in `deploy/README.md` (#128)
 
 ## Running it
 
@@ -229,6 +229,10 @@ not an oversight in the graph above; see `schedule/README.md`, *What
 cycling-manager/
 ├── AGENTS.md              # This file — the index (CLAUDE.md symlinks to it)
 ├── manage.py
+├── Dockerfile             # the deploy image: web + all-in-one stages
+├── fly.toml               # the one Fly.io machine
+├── deploy/
+│   └── README.md          # the runbook: what runs where, backups, restore, local run
 ├── requirements.txt
 ├── pyproject.toml
 ├── config/                # Django project: settings/, urls, wsgi, asgi

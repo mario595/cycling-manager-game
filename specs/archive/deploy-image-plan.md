@@ -1,6 +1,6 @@
 # The deploy image: implementation plan
 
-**Spec:** `specs/deploy-image.md` · **Issue:** #128 · **Status:** approved
+**Spec:** `specs/archive/deploy-image.md` · **Issue:** #128 · **Status:** implemented
 **Touches:** `Dockerfile` (new), `.dockerignore` (new), `deploy/` (new, ops files and runbook, not a Django app), `fly.toml` (new), `config/settings/prod.py`, `config/health.py` (new), `requirements.txt`, `.github/workflows/ci.yml`, `AGENTS.md`
 
 ## Context you need

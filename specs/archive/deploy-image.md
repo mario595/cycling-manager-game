@@ -1,6 +1,6 @@
 # The deploy image
 
-**Status:** approved
+**Status:** implemented
 **Domain(s):** `config/`, `world/`, `frontend/` (build only)
 **Issue:** #128
 **One-liner:** one self-contained machine image that runs the whole game (the website, its database and the hourly tick) on Fly.io, backs itself up off the box every night, and says when the tick has stopped.
