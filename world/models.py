@@ -7,8 +7,9 @@ from django.utils import timezone
 class GameClock(models.Model):
     """The mock clock's current value. There is exactly one row, `pk=1`.
 
-    **Only meaningful when `world.clocks.MockClock` is the configured
-    clock** (`settings.GAME_CLOCK_CLASS`, dev/test default). In production,
+    **Only meaningful when `world.clocks.MockClock`, or its staging subclass
+    `AcceleratedClock`, is the configured clock** (`settings.GAME_CLOCK_CLASS`,
+    dev/test default). In production,
     with `RealClock` active, this row is never read or written — `now()`
     returns live real time directly instead. See `world/README.md`, *Which
     clock runs where*.
@@ -21,6 +22,15 @@ class GameClock(models.Model):
     current = models.DateTimeField(
         help_text="The mock clock's value, aware UTC. Unused when RealClock is active.",
     )
+    anchored_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="Real time at which `current` was last written. AcceleratedClock "
+        "(#129) counts game time forward from here; MockClock ignores it.",
+    )
+    frozen = models.BooleanField(
+        default=False,
+        help_text="AcceleratedClock only: game time stands still at `current` (#129).",
+    )
     catch_up_max_races = models.PositiveSmallIntegerField(
         default=50,
         help_text="Per-tick cap on how many due races one tick will claim. Applies regardless of which clock is active.",
@@ -30,7 +40,9 @@ class GameClock(models.Model):
     def load(cls) -> GameClock:
         """The one clock row, created at the current real time on first call."""
         now = timezone.now()
-        obj, _ = cls.objects.get_or_create(pk=1, defaults={"current": now})
+        obj, _ = cls.objects.get_or_create(
+            pk=1, defaults={"current": now, "anchored_at": now},
+        )
         return obj
 
     def __str__(self) -> str:
@@ -56,6 +68,11 @@ class TickRun(models.Model):
         help_text="True when catch_up_max_races limited this run.",
     )
     seasons_opened = models.PositiveSmallIntegerField(default=0)
+    seasons_declared = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Seasons this tick declared because the world was down to its "
+        "last one (AUTO_DECLARE_SEASONS, #129).",
+    )
     seasons_closed = models.PositiveSmallIntegerField(default=0)
     weeks_processed = models.PositiveSmallIntegerField(
         default=0,

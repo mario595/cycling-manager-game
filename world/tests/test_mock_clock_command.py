@@ -68,3 +68,58 @@ def test_refuses_to_rewind_past_a_finished_race_without_force(db):
 def test_raises_when_real_clock_is_active(db):
     with pytest.raises(CommandError):
         call_command("mock_clock", "set", "2027-03-01T09:00")
+
+
+# --- The accelerated clock's subcommands (#129) ---------------------------
+
+def _out(*args) -> str:
+    from io import StringIO
+
+    buf = StringIO()
+    call_command("mock_clock", *args, stdout=buf)
+    return buf.getvalue()
+
+
+@pytest.fixture
+def accelerated_clock():
+    import world.services as world_services
+
+    world_services._clock = None
+    with override_settings(
+        GAME_CLOCK_CLASS="world.clocks.AcceleratedClock", GAME_CLOCK_SPEED=24,
+    ):
+        yield
+    world_services._clock = None
+
+
+def test_status_on_the_mock_clock_says_it_is_stopped(db):
+    out = _out("status")
+    assert out.startswith("game time: ")
+    assert "speed: stopped" in out
+
+
+def test_status_on_the_accelerated_clock_shows_speed_and_frozen(db, accelerated_clock):
+    out = _out("status")
+    assert "speed: 24x" in out
+    assert "frozen: no" in out
+
+
+def test_freeze_then_resume_on_the_accelerated_clock(db, accelerated_clock):
+    assert "clock frozen" in _out("freeze")
+    assert "frozen: yes" in _out("status")
+    assert "already frozen" in _out("freeze")
+    assert "clock resumed" in _out("resume")
+    assert "not frozen" in _out("resume")
+    assert "frozen: no" in _out("status")
+
+
+def test_set_works_on_the_accelerated_clock(db, accelerated_clock):
+    _out("freeze")
+    _out("set", "2027-03-01T09:00")
+    assert now() == parse_datetime("2027-03-01T09:00").replace(tzinfo=dt_timezone.utc)
+
+
+@pytest.mark.parametrize("action", ["freeze", "resume"])
+def test_freeze_and_resume_refuse_on_the_mock_clock(db, action):
+    with pytest.raises(CommandError, match="always stopped"):
+        call_command("mock_clock", action)

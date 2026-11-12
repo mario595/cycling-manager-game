@@ -180,6 +180,19 @@ RACE_LOG_STORAGE_PREFIX = "race_logs"
 # and an env var is a code path that could put one there by accident.
 GAME_CLOCK_CLASS = "world.clocks.RealClock"
 
+# How many game seconds pass per real second under
+# `world.clocks.AcceleratedClock` (#129). Ignored by every other clock.
+# Only `staging.py` raises it, to 24 (one game day per real hour). Not read
+# from the environment, for the same reason the clock class is not.
+GAME_CLOCK_SPEED = 1
+
+# Whether the tick declares the next season of the world calendar on its own
+# once only one declared season is left to play (#129; world/README.md,
+# *Automatic seasons*). Off here, and so in development and the test suite,
+# whose small calendars would otherwise grow seasons nobody declared;
+# `prod.py` turns it on, and staging inherits it.
+AUTO_DECLARE_SEASONS = False
+
 
 # --- DRF ------------------------------------------------------------------
 

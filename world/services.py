@@ -10,6 +10,7 @@ a developer-controlled mock clock in dev/test.
 
 from __future__ import annotations
 
+import io
 import traceback
 from datetime import datetime
 
@@ -64,7 +65,7 @@ from riders.youth_triage import (
     release_graduates,
     squad_development_deltas,
 )
-from schedule.models import SeasonTransition, Week
+from schedule.models import Season, SeasonTransition, Week
 from schedule.services import (
     current_position,
     process_transitions,
@@ -588,12 +589,42 @@ def _resolve_expired_auctions(at) -> tuple[int, int, str]:
     return sold, unsold, error
 
 
+def _declare_next_season_if_needed(at: datetime) -> tuple[int, str]:
+    """Declare the world calendar as the next season when at most one
+    declared season has not yet ended at `at` (#129; world/README.md,
+    *Automatic seasons*). Returns `(seasons declared, error)`.
+
+    Only with `settings.AUTO_DECLARE_SEASONS` (production and staging), and
+    only in a world that has a season at all — a fresh development database
+    is left alone. At most one season per tick: the rule fires as soon as
+    the last declared season is the one being played, a full season ahead.
+    Guarded like the AI market: a broken calendar file must not stop races.
+    """
+    from . import world_setup  # it imports this module inside its functions
+
+    if not settings.AUTO_DECLARE_SEASONS or not Season.objects.exists():
+        return 0, ""
+    if Season.objects.filter(ends_at__gt=at).count() > 1:
+        return 0, ""
+    try:
+        with transaction.atomic():
+            world_setup.add_season(calendar=world_setup.WORLD_CALENDAR, stdout=io.StringIO())
+    except Exception:
+        return 0, f"automatic season:\n{traceback.format_exc()}\n"
+    return 1, ""
+
+
 def tick() -> TickRun:
     """Find and process whatever is due, exactly once. The only entry point
     cron — or a developer, after moving the mock clock with `mock_clock` —
     ever calls."""
     max_races = GameClock.load().catch_up_max_races
     at = now()
+
+    # Before transitions: after an outage that ran past the last declared
+    # season's end, the next season must already exist when the close is
+    # recorded, so its opening is recorded in this same tick.
+    seasons_declared, season_error = _declare_next_season_if_needed(at)
 
     # Transitions before race claiming: a race in week 1 of a season that
     # has just opened should be processed in a world that has already
@@ -824,6 +855,7 @@ def tick() -> TickRun:
 
     run = TickRun.objects.create(
         races_started=len(claimed),
+        seasons_declared=seasons_declared,
         seasons_opened=sum(1 for t in transitions if t.kind == SeasonTransition.Kind.OPENED),
         seasons_closed=sum(1 for t in transitions if t.kind == SeasonTransition.Kind.CLOSED),
         weeks_processed=len(weeks),
@@ -854,7 +886,7 @@ def tick() -> TickRun:
         ai_trainers_hired=ai_trainers_hired,
         ai_sponsors_signed=ai_sponsors_signed,
         error=(
-            inactivity_error + solvency_error + auction_error + ai_market_error
+            season_error + inactivity_error + solvency_error + auction_error + ai_market_error
             + ai_management_error
         ),
     )

@@ -9,7 +9,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from racing.models import Race
-from world.clocks import MockClock
+from world.clocks import AcceleratedClock, MockClock
 from world.services import get_clock
 
 _DURATION_RE = re.compile(r"(\d+)([dhm])")
@@ -29,8 +29,10 @@ def _parse_duration(value: str) -> timedelta:
 
 class Command(BaseCommand):
     help = (
-        "Move the developer-controlled mock clock by hand. Only works when "
-        "GAME_CLOCK_CLASS is world.clocks.MockClock — never in production."
+        "Move the developer-controlled mock clock by hand, or freeze, resume "
+        "and inspect the accelerated staging clock. Only works when "
+        "GAME_CLOCK_CLASS is world.clocks.MockClock or its AcceleratedClock "
+        "subclass — never in production."
     )
 
     def add_arguments(self, parser):
@@ -54,6 +56,14 @@ class Command(BaseCommand):
             help="Move forward by a duration, e.g. 1d, 6h, 1d6h.",
         )
 
+        subparsers.add_parser(
+            "freeze", help="Accelerated clock only: stop game time where it is.",
+        )
+        subparsers.add_parser(
+            "resume", help="Accelerated clock only: let game time flow again.",
+        )
+        subparsers.add_parser("status", help="Show game time, speed and whether it is frozen.")
+
     def handle(self, *args, **options):
         clock = get_clock()
         if not isinstance(clock, MockClock):
@@ -62,10 +72,36 @@ class Command(BaseCommand):
                 f"current setting: {settings.GAME_CLOCK_CLASS}"
             )
 
-        if options["action"] == "set":
+        action = options["action"]
+        if action == "set":
             self._set(clock, options)
-        else:
+        elif action == "advance":
             self._advance(clock, options)
+        elif action == "status":
+            self._status(clock)
+        else:
+            self._freeze_or_resume(clock, action)
+
+    def _status(self, clock: MockClock) -> None:
+        self.stdout.write(f"game time: {clock.now().isoformat()}")
+        if isinstance(clock, AcceleratedClock):
+            self.stdout.write(f"speed: {clock.speed}x")
+            self.stdout.write(f"frozen: {'yes' if clock.frozen else 'no'}")
+        else:
+            self.stdout.write("speed: stopped (moves only when set or advanced)")
+
+    def _freeze_or_resume(self, clock: MockClock, action: str) -> None:
+        if not isinstance(clock, AcceleratedClock):
+            raise CommandError(
+                f"{action} only applies to the accelerated clock; the mock clock "
+                "is always stopped"
+            )
+        changed = clock.freeze() if action == "freeze" else clock.resume()
+        if action == "freeze":
+            message = "clock frozen" if changed else "clock was already frozen"
+        else:
+            message = "clock resumed" if changed else "clock was not frozen"
+        self.stdout.write(f"{message} at {clock.now().isoformat()}")
 
     def _set(self, clock: MockClock, options: dict) -> None:
         parsed = parse_datetime(options["datetime"])
