@@ -21,10 +21,49 @@ as_postgres() { HOME=/var/lib/postgresql setpriv --reuid=postgres --regid=postgr
 as_app() { HOME=/app setpriv --reuid=app --regid=app --init-groups "$@"; }
 log() { echo "[entrypoint] $*"; }
 
+pg_pid="" cron_pid="" web_pid=""
+
+# Stop everything, in order, within Fly's kill_timeout (fly.toml, 120 s):
+# gunicorn and the scheduler get up to STOP_GRACE seconds (default 90) to
+# finish (supercronic waits for a running tick, which can take a minute),
+# then anything still running is killed, and only then is Postgres stopped,
+# cleanly, with a fast shutdown. Postgres is never left for Fly to SIGKILL.
+shutdown() {
+    log "stopping"
+    local children=() pid
+    for pid in "$web_pid" "$cron_pid"; do [ -n "$pid" ] && children+=("$pid"); done
+    if [ "${#children[@]}" -gt 0 ]; then
+        kill -TERM "${children[@]}" 2>/dev/null || true
+        for _ in $(seq 1 "${STOP_GRACE:-90}"); do
+            kill -0 "${children[@]}" 2>/dev/null || break
+            sleep 1
+        done
+        if kill -0 "${children[@]}" 2>/dev/null; then
+            log "still running after ${STOP_GRACE:-90}s; killing the app and the scheduler"
+            kill -KILL "${children[@]}" 2>/dev/null || true
+        fi
+        wait "${children[@]}" 2>/dev/null || true
+    fi
+    if [ -n "$pg_pid" ]; then
+        as_postgres "$PGBIN/pg_ctl" -D "$PGDATA" -m fast -w stop >/dev/null 2>&1 || true
+    fi
+}
+# Installed before anything starts, so a stop during first-boot initdb or
+# migrate still shuts Postgres down cleanly.
+trap 'shutdown; exit 0' TERM INT
+
 mkdir -p "$DATA_DIR" "$PGDATA" "$DJANGO_MEDIA_ROOT" /run/postgresql
 chown postgres:postgres "$PGDATA" /run/postgresql
 chmod 700 "$PGDATA"
 chown app:app "$DJANGO_MEDIA_ROOT"
+
+# Refuse to start a different major than the one that wrote the data: say so
+# plainly instead of letting Postgres fail on incompatible files.
+if [ -s "$PGDATA/PG_VERSION" ] && [ "$(cat "$PGDATA/PG_VERSION")" != "$PG_MAJOR" ]; then
+    log "the data in $PGDATA was written by PostgreSQL $(cat "$PGDATA/PG_VERSION"), this image runs $PG_MAJOR"
+    log "dump with the old image and restore with this one: deploy/README.md, 'Upgrading Postgres'"
+    exit 1
+fi
 
 if [ ! -s "$PGDATA/PG_VERSION" ]; then
     log "first boot: initialising the database cluster in $PGDATA"
@@ -71,7 +110,7 @@ if [ "$#" -gt 0 ]; then
     log "running one-off command: $*"
     status=0
     as_app "$@" || status=$?
-    as_postgres "$PGBIN/pg_ctl" -D "$PGDATA" -m fast -w stop >/dev/null
+    shutdown
     exit "$status"
 fi
 
@@ -90,14 +129,6 @@ cron_pid=$!
 log "starting gunicorn"
 as_app gunicorn config.wsgi --config deploy/gunicorn.conf.py &
 web_pid=$!
-
-shutdown() {
-    log "stopping"
-    kill -TERM "$web_pid" "$cron_pid" 2>/dev/null || true
-    wait "$web_pid" "$cron_pid" 2>/dev/null || true
-    as_postgres "$PGBIN/pg_ctl" -D "$PGDATA" -m fast -w stop >/dev/null 2>&1 || true
-}
-trap 'shutdown; exit 0' TERM INT
 
 status=0
 wait -n "$pg_pid" "$cron_pid" "$web_pid" || status=$?

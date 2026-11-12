@@ -72,7 +72,7 @@ def test_a_backup_is_a_dump_and_a_media_archive_under_one_stamp(tmp_path):
     assert stamp == "20261112T033000Z"
     assert set(s3.objects) == {
         "backups/20261112T033000Z/db.dump",
-        "backups/20261112T033000Z/media.tar.gz",
+        "backups/20261112T033000Z/media.tar",
     }
     assert run.call_args.kwargs["env"]["PGPASSWORD"] == "pw"
     assert "--format=custom" in run.call_args.args[0]
@@ -106,9 +106,9 @@ def test_the_prefix_is_configurable():
 def test_only_stamps_with_a_dump_count_as_complete():
     s3 = FakeS3()
     s3.objects = {
-        "backups/20261110T033000Z/media.tar.gz": b"",
+        "backups/20261110T033000Z/media.tar": b"",
         "backups/20261110T033000Z/db.dump": b"",
-        "backups/20261111T033000Z/media.tar.gz": b"",  # dump never arrived
+        "backups/20261111T033000Z/media.tar": b"",  # dump never arrived
         "backups/not-a-stamp/db.dump": b"",
         "other/20261112T033000Z/db.dump": b"",
     }

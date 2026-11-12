@@ -17,8 +17,11 @@ swap_size_mb = 512
 
 # Migrations run in the image's entrypoint, not as a release_command: the
 # release machine has no volume, so it cannot reach this database.
+# A deploy can land mid-tick, and a race tick takes up to about a minute. The
+# entrypoint gives the app and the scheduler 90 s, then stops Postgres
+# cleanly; 120 s leaves room for that (Fly allows up to 300).
 kill_signal = "SIGTERM"
-kill_timeout = 30
+kill_timeout = 120
 
 [build]
   dockerfile = "Dockerfile"

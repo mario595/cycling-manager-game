@@ -40,7 +40,8 @@ def dump_database(target: Path, env=None) -> None:
 
 
 def archive_media(media_root: Path, target: Path) -> None:
-    with tarfile.open(target, "w:gz") as tar:
+    # Uncompressed: the race logs are already brotli-compressed.
+    with tarfile.open(target, "w") as tar:
         if media_root.exists():
             tar.add(media_root, arcname=".")
 

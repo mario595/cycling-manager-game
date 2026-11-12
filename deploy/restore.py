@@ -55,7 +55,7 @@ def restore_database(dump: Path, env=None) -> None:
 
 def restore_media(archive: Path, media_root: Path) -> None:
     media_root.mkdir(parents=True, exist_ok=True)
-    with tarfile.open(archive, "r:gz") as tar:
+    with tarfile.open(archive, "r:*") as tar:
         tar.extractall(media_root, filter="data")
 
 

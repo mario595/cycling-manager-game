@@ -45,7 +45,11 @@ Fly machine (shared-cpu-1x, 512 MB, region ams, never stopped)
   about 90 MB, Postgres about 40 MB, and Postgres is tuned small. A 512 MB
   swap file (`fly.toml`) is the cushion.
 - **Deploying restarts the database with the app.** Expect about 20–30 s of
-  downtime per deploy.
+  downtime per deploy. On a stop, gunicorn and the scheduler get up to 90 s
+  to finish, enough for a tick that is still running, and then Postgres is
+  stopped cleanly. `fly.toml`'s `kill_timeout` is 120 s, so Fly never
+  SIGKILLs the database. The tick itself is interruption-safe
+  (`world/README.md`), so a run that is cut short just runs again.
 
 ### The tick's cadence
 
@@ -130,7 +134,7 @@ world**, so rehearse risky ones first (below).
 
 Every night at 03:30 UTC, `python -m deploy.backup` uploads two objects:
 
-- `backups/<YYYYMMDDTHHMMSSZ>/media.tar.gz`, the race logs;
+- `backups/<YYYYMMDDTHHMMSSZ>/media.tar`, the race logs (not compressed again, since they are brotli already);
 - `backups/<YYYYMMDDTHHMMSSZ>/db.dump`, a `pg_dump -Fc` of the database.
 
 The dump is uploaded last, so a timestamp that has a dump is complete. The
@@ -185,21 +189,40 @@ The same all-in-one image, on your machine:
 
 ```bash
 cp deploy/env.example deploy/.env
-docker compose -f deploy/compose.local.yml up --build     # http://127.0.0.1:8080
-docker compose -f deploy/compose.local.yml run --rm game python manage.py seed_world
+alias dc='docker compose -f deploy/compose.local.yml'
+dc up --build -d                                       # http://127.0.0.1:8080
+dc exec -u app game python manage.py seed_world         # one-offs: exec into it
+dc logs -f game
 ```
 
+**Use `exec` for one-off commands while it is up, never `run`.** `run`
+starts a second container through the entrypoint, and so a second Postgres
+on the same volume. The two can't see each other's lock and will corrupt
+the data. `run` is only for when nothing is up.
+
 It differs from Fly only in having no TLS (`DJANGO_SECURE_SSL_REDIRECT=0`).
-`docker compose -f deploy/compose.local.yml down -v` throws the data away.
+`dc down -v` throws the data away.
 
 ### Rehearsing a migration on live data
 
 1. Put the R2 read credentials in `deploy/.env`.
-2. Start the image locally on the **current** master (an empty world).
-3. Load last night's live data:
-   `docker compose -f deploy/compose.local.yml run --rm game python -m deploy.restore latest --yes`
-4. Check out the branch with the migration and run `up --build` again. The
-   migration runs at boot, against a copy of the live world.
+2. On the **current** master, `dc up --build -d` (an empty world).
+3. Load last night's live data: `dc exec -u app game python -m deploy.restore latest --yes`
+4. `dc down` (keeping the volume), check out the branch with the migration,
+   and run `dc up --build -d` again. The migration runs at boot, against a
+   copy of the live world.
+
+## Upgrading Postgres
+
+The image pins PostgreSQL's major version (`PG_MAJOR` in the `Dockerfile`,
+currently 17), and the Debian release with it. The data directory on the
+volume can only be read by the major that wrote it. If the image's major
+doesn't match the data, the entrypoint refuses to start and says so.
+
+To move to a new major:
+1. Take a backup with the running image.
+2. Deploy the new image onto a **new, empty** volume.
+3. Restore that backup into it.
 
 ## Moving Postgres to its own machine
 
@@ -230,6 +253,9 @@ USD per month before VAT, Fly's Amsterdam prices (November 2026):
 | Egress at $0.02/GB | cents |
 | **Total** | **≈ $4** |
 
-R2, healthchecks.io and Sentry are on free tiers. Fly waives invoices under
+R2, healthchecks.io and Sentry are on free tiers. R2's free tier is 10 GB.
+Thirty full nightly backups add up as race logs accumulate (about 15 MB per
+season, and seasons go by quickly on the accelerated clock). It's a long way
+off, but if it gets close, shorten the lifecycle rule. Fly waives invoices under
 $5, but across the **whole account**, so this is free only while nothing else
 on the account bills.

@@ -5,10 +5,14 @@
 #   docker compose -f deploy/compose.local.yml up --build
 #   open http://127.0.0.1:8080
 #
-# One-off commands (seed a world, restore a backup) go through the same
-# entrypoint, which starts Postgres and migrates first:
+# One-off commands (seed a world, restore a backup) while it is up: use
+# exec, NEVER run. `run` starts a second container, and with it a second
+# Postgres on the same volume, which corrupts the data.
 #
-#   docker compose -f deploy/compose.local.yml run --rm game python manage.py seed_world
+#   docker compose -f deploy/compose.local.yml exec -u app game python manage.py seed_world
+#
+# (`run --rm game <command>` is only for when nothing is up: it starts
+# Postgres, migrates, runs the command and stops.)
 #
 # The volume keeps the database and race logs between runs;
 # `down -v` throws them away.

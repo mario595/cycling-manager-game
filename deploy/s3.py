@@ -12,7 +12,7 @@ from the environment only (deploy/README.md, "Backups"):
 One backup is two objects under one UTC timestamp:
 
     <prefix>/<YYYYMMDDTHHMMSSZ>/db.dump         pg_dump -Fc
-    <prefix>/<YYYYMMDDTHHMMSSZ>/media.tar.gz    the race logs (MEDIA_ROOT)
+    <prefix>/<YYYYMMDDTHHMMSSZ>/media.tar       the race logs (MEDIA_ROOT; already brotli)
 
 db.dump is uploaded last, so a timestamp that has it is complete. Old
 backups are expired by an R2 lifecycle rule, not by code.
@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 DB_NAME = "db.dump"
-MEDIA_NAME = "media.tar.gz"
+MEDIA_NAME = "media.tar"
 STAMP_FORMAT = "%Y%m%dT%H%M%SZ"
 STAMP_RE = re.compile(r"^\d{8}T\d{6}Z$")
 
