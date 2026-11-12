@@ -206,7 +206,7 @@ fails.
 
 ```bash
 manage.py check_calendar seasons/world.json --seeds 1,2,3 --jobs 4
-manage.py check_calendar seasons/world.json --seeds 1,2 --only "Polder"   # tune one course
+manage.py check_calendar seasons/world.json --seeds 1,2 --only "Marismas"   # tune one course
 ```
 
 - **It is database-free.** The field is `generate_field(seed)`: sixteen

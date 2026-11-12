@@ -6,7 +6,7 @@
       "week": 1,
       "day": "sunday",
       "time": "14:00",
-      "name": "Scheldt Coast Classic",
+      "name": "Clásica de Almería",
       "course": [
         {
           "length": 150000,
@@ -16,19 +16,19 @@
       "markers": [
         {
           "kind": "sprint",
-          "name": "Harbour Sprint",
+          "name": "Meta volante de Roquetas",
           "distance": 60000,
           "weight": "minor"
         },
         {
           "kind": "sprint",
-          "name": "Dyke Sprint",
+          "name": "Meta volante de El Ejido",
           "distance": 110000,
           "weight": "standard"
         },
         {
           "kind": "sprint",
-          "name": "Promenade Finish",
+          "name": "Meta en el Paseo Marítimo",
           "distance": 150000,
           "weight": "major"
         }
@@ -38,7 +38,7 @@
       "week": 2,
       "day": "sunday",
       "time": "14:00",
-      "name": "Brabant Hills Trophy",
+      "name": "Gran Premio de Llodio",
       "course": [
         {
           "length": 156500,
@@ -56,19 +56,19 @@
       "markers": [
         {
           "kind": "sprint",
-          "name": "Market Square",
+          "name": "Meta volante de Amurrio",
           "distance": 80000,
           "weight": "standard"
         },
         {
           "kind": "mountain",
-          "name": "Chapel Hill",
+          "name": "Alto de Santa Lucía",
           "distance": 159500,
           "category": "cat3"
         },
         {
           "kind": "sprint",
-          "name": "Chapel Finish",
+          "name": "Meta en Llodio",
           "distance": 160000,
           "weight": "standard"
         }
@@ -78,7 +78,7 @@
       "week": 3,
       "day": "sunday",
       "time": "14:00",
-      "name": "Loire Long Road",
+      "name": "Vuelta a La Rioja",
       "course": [
         {
           "length": 143000,
@@ -96,19 +96,19 @@
       "markers": [
         {
           "kind": "sprint",
-          "name": "Château Sprint",
+          "name": "Meta volante de Haro",
           "distance": 75000,
           "weight": "standard"
         },
         {
           "kind": "mountain",
-          "name": "Vineyard Rise",
+          "name": "Alto de las Viñas",
           "distance": 149000,
           "category": "cat3"
         },
         {
           "kind": "sprint",
-          "name": "Loire Finish",
+          "name": "Meta en Logroño",
           "distance": 150000,
           "weight": "standard"
         }
@@ -118,7 +118,7 @@
       "week": 4,
       "day": "sunday",
       "time": "14:00",
-      "name": "Polder Dyke Race",
+      "name": "Clásica de las Marismas",
       "course": [
         {
           "length": 163000,
@@ -136,19 +136,19 @@
       "markers": [
         {
           "kind": "sprint",
-          "name": "Windmill Sprint",
+          "name": "Meta volante de Almonte",
           "distance": 70000,
           "weight": "minor"
         },
         {
           "kind": "mountain",
-          "name": "Great Dyke",
+          "name": "Repecho del Rocío",
           "distance": 169000,
           "category": "cat3"
         },
         {
           "kind": "sprint",
-          "name": "Seawall Finish",
+          "name": "Meta en Huelva",
           "distance": 170000,
           "weight": "standard"
         }
@@ -161,7 +161,7 @@
       "week": 5,
       "day": "sunday",
       "time": "14:00",
-      "name": "Vercors Classic",
+      "name": "Clásica de Jaén",
       "course": [
         {
           "length": 50000,
@@ -203,19 +203,19 @@
       "markers": [
         {
           "kind": "mountain",
-          "name": "Col de la Combe",
+          "name": "Puerto de Valdepeñas",
           "distance": 62000,
           "category": "cat1"
         },
         {
           "kind": "mountain",
-          "name": "Mur des Gorges",
+          "name": "Alto de la Pandera",
           "distance": 92000,
           "category": "cat1"
         },
         {
           "kind": "mountain",
-          "name": "Côte Finale",
+          "name": "Alto de Jabalcuz",
           "distance": 100000,
           "category": "cat2"
         }
@@ -225,7 +225,7 @@
       "week": 6,
       "day": "sunday",
       "time": "14:00",
-      "name": "Eifel Ramp Classic",
+      "name": "Clásica de Ordizia",
       "course": [
         {
           "length": 151500,
@@ -243,19 +243,19 @@
       "markers": [
         {
           "kind": "sprint",
-          "name": "Crater Lake Sprint",
+          "name": "Meta volante de Beasain",
           "distance": 75000,
           "weight": "standard"
         },
         {
           "kind": "mountain",
-          "name": "Eifel Ramp",
+          "name": "Alto de Abaltzisketa",
           "distance": 154500,
           "category": "cat3"
         },
         {
           "kind": "sprint",
-          "name": "Eifel Finish",
+          "name": "Meta en Ordizia",
           "distance": 155000,
           "weight": "standard"
         }
@@ -265,7 +265,7 @@
       "week": 8,
       "day": "sunday",
       "time": "14:00",
-      "name": "Ardèche Walls",
+      "name": "Trofeo de las Hoces de Cuenca",
       "course": [
         {
           "length": 146500,
@@ -283,19 +283,19 @@
       "markers": [
         {
           "kind": "sprint",
-          "name": "Gorge Road Sprint",
+          "name": "Meta volante de Villalba",
           "distance": 75000,
           "weight": "standard"
         },
         {
           "kind": "mountain",
-          "name": "Wall of Vallon",
+          "name": "Muro de las Hoces",
           "distance": 149500,
           "category": "cat3"
         },
         {
           "kind": "sprint",
-          "name": "Vallon Finish",
+          "name": "Meta en Cuenca",
           "distance": 150000,
           "weight": "standard"
         }
@@ -305,7 +305,7 @@
       "week": 9,
       "day": "sunday",
       "time": "14:00",
-      "name": "Mont Lozère Summit",
+      "name": "Subida a Urkiola",
       "course": [
         {
           "length": 65000,
@@ -331,19 +331,19 @@
       "markers": [
         {
           "kind": "sprint",
-          "name": "Causse Sprint",
+          "name": "Meta volante de Durango",
           "distance": 40000,
           "weight": "minor"
         },
         {
           "kind": "mountain",
-          "name": "Col de Finiels",
+          "name": "Alto de Areitio",
           "distance": 80000,
           "category": "cat2"
         },
         {
           "kind": "mountain",
-          "name": "Mont Lozère",
+          "name": "Santuario de Urkiola",
           "distance": 125000,
           "category": "hc"
         }
@@ -353,7 +353,7 @@
       "week": 10,
       "day": "sunday",
       "time": "14:00",
-      "name": "Queen of the Cévennes",
+      "name": "Gran Premio de los Picos de Europa",
       "course": [
         {
           "length": 44000,
@@ -391,19 +391,19 @@
       "markers": [
         {
           "kind": "sprint",
-          "name": "Valley Sprint",
+          "name": "Meta volante de Cangas de Onís",
           "distance": 30000,
           "weight": "minor"
         },
         {
           "kind": "mountain",
-          "name": "Col du Bougès",
+          "name": "Puerto del Pontón",
           "distance": 58000,
           "category": "hc"
         },
         {
           "kind": "mountain",
-          "name": "Mont Aigoual",
+          "name": "Lagos de Covadonga",
           "distance": 130000,
           "category": "hc"
         }
@@ -413,7 +413,7 @@
       "week": 11,
       "day": "sunday",
       "time": "14:00",
-      "name": "Montferrat Hill Race",
+      "name": "Clásica del Montseny",
       "course": [
         {
           "length": 151500,
@@ -431,19 +431,19 @@
       "markers": [
         {
           "kind": "sprint",
-          "name": "Vineyard Sprint",
+          "name": "Meta volante de Vic",
           "distance": 80000,
           "weight": "standard"
         },
         {
           "kind": "mountain",
-          "name": "Castle Ramp",
+          "name": "Repecho de Montseny",
           "distance": 154500,
           "category": "cat3"
         },
         {
           "kind": "sprint",
-          "name": "Castle Finish",
+          "name": "Meta en Sant Celoni",
           "distance": 155000,
           "weight": "standard"
         }
@@ -453,7 +453,7 @@
       "week": 12,
       "day": "sunday",
       "time": "14:00",
-      "name": "Po Valley Championship",
+      "name": "Gran Premio de la Ribera del Ebro",
       "course": [
         {
           "length": 200000,
@@ -463,19 +463,19 @@
       "markers": [
         {
           "kind": "sprint",
-          "name": "Rice Fields Sprint",
+          "name": "Meta volante de Tudela",
           "distance": 70000,
           "weight": "minor"
         },
         {
           "kind": "sprint",
-          "name": "River Sprint",
+          "name": "Meta volante de Alfaro",
           "distance": 140000,
           "weight": "standard"
         },
         {
           "kind": "sprint",
-          "name": "Championship Finish",
+          "name": "Meta en Zaragoza",
           "distance": 200000,
           "weight": "major"
         }
@@ -484,13 +484,13 @@
   ],
   "stage_races": [
     {
-      "name": "Three Days of the Jura",
+      "name": "Vuelta a Castilla y León",
       "week": 4,
       "start_day": "wednesday",
       "time": "14:00",
       "stages": [
         {
-          "name": "Lakeside Sprint",
+          "name": "Tierra de Campos",
           "course": [
             {
               "length": 150000,
@@ -500,20 +500,20 @@
           "markers": [
             {
               "kind": "sprint",
-              "name": "Shore Sprint",
+              "name": "Meta volante de Sahagún",
               "distance": 80000,
               "weight": "standard"
             },
             {
               "kind": "sprint",
-              "name": "Lakeside Finish",
+              "name": "Meta en Palencia",
               "distance": 150000,
               "weight": "major"
             }
           ]
         },
         {
-          "name": "Watch Valley Wall",
+          "name": "Murallas de Ávila",
           "course": [
             {
               "length": 136500,
@@ -531,26 +531,26 @@
           "markers": [
             {
               "kind": "sprint",
-              "name": "Clockmakers' Sprint",
+              "name": "Meta volante de Arévalo",
               "distance": 70000,
               "weight": "standard"
             },
             {
               "kind": "mountain",
-              "name": "Watchmakers' Wall",
+              "name": "Muro de Ávila",
               "distance": 139500,
               "category": "cat3"
             },
             {
               "kind": "sprint",
-              "name": "Watch Valley Finish",
+              "name": "Meta en Ávila",
               "distance": 140000,
               "weight": "standard"
             }
           ]
         },
         {
-          "name": "Summit of the Crêt",
+          "name": "Laguna Negra",
           "course": [
             {
               "length": 60000,
@@ -576,13 +576,13 @@
           "markers": [
             {
               "kind": "mountain",
-              "name": "Col du Marchairuz",
+              "name": "Puerto de Santa Inés",
               "distance": 75000,
               "category": "cat2"
             },
             {
               "kind": "mountain",
-              "name": "Crêt de la Neige",
+              "name": "Alto de la Laguna Negra",
               "distance": 120000,
               "category": "hc"
             }
@@ -591,13 +591,13 @@
       ]
     },
     {
-      "name": "Tour of the Three Ranges",
+      "name": "Vuelta a Cataluña",
       "week": 7,
       "start_day": "monday",
       "time": "14:00",
       "stages": [
         {
-          "name": "Garonne Flats",
+          "name": "Costa Brava",
           "course": [
             {
               "length": 160000,
@@ -607,20 +607,20 @@
           "markers": [
             {
               "kind": "sprint",
-              "name": "Canal Sprint",
+              "name": "Meta volante de Palamós",
               "distance": 90000,
               "weight": "standard"
             },
             {
               "kind": "sprint",
-              "name": "Garonne Finish",
+              "name": "Meta en Lloret de Mar",
               "distance": 160000,
               "weight": "major"
             }
           ]
         },
         {
-          "name": "Gascony Drag",
+          "name": "Llanos de Urgell",
           "course": [
             {
               "length": 150000,
@@ -634,20 +634,20 @@
           "markers": [
             {
               "kind": "sprint",
-              "name": "Armagnac Sprint",
+              "name": "Meta volante de Tàrrega",
               "distance": 80000,
               "weight": "standard"
             },
             {
               "kind": "sprint",
-              "name": "Bastide Rise",
+              "name": "Repecho de Lleida",
               "distance": 170000,
               "weight": "major"
             }
           ]
         },
         {
-          "name": "Limousin Ramp",
+          "name": "Muro de Manresa",
           "course": [
             {
               "length": 146500,
@@ -665,26 +665,26 @@
           "markers": [
             {
               "kind": "sprint",
-              "name": "Chestnut Sprint",
+              "name": "Meta volante de Igualada",
               "distance": 75000,
               "weight": "standard"
             },
             {
               "kind": "mountain",
-              "name": "Limousin Ramp",
+              "name": "Muro de Manresa",
               "distance": 149500,
               "category": "cat3"
             },
             {
               "kind": "sprint",
-              "name": "Limousin Finish",
+              "name": "Meta en Manresa",
               "distance": 150000,
               "weight": "standard"
             }
           ]
         },
         {
-          "name": "Pyrenean Passes",
+          "name": "Puertos del Pirineo",
           "course": [
             {
               "length": 39000,
@@ -722,20 +722,20 @@
           "markers": [
             {
               "kind": "mountain",
-              "name": "Col de Peyresourde-Haut",
+              "name": "Port del Cantó",
               "distance": 53000,
               "category": "hc"
             },
             {
               "kind": "mountain",
-              "name": "Pic de l'Ours",
+              "name": "Port Ainé",
               "distance": 125000,
               "category": "hc"
             }
           ]
         },
         {
-          "name": "Landes Pine Road",
+          "name": "Delta del Ebro",
           "course": [
             {
               "length": 170000,
@@ -745,20 +745,20 @@
           "markers": [
             {
               "kind": "sprint",
-              "name": "Pine Forest Sprint",
+              "name": "Meta volante de Amposta",
               "distance": 90000,
               "weight": "standard"
             },
             {
               "kind": "sprint",
-              "name": "Landes Finish",
+              "name": "Meta en Tortosa",
               "distance": 170000,
               "weight": "major"
             }
           ]
         },
         {
-          "name": "Summit of Pic Blanc",
+          "name": "La Molina",
           "course": [
             {
               "length": 70000,
@@ -784,20 +784,20 @@
           "markers": [
             {
               "kind": "mountain",
-              "name": "Col d'Aspin-Bas",
+              "name": "Coll de la Creueta",
               "distance": 85000,
               "category": "cat2"
             },
             {
               "kind": "mountain",
-              "name": "Pic Blanc",
+              "name": "Alto de La Molina",
               "distance": 130000,
               "category": "hc"
             }
           ]
         },
         {
-          "name": "Basque Hills Finale",
+          "name": "Montjuïc",
           "course": [
             {
               "length": 126500,
@@ -815,19 +815,19 @@
           "markers": [
             {
               "kind": "sprint",
-              "name": "Fishing Port Sprint",
+              "name": "Meta volante del Port",
               "distance": 60000,
               "weight": "standard"
             },
             {
               "kind": "mountain",
-              "name": "Lighthouse Ramp",
+              "name": "Subida a Montjuïc",
               "distance": 129500,
               "category": "cat3"
             },
             {
               "kind": "sprint",
-              "name": "Boulevard Finish",
+              "name": "Meta en Barcelona",
               "distance": 130000,
               "weight": "major"
             }

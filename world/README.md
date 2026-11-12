@@ -744,11 +744,19 @@ registered player, and claims a new one.
 
 `seasons/world.json` is the one calendar every season repeats, the same way
 the real classics come back every year. It has 11 one-day races, the
-three-day *Three Days of the Jura* (week 4, Wednesday to Friday) and the
-seven-day *Tour of the Three Ranges* (week 7, Monday to Sunday), for **21
+three-day *Vuelta a Castilla y León* (week 4, Wednesday to Friday) and the
+seven-day *Vuelta a Cataluña* (week 7, Monday to Sunday), for **21
 race days**. That is the density the example seasons had, and the economy
 was measured against it. The two `.example` files stay as they are, for
 development.
+
+**The names are Spanish**, modelled on real Spanish races (decided on
+review of #139, since the beta's human testers play in Spanish, #137). Every race,
+stage and marker uses Spanish place names: *Meta volante de …* for an
+intermediate sprint, *Alto de …* or *Puerto de …* for a climb, and *Meta en …*
+for the line. They are proper nouns and are not translated. Each course
+still fits its place roughly, for example a flat coastal sprint at Almería,
+a summit finish at Urkiola and the Lagos de Covadonga at the Picos de Europa.
 
 Each race is built from one of a few terrain shapes, each aimed at one
 winning speciality. **Sprinters** get flat bunch finishes. **Puncheurs** get 3 km at 4%
@@ -778,27 +786,27 @@ passes (`balanced`):
 
 ```
 seed 1-5, 21 race days a season           winner's speciality
-  Scheldt Coast Classic                   sprinter 4, puncheur 1
-  Brabant Hills Trophy                    puncheur 4, rouleur 1
-  Loire Long Road                         sprinter 3, puncheur 1, rouleur 1
-  Jura 1: Lakeside Sprint                 sprinter 4, puncheur 1
-  Jura 2: Watch Valley Wall               puncheur 3, sprinter 1, rouleur 1
-  Jura 3: Summit of the Crêt              climber 5
-  Polder Dyke Race                        sprinter 4, rouleur 1
-  Vercors Classic                         climber 4, puncheur 1
-  Eifel Ramp Classic                      rouleur 2, puncheur 2, climber 1
-  Three Ranges 1: Garonne Flats           sprinter 5
-  Three Ranges 2: Gascony Drag            sprinter 3, rouleur 1, puncheur 1
-  Three Ranges 3: Limousin Ramp           puncheur 3, climber 1, rouleur 1
-  Three Ranges 4: Pyrenean Passes         climber 3, domestique 2
-  Three Ranges 5: Landes Pine Road        sprinter 5
-  Three Ranges 6: Summit of Pic Blanc     climber 5
-  Three Ranges 7: Basque Hills Finale     puncheur 2, sprinter 2, climber 1
-  Ardèche Walls                           sprinter 2, puncheur 2, climber 1
-  Mont Lozère Summit                      climber 5
-  Queen of the Cévennes                   climber 3, domestique 2
-  Montferrat Hill Race                    puncheur 3, sprinter 2
-  Po Valley Championship                  sprinter 5
+  Clásica de Almería                      sprinter 4, puncheur 1
+  Gran Premio de Llodio                   puncheur 4, rouleur 1
+  Vuelta a La Rioja                       sprinter 3, puncheur 1, rouleur 1
+  Castilla y León 1: Tierra de Campos     sprinter 4, puncheur 1
+  Castilla y León 2: Murallas de Ávila    puncheur 3, sprinter 1, rouleur 1
+  Castilla y León 3: Laguna Negra         climber 5
+  Clásica de las Marismas                 sprinter 4, rouleur 1
+  Clásica de Jaén                         climber 4, puncheur 1
+  Clásica de Ordizia                      rouleur 2, puncheur 2, climber 1
+  Cataluña 1: Costa Brava                 sprinter 5
+  Cataluña 2: Llanos de Urgell            sprinter 3, rouleur 1, puncheur 1
+  Cataluña 3: Muro de Manresa             puncheur 3, climber 1, rouleur 1
+  Cataluña 4: Puertos del Pirineo         climber 3, domestique 2
+  Cataluña 5: Delta del Ebro              sprinter 5
+  Cataluña 6: La Molina                   climber 5
+  Cataluña 7: Montjuïc                    puncheur 2, sprinter 2, climber 1
+  Trofeo de las Hoces de Cuenca           sprinter 2, puncheur 2, climber 1
+  Subida a Urkiola                        climber 5
+  GP de los Picos de Europa               climber 3, domestique 2
+  Clásica del Montseny                    puncheur 3, sprinter 2
+  GP de la Ribera del Ebro                sprinter 5
   GC, both tours                          climber 9, domestique 1
 
   sprinter   8.0 a season  38%

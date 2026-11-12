@@ -27,8 +27,8 @@ all free to claim. The calendar shows a season of named races with recognisable
 character: a flat coastal sprint, a cobble-free spring classic over short steep
 hills, a long endurance day, a summit finish, and two stage races, a three-day
 tour midweek and a full week-long grand tour with its own flat, hilly and
-mountain stages. The race names sound like the team names, invented places
-with a European cycling flavour.
+mountain stages. The race names are Spanish and modelled on real
+Spanish races: Clásica de Jaén, Vuelta a Cataluña, Subida a Urkiola.
 
 Over the season, the manager finds that no single kind of rider is enough.
 Sprinters win the flat days, climbers the mountain days, puncheurs the short
@@ -62,8 +62,8 @@ a fresh team in the new world.
 4. **Courses use course markers** (sprints with weights, climbs with
    categories, finish-line climbs) so the points competition has something to
    score on every kind of day.
-5. **Race and stage names are fictional proper nouns** in the team names' tone.
-   They are not translated (#137).
+5. **Race and stage names are Spanish proper nouns** modelled on real Spanish
+   races. They are not translated (#137).
 6. **The calendar can be started on any Monday.** The same file serves staging
    and production, each anchored to its own start. Every later season begins
    exactly where the previous one ends.
@@ -142,7 +142,10 @@ a fresh team in the new world.
 - How many seasons up front? **Four**, plus a command that appends the next.
 - What does a wipe remove? **The whole game world, but not accounts.** It
   refuses in production. No demo account, ever.
-- Names: invented by us, in the team names' tone.
+- Names: first drafted in the team names' tone (invented European places).
+  **Changed on review to Spanish names modelled on real Spanish races**
+  (Clásica de Jaén, Vuelta a Cataluña), at Mario's request. The courses
+  are unchanged, so the balance result still stands.
 
 ## Open questions
 
