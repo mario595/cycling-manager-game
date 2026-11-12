@@ -39,3 +39,8 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 # When race logs outgrow the local disk, swap STORAGES["default"] here for an
 # S3-compatible backend (Cloudflare R2 is the frugal pick: 10GB free, no
 # egress fees) via django-storages. No application code changes.
+
+# The tick declares the next season of the world calendar by itself once only
+# one declared season is left to play, so a running world never runs out of
+# calendar (#129; world/README.md, *Automatic seasons*). Staging inherits it.
+AUTO_DECLARE_SEASONS = True
