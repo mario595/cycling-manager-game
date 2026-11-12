@@ -7,6 +7,7 @@ same image runs anywhere. Nothing secret is committed.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 from .base import *  # noqa: F403
 
@@ -29,12 +30,33 @@ DATABASES["default"].update(  # noqa: F405
     }
 )
 
-SECURE_SSL_REDIRECT = True
+# On by default. Only the local run of the production image
+# (deploy/compose.local.yml) turns it off, because nothing terminates TLS in
+# front of it there. On Fly, TLS ends at Fly's proxy, which sets
+# X-Forwarded-Proto (SECURE_PROXY_SSL_HEADER below).
+SECURE_SSL_REDIRECT = os.environ.get("DJANGO_SECURE_SSL_REDIRECT", "1") != "0"
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 SECURE_HSTS_SECONDS = 31536000
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# Race logs live under MEDIA_ROOT. On Fly that is the persistent volume,
+# /data/media (fly.toml); the default keeps a plain checkout working.
+MEDIA_ROOT = Path(os.environ.get("DJANGO_MEDIA_ROOT", str(MEDIA_ROOT)))  # noqa: F405
+
+# Error reporting (deploy/README.md, "Monitoring"). Off unless a DSN is set,
+# so the image runs anywhere without a Sentry account.
+SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
+if SENTRY_DSN:
+    import sentry_sdk
+
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        environment=os.environ.get("SENTRY_ENVIRONMENT", "production"),
+        send_default_pii=False,
+        traces_sample_rate=0.0,
+    )
 
 # When race logs outgrow the local disk, swap STORAGES["default"] here for an
 # S3-compatible backend (Cloudflare R2 is the frugal pick: 10GB free, no
