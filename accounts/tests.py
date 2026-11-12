@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+from io import StringIO
+
 import pytest
+from django.core.management import CommandError, call_command
 from django.db import IntegrityError
 from django.test import override_settings
 from rest_framework.test import APIClient
 
-from accounts.models import User
+from accounts.models import ApiToken, User
 from accounts.serializers import RegisterSerializer
+from accounts.tokens import hash_key, issue_token, revoke_token, user_for_key
 
 # dev.py turns password strength checking off (registering a throwaway local
 # account shouldn't mean fighting CommonPasswordValidator), so this test
@@ -139,3 +143,74 @@ def test_last_seen_at_defaults_to_null(db):
     user = User.objects.create_user(email="mario@example.com", password="s0meth1ng-good")
 
     assert user.last_seen_at is None
+
+
+# --- API tokens (#130) ------------------------------------------------------
+
+
+@pytest.fixture
+def player(db):
+    return User.objects.create_user(email="agent@example.com", password="s0meth1ng-good")
+
+
+def test_issue_token_stores_only_a_hash(player):
+    key = issue_token(player)
+
+    token = ApiToken.objects.get(user=player)
+    assert key.startswith("cm_")
+    assert token.key_hash == hash_key(key)
+    assert key not in (token.key_hash, token.prefix)
+    assert key[3:].startswith(token.prefix)
+    assert user_for_key(key) == (player, token)
+
+
+def test_reissuing_replaces_the_old_token(player):
+    old = issue_token(player)
+    new = issue_token(player)
+
+    assert ApiToken.objects.filter(user=player).count() == 1
+    assert user_for_key(old) is None
+    assert user_for_key(new)[0] == player
+
+
+def test_revoke_removes_the_token(player):
+    key = issue_token(player)
+
+    assert revoke_token(player) is True
+    assert user_for_key(key) is None
+    assert revoke_token(player) is False
+
+
+def test_an_inactive_users_key_resolves_to_nobody(player):
+    key = issue_token(player)
+    player.is_active = False
+    player.save()
+
+    assert user_for_key(key) is None
+
+
+def test_unknown_key_resolves_to_nobody(db):
+    assert user_for_key("cm_nope") is None
+
+
+def test_issue_command_prints_the_key_once(player):
+    out = StringIO()
+    call_command("issue_api_token", "AGENT@example.com", stdout=out, stderr=StringIO())
+
+    key = out.getvalue().strip()
+    assert user_for_key(key)[0] == player
+
+
+def test_revoke_command(player):
+    key = issue_token(player)
+    out = StringIO()
+    call_command("revoke_api_token", "agent@example.com", stdout=out)
+
+    assert "revoked" in out.getvalue()
+    assert user_for_key(key) is None
+
+
+@pytest.mark.parametrize("command", ["issue_api_token", "revoke_api_token"])
+def test_token_commands_reject_an_unknown_email(db, command):
+    with pytest.raises(CommandError):
+        call_command(command, "nobody@example.com", stdout=StringIO(), stderr=StringIO())

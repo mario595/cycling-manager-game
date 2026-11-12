@@ -19,3 +19,8 @@ node_modules
 
 # Claude Design export artifact (regenerated on export)
 design/.thumbnail
+
+# Test coverage output — generated, never source.
+.coverage
+.coverage.*
+htmlcov/
