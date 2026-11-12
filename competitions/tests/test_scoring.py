@@ -45,16 +45,16 @@ def test_table_has_exactly_ten_scoring_positions():
 
 
 def test_prize_by_position():
-    assert prize_for(1) == 20_000
-    assert prize_for(2) == 15_000
-    assert prize_for(3) == 12_000
-    assert prize_for(4) == 10_000
-    assert prize_for(5) == 8_000
-    assert prize_for(6) == 6_000
-    assert prize_for(7) == 4_000
-    assert prize_for(8) == 3_000
-    assert prize_for(9) == 2_000
-    assert prize_for(10) == 1_000
+    assert prize_for(1) == 22_000
+    assert prize_for(2) == 16_500
+    assert prize_for(3) == 13_200
+    assert prize_for(4) == 11_000
+    assert prize_for(5) == 8_800
+    assert prize_for(6) == 6_600
+    assert prize_for(7) == 4_400
+    assert prize_for(8) == 3_300
+    assert prize_for(9) == 2_200
+    assert prize_for(10) == 1_100
 
 
 def test_position_outside_table_pays_nothing():
@@ -90,14 +90,14 @@ def test_gc_points_by_position():
 
 
 def test_stage_prize_by_position():
-    assert stage_prize_for(1) == 10_000
-    assert stage_prize_for(10) == 500
+    assert stage_prize_for(1) == 11_000
+    assert stage_prize_for(10) == 550
     assert stage_prize_for(11) == 0
 
 
 def test_gc_prize_by_position():
-    assert gc_prize_for(1) == 40_000
-    assert gc_prize_for(10) == 2_000
+    assert gc_prize_for(1) == 44_000
+    assert gc_prize_for(10) == 2_200
     assert gc_prize_for(11) == 0
 
 
