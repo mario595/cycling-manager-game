@@ -4,8 +4,10 @@
 # PostgreSQL and the tick scheduler, with the database and race logs on the
 # `data` volume. Secrets are set with `fly secrets set` (#136), never here.
 #
-# The app name is chosen when the app is created (#136).
-app = "cycling-manager"
+# The app is `velodra`, served at velodra.fly.dev (#136). It runs the
+# accelerated staging world for milestone 1, and #133 promotes this same app
+# to production by switching the three staging values in [env] below.
+app = "velodra"
 primary_region = "ams"
 
 # Fly stops idle machines by default; that would stop the tick too, and the
@@ -27,9 +29,15 @@ kill_timeout = 120
   dockerfile = "Dockerfile"
   build-target = "allinone"
 
+# Not secret, so committed. Secrets go in with `fly secrets set`.
 [env]
-  DJANGO_SETTINGS_MODULE = "config.settings.prod"
-  SENTRY_ENVIRONMENT = "production"
+  # Staging: the accelerated clock (config/settings/staging.py, #129), ticked
+  # every 5 minutes. Nothing advances the clock: it moves by itself.
+  # #133 sets these back to config.settings.prod, production and hourly.
+  DJANGO_SETTINGS_MODULE = "config.settings.staging"
+  SENTRY_ENVIRONMENT = "staging"
+  TICK_SCHEDULE = "*/5 * * * *"
+  DJANGO_ALLOWED_HOSTS = "velodra.fly.dev"
 
 [mounts]
   source = "data"
