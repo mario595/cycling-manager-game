@@ -56,6 +56,9 @@ INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
 
 MIDDLEWARE = [
+    # First on purpose: answers /healthz before the HTTPS redirect and host
+    # validation can turn Fly's internal health check away. See config/health.py.
+    "config.health.HealthCheckMiddleware",
     "django.middleware.security.SecurityMiddleware",
     # WhiteNoise serves the built React bundle and Django's static files
     # without a separate web server. See "Frontend" below.
