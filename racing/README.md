@@ -193,6 +193,49 @@ limitation*. Anything that scores or ranks off `RaceResult` must filter on
 protects (a team whose whole squad didn't finish must not be credited for
 wherever those riders were numbered).
 
+## The calendar check (#139)
+
+`racing/calendar_check.py` answers one question about a season file: **which
+kind of rider does each course reward?** The `check_calendar` command runs
+every race and every stage through the engine against freshly generated
+fields, one field per seed, and reports the winner's speciality per race
+day. It then applies the beta world's rule (`specs/archive/beta-world.md`):
+climbers, sprinters and puncheurs each win at least two race days a season,
+rouleurs at least one until time trials exist, and none wins more than 40%. It exits non-zero when the rule
+fails.
+
+```bash
+manage.py check_calendar seasons/world.json --seeds 1,2,3 --jobs 4
+manage.py check_calendar seasons/world.json --seeds 1,2 --only "Marismas"   # tune one course
+```
+
+- **It is database-free.** The field is `generate_field(seed)`: sixteen
+  unsaved teams of twelve generated riders, rolled exactly as `seed_teams`
+  rolls them, with synthetic pks. The engine runs through
+  `run_race_via_adapter` with no log file (`log_path=None`), and the course
+  comes from the season file's JSON through `to_engine_course_from_json`.
+  Nothing is written, so it is safe to run against any database, production
+  included.
+- **Squads are picked with the game's own ranking.** `course_pick_order` is
+  `course_pick_squad`'s scoring over a plain list, so the check fields what
+  an unmanaged team would field. A stage race's squads are picked once, for
+  stage 1, and ride every stage, as in the game. That is also what makes the
+  check's GC line meaningful.
+- **It leaves out everything a season adds between races**: fatigue,
+  recovery, training, transfers, a human's squad choice. It measures the
+  course, not the season. Staging is where the season gets measured.
+- **It is not in the test suite.** A season of 21 race days across three
+  seeds takes roughly 25 minutes on four cores. `racing/test_calendar_check.py`
+  tests its logic on a 3 km course, and `world/tests` checks that the world
+  calendar loads. Run it by hand whenever a course in `seasons/world.json`
+  changes, and update the result recorded in `world/README.md`, *The world
+  calendar*.
+- Workers use the `fork` start method, so each one inherits the configured
+  Django. The engine's run-order nondeterminism (`race_engine/README.md`,
+  *Regression audit*) means a single race's winner can differ between a
+  `--jobs 1` and a `--jobs 4` run. The rule is judged across seeds for that
+  reason.
+
 ## Markers and crossings
 
 Course markers are named points a race declares (`RaceMarker`), and the

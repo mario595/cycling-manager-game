@@ -73,3 +73,7 @@ AUTH_PASSWORD_VALIDATORS: list[dict] = []
 # this only applies when DJANGO_SETTINGS_MODULE points at this file — prod.py
 # never imports dev.py, so this has no way to reach a real deployment.
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
+
+# A development world is throwaway: `seed_world --reset` may wipe it. See
+# base.py's ALLOW_WORLD_RESET.
+ALLOW_WORLD_RESET = True
