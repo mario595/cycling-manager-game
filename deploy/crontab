@@ -1,0 +1,12 @@
+# The all-in-one machine's schedule, run by supercronic (deploy/README.md).
+# Times are UTC. supercronic never starts a job while its previous run is
+# still going, so two ticks cannot overlap.
+#
+# #129 (the accelerated staging clock) replaces the tick line with a 5-minute
+# `mock_clock advance --by 2h` + tick.
+
+# The hourly tick: world/README.md, "Deployment requirement".
+0 * * * * /app/deploy/tick.sh
+
+# Nightly off-box backup of the database and the race logs.
+30 3 * * * cd /app && python -m deploy.backup

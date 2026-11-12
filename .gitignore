@@ -19,3 +19,6 @@ node_modules
 
 # Claude Design export artifact (regenerated on export)
 design/.thumbnail
+
+# Local secrets for deploy/compose.local.yml
+deploy/.env
