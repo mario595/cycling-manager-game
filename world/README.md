@@ -842,6 +842,11 @@ the sleep lasted — such platforms are ruled out by this feature. The task
 also needs to run long enough to work out a day's races, currently around
 eight seconds each.
 
+That host is one always-on Fly.io machine (`deploy/README.md`, #128). Its
+scheduler runs `deploy/tick.sh` on `TICK_SCHEDULE`, hourly by default; it
+never overlaps two ticks, and it pings healthchecks.io after each successful
+one so a stopped tick is noticed.
+
 ## What `world/` may import
 
 Everything. `world/` and `api/` are the two apps allowed to know about every

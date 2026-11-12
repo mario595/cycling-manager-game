@@ -1,0 +1,15 @@
+# The all-in-one machine's schedule, run by supercronic (deploy/README.md).
+# Times are UTC. supercronic never starts a job while its previous run is
+# still going, so two ticks cannot overlap.
+#
+# This file is a template. The entrypoint renders it at boot, replacing
+# @TICK_SCHEDULE@ with the TICK_SCHEDULE environment variable (default
+# "0 * * * *", hourly). The accelerated staging world (#129) sets
+# "*/5 * * * *"; its clock moves on its own. Only the cadence comes from the
+# environment; which clock runs is still the settings module's choice.
+
+# The tick: world/README.md, "Deployment requirement".
+@TICK_SCHEDULE@ /app/deploy/tick.sh
+
+# Nightly off-box backup of the database and the race logs.
+30 3 * * * cd /app && python -m deploy.backup

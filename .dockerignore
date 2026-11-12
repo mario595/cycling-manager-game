@@ -1,0 +1,15 @@
+# Keep the build context small and free of local state and secrets.
+.git
+**/node_modules
+frontend/dist
+race_player/dist
+.venv
+staticfiles
+media
+.env
+deploy/.env
+.claude/worktrees
+**/__pycache__
+**/*.pyc
+*.jsonl
+*.jsonl.br

@@ -94,3 +94,21 @@ jobs:
 
       - name: Tests with coverage
         run: python -m pytest --cov --cov-report=term-missing --cov-fail-under=85
+  image:
+    name: Deploy image builds
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # The all-in-one image Fly deploys (fly.toml, deploy/README.md). Built
+      # only, never pushed: pushing and deploying belong to the deploy
+      # pipeline (#136). It builds `web` on the way, so both stages are covered.
+      - name: Build the all-in-one image
+        run: docker build --target allinone -t cycling-manager:ci .
+
+      # Rendered with the default schedule, as the entrypoint does at boot.
+      - name: The crontab parses
+        run: >-
+          docker run --rm --entrypoint sh cycling-manager:ci -c
+          'sed "s|@TICK_SCHEDULE@|0 * * * *|" /app/deploy/crontab > /tmp/crontab && supercronic -test /tmp/crontab'
+

@@ -20,6 +20,9 @@ node_modules
 # Claude Design export artifact (regenerated on export)
 design/.thumbnail
 
+# Local secrets for deploy/compose.local.yml
+deploy/.env
+
 # Test coverage output — generated, never source.
 .coverage
 .coverage.*
