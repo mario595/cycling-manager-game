@@ -287,7 +287,10 @@ reads `now()` once, then finds and processes whatever is due, in six steps:
    querying rather than a stored counter, so a gap between seasons
    contributes no weeks for free (weeks only exist inside a declared
    season). `last_seen_at` is a **game**-time field on `accounts.User`,
-   stamped at login by `api.services.touch_last_seen` — deliberately not
+   stamped at login, and on API-token requests at most once a game hour
+   (#130, `api/README.md`, *Authentication*), so a token-only agent is not
+   exempt as a never-logged-in account is, by `api.services.touch_last_seen`
+   — deliberately not
    `django.contrib.auth`'s `last_login`, which is real time and would
    compare incorrectly against game time under `MockClock` (see
    `accounts/README.md`, *Last seen is game time*). A manager who has

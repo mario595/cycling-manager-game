@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from feedback.models import Report
@@ -183,6 +184,15 @@ class SalaryChangeSerializer(serializers.Serializer):
     to_value = serializers.IntegerField(source="to")
 
 
+class SalaryReviewSerializer(serializers.Serializer):
+    """Schema only: the shape RosterSerializer.get_salary_review builds."""
+
+    season_number = serializers.IntegerField()
+    payroll_before = serializers.IntegerField()
+    payroll_after = serializers.IntegerField()
+    changes = SalaryChangeSerializer(many=True)
+
+
 class RosterSerializer(serializers.Serializer):
     """The caller's own team's roster: every rider plus the squad's total
     market value, so the roster screen's header total and its per-rider
@@ -195,6 +205,7 @@ class RosterSerializer(serializers.Serializer):
     squad_value = serializers.IntegerField()
     salary_review = serializers.SerializerMethodField()
 
+    @extend_schema_field(SalaryReviewSerializer(allow_null=True))
     def get_salary_review(self, obj):
         report = obj["salary_review"]
         if report is None:
@@ -661,6 +672,13 @@ class TrainingChangeSerializer(serializers.Serializer):
     to_value = serializers.IntegerField(source="to")
 
 
+class TrainingWeekSerializer(serializers.Serializer):
+    """Schema only: the shape TrainingSerializer.get_last_week builds."""
+
+    attribute = serializers.CharField()
+    changes = TrainingChangeSerializer(many=True)
+
+
 class TrainingSerializer(serializers.Serializer):
     """The Training screen's whole state in one payload, the same shape
     rule StaffSerializer follows: every key always present, so the SPA
@@ -675,6 +693,7 @@ class TrainingSerializer(serializers.Serializer):
     options = serializers.ListField(child=serializers.CharField())
     last_week = serializers.SerializerMethodField()
 
+    @extend_schema_field(TrainingWeekSerializer(allow_null=True))
     def get_last_week(self, obj):
         report = obj["last_week"]
         if report is None:
