@@ -157,7 +157,7 @@ from .rider_profile import rider_profile
 from .services import touch_last_seen
 from accounts.serializers import LoginSerializer
 
-from .schema import NO_TEAM, _pct, refused
+from .schema import NO_TEAM, pct, refused
 from .serializers import (
     AuctionMarketSerializer,
     CalendarSerializer,
@@ -774,7 +774,7 @@ class FreeAgentsView(APIView):
         summary="The free-agent pool",
         description=(
             f'Every rider with no team, each with attributes, salary, market value and '
-            f'the fee to sign them ({_pct(SIGNING_FEE_RATE)}% of market value), plus '
+            f'the fee to sign them ({pct(SIGNING_FEE_RATE)}% of market value), plus '
             f'your current balance. Long-unattached weak riders leave the pool over '
             f'time.'
         ),
@@ -806,7 +806,7 @@ class SignFreeAgentView(APIView):
         summary="Sign a free agent",
         description=(
             f"Sign `rider_id` from the free-agent pool onto your roster. The signing "
-            f"fee ({_pct(SIGNING_FEE_RATE)}% of market value) is debited now, and the "
+            f"fee ({pct(SIGNING_FEE_RATE)}% of market value) is debited now, and the "
             f"rider's weekly salary is paid from the next payday. Refused if the rider "
             f"is no longer free, your roster is full, you cannot afford it, or your "
             f"team is insolvent."
@@ -865,7 +865,7 @@ class ReleaseRiderView(APIView):
         summary="Release one of your riders",
         description=(
             f"Send `rider_id` from your roster to the free-agent pool. You pay "
-            f"severance ({_pct(SEVERANCE_FEE_RATE)}% of market value), except for "
+            f"severance ({pct(SEVERANCE_FEE_RATE)}% of market value), except for "
             f"riders inherited with a team you claimed within the cooldown, who leave "
             f"for free. Severance is charged even if it takes your balance negative. "
             f"The roster's `release_cost` shows the price first."
@@ -980,7 +980,7 @@ class ListForAuctionView(APIView):
         summary="Put one of your riders up for auction",
         description=(
             f'Open an auction for `rider_id`, a rider your team owns: on your roster, '
-            f'or a development squad graduate. The reserve is {_pct(RESERVE_RATE)}% of '
+            f'or a development squad graduate. The reserve is {pct(RESERVE_RATE)}% of '
             f'market value, and bidding runs for {AUCTION_DURATION.days} days of game '
             f'time. If it sells, the price is paid to you and the rider leaves. If '
             f'not, a roster rider stays. The rider keeps racing for you while listed.'

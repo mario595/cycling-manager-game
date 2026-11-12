@@ -218,7 +218,10 @@ take in the browser is here, under exactly the same rules, and nothing else.
 **Authentication.** Send `Authorization: Bearer <token>` on every request. A
 token belongs to one account and is issued by the game's operator. A missing,
 wrong or revoked token gets a `403` with a JSON `detail`. Writes made with a
-token need no CSRF token and no cookie.
+token need no CSRF token and no cookie. **Do not send cookies with a token
+request:** a request that carries a session cookie (registering or logging in
+sets one) is treated as a browser request and needs a CSRF token, so its
+writes fail with a `403` even though the token is valid.
 
 **Your team.** Endpoints never take a team id: "your team" is always the team
 the token's account manages. An account that manages no team gets a `403`

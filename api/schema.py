@@ -9,6 +9,8 @@ describe the class.
 from __future__ import annotations
 
 from drf_spectacular.extensions import OpenApiAuthenticationExtension
+from drf_spectacular.utils import OpenApiResponse
+from rest_framework import serializers
 
 
 class GameTokenScheme(OpenApiAuthenticationExtension):
@@ -24,9 +26,6 @@ class GameTokenScheme(OpenApiAuthenticationExtension):
 
 
 # --- Shared pieces for the @extend_schema decorators in api/views.py ---------
-
-from drf_spectacular.utils import OpenApiResponse  # noqa: E402
-from rest_framework import serializers  # noqa: E402
 
 
 class DetailSerializer(serializers.Serializer):
@@ -47,6 +46,6 @@ def refused(**codes: str) -> dict:
     }
 
 
-def _pct(rate: float) -> int:
+def pct(rate: float) -> int:
     """A fee rate as a whole percentage, for descriptions."""
     return round(rate * 100)

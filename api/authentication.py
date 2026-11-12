@@ -15,7 +15,9 @@ from api.services import touch_last_seen
 from world.services import now
 
 # Inactivity is counted in weeks, so stamping at most once per game hour
-# loses nothing and keeps an UPDATE off nearly every request.
+# loses nothing and keeps an UPDATE off nearly every request. Authentication
+# runs before throttling, so a throttled request still counts as being seen —
+# deliberately: the manager did show up.
 LAST_SEEN_RESOLUTION = timedelta(hours=1)
 
 

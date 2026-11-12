@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from django.http import JsonResponse
 from django.urls import include, path, re_path
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView
+from rest_framework.exceptions import NotFound
+from rest_framework.permissions import AllowAny
+from rest_framework.views import APIView
 
 from .views import (
     AcknowledgeSpellView,
@@ -46,14 +48,32 @@ from .views import (
 app_name = "api"
 
 
-def api_not_found(request, *args, **kwargs):
-    """Every /api/ path that matches nothing above. Without it the SPA's
-    catch-all in config/urls.py answers with index.html and a 200, which
-    tells an API client nothing — and a missing trailing slash would land
-    there too (#130; api/README.md, Browser assumptions)."""
-    return JsonResponse(
-        {"detail": "No such API endpoint. API paths end with a slash."}, status=404,
-    )
+class ApiNotFoundView(APIView):
+    """Every /api/ path that matches nothing above, for every method.
+
+    Without it the SPA's catch-all in config/urls.py answers with index.html
+    and a 200, which tells an API client nothing, and a missing trailing
+    slash would land there too (#130; api/README.md, Browser assumptions).
+    A DRF view, not a plain Django one: `APIView.as_view()` is what exempts it
+    from CsrfViewMiddleware, so a write to an unknown path also gets this JSON
+    404 rather than Django's HTML "CSRF verification failed" page. No
+    authentication, so the answer is the same whoever asks.
+    """
+
+    authentication_classes: list = []
+    permission_classes = [AllowAny]
+    schema = None  # not an endpoint; keep it out of the OpenAPI schema
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        raise NotFound("No such API endpoint. API paths end with a slash.")
+
+    # Every method resolves to a handler, so none is refused as 405 before
+    # initial() raises the 404.
+    def get(self, request, *args, **kwargs):  # pragma: no cover — initial() raises first
+        raise NotFound()
+
+    post = put = patch = delete = head = options = get
 
 
 urlpatterns = [
@@ -139,5 +159,5 @@ urlpatterns = [
     path("schema/", SpectacularAPIView.as_view(), name="schema"),
     path("docs/", SpectacularRedocView.as_view(url_name="api:schema"), name="docs"),
     # Must stay last.
-    re_path(r"^.*$", api_not_found),
+    re_path(r"^.*$", ApiNotFoundView.as_view()),
 ]

@@ -241,12 +241,26 @@ def test_docs_page_is_served_to_a_session(manager):
     assert b"redoc" in response.content.lower()
 
 
-@pytest.mark.parametrize("path", ["/api/nope/", "/api/riders", "/api/racing/races/1/squad"])
-def test_unknown_api_paths_are_a_json_404(team, key, path):
-    response = bearer(key).get(path)
+@pytest.mark.parametrize("method", ["get", "post", "put", "patch", "delete"])
+@pytest.mark.parametrize("path", ["/api/nope/", "/api/riders", "/api/staff/training"])
+def test_unknown_api_paths_are_a_json_404(team, key, method, path):
+    # enforce_csrf_checks (via bearer()): a plain Django view here would turn
+    # every write into Django's HTML CSRF failure page instead.
+    response = getattr(bearer(key), method)(path, {}, format="json")
 
     assert response.status_code == 404
+    assert response["Content-Type"].startswith("application/json")
     assert response.json()["detail"].startswith("No such API endpoint")
+
+
+def test_unknown_api_path_is_a_json_404_for_a_session_write_too(manager):
+    client = APIClient(enforce_csrf_checks=True)
+    client.force_login(manager)
+
+    response = client.post("/api/nope/", {}, format="json")
+
+    assert response.status_code == 404
+    assert response["Content-Type"].startswith("application/json")
 
 
 def test_non_api_paths_still_reach_the_spa(db):

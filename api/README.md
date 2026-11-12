@@ -721,7 +721,7 @@ what an LLM manager reads to learn the API, so:
   costs, when it is refused), `request=` (the serializer the view validates
   with, or `None`) and `responses=` (`api.schema.refused(r403=…, r409=…)`
   builds the `{"detail": …}` refusals). Fee percentages and caps are
-  interpolated from their constants (`_pct(SIGNING_FEE_RATE)`, `ROSTER_CAP`),
+  interpolated from their constants (`pct(SIGNING_FEE_RATE)`, `ROSTER_CAP`),
   so the text cannot drift from the rule.
 - A `SerializerMethodField` needs `@extend_schema_field`, or the schema
   types it as a string (`SalaryReviewSerializer` and `TrainingWeekSerializer`
@@ -740,12 +740,19 @@ Every endpoint was checked for anything a non-browser client trips on:
 
 - **Unknown `/api/` paths, including a missing trailing slash**, used to fall
   through to the SPA catch-all and answer `200 text/html`. **Fixed:**
-  `api/urls.py` ends with `api_not_found`, a JSON 404 inside the `api/`
-  include, so it can't swallow SPA paths. It must stay last.
+  `api/urls.py` ends with `ApiNotFoundView`, a JSON 404 for **every**
+  method inside the `api/` include, so it can't swallow SPA paths. It must
+  stay last. It is a DRF `APIView`, not a plain Django view, because
+  `as_view()` is what exempts it from `CsrfViewMiddleware`. A plain view
+  answered writes with Django's HTML CSRF failure page.
 - **`GET /api/accounts/me/`**'s `@ensure_csrf_cookie` sets a cookie a token
   client can ignore. Harmless.
-- **Register and login** start a session (`login()`). A token client can
-  ignore the cookie. Register is still how an agent's account is made, and
+- **Register and login** start a session (`login()`). A token client **must
+  not send that cookie back**: session authentication runs first, so a
+  request carrying `sessionid` is a browser request and its writes need CSRF,
+  token or not. A harness on `requests.Session()` or a cookie-keeping httpx
+  client that registers and then plays with the token hits exactly this. The
+  schema's `DESCRIPTION` warns about it. Register is still how an agent's account is made, and
   the token is then issued by command.
 - **Logout** ends the session and never touches a token. Revoking is the
   operator's `revoke_api_token`. This is documented on the operation.
