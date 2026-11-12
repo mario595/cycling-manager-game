@@ -287,7 +287,10 @@ reads `now()` once, then finds and processes whatever is due, in six steps:
    querying rather than a stored counter, so a gap between seasons
    contributes no weeks for free (weeks only exist inside a declared
    season). `last_seen_at` is a **game**-time field on `accounts.User`,
-   stamped at login by `api.services.touch_last_seen` — deliberately not
+   stamped at login, and on API-token requests at most once a game hour
+   (#130, `api/README.md`, *Authentication*), so a token-only agent is not
+   exempt as a never-logged-in account is, by `api.services.touch_last_seen`
+   — deliberately not
    `django.contrib.auth`'s `last_login`, which is real time and would
    compare incorrectly against game time under `MockClock` (see
    `accounts/README.md`, *Last seen is game time*). A manager who has
@@ -716,7 +719,15 @@ registered player, and claims a new one.
 - **`WORLD_APPS` is an explicit list.** `accounts` and Django's own apps are
   not in it, and `world.GameClock` is kept. **A new app is not wiped until
   it is added to the list.** That is the safe default for something an
-  operator might want to keep (problem reports, say, #131).
+  operator might want to keep (problem reports, say, #131). **That only
+  holds for an app with no database foreign-key constraint into a wiped
+  table**: `TRUNCATE … CASCADE` empties every table that has one, whatever
+  its app and whether or not any row uses it. `feedback.Report.team` is
+  declared `db_constraint=False` for exactly this reason, and `wipe_world`
+  clears that column before the truncate, so a kept report never points at
+  the new team that reuses its old team's id. `world/tests/test_world_setup.py`
+  checks a report survives a reset. A future kept app that points into the
+  world needs the same treatment.
 - Race log files are deleted from storage before the truncate, so a reset
   does not leave them orphaned on disk.
 

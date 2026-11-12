@@ -6,6 +6,7 @@ import { seasonLabel } from '../seasonLabel'
 import { MOBILE_BREAKPOINT, color, font } from '../theme'
 import { useAuth } from '../useAuth'
 import { useSeason } from '../useSeason'
+import { ReportProblemButton } from './ReportProblem'
 import { Sidebar } from './Sidebar'
 
 /** Routes that a logged-in, team-less user must still be able to reach —
@@ -157,6 +158,10 @@ export function Layout() {
 
         <Outlet />
       </main>
+
+      {/* Every logged-in screen, /claim included; never the login or
+          register pages, which also render inside this frame (#131). */}
+      {me?.authenticated ? <ReportProblemButton /> : null}
     </div>
   )
 }

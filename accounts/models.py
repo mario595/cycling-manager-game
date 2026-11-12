@@ -80,3 +80,25 @@ class User(AbstractUser):
 
     def __str__(self) -> str:
         return self.display_name or self.username
+
+
+class ApiToken(models.Model):
+    """A user's one API token, for playing through the API without a browser
+    session (#130). Only a SHA-256 of the key is stored, so a token cannot be
+    read back out of the database: it is shown once, at issue, and lost after
+    that. Plain SHA-256 rather than a slow password hash is deliberate — the key
+    is 32 random bytes, so there is nothing to brute-force, and a slow hash
+    would tax every request. See accounts/README.md, API tokens.
+    """
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="api_token")
+    key_hash = models.CharField(max_length=64, unique=True)
+    prefix = models.CharField(
+        max_length=8,
+        help_text="First characters of the key after cm_, so a token can be recognised but not rebuilt.",
+    )
+    # Real time, not game time: this is operator metadata, not game state.
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self) -> str:
+        return f"{self.user.email} cm_{self.prefix}…"
