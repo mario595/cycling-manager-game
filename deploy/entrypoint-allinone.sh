@@ -78,8 +78,13 @@ fi
 sentry_flag=()
 [ -n "${SENTRY_DSN:-}" ] && sentry_flag=(-sentry-dsn "$SENTRY_DSN")
 
+# Render the schedule: the tick's cadence comes from TICK_SCHEDULE (deploy/crontab).
+mkdir -p /run/cycling
+sed "s|@TICK_SCHEDULE@|${TICK_SCHEDULE:-0 * * * *}|" /app/deploy/crontab > /run/cycling/crontab
+log "tick schedule: ${TICK_SCHEDULE:-0 * * * *}${TICK_ADVANCE_BY:+, advancing the mock clock by $TICK_ADVANCE_BY each run}"
+
 log "starting the scheduler"
-as_app /usr/local/bin/supercronic -passthrough-logs "${sentry_flag[@]}" /app/deploy/crontab &
+as_app /usr/local/bin/supercronic -passthrough-logs "${sentry_flag[@]}" /run/cycling/crontab &
 cron_pid=$!
 
 log "starting gunicorn"

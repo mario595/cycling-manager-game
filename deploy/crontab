@@ -2,11 +2,14 @@
 # Times are UTC. supercronic never starts a job while its previous run is
 # still going, so two ticks cannot overlap.
 #
-# #129 (the accelerated staging clock) replaces the tick line with a 5-minute
-# `mock_clock advance --by 2h` + tick.
+# This file is a template. The entrypoint renders it at boot, replacing
+# @TICK_SCHEDULE@ with the TICK_SCHEDULE environment variable (default
+# "0 * * * *", hourly). The accelerated staging world (#129) sets a 5-minute
+# schedule and TICK_ADVANCE_BY (see tick.sh). Only the cadence comes from the
+# environment; which clock runs is still the settings module's choice.
 
-# The hourly tick: world/README.md, "Deployment requirement".
-0 * * * * /app/deploy/tick.sh
+# The tick: world/README.md, "Deployment requirement".
+@TICK_SCHEDULE@ /app/deploy/tick.sh
 
 # Nightly off-box backup of the database and the race logs.
 30 3 * * * cd /app && python -m deploy.backup
