@@ -40,7 +40,11 @@ WORLD_SEASONS = 4
 #: (and Django's own auth, sessions, admin) are deliberately absent: a
 #: wipe keeps every user (specs/archive/beta-world.md, In scope 9). A new game app
 #: is **not** wiped until it is added here — the safe default for an app
-#: that might hold something an operator wants to keep.
+#: that might hold something an operator wants to keep — **but only if it
+#: holds no database foreign-key constraint into a wiped table**, since
+#: TRUNCATE … CASCADE empties any such table whatever the app. `feedback`
+#: survives because `Report.team` is declared with `db_constraint=False`,
+#: and `wipe_world` clears that column before truncating (#131).
 WORLD_APPS = (
     "teams",
     "riders",
@@ -108,6 +112,7 @@ def wipe_world() -> dict[str, int]:
             "(it is never on in production)"
         )
 
+    from feedback.models import Report
     from racing.models import RaceLog
 
     for log in RaceLog.objects.exclude(file=""):
@@ -130,6 +135,11 @@ def wipe_world() -> dict[str, int]:
         # runs inside one that already wrote (a test, or build_world's own).
         # Firing them now is harmless: they are checks on rows about to go.
         cursor.execute("SET CONSTRAINTS ALL IMMEDIATE")
+        # Reports outlive the world (#131). Their team link carries no
+        # database constraint, so the CASCADE below leaves them alone; it is
+        # cleared here so RESTART IDENTITY cannot pair a report with an
+        # unrelated new team. team_name keeps the snapshot.
+        Report.objects.exclude(team=None).update(team=None)
         cursor.execute(f"TRUNCATE {tables} RESTART IDENTITY CASCADE")
     return counts
 

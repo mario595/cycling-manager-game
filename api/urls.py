@@ -33,6 +33,7 @@ from .views import (
     RaceLogView,
     RaceResultsView,
     ReleaseRiderView,
+    ReportsView,
     RiderListView,
     RiderProfileView,
     SignFreeAgentView,
@@ -154,6 +155,7 @@ urlpatterns = [
         name="place-bid",
     ),
     path("transfers/auctions/mine/", MyBidsView.as_view(), name="my-bids"),
+    path("feedback/reports/", ReportsView.as_view(), name="reports"),
     # OpenAPI schema and its docs page, for authenticated users only
     # (SPECTACULAR_SETTINGS["SERVE_PERMISSIONS"]).
     path("schema/", SpectacularAPIView.as_view(), name="schema"),

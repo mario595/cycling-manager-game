@@ -3,6 +3,7 @@ from __future__ import annotations
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
+from feedback.models import Report
 from riders.display import to_display_scale
 from riders.models import ENGINE_ATTRIBUTES, DevelopmentSquad
 from riders.services import is_due_to_retire
@@ -1021,3 +1022,31 @@ class SolvencySerializer(serializers.Serializer):
     deadline = serializers.DateTimeField(allow_null=True)
     roster_size = serializers.IntegerField()
     roster_floor = serializers.IntegerField()
+
+
+class ReportSerializer(serializers.Serializer):
+    """A beta tester's report, as its own reporter sees it (#131). Deliberately
+    no `triage_note`: that is staff-only — see feedback/README.md, *Triage*.
+    The team is the snapshot taken when it was sent, never the author's
+    current team."""
+
+    id = serializers.IntegerField()
+    category = serializers.CharField()
+    text = serializers.CharField()
+    location = serializers.CharField()
+    team_name = serializers.CharField()
+    season_number = serializers.IntegerField(allow_null=True)
+    week_number = serializers.IntegerField(allow_null=True)
+    game_time = serializers.DateTimeField()
+    created_at = serializers.DateTimeField()
+    status = serializers.CharField()
+    github_issue_url = serializers.CharField()
+
+
+class ReportCreateSerializer(serializers.Serializer):
+    """What a reporter sends. Everything else on a report is worked out by
+    the server. Over-long text is refused rather than cut."""
+
+    category = serializers.ChoiceField(choices=Report.Category.choices)
+    text = serializers.CharField(max_length=4000)
+    location = serializers.CharField(max_length=300, required=False, allow_blank=True, default="")
