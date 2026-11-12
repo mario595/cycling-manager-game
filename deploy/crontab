@@ -4,8 +4,8 @@
 #
 # This file is a template. The entrypoint renders it at boot, replacing
 # @TICK_SCHEDULE@ with the TICK_SCHEDULE environment variable (default
-# "0 * * * *", hourly). The accelerated staging world (#129) sets a 5-minute
-# schedule and TICK_ADVANCE_BY (see tick.sh). Only the cadence comes from the
+# "0 * * * *", hourly). The accelerated staging world (#129) sets
+# "*/5 * * * *"; its clock moves on its own. Only the cadence comes from the
 # environment; which clock runs is still the settings module's choice.
 
 # The tick: world/README.md, "Deployment requirement".

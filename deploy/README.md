@@ -49,12 +49,11 @@ Fly machine (shared-cpu-1x, 512 MB, region ams, never stopped)
 
 ### The tick's cadence
 
-Set by the environment, read by the entrypoint and `tick.sh`:
+Set by the environment and read by the entrypoint:
 
 | Variable | Default | Effect |
 |---|---|---|
-| `TICK_SCHEDULE` | `0 * * * *` | Cron expression for the tick. |
-| `TICK_ADVANCE_BY` | unset | If set (e.g. `2h`), each run first does `mock_clock advance --by` that. Only works under a MockClock settings module (#129). |
+| `TICK_SCHEDULE` | `0 * * * *` | Cron expression for the tick. The accelerated staging world (#129) uses `*/5 * * * *`. |
 
 supercronic never starts a tick while the previous one is still running.
 **Which clock runs is never an environment variable**: it is decided by
