@@ -47,12 +47,21 @@ class Report(models.Model):
 
     # The team the author managed when they sent it. SET_NULL keeps the
     # report if the team row is ever deleted; team_name keeps the name it had.
+    #
+    # db_constraint=False is load-bearing: world_setup.wipe_world truncates
+    # teams_team with CASCADE, and Postgres's TRUNCATE CASCADE empties every
+    # table holding a foreign-key *constraint* into a truncated one, rows or
+    # no rows. With the constraint, a staging reset would delete every
+    # report. wipe_world clears this column first, so a report never points
+    # at the unrelated team that later reuses the id (RESTART IDENTITY).
+    # See feedback/README.md, *Reports outlive a world reset*.
     team = models.ForeignKey(
         "teams.Team",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="+",
+        db_constraint=False,
     )
     team_name = models.CharField(max_length=100, blank=True, default="")
     # Empty off-season and before the first season is declared.

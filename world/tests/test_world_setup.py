@@ -157,3 +157,27 @@ def test_the_world_calendar_loads(db):
 
     season = Season.objects.get()
     assert Race.objects.filter(week__season=season).count() >= 20
+
+
+def test_reset_keeps_reports_detached_from_the_wiped_teams(db, calendar):
+    """A report outlives the world it was filed in (#131): the wipe's
+    TRUNCATE … CASCADE must not reach feedback_report, and the report must
+    not point at whichever new team reuses its old team's id."""
+    from feedback.models import Report
+
+    seed(calendar)
+    user = User.objects.create_user(email="agent@example.com", password="x")
+    team = Team.objects.first()
+    report = Report.objects.create(
+        author=user, category=Report.Category.BUG, text="Wages doubled.",
+        team=team, team_name=team.name, game_time=now(),
+        status=Report.Status.TRIAGED, triage_note="Seen it.",
+    )
+
+    seed(calendar, "--reset", "--seasons", "1")
+
+    report.refresh_from_db()
+    assert report.team is None
+    assert report.team_name == team.name
+    assert report.status == Report.Status.TRIAGED
+    assert report.triage_note == "Seen it."

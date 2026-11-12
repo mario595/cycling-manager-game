@@ -34,6 +34,18 @@ by someone else and renamed still shows on the report under the name it had
 *now*. `season_number` and `week_number` are `null` off-season and before
 the first season.
 
+## Reports outlive a world reset
+
+`seed_world --reset` (#139) truncates every world table with `CASCADE`, and
+Postgres's `TRUNCATE CASCADE` empties any table holding a foreign-key
+constraint into a truncated one. So `Report.team` is declared with
+`db_constraint=False`: Django still treats it as a foreign key (joins,
+admin, `SET_NULL` on an ordinary team delete, which Django enforces in
+Python anyway), but the database holds no constraint for the truncate to
+follow. `wipe_world` sets `team` to null on every report first, inside the
+same transaction, because `RESTART IDENTITY` hands the old ids to new teams.
+`team_name` keeps the snapshot. Do not put the constraint back.
+
 ## Two clocks
 
 `game_time` is `world.services.now()` — the game clock, which on staging's
@@ -65,7 +77,7 @@ move without a migration.
 
 ## Triage
 
-`/admin/feedback/report/`, for staff. Filter by status, category and team;
+`/admin/feedback/report/`, for staff. Filter by status, category, team and reporter;
 search text, author email and team name. What the reporter wrote and the
 captured context are read-only; only `status` (`new` → `triaged` or
 `dismissed`), `github_issue_url` and `triage_note` change. Two bulk actions
