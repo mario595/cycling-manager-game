@@ -132,6 +132,15 @@ step is skipped, not broken. Either re-run `seed_teams` once the season is
 declared, or move the mock clock to the season's start and `tick`: both
 generate every team's round (`economy/README.md`, *Sponsorship*).
 
+**Staging and production worlds are built with `seed_world`, not this
+recipe** (#139). It creates 16 claimable teams, 24 trainers and four seasons
+of the world calendar `seasons/world.json` in the right order, never creates
+the demo account, and `--reset` wipes the game world while keeping accounts,
+wherever `ALLOW_WORLD_RESET` is on (never in production). `add_season`
+appends the next season. `check_calendar` checks that the calendar gives
+every winning speciality its races. See `world/README.md`, *Building a
+world*.
+
 **If a feature needs more data to be visible, extend the relevant domain's seed
 script and note it here**, rather than inventing data by hand in a database.
 

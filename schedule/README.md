@@ -104,6 +104,21 @@ is six weeks *into season 2*, so with only season 1 declared the
 graduation, the decision window and the release to the free-agent pool can
 never all be seen. Load both when working on that.
 
+**`--number` and `--starts-at` override the file** (#139). They let one
+calendar file serve every season of a world: `seed_world` and `add_season`
+(`world/README.md`, *Building a world*) declare `seasons/world.json` again
+and again, each time with the next number and the previous season's
+`ends_at`:
+
+```bash
+manage.py load_season seasons/world.json --number 3 --starts-at 2027-08-16
+```
+
+Both are written into the parsed JSON *before* it is validated, so an
+override obeys exactly the rules the file's own value does: a Monday at
+00:00 UTC, and a positive number. A bare date means 00:00 UTC. There is no
+second validation path to drift from the first.
+
 A season that has already started (`starts_at <= now()`) can never be
 touched again — `load_season` refuses outright, with no `--replace`
 escape. A season declared but not yet started is still a draft: reloading

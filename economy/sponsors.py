@@ -62,7 +62,7 @@ PROFILES = (
 PROFILES_BY_KEY = {profile.key: profile for profile in PROFILES}
 
 
-def offer_terms(profile: SponsorProfile, fanbase: int, *, fanbase_per_credit: int) -> dict:
+def offer_terms(profile: SponsorProfile, fanbase: int, *, credits_per_thousand_fans: int) -> dict:
     """The four money figures for one offer at a given fanbase.
 
     floor_amount and ceiling_amount are derived from weekly_base ONCE, here,
@@ -70,7 +70,7 @@ def offer_terms(profile: SponsorProfile, fanbase: int, *, fanbase_per_credit: in
     never re-derives them, so a later constant change cannot silently
     reprice a contract already signed against a displayed promise.
     """
-    weekly_base = round((fanbase // fanbase_per_credit) * profile.base_multiplier)
+    weekly_base = round((fanbase * credits_per_thousand_fans // 1_000) * profile.base_multiplier)
     return {
         "weekly_base": weekly_base,
         "floor_amount": round(weekly_base * profile.floor_fraction),

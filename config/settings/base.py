@@ -190,3 +190,8 @@ REST_FRAMEWORK = {
 
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Whether `seed_world --reset` may wipe the game world (world/world_setup.py,
+# wipe_world). Off here and so in production, which never turns it on; dev.py
+# turns it on, and the staging settings (#129) must turn it on explicitly.
+ALLOW_WORLD_RESET = False

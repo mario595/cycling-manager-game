@@ -565,36 +565,16 @@ unmanaged team's ledger, before any per-auction guard exists — is caught
 around the whole AI step, so the tick still settles its week, charges wages
 and writes its `TickRun`. Losing a tick to the garnish would be a bad trade.
 
-**Balances, measured.** Every team runs a deficit at today's prices: wages
-outrun prize money and merchandise for managed and unmanaged teams alike.
-#45 narrows the gap for unmanaged teams; it does not close it. Two seeded
-seasons (`seed_teams`, `seed_trainers`, season 1 plus a copy shifted into
-season 2, ticked daily on the mock clock), average per unmanaged team, 15
-teams:
-
-| Ledger kind | Before #45, S1 | Before, S2 | After #45, S1 | After, S2 |
-|---|---|---|---|---|
-| Prize money + GC prizes | 95,967 | 97,500 | 101,400 | 101,134 |
-| Merchandise | 4,599 | 4,423 | 4,627 | 4,565 |
-| Sponsorship | — | — | 51,000 | 50,728 |
-| Trainer hire fee | — | — | −30,040 | — |
-| Trainer salary | — | — | −27,537 | −30,040 |
-| Wages | −157,400 | −164,920 | −168,640 | −166,160 |
-| **Net** | **−56,835** | **−62,997** | **−69,189** | **−39,774** |
-
-Season 2 is the steady state, and its loss falls to **63%** of the
-pre-feature one, short of the spec's "about half". The sponsor came in as
-projected (about $4,200 a week); the trainer did not. The plan assumed the
-cheapest trainer at about $1,500 a week, but fifteen teams each taking the
-cheapest one *left* pay about $2,500 on average. Season 1 is worse than
-before because it carries the one-off hire fee. Better-trained riders add
-only a few thousand in prizes within two seasons. The product owner accepted
-the shortfall (2026-11-10) rather than capping the AI's trainer or skipping
-it, both of which would buy money by making AI teams weaker. At about $40,000
-a season from a starting $500,000, AI buying in the market has roughly a
-decade of runway, not three seasons. Closing the gap is the economy-wide
-wage-to-income rebalance, not a fatter cushion here: a cushion large enough
-to matter would also let AI teams bid away the human market.
+**Balances, measured.** Since #125 the average team, unmanaged teams
+included, ends a settled season slightly ahead (about +$11,000 in season 2 of
+a seeded run) instead of about $68,000 behind. Unmanaged teams always sign the
+steady sponsor, so they sit at or a little below the average, and AI buying
+power no longer drains over the long run. The bottom quarter still loses
+money slowly. The targets, the before/after table and the
+`scripts/measure_economy.py` command that reproduces them are in
+`economy/README.md`, *Balance targets*. The #45 shortfall recorded there (the
+cheapest trainer *left* averages about $2,500–3,100 a week, not $1,500) still
+holds. It is now counted in the break-even rather than fighting it.
 
 ## The AI management (#45)
 
@@ -661,6 +641,173 @@ manage.py tick                              # then process what's now due
 
 Every `mock_clock` subcommand refuses to run unless `GAME_CLOCK_CLASS` is
 `MockClock`.
+
+## Building a world (#139)
+
+A beta or launch world is built by **one command**, not the five-step dev
+recipe in `AGENTS.md`:
+
+```bash
+manage.py seed_world --starts-at 2027-03-01            # production: real clock, opens on that Monday
+manage.py seed_world --set-clock                       # staging: MockClock, season 1 opens now
+manage.py seed_world --set-clock --reset               # staging: wipe and rebuild between beta runs
+manage.py add_season                                   # append the next season to a running world
+```
+
+`seed_world` (`world/world_setup.py`, `build_world`) creates **16 unmanaged
+teams, all claimable**, a **trainer pool of 24**, and **four back-to-back
+seasons** of the world calendar, `seasons/world.json`. Those numbers are
+settled in `specs/archive/beta-world.md`. The pool is twice
+`staff.generation.INITIAL_POOL_SIZE` because sixteen unmanaged teams each
+hire the cheapest trainer they can afford (*The AI management*), and a pool
+of twelve runs dry before a human arrives. (With `--set-clock` the pool
+then reads 32, because opening season 1 adds the usual season-boundary
+top-up, `staff.services.top_up_pool`.) Every number has a flag
+(`--teams`, `--trainers`, `--seasons`), and `--calendar` points at a
+different season file.
+
+- **It composes the domains' own seeds**, `seed_teams`, `seed_trainers` and
+  `load_season`, through `call_command`, so a change to how a team is seeded
+  reaches a built world with no change here.
+- **The order is teams, trainers, then seasons.** That is the ordering trap
+  in `AGENTS.md`: no team gets a sponsor offer round when it is created, so
+  the round comes from the tick that opens season 1, the same way it does
+  for every later season.
+- **`--starts-at`** is season 1's opening Monday (00:00 UTC). It defaults to
+  the next Monday after the current game time. Each later season starts at
+  the previous one's `ends_at`, using `load_season`'s `--number` and
+  `--starts-at` overrides (`schedule/README.md`, *Declaring a season*). One
+  file serves every season of every world.
+- **`--set-clock` is for the accelerated staging world only** and refuses on
+  `RealClock`. It moves the mock clock to the start *before* anything is
+  seeded, so the opening ledger entries are stamped in game time. It then
+  ticks once, so season 1 is open and every team has its sponsor offers
+  before the first manager logs in. A production world built without it
+  simply opens on its start date. During the lead time its teams are
+  claimable, and sponsor offers appear when the season opens.
+- **It never creates a user.** The demo account (`seed_user`) is for
+  development only and must not exist in production.
+- **It refuses to build over an existing world** (any team, trainer or
+  season) unless `--reset` is passed. All the seeding runs in one
+  transaction, so a broken calendar file leaves nothing half-built.
+- **`add_season`** declares the calendar as the next season number, starting
+  where the last declared season ends. Keeping a long-running world supplied
+  with seasons (calling it from cron, say) belongs to the deployment
+  (#129, #136).
+
+### The wipe
+
+`seed_world --reset` calls `wipe_world()` first. It removes **the whole game
+world and keeps every account**: teams, riders, trainers, seasons, races,
+results and race logs, the ledger and fanbase, the market and youth squads.
+A manager whose team disappears is left without a team, like a newly
+registered player, and claims a new one.
+
+- **It is gated on `settings.ALLOW_WORLD_RESET`.** That is off in `base.py`
+  and therefore in `prod.py`, and on in `dev.py`. **The staging settings
+  (#129) must turn it on explicitly.** It is deliberately not inferred from
+  `DEBUG` or the settings module's name, because staging inherits prod.
+- **It is one `TRUNCATE … RESTART IDENTITY CASCADE`** over every model of the
+  apps in `WORLD_APPS`, preceded by `SET CONSTRAINTS ALL IMMEDIATE`. Postgres
+  refuses to truncate a table with deferred foreign-key checks still
+  pending, and Django's FKs are deferred. An ORM delete would have to
+  unpick the PROTECT foreign keys (race → week, stage → tour) in the right
+  order, and that order would go stale with every new model.
+- **`WORLD_APPS` is an explicit list.** `accounts` and Django's own apps are
+  not in it, and `world.GameClock` is kept. **A new app is not wiped until
+  it is added to the list.** That is the safe default for something an
+  operator might want to keep (problem reports, say, #131).
+- Race log files are deleted from storage before the truncate, so a reset
+  does not leave them orphaned on disk.
+
+### The world calendar
+
+`seasons/world.json` is the one calendar every season repeats, the same way
+the real classics come back every year. It has 11 one-day races, the
+three-day *Vuelta a Castilla y León* (week 4, Wednesday to Friday) and the
+seven-day *Vuelta a Cataluña* (week 7, Monday to Sunday), for **21
+race days**. That is the density the example seasons had, and the economy
+was measured against it. The two `.example` files stay as they are, for
+development.
+
+**The names are Spanish**, modelled on real Spanish races (decided on
+review of #139, since the beta's human testers play in Spanish, #137). Every race,
+stage and marker uses Spanish place names: *Meta volante de …* for an
+intermediate sprint, *Alto de …* or *Puerto de …* for a climb, and *Meta en …*
+for the line. They are proper nouns and are not translated. Each course
+still fits its place roughly, for example a flat coastal sprint at Almería,
+a summit finish at Urkiola and the Lagos de Covadonga at the Picos de Europa.
+
+Each race is built from one of a few terrain shapes, each aimed at one
+winning speciality. **Sprinters** get flat bunch finishes. **Puncheurs** get 3 km at 4%
+topping out 500 m from the line, which drops the sprinters but is too short
+for a climber to get clear. **Rouleurs** get a 6 km rise at 2.5% topping out
+1 km from the line, or a 20 km false-flat drag. A short 5% ramp right at the
+line was tried for puncheurs, and so were strong wind and long 1% drags for
+rouleurs. Each one went to climbers or sprinters too often. **Climbers** get summit finishes, two-climb
+mountain days and steep hilly classics. The climb shapes are the engine's
+audited `summit_finish`, `mountain_stage` and `lombardia` profiles
+(`race_engine/README.md`, *Bundled configs*), so no course goes beyond
+what the engine was tuned for. Every course carries markers: weighted
+sprints, categorised climbs, and a finish-line marker that is a climb on a
+puncheur or climber day.
+
+**Balance check.** `check_calendar` (`racing/README.md`, *The calendar
+check*) simulates every race day against freshly generated fields:
+
+```bash
+manage.py check_calendar seasons/world.json --seeds 1,2,3 --jobs 4
+```
+
+The rule (`specs/archive/beta-world.md`, In scope 3) is that climbers,
+sprinters and puncheurs each win at least two race days a season, rouleurs
+at least one (below), and no speciality wins more than 40%. The last run
+passes (`balanced`):
+
+```
+seed 1-5, 21 race days a season           winner's speciality
+  Clásica de Almería                      sprinter 4, puncheur 1
+  Gran Premio de Llodio                   puncheur 4, rouleur 1
+  Vuelta a La Rioja                       sprinter 3, puncheur 1, rouleur 1
+  Castilla y León 1: Tierra de Campos     sprinter 4, puncheur 1
+  Castilla y León 2: Murallas de Ávila    puncheur 3, sprinter 1, rouleur 1
+  Castilla y León 3: Laguna Negra         climber 5
+  Clásica de las Marismas                 sprinter 4, rouleur 1
+  Clásica de Jaén                         climber 4, puncheur 1
+  Clásica de Ordizia                      rouleur 2, puncheur 2, climber 1
+  Cataluña 1: Costa Brava                 sprinter 5
+  Cataluña 2: Llanos de Urgell            sprinter 3, rouleur 1, puncheur 1
+  Cataluña 3: Muro de Manresa             puncheur 3, climber 1, rouleur 1
+  Cataluña 4: Puertos del Pirineo         climber 3, domestique 2
+  Cataluña 5: Delta del Ebro              sprinter 5
+  Cataluña 6: La Molina                   climber 5
+  Cataluña 7: Montjuïc                    puncheur 2, sprinter 2, climber 1
+  Trofeo de las Hoces de Cuenca           sprinter 2, puncheur 2, climber 1
+  Subida a Urkiola                        climber 5
+  GP de los Picos de Europa               climber 3, domestique 2
+  Clásica del Montseny                    puncheur 3, sprinter 2
+  GP de la Ribera del Ebro                sprinter 5
+  GC, both tours                          climber 9, domestique 1
+
+  sprinter   8.0 a season  38%
+  climber    5.8 a season  28%
+  puncheur   4.8 a season  23%
+  rouleur    1.6 a season   8%
+  domestique 0.8 a season   4%
+```
+
+**Rouleurs are the weak spot, and that is the engine, not the calendar.** A
+rouleur's edge is flat power, and today's engine has no time trial, no
+echelons and no breakaways, which are the three places that edge decides a
+race. Everywhere else the bunch holds and a sprinter wins the final. So the
+rouleur minimum is **one win a season** (`MIN_WINS_BY_SPECIALITY`) until
+time trials (#89, #90) give them their own day. Decided on #139.
+
+Sprinters sit close to the 40% ceiling. Puncheur days are the noisiest,
+because on a 4% ramp a puncheur and a climber are close and the field
+decides it. The check uses unmanaged-team squads (`course_pick_order`). A
+human who brings climbers to a puncheur day can sometimes steal it, which
+is a choice worth having.
 
 ## What is deliberately not built
 

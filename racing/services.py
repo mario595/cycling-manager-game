@@ -195,8 +195,16 @@ def course_pick_squad(team: Team, course: list[dict]) -> tuple[list[int], int]:
             f"{team} has only {len(riders)} riders; a squad needs {SQUAD_SIZE}"
         )
 
+    picked = course_pick_order(riders, course)[:SQUAD_SIZE]
+    return [r.pk for r in picked], picked[0].pk
+
+
+def course_pick_order(riders: list[Rider], course: list[dict]) -> list[Rider]:
+    """`riders` best-first for this course: course_pick_squad's ranking,
+    over a plain list so the calendar check (racing/calendar_check.py) can
+    rank an unsaved, generated field the same way the game ranks a roster."""
     attribute = course_training_attribute(course)
-    ordered = sorted(
+    return sorted(
         riders,
         key=lambda r: (
             -(
@@ -207,8 +215,6 @@ def course_pick_squad(team: Team, course: list[dict]) -> tuple[list[int], int]:
             r.pk,
         ),
     )
-    picked = ordered[:SQUAD_SIZE]
-    return [r.pk for r in picked], picked[0].pk
 
 
 def previous_squad(team: Team, before: Race) -> tuple[list[int], int] | None:
