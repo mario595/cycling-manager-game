@@ -124,10 +124,23 @@ def test_advance_to_next_due_looks_after_the_flowed_time(accelerated, real):
 def test_a_never_anchored_row_starts_flowing_from_current(db, real):
     GameClock.objects.create(pk=1, current=GAME_START, anchored_at=None)
     with override_settings(GAME_CLOCK_SPEED=24):
-        assert AcceleratedClock().now() == GAME_START
+        clock = AcceleratedClock()
+        assert clock.now() == GAME_START
+        real.pass_(timedelta(hours=1))
+        assert clock.now() == GAME_START + timedelta(days=1)
 
 
-@pytest.mark.parametrize("speed", [0, -3, 1.5, "24"])
+def test_the_migration_anchors_a_clock_row_that_predates_it(db, real):
+    from importlib import import_module
+
+    from django.apps import apps
+
+    GameClock.objects.create(pk=1, current=GAME_START, anchored_at=None)
+    import_module("world.migrations.0023_accelerated_clock").anchor_existing_clock(apps, None)
+    assert GameClock.load().anchored_at == REAL_START
+
+
+@pytest.mark.parametrize("speed", [0, -3, 1.5, "24", True])
 def test_a_bad_speed_is_refused(accelerated, speed):
     with override_settings(GAME_CLOCK_SPEED=speed):
         with pytest.raises(ImproperlyConfigured):

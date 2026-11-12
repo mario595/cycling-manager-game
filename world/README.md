@@ -689,7 +689,9 @@ real hours, and a race roughly every seven. The spec is
   no new races, wages, auction deadlines or inactivity come due. **Resume**
   carries on from the frozen moment, so no game time is skipped. Both are
   idempotent. `set` while frozen moves the frozen moment, and the clock stays
-  frozen. The flag is on the row because gunicorn workers and the cron tick
+  frozen. **The flag survives `seed_world --reset`**, since the clock row is
+  kept, so a world rebuilt while frozen stays frozen until `mock_clock
+  resume`. The flag is on the row because gunicorn workers and the cron tick
   are separate processes.
 - **Downtime is caught up, not skipped.** If the machine stops without a
   freeze, game time keeps running, and at 24× one real day is about 3.5 game

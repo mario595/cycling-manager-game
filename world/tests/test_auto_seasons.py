@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone as dt_timezone
 import pytest
 from django.test import override_settings
 
+from racing.models import Race
 from schedule.models import Season, SeasonTransition
 from world.clocks import MockClock
 from world.services import tick
@@ -102,6 +103,10 @@ def test_a_world_with_no_seasons_is_left_alone(db, calendar):
 @override_settings(AUTO_DECLARE_SEASONS=True)
 def test_a_broken_calendar_is_recorded_and_the_tick_carries_on(db, calendar, monkeypatch):
     world(calendar, seasons=1)
+    race = Race.objects.create(
+        name="Still Raced", course=[{"length": 500.0, "gradient": 0.0}],
+        starts_at=MockClock().now(), status=Race.Status.SCHEDULED,
+    )
     monkeypatch.setattr("world.world_setup.WORLD_CALENDAR", calendar.parent / "missing.json")
 
     run = tick()
@@ -110,3 +115,6 @@ def test_a_broken_calendar_is_recorded_and_the_tick_carries_on(db, calendar, mon
     assert "automatic season" in run.error
     assert run.finished_at is not None
     assert numbers() == [1]
+    race.refresh_from_db()
+    assert race.status == Race.Status.FINISHED
+    assert run.races_finished == 1

@@ -113,7 +113,7 @@ class AcceleratedClock(MockClock):
     @property
     def speed(self) -> int:
         speed = getattr(settings, "GAME_CLOCK_SPEED", 1)
-        if not isinstance(speed, int) or speed < 1:
+        if type(speed) is not int or speed < 1:  # not isinstance: True is an int
             raise ImproperlyConfigured(
                 f"GAME_CLOCK_SPEED must be a whole number of at least 1, got {speed!r}"
             )
@@ -122,6 +122,18 @@ class AcceleratedClock(MockClock):
     @property
     def frozen(self) -> bool:
         return GameClock.load().frozen
+
+    def now(self) -> datetime:
+        row = GameClock.load()
+        if row.anchored_at is None:
+            # Migration 0023 backfills the anchor, so this is only a row
+            # nulled by hand. Anchor it here rather than let it stand still
+            # while `status` says it is not frozen.
+            with transaction.atomic():
+                row = self._locked()
+                if row.anchored_at is None:
+                    self._write(row, row.current, timezone.now())
+        return self._effective(row, timezone.now())
 
     def _effective(self, row: GameClock, real_now: datetime) -> datetime:
         if row.frozen or row.anchored_at is None:
