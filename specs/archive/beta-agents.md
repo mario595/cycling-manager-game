@@ -1,6 +1,6 @@
 # LLM beta testers
 
-**Status:** approved
+**Status:** implemented
 **Domain(s):** a new top-level `beta_agents/` folder (not a Django app), with a deploy note in `deploy/`
 **Issue:** #132
 **One-liner:** five AI managers play the staging world on a schedule, each with its own team and play style, and report anything in the game that looks wrong.

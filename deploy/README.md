@@ -218,6 +218,13 @@ clock; it moves by itself. The tick declares the next season by itself too,
 so there is no `add_season` cron. The LLM managers' briefing on what the
 speed means is `world/STAGING_BRIEFING.md`.
 
+- **The beta testers** (#132) play from GitHub Actions, not from this
+  machine: five LLM managers on their own accounts and API keys, run by
+  `.github/workflows/beta-agents.yml`. Setting them up, pausing them and
+  choosing their model are in `beta_agents/README.md`. Their reports land in
+  Django admin like anyone else's. **Before promoting to production (#133),
+  pause them** (`BETA_AGENTS_ENABLED`), or they will play on the real clock
+  at staging's cadence.
 - **The address is not advertised.** Registration is open until #134
   (invite-only) lands. Only the beta managers are meant to be there.
 - **Wiping and rebuilding between beta runs** keeps the accounts and
