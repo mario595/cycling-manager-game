@@ -49,7 +49,7 @@ Fly machine (shared-cpu-1x, 512 MB, region ams, never stopped)
   swap file (`fly.toml`) is the cushion.
 - **Deploying restarts the database with the app.** Expect about 20–30 s of
   downtime per deploy. On a stop, gunicorn and the scheduler get up to 90 s
-  to finish, enough for a tick that is still running, and then Postgres is
+  to finish (the tick ignores the SIGTERM a stop sends it, `deploy/tick.sh`), enough for a tick that is still running, and then Postgres is
   stopped cleanly. `fly.toml`'s `kill_timeout` is 120 s, so Fly never
   SIGKILLs the database. The tick itself is interruption-safe
   (`world/README.md`), so a run that is cut short just runs again.
@@ -94,6 +94,12 @@ The image sets `POSTGRES_HOST=127.0.0.1`, `PGDATA=/data/postgres` and
 
 Done once, by the operator, on a laptop with
 [`flyctl`](https://fly.io/docs/flyctl/install/) signed in (`fly auth login`).
+
+**Add a payment method to the Fly organization first.** A trial
+organization stops every machine 5 minutes after it starts (`flyd`,
+`requested_stop=true` in `fly machine status`), and the proxy only starts it
+again on the next request, so the tick barely runs. That cost the first
+deploy a day (#136). The bill is under Fly's $5 waiver either way.
 In this order. Each external service is optional: the app runs before its
 key is set, and the service switches on when the key arrives.
 
@@ -152,9 +158,11 @@ redundancy: that is the design, and the nightly backup is the safety net.
 backup by hand.
 
 **6. Tick alerts.** On healthchecks.io, create a check named *velodra tick*
-with **period 10 minutes** and **grace 20 minutes**. That emails after about
-30 minutes without a successful tick: half a game day on the accelerated
-clock. (Production goes back to 1 hour and 1 hour, #133.) Then:
+with **period 10 minutes** and **grace 50 minutes**. That emails after about
+an hour without a successful tick: one game day on the accelerated clock.
+Not tighter: the ping goes out only when a tick ends, and a race tick held
+at the CPU baseline takes 15–20 minutes, two races back to back on a stage
+day twice that (*What the machine can do: CPU*). (Production goes back to 1 hour and 1 hour, #133.) Then:
 
 ```bash
 fly secrets set --app velodra HEALTHCHECKS_TICK_URL=https://hc-ping.com/<uuid>
@@ -208,6 +216,30 @@ the old code can survive, since they would run while it still serves. That's
 about $3–5 a month more. It is worth doing when deploy downtime starts to
 matter, probably before the human beta.
 
+## What the machine can do: CPU
+
+A `shared-cpu-1x` is guaranteed **6.25% of a core**. It bursts to a full core
+on credit it saves while below that, and once the credit is spent the host
+holds it at the baseline (inside the VM this shows as ~90% steal in `top`;
+in Fly's Grafana, *CPU utilization* sits on the 6.25% line). At full speed a
+race simulates in under a minute; held at the baseline it takes **15–20
+minutes**. Measured on 2026-11-13, when restarts and seeding had spent the
+credit.
+
+- **Normal play fits the baseline.** The world calendar has ~20 races a
+  season, about one every 4 game days. On the accelerated clock that is
+  every ~4 real hours, so even a throttled race leaves the machine idle,
+  earning credit, most of the time. A tick with nothing due takes seconds.
+- **A catch-up is slow.** After an outage, the first tick simulates every
+  race that fell due, one after another, at the baseline. supercronic skips
+  the ticks that come due meanwhile (`not starting: job is still running`),
+  and healthchecks.io gets no ping until it ends. That's expected, not a
+  hang: check the log for the tick's `starting` line and the CPU graph.
+- **If it stops fitting** (agents notice slow pages while a race runs, or the
+  graph sits on the baseline between races), move to `shared-cpu-2x`: twice
+  the baseline and the burst, about $2 a month more. Change `[[vm]]` in
+  `fly.toml`, not `fly scale`, or the next deploy undoes it.
+
 ## The staging world
 
 For milestone 1 the app runs `config.settings.staging` (`fly.toml`): the
@@ -245,8 +277,8 @@ speed means is `world/STAGING_BRIEFING.md`.
 
 - **The tick: healthchecks.io.**
   1. Create a check. On the staging world, use **period 10 minutes** and
-     **grace 20 minutes**, which emails after about 30 minutes without a
-     tick. On the hourly production tick (#133), use **period 1 hour** and
+     **grace 50 minutes**, which emails after about an hour without a
+     successful tick, longer than a throttled race tick takes. On the hourly production tick (#133), use **period 1 hour** and
      **grace 1 hour**, which emails after about two missed ticks.
   2. Set its ping URL as `HEALTHCHECKS_TICK_URL`.
 
