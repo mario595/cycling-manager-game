@@ -158,9 +158,11 @@ redundancy: that is the design, and the nightly backup is the safety net.
 backup by hand.
 
 **6. Tick alerts.** On healthchecks.io, create a check named *velodra tick*
-with **period 10 minutes** and **grace 20 minutes**. That emails after about
-30 minutes without a successful tick: half a game day on the accelerated
-clock. (Production goes back to 1 hour and 1 hour, #133.) Then:
+with **period 10 minutes** and **grace 50 minutes**. That emails after about
+an hour without a successful tick: one game day on the accelerated clock.
+Not tighter: the ping goes out only when a tick ends, and a race tick held
+at the CPU baseline takes 15–20 minutes, two races back to back on a stage
+day twice that (*What the machine can do: CPU*). (Production goes back to 1 hour and 1 hour, #133.) Then:
 
 ```bash
 fly secrets set --app velodra HEALTHCHECKS_TICK_URL=https://hc-ping.com/<uuid>
@@ -275,8 +277,8 @@ speed means is `world/STAGING_BRIEFING.md`.
 
 - **The tick: healthchecks.io.**
   1. Create a check. On the staging world, use **period 10 minutes** and
-     **grace 20 minutes**, which emails after about 30 minutes without a
-     tick. On the hourly production tick (#133), use **period 1 hour** and
+     **grace 50 minutes**, which emails after about an hour without a
+     successful tick, longer than a throttled race tick takes. On the hourly production tick (#133), use **period 1 hour** and
      **grace 1 hour**, which emails after about two missed ticks.
   2. Set its ping URL as `HEALTHCHECKS_TICK_URL`.
 
