@@ -15,7 +15,7 @@ passed, and the world responded.
 
 The single source of truth for what time it is in the game, and the machinery
 that finds and processes due work: `world/clocks.py` (`Clock`, `RealClock`,
-`MockClock`), `GameClock`, `TickRun`, and the `tick` and `mock_clock`
+`MockClock` and staging's `AcceleratedClock`), `GameClock`, `TickRun`, and the `tick` and `mock_clock`
 management commands. No calendar. It also owns **the AI market**
 (`world/ai_market.py`): what an unmanaged team bids on and what it lists
 when nobody is managing it — see *The AI market (#30)* below — and **the AI
@@ -46,6 +46,12 @@ when a check actually ran on the host — real time, regardless of which clock
 the game itself is running on — and is not a stand-in for "is X due?"
 anywhere.
 
+The second is `GameClock.anchored_at`, written with real time by every
+`MockClock` / `AcceleratedClock` write (`world/clocks.py`). It is the real
+moment the stored game time was true, which is what lets the accelerated
+clock count game time forward (*The accelerated clock (#129)*). It answers
+"when was the clock last moved", never "is X due".
+
 There is no automated enforcement of this rule yet. It is a project
 convention, not a constraint the code checks — worth revisiting once there
 is enough timed behaviour elsewhere in the game for the rule to be worth
@@ -60,10 +66,11 @@ cached by `world.services.get_clock()`.
 |---|---|---|
 | `config/settings/base.py` | `world.clocks.RealClock` | The default. No state, no database — `now()` returns `timezone.now()` directly. |
 | `config/settings/dev.py` | `world.clocks.RealClock` | Same as prod by default, so a normal dev session just shows the actual time with no manual resyncing. **Read from the `GAME_CLOCK_CLASS` environment variable** — set it to `world.clocks.MockClock` for a session where you deliberately want to fast-forward a season, e.g. `GAME_CLOCK_CLASS=world.clocks.MockClock manage.py runserver`. |
+| `config/settings/staging.py` | `world.clocks.AcceleratedClock`, `GAME_CLOCK_SPEED = 24` | **The staging world (#129).** Inherits `prod.py` and changes only the clock and `ALLOW_WORLD_RESET`. Set in the module, never read from the environment, for the same reason as `prod.py`. See *The accelerated clock (#129)*. |
 | `config/settings/prod.py` | *(inherits `RealClock` from `base.py`)* | **Deliberately not read from the environment**, unlike `dev.py`. Every other production setting in `prod.py` is env-driven, but the clock is the one exception: a non-real clock must never be a live-game possibility — not disabled, not gated behind a permission, simply not a code path production runs. An environment variable is a code path in `dev.py`, by design; it is not one in `prod.py`, also by design. |
 
 `manage.py mock_clock` refuses to run — raising `CommandError` — unless the
-active clock is `MockClock`. This is the runtime enforcement that a mistaken
+active clock is `MockClock` (which includes its `AcceleratedClock` subclass). This is the runtime enforcement that a mistaken
 invocation cannot move time in an environment running `RealClock`.
 
 **Tests always run against `MockClock`**, regardless of what `GAME_CLOCK_CLASS`
@@ -287,7 +294,10 @@ reads `now()` once, then finds and processes whatever is due, in six steps:
    querying rather than a stored counter, so a gap between seasons
    contributes no weeks for free (weeks only exist inside a declared
    season). `last_seen_at` is a **game**-time field on `accounts.User`,
-   stamped at login by `api.services.touch_last_seen` — deliberately not
+   stamped at login, and on API-token requests at most once a game hour
+   (#130, `api/README.md`, *Authentication*), so a token-only agent is not
+   exempt as a never-logged-in account is, by `api.services.touch_last_seen`
+   — deliberately not
    `django.contrib.auth`'s `last_login`, which is real time and would
    compare incorrectly against game time under `MockClock` (see
    `accounts/README.md`, *Last seen is game time*). A manager who has
@@ -565,36 +575,16 @@ unmanaged team's ledger, before any per-auction guard exists — is caught
 around the whole AI step, so the tick still settles its week, charges wages
 and writes its `TickRun`. Losing a tick to the garnish would be a bad trade.
 
-**Balances, measured.** Every team runs a deficit at today's prices: wages
-outrun prize money and merchandise for managed and unmanaged teams alike.
-#45 narrows the gap for unmanaged teams; it does not close it. Two seeded
-seasons (`seed_teams`, `seed_trainers`, season 1 plus a copy shifted into
-season 2, ticked daily on the mock clock), average per unmanaged team, 15
-teams:
-
-| Ledger kind | Before #45, S1 | Before, S2 | After #45, S1 | After, S2 |
-|---|---|---|---|---|
-| Prize money + GC prizes | 95,967 | 97,500 | 101,400 | 101,134 |
-| Merchandise | 4,599 | 4,423 | 4,627 | 4,565 |
-| Sponsorship | — | — | 51,000 | 50,728 |
-| Trainer hire fee | — | — | −30,040 | — |
-| Trainer salary | — | — | −27,537 | −30,040 |
-| Wages | −157,400 | −164,920 | −168,640 | −166,160 |
-| **Net** | **−56,835** | **−62,997** | **−69,189** | **−39,774** |
-
-Season 2 is the steady state, and its loss falls to **63%** of the
-pre-feature one, short of the spec's "about half". The sponsor came in as
-projected (about $4,200 a week); the trainer did not. The plan assumed the
-cheapest trainer at about $1,500 a week, but fifteen teams each taking the
-cheapest one *left* pay about $2,500 on average. Season 1 is worse than
-before because it carries the one-off hire fee. Better-trained riders add
-only a few thousand in prizes within two seasons. The product owner accepted
-the shortfall (2026-11-10) rather than capping the AI's trainer or skipping
-it, both of which would buy money by making AI teams weaker. At about $40,000
-a season from a starting $500,000, AI buying in the market has roughly a
-decade of runway, not three seasons. Closing the gap is the economy-wide
-wage-to-income rebalance, not a fatter cushion here: a cushion large enough
-to matter would also let AI teams bid away the human market.
+**Balances, measured.** Since #125 the average team, unmanaged teams
+included, ends a settled season slightly ahead (about +$11,000 in season 2 of
+a seeded run) instead of about $68,000 behind. Unmanaged teams always sign the
+steady sponsor, so they sit at or a little below the average, and AI buying
+power no longer drains over the long run. The bottom quarter still loses
+money slowly. The targets, the before/after table and the
+`scripts/measure_economy.py` command that reproduces them are in
+`economy/README.md`, *Balance targets*. The #45 shortfall recorded there (the
+cheapest trainer *left* averages about $2,500–3,100 a week, not $1,500) still
+holds. It is now counted in the break-even rather than fighting it.
 
 ## The AI management (#45)
 
@@ -660,15 +650,276 @@ manage.py tick                              # then process what's now due
 ```
 
 Every `mock_clock` subcommand refuses to run unless `GAME_CLOCK_CLASS` is
-`MockClock`.
+`MockClock` or `AcceleratedClock`. Staging has three more:
+
+```bash
+manage.py mock_clock status    # game time, speed, frozen or not (any mock clock)
+manage.py mock_clock freeze    # accelerated clock only: stop game time
+manage.py mock_clock resume    # accelerated clock only: carry on from the frozen moment
+```
+
+Staging's cron runs only `manage.py tick`, every 5 minutes
+(`TICK_SCHEDULE="*/5 * * * *"` in the image, #128). **`TICK_ADVANCE_BY` stays
+unset there**: the accelerated clock moves by itself, so advancing it as well
+would skip game time.
+
+## The accelerated clock (#129)
+
+`world.clocks.AcceleratedClock` is the staging world's clock: the real game,
+with time flowing at `settings.GAME_CLOCK_SPEED` (24 on staging) times real
+time. One game day passes per real hour, a twelve-week season in about 84
+real hours, and a race roughly every seven. The spec is
+`specs/archive/staging-clock.md`.
+
+- **It is a `MockClock` subclass**, so `mock_clock`, `seed_world --set-clock`
+  and every `isinstance(clock, MockClock)` guard work on staging unchanged.
+  `set` and `advance` still work, and time then flows on from the new value.
+- **The row is an anchor.** `GameClock.current` is the game time at the real
+  moment `GameClock.anchored_at`, and `now()` is
+  `current + (real now − anchored_at) × speed`. Every write first works out
+  the *effective* time under a row lock, then re-anchors. **Never
+  `current += delta` on this clock**, because that drops the time that has
+  flowed since the last write. `MockClock` stamps the anchor too and ignores
+  it, so a world switched between the two clocks flows on from its last
+  write.
+- **Time moves between any two reads**, as on production. Nothing can depend
+  on it standing still, and a tick still reads `now()` once and works with
+  that.
+- **Freeze** (`GameClock.frozen`) stops game time at the moment of freezing:
+  no new races, wages, auction deadlines or inactivity come due. **Resume**
+  carries on from the frozen moment, so no game time is skipped. Both are
+  idempotent. `set` while frozen moves the frozen moment, and the clock stays
+  frozen. **The flag survives `seed_world --reset`**, since the clock row is
+  kept, so a world rebuilt while frozen stays frozen until `mock_clock
+  resume`. The flag is on the row because gunicorn workers and the cron tick
+  are separate processes.
+- **Downtime is caught up, not skipped.** If the machine stops without a
+  freeze, game time keeps running, and at 24× one real day is about 3.5 game
+  weeks. The next ticks then charge every missed week and run the missed
+  races in order, with *The catch-up cap* spreading a long backlog across
+  ticks, exactly as production does after an outage. **Freeze before any
+  planned downtime longer than about three real days.** That is the
+  ten-game-week inactivity release (`INACTIVITY_WEEKS`), and an outage that
+  long would release every manager's team.
+- **What stays on real time:** the report-a-problem cap (20 per 24 real
+  hours, `feedback/`), the API token throttle (60 a real minute, `api/`),
+  login session expiry, and the timestamps that record when the server did
+  something (`TickRun.started_at` / `finished_at`, a report's `created_at`, a
+  lost-team message's `acknowledged_at`). This is expected and none of it
+  decides what is due.
+- **A staging world cannot be promoted to production as it stands.** After two
+  real weeks at 24×, game time is about a year ahead of real time.
+  Production (#133) starts from `seed_world --reset` on the real clock.
+
+What the beta managers are told about all this is in
+[`STAGING_BRIEFING.md`](STAGING_BRIEFING.md), written to go into the LLM
+harness's prompt as it is (#132).
+
+## Automatic seasons
+
+With `settings.AUTO_DECLARE_SEASONS` on (`prod.py`, and so staging), each tick
+begins by declaring the world calendar (`world_setup.WORLD_CALENDAR`) as the
+next season whenever **at most one declared season has not yet ended**, using
+`add_season()`. It declares at most one per tick, so a running world always
+has the season being played plus the next one. A season added this way is
+the same as one added by hand. The count lands on `TickRun.seasons_declared`,
+and a failure (a broken calendar file, say) lands on `TickRun.error` without
+stopping the tick.
+
+- **It runs before `process_transitions`**, so after an outage past the last
+  season's end, the next season exists by the time the close is recorded, and
+  it opens in the same tick.
+- **It is off in `base.py`, and so in development and the test suite.** Their
+  small example calendars and season-crossing tests would otherwise grow
+  seasons nobody declared.
+- **A world with no season at all is left alone.** That is a fresh database,
+  not a running world.
+
+## Building a world (#139)
+
+A beta or launch world is built by **one command**, not the five-step dev
+recipe in `AGENTS.md`:
+
+```bash
+manage.py seed_world --starts-at 2027-03-01            # production: real clock, opens on that Monday
+manage.py seed_world --set-clock                       # staging: MockClock, season 1 opens now
+manage.py seed_world --set-clock --reset               # staging: wipe and rebuild between beta runs
+manage.py add_season                                   # append the next season to a running world
+```
+
+`seed_world` (`world/world_setup.py`, `build_world`) creates **16 unmanaged
+teams, all claimable**, a **trainer pool of 24**, and **four back-to-back
+seasons** of the world calendar, `seasons/world.json`. Those numbers are
+settled in `specs/archive/beta-world.md`. The pool is twice
+`staff.generation.INITIAL_POOL_SIZE` because sixteen unmanaged teams each
+hire the cheapest trainer they can afford (*The AI management*), and a pool
+of twelve runs dry before a human arrives. (With `--set-clock` the pool
+then reads 32, because opening season 1 adds the usual season-boundary
+top-up, `staff.services.top_up_pool`.) Every number has a flag
+(`--teams`, `--trainers`, `--seasons`), and `--calendar` points at a
+different season file.
+
+- **It composes the domains' own seeds**, `seed_teams`, `seed_trainers` and
+  `load_season`, through `call_command`, so a change to how a team is seeded
+  reaches a built world with no change here.
+- **The order is teams, trainers, then seasons.** That is the ordering trap
+  in `AGENTS.md`: no team gets a sponsor offer round when it is created, so
+  the round comes from the tick that opens season 1, the same way it does
+  for every later season.
+- **`--starts-at`** is season 1's opening Monday (00:00 UTC). It defaults to
+  the next Monday after the current game time. Each later season starts at
+  the previous one's `ends_at`, using `load_season`'s `--number` and
+  `--starts-at` overrides (`schedule/README.md`, *Declaring a season*). One
+  file serves every season of every world.
+- **`--set-clock` is for the accelerated staging world only** and refuses on
+  `RealClock`. It moves the mock clock to the start *before* anything is
+  seeded, so the opening ledger entries are stamped in game time. It then
+  ticks once, so season 1 is open and every team has its sponsor offers
+  before the first manager logs in. A production world built without it
+  simply opens on its start date. During the lead time its teams are
+  claimable, and sponsor offers appear when the season opens.
+- **It never creates a user.** The demo account (`seed_user`) is for
+  development only and must not exist in production.
+- **It refuses to build over an existing world** (any team, trainer or
+  season) unless `--reset` is passed. All the seeding runs in one
+  transaction, so a broken calendar file leaves nothing half-built.
+- **`add_season`** declares the calendar as the next season number, starting
+  where the last declared season ends. In production and staging the tick
+  calls it by itself before the world runs out (*Automatic seasons*), so
+  the command is only needed by hand.
+
+### The wipe
+
+`seed_world --reset` calls `wipe_world()` first. It removes **the whole game
+world and keeps every account**: teams, riders, trainers, seasons, races,
+results and race logs, the ledger and fanbase, the market and youth squads.
+A manager whose team disappears is left without a team, like a newly
+registered player, and claims a new one.
+
+- **It is gated on `settings.ALLOW_WORLD_RESET`.** That is off in `base.py`
+  and therefore in `prod.py`, and on in `dev.py`. **The staging settings
+  (#129) must turn it on explicitly.** It is deliberately not inferred from
+  `DEBUG` or the settings module's name, because staging inherits prod.
+- **It is one `TRUNCATE … RESTART IDENTITY CASCADE`** over every model of the
+  apps in `WORLD_APPS`, preceded by `SET CONSTRAINTS ALL IMMEDIATE`. Postgres
+  refuses to truncate a table with deferred foreign-key checks still
+  pending, and Django's FKs are deferred. An ORM delete would have to
+  unpick the PROTECT foreign keys (race → week, stage → tour) in the right
+  order, and that order would go stale with every new model.
+- **`WORLD_APPS` is an explicit list.** `accounts` and Django's own apps are
+  not in it, and `world.GameClock` is kept. **A new app is not wiped until
+  it is added to the list.** That is the safe default for something an
+  operator might want to keep (problem reports, say, #131). **That only
+  holds for an app with no database foreign-key constraint into a wiped
+  table**: `TRUNCATE … CASCADE` empties every table that has one, whatever
+  its app and whether or not any row uses it. `feedback.Report.team` is
+  declared `db_constraint=False` for exactly this reason, and `wipe_world`
+  clears that column before the truncate, so a kept report never points at
+  the new team that reuses its old team's id. `world/tests/test_world_setup.py`
+  checks a report survives a reset. A future kept app that points into the
+  world needs the same treatment.
+- Race log files are deleted from storage before the truncate, so a reset
+  does not leave them orphaned on disk.
+
+### The world calendar
+
+`seasons/world.json` is the one calendar every season repeats, the same way
+the real classics come back every year. It has 11 one-day races, the
+three-day *Vuelta a Castilla y León* (week 4, Wednesday to Friday) and the
+seven-day *Vuelta a Cataluña* (week 7, Monday to Sunday), for **21
+race days**. That is the density the example seasons had, and the economy
+was measured against it. The two `.example` files stay as they are, for
+development.
+
+**The names are Spanish**, modelled on real Spanish races (decided on
+review of #139, since the beta's human testers play in Spanish, #137). Every race,
+stage and marker uses Spanish place names: *Meta volante de …* for an
+intermediate sprint, *Alto de …* or *Puerto de …* for a climb, and *Meta en …*
+for the line. They are proper nouns and are not translated. Each course
+still fits its place roughly, for example a flat coastal sprint at Almería,
+a summit finish at Urkiola and the Lagos de Covadonga at the Picos de Europa.
+
+Each race is built from one of a few terrain shapes, each aimed at one
+winning speciality. **Sprinters** get flat bunch finishes. **Puncheurs** get 3 km at 4%
+topping out 500 m from the line, which drops the sprinters but is too short
+for a climber to get clear. **Rouleurs** get a 6 km rise at 2.5% topping out
+1 km from the line, or a 20 km false-flat drag. A short 5% ramp right at the
+line was tried for puncheurs, and so were strong wind and long 1% drags for
+rouleurs. Each one went to climbers or sprinters too often. **Climbers** get summit finishes, two-climb
+mountain days and steep hilly classics. The climb shapes are the engine's
+audited `summit_finish`, `mountain_stage` and `lombardia` profiles
+(`race_engine/README.md`, *Bundled configs*), so no course goes beyond
+what the engine was tuned for. Every course carries markers: weighted
+sprints, categorised climbs, and a finish-line marker that is a climb on a
+puncheur or climber day.
+
+**Balance check.** `check_calendar` (`racing/README.md`, *The calendar
+check*) simulates every race day against freshly generated fields:
+
+```bash
+manage.py check_calendar seasons/world.json --seeds 1,2,3 --jobs 4
+```
+
+The rule (`specs/archive/beta-world.md`, In scope 3) is that climbers,
+sprinters and puncheurs each win at least two race days a season, rouleurs
+at least one (below), and no speciality wins more than 40%. The last run
+passes (`balanced`):
+
+```
+seed 1-5, 21 race days a season           winner's speciality
+  Clásica de Almería                      sprinter 4, puncheur 1
+  Gran Premio de Llodio                   puncheur 4, rouleur 1
+  Vuelta a La Rioja                       sprinter 3, puncheur 1, rouleur 1
+  Castilla y León 1: Tierra de Campos     sprinter 4, puncheur 1
+  Castilla y León 2: Murallas de Ávila    puncheur 3, sprinter 1, rouleur 1
+  Castilla y León 3: Laguna Negra         climber 5
+  Clásica de las Marismas                 sprinter 4, rouleur 1
+  Clásica de Jaén                         climber 4, puncheur 1
+  Clásica de Ordizia                      rouleur 2, puncheur 2, climber 1
+  Cataluña 1: Costa Brava                 sprinter 5
+  Cataluña 2: Llanos de Urgell            sprinter 3, rouleur 1, puncheur 1
+  Cataluña 3: Muro de Manresa             puncheur 3, climber 1, rouleur 1
+  Cataluña 4: Puertos del Pirineo         climber 3, domestique 2
+  Cataluña 5: Delta del Ebro              sprinter 5
+  Cataluña 6: La Molina                   climber 5
+  Cataluña 7: Montjuïc                    puncheur 2, sprinter 2, climber 1
+  Trofeo de las Hoces de Cuenca           sprinter 2, puncheur 2, climber 1
+  Subida a Urkiola                        climber 5
+  GP de los Picos de Europa               climber 3, domestique 2
+  Clásica del Montseny                    puncheur 3, sprinter 2
+  GP de la Ribera del Ebro                sprinter 5
+  GC, both tours                          climber 9, domestique 1
+
+  sprinter   8.0 a season  38%
+  climber    5.8 a season  28%
+  puncheur   4.8 a season  23%
+  rouleur    1.6 a season   8%
+  domestique 0.8 a season   4%
+```
+
+**Rouleurs are the weak spot, and that is the engine, not the calendar.** A
+rouleur's edge is flat power, and today's engine has no time trial, no
+echelons and no breakaways, which are the three places that edge decides a
+race. Everywhere else the bunch holds and a sprinter wins the final. So the
+rouleur minimum is **one win a season** (`MIN_WINS_BY_SPECIALITY`) until
+time trials (#89, #90) give them their own day. Decided on #139.
+
+Sprinters sit close to the 40% ceiling. Puncheur days are the noisiest,
+because on a 4% ramp a puncheur and a climber are close and the field
+decides it. The check uses unmanaged-team squads (`course_pick_order`). A
+human who brings climbers to a puncheur day can sometimes steal it, which
+is a choice worth having.
 
 ## What is deliberately not built
 
 - **No player control over the clock at all.** No pausing, no skipping, no
   per-player time — the clock is shared world state, moved only by
-  `mock_clock` in development or by cron in production.
+  `mock_clock` in development or by cron in production. Staging's freeze is
+  an operator's command, not a player's.
 - **No in-game admin screen for the mock clock.** A command line tool is
-  enough for now.
+  enough for now, staging's freeze, resume and status included.
+- **No in-game sign that a world is accelerated.** Only LLM managers play on
+  staging, and their briefing tells them.
 - **No parallel race processing.** A tick works through claimed races one at
   a time. Fine while a game day holds at most a handful of races; the
   frugal next step, once that stops being true, is a queue held in the
@@ -683,6 +934,11 @@ cannot check for due work while asleep, and races start late by however long
 the sleep lasted — such platforms are ruled out by this feature. The task
 also needs to run long enough to work out a day's races, currently around
 eight seconds each.
+
+That host is one always-on Fly.io machine (`deploy/README.md`, #128). Its
+scheduler runs `deploy/tick.sh` on `TICK_SCHEDULE`, hourly by default; it
+never overlaps two ticks, and it pings healthchecks.io after each successful
+one so a stopped tick is noticed.
 
 ## What `world/` may import
 

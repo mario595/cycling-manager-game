@@ -65,9 +65,10 @@ endpoints need. **The one case where hand-rolling would start to hurt is
 social login** (Google, Discord); if that becomes a real requirement,
 `django-allauth` is the thing to reach for then, not before.
 
-Tokens/JWT were not used either: the SPA is served same-origin by Django,
-so there is no cross-domain problem for a token to solve, and inventing
-refresh/revocation would buy nothing.
+JWT was not used either: the SPA is served same-origin by Django, so there
+is no cross-domain problem for it to solve, and refresh tokens would buy
+nothing. The SPA still uses the session. API tokens arrived later, for a
+different client (#130, below).
 
 ## Login failures are vague; registration failures are not
 
@@ -112,3 +113,36 @@ app's own login URL (`api/urls.py`; see `api/README.md`). `null` means the
 account has never logged in, and stays that way until it does — never
 backfilled to `last_login` or to "now" at migration time, both of which
 would put real time in a game-time column.
+
+## API tokens
+
+For clients that are not a browser, which today means the LLM beta managers
+([#130](https://github.com/mario595/cycling-manager/issues/130), used by #132).
+A token lets an account play through exactly the same endpoints and rules as
+the SPA, with no session and no CSRF dance.
+
+- **`ApiToken`**: one per account (`OneToOneField`, `related_name="api_token"`).
+  It stores `key_hash`, a SHA-256 of the key (unique, and that is the lookup),
+  `prefix` (eight characters after `cm_`, so the admin can tell which token is
+  which), and `created_at` in **real** time, since it is operator metadata
+  rather than game state.
+- **Shown once.** `accounts.tokens.issue_token` returns the raw key
+  (`cm_` + `secrets.token_urlsafe(32)`) and it is never stored. A lost token
+  means issuing a new one. That is why this is a small model rather than DRF's
+  `rest_framework.authtoken`, which keeps the key in plain text. Plain
+  SHA-256 rather than a slow password hash: the key is 32 random bytes, so
+  there is nothing to brute-force, and a slow hash would tax every request.
+- **Commands.** `issue_api_token <email>` prints the key on stdout (the note
+  goes to stderr, so `KEY=$(… issue_api_token me@x.com)` works). Issuing
+  again replaces the old token, delete-then-create in one transaction, so the
+  old key stops working at once. `revoke_api_token <email>` deletes it. The
+  email match is case-insensitive, as at registration. In the admin the token
+  is read-only, and deleting the row revokes it.
+- **No expiry and no self-service screen**, both deliberately
+  (`specs/archive/api-tokens.md`).
+- **`accounts.authentication.ApiTokenAuthentication`** resolves
+  `Authorization: Bearer <key>` to the user, refusing inactive users. It does
+  **not** stamp last-seen: that needs `world.services.now()`, which this app
+  may not import. `api.authentication.GameTokenAuthentication` subclasses it
+  to do so, and that subclass is the one the settings name. It is the same
+  split as `LoginView` (*Last seen is game time*, above).

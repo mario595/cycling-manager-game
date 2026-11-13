@@ -17,9 +17,11 @@ def points_for(position: int) -> int:
 #: Prize money by finishing position, 1-indexed. Positions beyond this pay
 #: nothing. Frozen per race at award time by virtue of the append-only
 #: ledger — see specs/prize-money-for-race-results.md.
+#: Raised 10% across all three prize tables by #125 (economy/README.md,
+#: *Balance targets*); the stage-is-half and GC-is-double ratios still hold.
 PRIZE_BY_POSITION: dict[int, int] = {
-    1: 20_000, 2: 15_000, 3: 12_000, 4: 10_000, 5: 8_000,
-    6: 6_000,  7: 4_000,  8: 3_000,  9: 2_000, 10: 1_000,
+    1: 22_000, 2: 16_500, 3: 13_200, 4: 11_000, 5: 8_800,
+    6: 6_600,  7: 4_400,  8: 3_300,  9: 2_200, 10: 1_100,
 }
 
 
@@ -58,8 +60,8 @@ def gc_points_for(position: int) -> int:
 #: Prize money for one stage of a stage race — the stage counterpart of
 #: STAGE_POINTS_BY_POSITION, same reasoning.
 STAGE_PRIZE_BY_POSITION: dict[int, int] = {
-    1: 10_000, 2: 7_500, 3: 6_000, 4: 5_000, 5: 4_000,
-    6: 3_000,  7: 2_000, 8: 1_500, 9: 1_000, 10: 500,
+    1: 11_000, 2: 8_250, 3: 6_600, 4: 5_500, 5: 4_400,
+    6: 3_300,  7: 2_200, 8: 1_650, 9: 1_100, 10: 550,
 }
 
 
@@ -71,8 +73,8 @@ def stage_prize_for(position: int) -> int:
 #: Prize money for a stage race's final general classification — double
 #: PRIZE_BY_POSITION, the GC counterpart of GC_POINTS_BY_POSITION.
 GC_PRIZE_BY_POSITION: dict[int, int] = {
-    1: 40_000, 2: 30_000, 3: 24_000, 4: 20_000, 5: 16_000,
-    6: 12_000, 7: 8_000,  8: 6_000,  9: 4_000,  10: 2_000,
+    1: 44_000, 2: 33_000, 3: 26_400, 4: 22_000, 5: 17_600,
+    6: 13_200, 7: 8_800,  8: 6_600,  9: 4_400,  10: 2_200,
 }
 
 

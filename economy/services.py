@@ -11,7 +11,7 @@ from .models import (
     FANBASE_PER_POINT,
     MERCHANDISE_FANBASE_PER_CREDIT,
     MINIMUM_FANBASE,
-    SPONSOR_FANBASE_PER_CREDIT,
+    SPONSOR_CREDITS_PER_THOUSAND_FANS,
     STARTING_BALANCE,
     STARTING_FANBASE,
     WEEKLY_FANBASE_DECAY,
@@ -394,7 +394,7 @@ def ensure_offer_round(team, season, *, at, rng=None) -> list[SponsorOffer]:
             season=season,
             profile=profile.key,
             sponsor_name=name,
-            **_offer_terms(profile, fanbase, fanbase_per_credit=SPONSOR_FANBASE_PER_CREDIT),
+            **_offer_terms(profile, fanbase, credits_per_thousand_fans=SPONSOR_CREDITS_PER_THOUSAND_FANS),
         )
         for profile, name in zip(PROFILES, names)
     ]

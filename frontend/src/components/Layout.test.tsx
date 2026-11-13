@@ -123,4 +123,29 @@ describe('Layout', () => {
 
     expect(screen.getByTestId('login-state')).toHaveTextContent('{"from":"/league"}')
   })
+
+  it('shows the report button to a manager', () => {
+    mockAuth(manager, false)
+
+    renderLayout('/roster')
+
+    expect(screen.getByRole('button', { name: 'Report a problem' })).toBeInTheDocument()
+  })
+
+  it('shows the report button to a team-less user on /claim', () => {
+    mockAuth({ ...manager, team: null }, false)
+
+    renderLayout('/claim')
+
+    expect(screen.getByTestId('claim')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Report a problem' })).toBeInTheDocument()
+  })
+
+  it('does not show the report button on the login page', () => {
+    mockAuth(anonymous, false)
+
+    renderLayout('/login')
+
+    expect(screen.queryByRole('button', { name: 'Report a problem' })).toBeNull()
+  })
 })

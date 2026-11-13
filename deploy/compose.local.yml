@@ -1,0 +1,37 @@
+# Run the production all-in-one image on your own machine (deploy/README.md,
+# "Running the image locally"):
+#
+#   cp deploy/env.example deploy/.env      # once; edit as needed
+#   docker compose -f deploy/compose.local.yml up --build
+#   open http://127.0.0.1:8080
+#
+# One-off commands (seed a world, restore a backup) while it is up: use
+# exec, NEVER run. `run` starts a second container, and with it a second
+# Postgres on the same volume, which corrupts the data.
+#
+#   docker compose -f deploy/compose.local.yml exec -u app game python manage.py seed_world
+#
+# (`run --rm game <command>` is only for when nothing is up: it starts
+# Postgres, migrates, runs the command and stops.)
+#
+# The volume keeps the database and race logs between runs;
+# `down -v` throws them away.
+
+services:
+  game:
+    build:
+      context: ..
+      target: allinone
+    env_file: .env
+    # Fly runs its own init as PID 1; locally, give the entrypoint one too.
+    init: true
+    environment:
+      # No TLS in front of it locally. Everything else is production as is.
+      DJANGO_SECURE_SSL_REDIRECT: "0"
+    ports:
+      - "127.0.0.1:8080:8000"
+    volumes:
+      - data:/data
+
+volumes:
+  data:

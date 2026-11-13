@@ -1,0 +1,839 @@
+{
+  "number": 1,
+  "starts_at": "2027-03-01T00:00:00Z",
+  "races": [
+    {
+      "week": 1,
+      "day": "sunday",
+      "time": "14:00",
+      "name": "Clásica de Almería",
+      "course": [
+        {
+          "length": 150000,
+          "gradient": 0.0
+        }
+      ],
+      "markers": [
+        {
+          "kind": "sprint",
+          "name": "Meta volante de Roquetas",
+          "distance": 60000,
+          "weight": "minor"
+        },
+        {
+          "kind": "sprint",
+          "name": "Meta volante de El Ejido",
+          "distance": 110000,
+          "weight": "standard"
+        },
+        {
+          "kind": "sprint",
+          "name": "Meta en el Paseo Marítimo",
+          "distance": 150000,
+          "weight": "major"
+        }
+      ]
+    },
+    {
+      "week": 2,
+      "day": "sunday",
+      "time": "14:00",
+      "name": "Gran Premio de Llodio",
+      "course": [
+        {
+          "length": 156500,
+          "gradient": 0.0
+        },
+        {
+          "length": 3000,
+          "gradient": 4.0
+        },
+        {
+          "length": 500,
+          "gradient": 0.0
+        }
+      ],
+      "markers": [
+        {
+          "kind": "sprint",
+          "name": "Meta volante de Amurrio",
+          "distance": 80000,
+          "weight": "standard"
+        },
+        {
+          "kind": "mountain",
+          "name": "Alto de Santa Lucía",
+          "distance": 159500,
+          "category": "cat3"
+        },
+        {
+          "kind": "sprint",
+          "name": "Meta en Llodio",
+          "distance": 160000,
+          "weight": "standard"
+        }
+      ]
+    },
+    {
+      "week": 3,
+      "day": "sunday",
+      "time": "14:00",
+      "name": "Vuelta a La Rioja",
+      "course": [
+        {
+          "length": 143000,
+          "gradient": 0.0
+        },
+        {
+          "length": 6000,
+          "gradient": 2.5
+        },
+        {
+          "length": 1000,
+          "gradient": 0.0
+        }
+      ],
+      "markers": [
+        {
+          "kind": "sprint",
+          "name": "Meta volante de Haro",
+          "distance": 75000,
+          "weight": "standard"
+        },
+        {
+          "kind": "mountain",
+          "name": "Alto de las Viñas",
+          "distance": 149000,
+          "category": "cat3"
+        },
+        {
+          "kind": "sprint",
+          "name": "Meta en Logroño",
+          "distance": 150000,
+          "weight": "standard"
+        }
+      ]
+    },
+    {
+      "week": 4,
+      "day": "sunday",
+      "time": "14:00",
+      "name": "Clásica de las Marismas",
+      "course": [
+        {
+          "length": 163000,
+          "gradient": 0.0
+        },
+        {
+          "length": 6000,
+          "gradient": 2.5
+        },
+        {
+          "length": 1000,
+          "gradient": 0.0
+        }
+      ],
+      "markers": [
+        {
+          "kind": "sprint",
+          "name": "Meta volante de Almonte",
+          "distance": 70000,
+          "weight": "minor"
+        },
+        {
+          "kind": "mountain",
+          "name": "Repecho del Rocío",
+          "distance": 169000,
+          "category": "cat3"
+        },
+        {
+          "kind": "sprint",
+          "name": "Meta en Huelva",
+          "distance": 170000,
+          "weight": "standard"
+        }
+      ],
+      "wind": {
+        "band": "moderate"
+      }
+    },
+    {
+      "week": 5,
+      "day": "sunday",
+      "time": "14:00",
+      "name": "Clásica de Jaén",
+      "course": [
+        {
+          "length": 50000,
+          "gradient": 0.0
+        },
+        {
+          "length": 12000,
+          "gradient": 5.0
+        },
+        {
+          "length": 6000,
+          "gradient": -5.0
+        },
+        {
+          "length": 15000,
+          "gradient": 2.0
+        },
+        {
+          "length": 9000,
+          "gradient": 7.0
+        },
+        {
+          "length": 5000,
+          "gradient": -7.0
+        },
+        {
+          "length": 3000,
+          "gradient": 6.0
+        },
+        {
+          "length": 4000,
+          "gradient": -3.0
+        },
+        {
+          "length": 6000,
+          "gradient": 0.0
+        }
+      ],
+      "markers": [
+        {
+          "kind": "mountain",
+          "name": "Puerto de Valdepeñas",
+          "distance": 62000,
+          "category": "cat1"
+        },
+        {
+          "kind": "mountain",
+          "name": "Alto de la Pandera",
+          "distance": 92000,
+          "category": "cat1"
+        },
+        {
+          "kind": "mountain",
+          "name": "Alto de Jabalcuz",
+          "distance": 100000,
+          "category": "cat2"
+        }
+      ]
+    },
+    {
+      "week": 6,
+      "day": "sunday",
+      "time": "14:00",
+      "name": "Clásica de Ordizia",
+      "course": [
+        {
+          "length": 151500,
+          "gradient": 0.0
+        },
+        {
+          "length": 3000,
+          "gradient": 4.0
+        },
+        {
+          "length": 500,
+          "gradient": 0.0
+        }
+      ],
+      "markers": [
+        {
+          "kind": "sprint",
+          "name": "Meta volante de Beasain",
+          "distance": 75000,
+          "weight": "standard"
+        },
+        {
+          "kind": "mountain",
+          "name": "Alto de Abaltzisketa",
+          "distance": 154500,
+          "category": "cat3"
+        },
+        {
+          "kind": "sprint",
+          "name": "Meta en Ordizia",
+          "distance": 155000,
+          "weight": "standard"
+        }
+      ]
+    },
+    {
+      "week": 8,
+      "day": "sunday",
+      "time": "14:00",
+      "name": "Trofeo de las Hoces de Cuenca",
+      "course": [
+        {
+          "length": 146500,
+          "gradient": 0.0
+        },
+        {
+          "length": 3000,
+          "gradient": 4.0
+        },
+        {
+          "length": 500,
+          "gradient": 0.0
+        }
+      ],
+      "markers": [
+        {
+          "kind": "sprint",
+          "name": "Meta volante de Villalba",
+          "distance": 75000,
+          "weight": "standard"
+        },
+        {
+          "kind": "mountain",
+          "name": "Muro de las Hoces",
+          "distance": 149500,
+          "category": "cat3"
+        },
+        {
+          "kind": "sprint",
+          "name": "Meta en Cuenca",
+          "distance": 150000,
+          "weight": "standard"
+        }
+      ]
+    },
+    {
+      "week": 9,
+      "day": "sunday",
+      "time": "14:00",
+      "name": "Subida a Urkiola",
+      "course": [
+        {
+          "length": 65000,
+          "gradient": 1.0
+        },
+        {
+          "length": 15000,
+          "gradient": 4.0
+        },
+        {
+          "length": 10000,
+          "gradient": -2.0
+        },
+        {
+          "length": 22000,
+          "gradient": -4.0
+        },
+        {
+          "length": 13000,
+          "gradient": 8.1
+        }
+      ],
+      "markers": [
+        {
+          "kind": "sprint",
+          "name": "Meta volante de Durango",
+          "distance": 40000,
+          "weight": "minor"
+        },
+        {
+          "kind": "mountain",
+          "name": "Alto de Areitio",
+          "distance": 80000,
+          "category": "cat2"
+        },
+        {
+          "kind": "mountain",
+          "name": "Santuario de Urkiola",
+          "distance": 125000,
+          "category": "hc"
+        }
+      ]
+    },
+    {
+      "week": 10,
+      "day": "sunday",
+      "time": "14:00",
+      "name": "Gran Premio de los Picos de Europa",
+      "course": [
+        {
+          "length": 44000,
+          "gradient": 1.0
+        },
+        {
+          "length": 14000,
+          "gradient": 6.5
+        },
+        {
+          "length": 10000,
+          "gradient": -6.5
+        },
+        {
+          "length": 15000,
+          "gradient": 0.0
+        },
+        {
+          "length": 17000,
+          "gradient": 7.0
+        },
+        {
+          "length": 8000,
+          "gradient": -7.0
+        },
+        {
+          "length": 13000,
+          "gradient": 2.0
+        },
+        {
+          "length": 9000,
+          "gradient": 8.0
+        }
+      ],
+      "markers": [
+        {
+          "kind": "sprint",
+          "name": "Meta volante de Cangas de Onís",
+          "distance": 30000,
+          "weight": "minor"
+        },
+        {
+          "kind": "mountain",
+          "name": "Puerto del Pontón",
+          "distance": 58000,
+          "category": "hc"
+        },
+        {
+          "kind": "mountain",
+          "name": "Lagos de Covadonga",
+          "distance": 130000,
+          "category": "hc"
+        }
+      ]
+    },
+    {
+      "week": 11,
+      "day": "sunday",
+      "time": "14:00",
+      "name": "Clásica del Montseny",
+      "course": [
+        {
+          "length": 151500,
+          "gradient": 0.0
+        },
+        {
+          "length": 3000,
+          "gradient": 4.0
+        },
+        {
+          "length": 500,
+          "gradient": 0.0
+        }
+      ],
+      "markers": [
+        {
+          "kind": "sprint",
+          "name": "Meta volante de Vic",
+          "distance": 80000,
+          "weight": "standard"
+        },
+        {
+          "kind": "mountain",
+          "name": "Repecho de Montseny",
+          "distance": 154500,
+          "category": "cat3"
+        },
+        {
+          "kind": "sprint",
+          "name": "Meta en Sant Celoni",
+          "distance": 155000,
+          "weight": "standard"
+        }
+      ]
+    },
+    {
+      "week": 12,
+      "day": "sunday",
+      "time": "14:00",
+      "name": "Gran Premio de la Ribera del Ebro",
+      "course": [
+        {
+          "length": 200000,
+          "gradient": 0.0
+        }
+      ],
+      "markers": [
+        {
+          "kind": "sprint",
+          "name": "Meta volante de Tudela",
+          "distance": 70000,
+          "weight": "minor"
+        },
+        {
+          "kind": "sprint",
+          "name": "Meta volante de Alfaro",
+          "distance": 140000,
+          "weight": "standard"
+        },
+        {
+          "kind": "sprint",
+          "name": "Meta en Zaragoza",
+          "distance": 200000,
+          "weight": "major"
+        }
+      ]
+    }
+  ],
+  "stage_races": [
+    {
+      "name": "Vuelta a Castilla y León",
+      "week": 4,
+      "start_day": "wednesday",
+      "time": "14:00",
+      "stages": [
+        {
+          "name": "Tierra de Campos",
+          "course": [
+            {
+              "length": 150000,
+              "gradient": 0.0
+            }
+          ],
+          "markers": [
+            {
+              "kind": "sprint",
+              "name": "Meta volante de Sahagún",
+              "distance": 80000,
+              "weight": "standard"
+            },
+            {
+              "kind": "sprint",
+              "name": "Meta en Palencia",
+              "distance": 150000,
+              "weight": "major"
+            }
+          ]
+        },
+        {
+          "name": "Murallas de Ávila",
+          "course": [
+            {
+              "length": 136500,
+              "gradient": 0.0
+            },
+            {
+              "length": 3000,
+              "gradient": 4.0
+            },
+            {
+              "length": 500,
+              "gradient": 0.0
+            }
+          ],
+          "markers": [
+            {
+              "kind": "sprint",
+              "name": "Meta volante de Arévalo",
+              "distance": 70000,
+              "weight": "standard"
+            },
+            {
+              "kind": "mountain",
+              "name": "Muro de Ávila",
+              "distance": 139500,
+              "category": "cat3"
+            },
+            {
+              "kind": "sprint",
+              "name": "Meta en Ávila",
+              "distance": 140000,
+              "weight": "standard"
+            }
+          ]
+        },
+        {
+          "name": "Laguna Negra",
+          "course": [
+            {
+              "length": 60000,
+              "gradient": 1.0
+            },
+            {
+              "length": 15000,
+              "gradient": 4.0
+            },
+            {
+              "length": 10000,
+              "gradient": -2.0
+            },
+            {
+              "length": 22000,
+              "gradient": -4.0
+            },
+            {
+              "length": 13000,
+              "gradient": 8.1
+            }
+          ],
+          "markers": [
+            {
+              "kind": "mountain",
+              "name": "Puerto de Santa Inés",
+              "distance": 75000,
+              "category": "cat2"
+            },
+            {
+              "kind": "mountain",
+              "name": "Alto de la Laguna Negra",
+              "distance": 120000,
+              "category": "hc"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Vuelta a Cataluña",
+      "week": 7,
+      "start_day": "monday",
+      "time": "14:00",
+      "stages": [
+        {
+          "name": "Costa Brava",
+          "course": [
+            {
+              "length": 160000,
+              "gradient": 0.0
+            }
+          ],
+          "markers": [
+            {
+              "kind": "sprint",
+              "name": "Meta volante de Palamós",
+              "distance": 90000,
+              "weight": "standard"
+            },
+            {
+              "kind": "sprint",
+              "name": "Meta en Lloret de Mar",
+              "distance": 160000,
+              "weight": "major"
+            }
+          ]
+        },
+        {
+          "name": "Llanos de Urgell",
+          "course": [
+            {
+              "length": 150000,
+              "gradient": 0.0
+            },
+            {
+              "length": 20000,
+              "gradient": 1.5
+            }
+          ],
+          "markers": [
+            {
+              "kind": "sprint",
+              "name": "Meta volante de Tàrrega",
+              "distance": 80000,
+              "weight": "standard"
+            },
+            {
+              "kind": "sprint",
+              "name": "Repecho de Lleida",
+              "distance": 170000,
+              "weight": "major"
+            }
+          ]
+        },
+        {
+          "name": "Muro de Manresa",
+          "course": [
+            {
+              "length": 146500,
+              "gradient": 0.0
+            },
+            {
+              "length": 3000,
+              "gradient": 4.0
+            },
+            {
+              "length": 500,
+              "gradient": 0.0
+            }
+          ],
+          "markers": [
+            {
+              "kind": "sprint",
+              "name": "Meta volante de Igualada",
+              "distance": 75000,
+              "weight": "standard"
+            },
+            {
+              "kind": "mountain",
+              "name": "Muro de Manresa",
+              "distance": 149500,
+              "category": "cat3"
+            },
+            {
+              "kind": "sprint",
+              "name": "Meta en Manresa",
+              "distance": 150000,
+              "weight": "standard"
+            }
+          ]
+        },
+        {
+          "name": "Puertos del Pirineo",
+          "course": [
+            {
+              "length": 39000,
+              "gradient": 1.0
+            },
+            {
+              "length": 14000,
+              "gradient": 6.5
+            },
+            {
+              "length": 10000,
+              "gradient": -6.5
+            },
+            {
+              "length": 15000,
+              "gradient": 0.0
+            },
+            {
+              "length": 17000,
+              "gradient": 7.0
+            },
+            {
+              "length": 8000,
+              "gradient": -7.0
+            },
+            {
+              "length": 13000,
+              "gradient": 2.0
+            },
+            {
+              "length": 9000,
+              "gradient": 8.0
+            }
+          ],
+          "markers": [
+            {
+              "kind": "mountain",
+              "name": "Port del Cantó",
+              "distance": 53000,
+              "category": "hc"
+            },
+            {
+              "kind": "mountain",
+              "name": "Port Ainé",
+              "distance": 125000,
+              "category": "hc"
+            }
+          ]
+        },
+        {
+          "name": "Delta del Ebro",
+          "course": [
+            {
+              "length": 170000,
+              "gradient": 0.0
+            }
+          ],
+          "markers": [
+            {
+              "kind": "sprint",
+              "name": "Meta volante de Amposta",
+              "distance": 90000,
+              "weight": "standard"
+            },
+            {
+              "kind": "sprint",
+              "name": "Meta en Tortosa",
+              "distance": 170000,
+              "weight": "major"
+            }
+          ]
+        },
+        {
+          "name": "La Molina",
+          "course": [
+            {
+              "length": 70000,
+              "gradient": 1.0
+            },
+            {
+              "length": 15000,
+              "gradient": 4.0
+            },
+            {
+              "length": 10000,
+              "gradient": -2.0
+            },
+            {
+              "length": 22000,
+              "gradient": -4.0
+            },
+            {
+              "length": 13000,
+              "gradient": 8.1
+            }
+          ],
+          "markers": [
+            {
+              "kind": "mountain",
+              "name": "Coll de la Creueta",
+              "distance": 85000,
+              "category": "cat2"
+            },
+            {
+              "kind": "mountain",
+              "name": "Alto de La Molina",
+              "distance": 130000,
+              "category": "hc"
+            }
+          ]
+        },
+        {
+          "name": "Montjuïc",
+          "course": [
+            {
+              "length": 126500,
+              "gradient": 0.0
+            },
+            {
+              "length": 3000,
+              "gradient": 4.0
+            },
+            {
+              "length": 500,
+              "gradient": 0.0
+            }
+          ],
+          "markers": [
+            {
+              "kind": "sprint",
+              "name": "Meta volante del Port",
+              "distance": 60000,
+              "weight": "standard"
+            },
+            {
+              "kind": "mountain",
+              "name": "Subida a Montjuïc",
+              "distance": 129500,
+              "category": "cat3"
+            },
+            {
+              "kind": "sprint",
+              "name": "Meta en Barcelona",
+              "distance": 130000,
+              "weight": "major"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

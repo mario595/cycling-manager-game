@@ -96,6 +96,23 @@ def to_engine_course(race: Race, markers: list[RaceMarker]) -> Course:
     )
 
 
+def to_engine_course_from_json(course: list[dict], markers: list[dict]) -> Course:
+    """Build the engine's Course from a season file's course and marker JSON,
+    with no `Race` row behind it — for the calendar check
+    (racing/calendar_check.py). Markers are taken in distance order, the
+    order `to_engine_course` gets them from `RaceMarker`'s Meta ordering."""
+    return Course(
+        segments=[
+            Segment(length=float(s["length"]), gradient=float(s["gradient"]))
+            for s in course
+        ],
+        markers=[
+            Marker(kind=MarkerKind(m["kind"]), distance=m["distance"], name=m["name"])
+            for m in sorted(markers, key=lambda m: m["distance"])
+        ],
+    )
+
+
 def to_team_codes(teams: list[Team]) -> dict[str, dict[str, str]]:
     """Build the team-code/colour map the race logger writes into the log.
 
@@ -115,7 +132,7 @@ def to_team_codes(teams: list[Team]) -> dict[str, dict[str, str]]:
 def run_race_via_adapter(
     riders: list[EngineRider],
     course: Course,
-    log_path: str,
+    log_path: str | None,
     seed: int | None,
     team_codes: dict[str, dict[str, str]],
     wind: bool,

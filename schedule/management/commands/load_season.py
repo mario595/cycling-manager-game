@@ -10,6 +10,12 @@ from schedule.loaders import SeasonFileError, create_races, create_stage_races, 
 from schedule.models import SEASON_WEEKS, Season, Week
 
 
+def _iso_moment(value: str) -> str:
+    """`2027-03-01` -> `2027-03-01T00:00:00Z`; anything with a time is
+    passed through for parse_season_file to judge."""
+    return f"{value}T00:00:00Z" if len(value) == 10 else value
+
+
 class Command(BaseCommand):
     help = (
         "Declare a season from a JSON file: its number, start and races. "
@@ -22,6 +28,17 @@ class Command(BaseCommand):
         parser.add_argument(
             "--replace", action="store_true",
             help="Replace an existing, not-yet-started season with the same number.",
+        )
+        parser.add_argument(
+            "--number", type=int, default=None,
+            help="Declare the file as this season number, overriding the file's "
+            "`number`. One calendar file then serves every season of a world.",
+        )
+        parser.add_argument(
+            "--starts-at", default=None,
+            help="Start the season at this moment instead of the file's "
+            "`starts_at` (ISO 8601; a date alone means 00:00 UTC). Must be a "
+            "Monday at 00:00 UTC, the same rule the file's own value obeys.",
         )
 
     def handle(self, *args, **options):
@@ -41,6 +58,15 @@ class Command(BaseCommand):
             raise CommandError(f"could not read {path!r}: {exc}")
         except json.JSONDecodeError as exc:
             raise CommandError(f"could not parse {path!r} as JSON: {exc}")
+
+        # The overrides replace the file's values *before* parsing, so they
+        # go through exactly the same validation (a Monday at 00:00 UTC, a
+        # positive number) — there is no second check to drift from it.
+        if isinstance(data, dict):
+            if options.get("number") is not None:
+                data["number"] = options["number"]
+            if options.get("starts_at"):
+                data["starts_at"] = _iso_moment(options["starts_at"])
 
         try:
             declaration = parse_season_file(data)

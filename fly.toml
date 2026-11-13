@@ -1,0 +1,64 @@
+# Fly.io configuration for the one environment (deploy/README.md).
+#
+# One always-on machine runs everything (the all-in-one image): gunicorn,
+# PostgreSQL and the tick scheduler, with the database and race logs on the
+# `data` volume. Secrets are set with `fly secrets set` (#136), never here.
+#
+# The app is `velodra`, served at velodra.fly.dev (#136). It runs the
+# accelerated staging world for milestone 1, and #133 promotes this same app
+# to production by switching the three staging values in [env] below.
+app = "velodra"
+primary_region = "ams"
+
+# Fly stops idle machines by default; that would stop the tick too, and the
+# game needs an always-on host (world/README.md, "Deployment requirement").
+# auto_stop_machines = "off" plus min_machines_running = 1 keep it up.
+
+# A swap file as a cushion against an out-of-memory kill of Postgres.
+swap_size_mb = 512
+
+# Migrations run in the image's entrypoint, not as a release_command: the
+# release machine has no volume, so it cannot reach this database.
+# A deploy can land mid-tick, and a race tick takes up to about a minute. The
+# entrypoint gives the app and the scheduler 90 s, then stops Postgres
+# cleanly; 120 s leaves room for that (Fly allows up to 300).
+kill_signal = "SIGTERM"
+kill_timeout = 120
+
+[build]
+  dockerfile = "Dockerfile"
+  build-target = "allinone"
+
+# Not secret, so committed. Secrets go in with `fly secrets set`.
+[env]
+  # Staging: the accelerated clock (config/settings/staging.py, #129), ticked
+  # every 5 minutes. Nothing advances the clock: it moves by itself.
+  # #133 sets these back to config.settings.prod, production and hourly.
+  DJANGO_SETTINGS_MODULE = "config.settings.staging"
+  SENTRY_ENVIRONMENT = "staging"
+  TICK_SCHEDULE = "*/5 * * * *"
+  DJANGO_ALLOWED_HOSTS = "velodra.fly.dev"
+
+[mounts]
+  source = "data"
+  destination = "/data"
+  initial_size = "1gb"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/healthz"
+    interval = "30s"
+    timeout = "5s"
+    # First boot runs initdb and every migration before gunicorn starts.
+    grace_period = "120s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

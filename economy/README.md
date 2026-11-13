@@ -435,7 +435,7 @@ go blind, or worse, silently repriced, the moment that row is gone.
 
 **The floor and ceiling are stored, not recomputed at payment time.** The
 range shown at signing is a promise; recomputing it later from
-`SPONSOR_FANBASE_PER_CREDIT` or a profile's fractions would let a constant
+`SPONSOR_CREDITS_PER_THOUSAND_FANS` or a profile's fractions would let a constant
 tuning change silently reprice a contract someone already signed against a
 different number.
 
@@ -556,6 +556,63 @@ every payday), `paydays_left` (null once the live shortfall is zero) and
 `deadline` (the start of the week that payday falls in, or null when that week
 is not declared yet). Nothing about the deadline is stored.
 
+## Balance targets
+
+What the money is *meant* to do, set by #125 (`specs/archive/economy-break-even.md`).
+A change to any income or cost constant (sponsor rate, prize tables, salary
+pricing, trainer prices, merchandise) should be checked against these by
+re-running the measurement, not by reasoning about one flow in isolation.
+
+1. **The average team breaks even, slightly ahead.** With a steady sponsor,
+   the cheapest trainer it can get, no development squad and no transfers,
+   a team that races about as well as the field ends a settled season roughly
+   **$10,000–$20,000 up**.
+2. **The top quarter makes a clear profit**, several times the average.
+3. **The bottom quarter loses money slowly**, slowly enough that a starting
+   balance lasts several seasons. Insolvency is the result of racing badly
+   for a long time, not a property of the prices.
+
+Optional spending (a development squad, transfer buying) is deliberately
+*not* covered: it is paid for by racing above average or by spending the
+starting balance.
+
+**The levers #125 moved.** Sponsorship grew ×2.2 — `SPONSOR_CREDITS_PER_THOUSAND_FANS`
+went from the old `fanbase // 2` (500 per thousand) to **1,100**, so a steady
+offer at the starting fanbase pays $9,350 a week — and all three prize tables
+(`competitions/scoring.py`) rose 10%. Wages, merchandise, trainer prices,
+development squad prices and the starting balance were left alone. Most of the
+new money is sponsorship, which every team gets, so the gap between strong and
+weak teams widened only a little.
+
+**The measurement.** `.venv/bin/python scripts/measure_economy.py` drops and
+recreates this checkout's dev database, seeds a world (16 unmanaged teams),
+plays seasons 1 and 2 a day at a time on the mock clock and prints every
+ledger kind per season plus the season-2 spread. It takes about 25 minutes.
+Transfer fees are excluded from the net (AI market churn, not a structural
+flow). Season 2 is the steady state, because season 1 carries the trainer's
+one-off hire fee.
+
+Season 2, average per team, before and after #125:
+
+| Ledger kind | Before | After |
+|---|---|---|
+| Sponsorship | 48,909 | 108,778 |
+| Prize money + GC prizes | 92,625 | 108,075 |
+| Merchandise | 4,341 | 4,415 |
+| Trainer salary | −34,538 | −37,725 |
+| Wages | −179,888 | −172,725 |
+| **Net** | **−68,550** | **+10,818** |
+| Bottom quarter / median / top quarter | −135,528 / −92,188 / +47,262 | −89,820 / +11,816 / +151,394 |
+
+**Runs are noisy.** Wages, trainer prices and fanbase differ between seeds,
+so the average moves by about ±$8,000 from run to run. Three runs during #125,
+at rates 1,250, 1,150 and 1,100, measured +$28,159, +$26,228 and +$10,818. Do not
+tune to a single run near an edge of the band.
+
+**Prize money is a shared pot.** Each race pays a fixed table split by
+placing, so the average team's share falls as the field grows. The targets
+hold for a field of about sixteen teams. The pyramid will need its own pass.
+
 ## What `economy/` may import
 
 `core`, `teams`, `riders`, `schedule` — matching `AGENTS.md`'s dependency
@@ -577,10 +634,9 @@ string `"racing.Race"`, so nothing in `economy/` imports `racing/`. Likewise
 - **A player lever on fanbase** — #21 deliberately has none; nothing lets a
   manager spend or invest in fanbase yet.
 - **Insolvency for unmanaged teams.** #27 assesses managed teams only.
-  #45 gives unmanaged teams sponsorship, but it narrows their loss rather
-  than closing it (`world/README.md`, *Balances, measured*), so they would
-  still walk the ladder, only more slowly. Revisit with the economy-wide
-  wage-to-income rebalance.
+  Since #125 the average unmanaged team breaks even (see *Balance targets*),
+  but the bottom quarter still loses money slowly. Revisit once staging has
+  shown the economy holding over several seasons.
 - **A full-table read every tick** — `charge_weekly_wages` counts every
   team's riders on each wage run. Fine at dozens of teams; worth a
   `WHERE team.manager IS NOT NULL` or another efficiency when the pool

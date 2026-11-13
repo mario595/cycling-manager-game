@@ -1035,3 +1035,33 @@ export async function promoteSquadRider(riderId: number): Promise<void> {
 export async function discardSquadRider(riderId: number): Promise<void> {
   return writeJson(`/api/development-squad/riders/${riderId}/discard/`, 'POST')
 }
+
+/** What kind of problem a beta tester is reporting (#131). */
+export type ReportCategory = 'bug' | 'looks_wrong' | 'balance' | 'suggestion'
+
+/** A report as its own reporter sees it. The server attaches the context
+ * (team, season, week, game and real time); the triage note is staff-only
+ * and never sent. */
+export interface Report {
+  id: number
+  category: ReportCategory
+  text: string
+  location: string
+  team_name: string
+  season_number: number | null
+  week_number: number | null
+  game_time: string
+  created_at: string
+  status: 'new' | 'triaged' | 'dismissed'
+  github_issue_url: string
+}
+
+/** Send a report. `location` is the screen the reporter was on. A refusal —
+ * the daily cap's 429 included — rejects with the server's own message. */
+export async function createReport(
+  category: ReportCategory,
+  text: string,
+  location: string,
+): Promise<Report> {
+  return writeJson('/api/feedback/reports/', 'POST', { category, text, location })
+}
