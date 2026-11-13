@@ -33,10 +33,10 @@ runs the due testers every hour, keeping each one's diary on the
    cookie jar, so no cookie is ever sent. The workflow needs only a Python and
    the repo.
 3. **The model is reached through an OpenAI-compatible chat completions
-   endpoint.** Mistral, Groq, OpenRouter and Gemini's compatibility endpoint all
+   endpoint.** Gemini's compatibility endpoint, Mistral, Groq and OpenRouter all
    speak it, so the provider is three settings: `BETA_LLM_BASE_URL` (default
-   `https://api.mistral.ai/v1`), `BETA_LLM_MODEL` (default
-   `mistral-large-2512`) and `BETA_LLM_API_KEY`. Moving to Claude would
+   `https://generativelanguage.googleapis.com/v1beta/openai`), `BETA_LLM_MODEL`
+   (default `gemini-flash-lite-latest`) and `BETA_LLM_API_KEY`. Moving to Claude would
    take a second small client class behind the same `chat()` call, which is
    not built now.
 4. **One tool per API operation**, generated at the start of every visit from
@@ -48,13 +48,13 @@ runs the due testers every hour, keeping each one's diary on the
    visit and is the only way to write the diary. `report_a_problem` is the
    API's own operation, but the harness counts the calls and refuses a fourth
    in one visit with a tool error, so the cap holds whatever the model does.
-6. **A visit is bounded.** At most `BETA_MAX_STEPS` model calls (default 40). A
+6. **A visit is bounded.** At most `BETA_MAX_STEPS` model calls (default 30). A
    tool result longer than 8,000 characters is cut, with a note saying so. If
    the model stops calling tools without finishing, it is asked once for its
    diary entry. If the cap is hit, the harness writes the entry itself,
    saying the visit was cut short.
-7. **Pacing.** Model calls are spaced at least 1.2 s apart (the free tier
-   allows about one a second). A `429` from either side is waited out using
+7. **Pacing.** Model calls are spaced at least 5 s apart (the free tier
+   allows about 15 a minute). A `429` from either side is waited out using
    `Retry-After`, up to three times. After that, the call fails.
 8. **Failure is a skipped visit.** If the schema can't be fetched, the key is
    refused, or the model errors after retries, the command exits non-zero
@@ -68,9 +68,10 @@ runs the due testers every hour, keeping each one's diary on the
 10. **The schedule is computed, not written in cron.** The workflow runs at
     minute 17 of every hour and asks `python -m beta_agents due`, which lists
     the testers due at the current UTC hour: tester *t* is due when
-    `hour % period == offset`. Four testers have period 4 and offsets 0–3, so
-    exactly one of them visits each hour. The minimal-effort tester has
-    period 24 and offset 2. The testers in one run visit one after another,
+    `hour % period == offset`. Four testers have period 8 and offsets 0, 2, 4
+    and 6, and the minimal-effort tester has period 24 and offset 3, so no
+    two testers visit in the same hour. That is 13 visits and at most 390
+    model calls a day, inside the free tier's roughly 500. The testers in one run visit one after another,
     and a workflow `concurrency` group keeps two runs from overlapping.
 11. **Pause** is the repository variable `BETA_AGENTS_ENABLED`. The scheduled
     job runs only when it is `true`. A manual `workflow_dispatch` run of one
@@ -136,7 +137,7 @@ runs the due testers every hour, keeping each one's diary on the
 
 ## Risks
 
-- **Mistral's tool calling with 39 tools** may be shaky on the small model.
+- **Tool calling with 39 tools** may be shaky on a small free model.
   The model is a single variable.
 - **Free-tier limits are unpublished.** A visit's tool definitions are about
   8K tokens a call, which is fine at the reported 500K tokens a minute.

@@ -33,10 +33,10 @@ The limits hold whatever the model does:
 
 | Limit | Value | Where |
 |---|---|---|
-| Model calls per visit | 40 (`BETA_MAX_STEPS`) | `visit.py`. When the cap is hit, the harness writes the diary entry itself and says so. |
+| Model calls per visit | 30 (`BETA_MAX_STEPS`) | `visit.py`. When the cap is hit, the harness writes the diary entry itself and says so. |
 | Reports per visit | 3 | `visit.py`. A fourth call gets a tool error and never reaches the server. |
 | Tool result size | 8,000 characters, with a note when cut | `tools.py` |
-| Gap between model calls | 1.2 s (`BETA_LLM_MIN_INTERVAL`) | `llm.py` |
+| Gap between model calls | 5 s (`BETA_LLM_MIN_INTERVAL`) | `llm.py` |
 | 429s waited out | 3 times, using `Retry-After` | `game_api.py` and `llm.py` |
 
 If the model stops calling tools before `finish_visit`, it is asked once more
@@ -53,15 +53,16 @@ and needs CSRF (`api/README.md`).
 
 | Slug | Persona | Visits |
 |---|---|---|
-| `youth` | builds through the development squad | every 4 h, at 00, 04, 08… UTC |
-| `trader` | trades at auction and in the free-agent pool | every 4 h, at 01, 05… |
-| `money` | chases sponsorship and a low wage bill, and audits the ledger | every 4 h, at 02, 06… |
-| `racer` | picks a squad for every course, and sets training | every 4 h, at 03, 07… |
-| `casual` | minimal effort, leaves squads to the auto-pick | once a day, at 02 UTC |
+| `youth` | builds through the development squad | every 8 h, at 00, 08, 16 UTC |
+| `trader` | trades at auction and in the free-agent pool | every 8 h, at 02, 10, 18 |
+| `money` | chases sponsorship and a low wage bill, and audits the ledger | every 8 h, at 04, 12, 20 |
+| `racer` | picks a squad for every course, and sets training | every 8 h, at 06, 14, 22 |
+| `casual` | minimal effort, leaves squads to the auto-pick | once a day, at 03 UTC |
 
-Exactly one regular tester visits each hour. Four real hours is about four game
-days on the staging clock, and once a day stays well inside the 70-hour
-inactivity release.
+No two testers visit in the same hour. Eight real hours is about eight game
+days on the staging clock, so a regular tester sees about one race in two
+before it starts. A race it misses is auto-picked, as for any player. Once a
+day stays well inside the 70-hour inactivity release.
 
 ## The workflow
 
@@ -121,21 +122,25 @@ changing these repository variables:
 
 | Variable | Default | Notes |
 |---|---|---|
-| `BETA_LLM_BASE_URL` | `https://api.mistral.ai/v1` | Gemini: `https://generativelanguage.googleapis.com/v1beta/openai` |
-| `BETA_LLM_MODEL` | `mistral-large-2512` | On Mistral's free tier (November 2026) it allows 250K tokens a minute at 1 request a second. `mistral-small` allows only 20K a minute, which is too few. For Gemini, use the Flash-Lite model id that AI Studio lists. |
-| `BETA_LLM_MIN_INTERVAL` | `1.2` (seconds) | Keep within the provider's requests per minute. For a 15-a-minute tier, use `5`. |
-| `BETA_MAX_STEPS` | `40` | Model calls per visit |
+| `BETA_LLM_BASE_URL` | `https://generativelanguage.googleapis.com/v1beta/openai` | Gemini's OpenAI-compatible endpoint. Mistral is `https://api.mistral.ai/v1`. |
+| `BETA_LLM_MODEL` | `gemini-flash-lite-latest` | Gemini's alias for the newest Flash-Lite. Pin a dated id from AI Studio if the alias moves under you. On Mistral, `mistral-large-2512` allows 250K tokens a minute, while `mistral-small` allows only 20K, which is too few. |
+| `BETA_LLM_MIN_INTERVAL` | `5` (seconds) | Keep within the provider's requests per minute: 5 s suits a 15-a-minute tier. Raise it if visits hit tokens-per-minute 429s. |
+| `BETA_MAX_STEPS` | `30` | Model calls per visit |
 | `BETA_BASE_URL` | `https://velodra.fly.dev` | The game server |
 
-A visit makes up to about 40 model calls. Each call carries about 8K tokens
+A visit makes up to 30 model calls. Each call carries about 8K tokens
 of instructions and tool definitions, plus the visit's history so far. Budget
-about 0.5M tokens and 30 calls per visit, and about 26 visits a real day at
-the default cadence. Claude would need a second small client behind the same
+about 0.5M tokens and 30 calls per visit, and 13 visits a real day at the
+default cadence, which is at most 390 calls. That's inside the roughly 500 a
+day that Gemini's free Flash-Lite allowed in November 2026. The cadence is set
+by that allowance. A provider with more headroom could take the regular
+testers back to every 4 hours by changing their `period` and `offset` in
+`testers.py`. Claude would need a second small client behind the same
 `chat()` call, which isn't built.
 
 Free tiers move. In November 2026, Mistral's Free plan created API keys only
-once *API pay-as-you-go* was enabled on the Subscription page, and came with
-$10 a month of included usage, Groq's free tier allowed 200K tokens a day (too few), and Gemini
+once *API pay-as-you-go* was enabled, which required buying $10 of credits.
+OpenCode's free models answered only its own client, Groq's free tier allowed 200K tokens a day (too few), and Gemini
 Flash-Lite allowed about 500 calls a day. Check the provider's console for
 the numbers on your own project.
 

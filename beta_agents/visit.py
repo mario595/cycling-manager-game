@@ -20,7 +20,7 @@ from .prompt import MAX_REPORTS_PER_VISIT, opening_message, system_prompt
 from .testers import Tester
 from .tools import Toolbox
 
-DEFAULT_MAX_STEPS = 40
+DEFAULT_MAX_STEPS = 30
 DIARY_ENTRIES_READ = 5
 
 FINISH_TOOL = {

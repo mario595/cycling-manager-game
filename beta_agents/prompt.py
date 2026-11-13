@@ -82,7 +82,7 @@ VISIT = """\
    250 words.
 
 You have a limited number of steps per visit, so do not read the same thing
-twice without a reason. The game's world moves on between visits, about four
+twice without a reason. The game's world moves on between visits, about eight
 game days on this world.
 """
 

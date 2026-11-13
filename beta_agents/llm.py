@@ -1,6 +1,6 @@
 """The model, reached through an OpenAI-compatible chat completions endpoint.
 
-Mistral (the default), Groq, OpenRouter and Gemini's compatibility endpoint all
+Gemini's compatibility endpoint (the default), Mistral, Groq and OpenRouter all
 speak this shape, so changing provider is three settings: the base URL, the
 model and the key (beta_agents/README.md, *Choosing the model*).
 """
@@ -14,8 +14,8 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any, Callable
 
-DEFAULT_BASE_URL = "https://api.mistral.ai/v1"
-DEFAULT_MODEL = "mistral-large-2512"
+DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
+DEFAULT_MODEL = "gemini-flash-lite-latest"
 
 
 class LLMError(RuntimeError):
@@ -50,7 +50,7 @@ class ChatClient:
         post: Post = urllib_post,
         sleep: Callable[[float], None] = time.sleep,
         clock: Callable[[], float] = time.monotonic,
-        min_interval: float = 1.2,
+        min_interval: float = 5.0,
         max_retries: int = 3,
         timeout: float = 120.0,
     ):

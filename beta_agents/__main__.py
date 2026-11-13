@@ -78,7 +78,7 @@ def _visit(tester: testers.Tester, args, env: dict[str, str]) -> int:
         api_key=env.get("BETA_LLM_API_KEY", ""),
         model=env.get("BETA_LLM_MODEL") or DEFAULT_MODEL,
         base_url=env.get("BETA_LLM_BASE_URL") or DEFAULT_BASE_URL,
-        min_interval=float(env.get("BETA_LLM_MIN_INTERVAL") or 1.2),
+        min_interval=float(env.get("BETA_LLM_MIN_INTERVAL") or 5.0),
     )
     diary = Diary(args.diary_dir, tester.slug, tester.display_name)
     print(f"[{tester.slug}] visiting {args.base_url} with {llm.model}")

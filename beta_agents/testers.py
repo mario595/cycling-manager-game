@@ -1,10 +1,11 @@
 """The five beta testers: who they are, how they play, and when they visit.
 
 A tester visits when `hour % period == offset`, the hour being the current UTC
-hour. The four regular testers share period 4 with offsets 0-3, so exactly one
-of them visits each hour, and each visits every four real hours (about four
-game days on the staging clock). The minimal-effort tester visits once a real
-day (specs/archive/beta-agents.md, Cadence).
+hour. The four regular testers share period 8 with offsets 0, 2, 4 and 6, so
+one of them visits every even hour, and each visits every eight real hours
+(about eight game days on the staging clock). The minimal-effort tester visits
+once a real day, at an odd hour. The cadence is set by the free model tier's
+daily call allowance (specs/archive/beta-agents.md, Cadence).
 """
 
 from __future__ import annotations
@@ -37,7 +38,7 @@ TESTERS: tuple[Tester, ...] = (
     Tester(
         slug="youth",
         display_name="Beta Youth Builder",
-        period=4,
+        period=8,
         offset=0,
         persona=(
             "You are a patient youth builder. You believe a team is built from "
@@ -51,8 +52,8 @@ TESTERS: tuple[Tester, ...] = (
     Tester(
         slug="trader",
         display_name="Beta Trader",
-        period=4,
-        offset=1,
+        period=8,
+        offset=2,
         persona=(
             "You are an aggressive trader. Every visit, look at the auction "
             "market and the free-agent pool. Bid on riders who look undervalued, "
@@ -65,8 +66,8 @@ TESTERS: tuple[Tester, ...] = (
     Tester(
         slug="money",
         display_name="Beta Accountant",
-        period=4,
-        offset=2,
+        period=8,
+        offset=4,
         persona=(
             "You are a money-focused manager. Your aim is a healthy balance. "
             "Pick the sponsor offer you think will pay best, keep the wage bill "
@@ -78,8 +79,8 @@ TESTERS: tuple[Tester, ...] = (
     Tester(
         slug="racer",
         display_name="Beta Racer",
-        period=4,
-        offset=3,
+        period=8,
+        offset=6,
         persona=(
             "You are a racer. Results are all that matter to you. Before every "
             "upcoming race, read its course and pick the four riders best "
@@ -93,7 +94,7 @@ TESTERS: tuple[Tester, ...] = (
         slug="casual",
         display_name="Beta Casual",
         period=24,
-        offset=2,
+        offset=3,
         persona=(
             "You are a minimal-effort manager who rarely has time. Visit, check "
             "that nothing is on fire, and leave most things to their defaults. "

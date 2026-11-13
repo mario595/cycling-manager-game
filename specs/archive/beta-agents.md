@@ -34,7 +34,7 @@ bill low; a **racer** who picks a squad for every race's course; and a
 **minimal-effort manager** who rarely visits and leaves most things to their
 defaults.
 
-A tester visits about every four real hours, which is about every four game
+A tester visits about every eight real hours, which is about every eight game
 days. The minimal-effort tester visits once a real day. Visits are spread out so
 the testers do not arrive together. On each visit a tester first reads its own
 diary: a short note it wrote at the end of each earlier visit, saying what it
@@ -65,7 +65,7 @@ claims a free team and keeps playing.
 ## In scope
 
 1. Five testers, each with its own account, team, persona and diary.
-2. Visits on a schedule: about every four real hours for four of the testers
+2. Visits on a schedule: about every eight real hours for four of the testers
    and once a real day for the minimal-effort one, staggered so no two visit
    at the same time.
 3. On each visit, a tester reads its last few diary entries, plays its team
@@ -88,7 +88,7 @@ claims a free team and keeps playing.
 10. One switch pauses every tester and turns them back on.
 11. A setup step, run once per tester by the operator, creates the tester's
     account, claims a team for it and gives the operator a key to store.
-12. The testers run on a free model tier (Mistral). Changing provider or model
+12. The testers run on a free model tier (Gemini Flash-Lite). Changing provider or model
     is a setting, not a rewrite.
 13. Everything can be run against a local server before it runs against
     staging.
@@ -116,9 +116,10 @@ claims a free team and keeps playing.
   It counts as active for the inactivity rule like anyone else.
 - **Limits.** A tester stays within the API's 60 requests a minute and the
   report channel's 20 reports per 24 real hours. At three reports a visit and
-  at most six visits a real day, it cannot reach the report limit. The model
-  provider's free tier allows about one request a second, shared by all the
-  testers, so they visit one at a time.
+  at most three visits a real day, it cannot reach the report limit. The model
+  provider's free tier allows a limited number of calls a minute and a day,
+  shared by all the testers, so they visit one at a time and their cadence
+  is set by that allowance.
 - **Bounded visits.** A visit has a cap on how many steps it can take, so a
   confused tester cannot loop for an hour or burn the free quota. A visit that
   hits the cap still writes its diary entry and says it was cut short.
@@ -140,15 +141,17 @@ claims a free team and keeps playing.
 - **Runner:** a scheduled GitHub Actions workflow running a small script in the
   repo, so every visit has a log and the harness can be run against a local
   server.
-- **Model provider:** Mistral's free "Experiment" tier (about a billion tokens a
-  month, about one request a second). Mario's prompts on it may be used for
-  training, which is acceptable because the game data is made up. Claude Haiku
-  5.5 (about $5 per staging season) is the paid fallback if the free tier
-  doesn't hold up. Gemini, Groq, OpenRouter and Cerebras free tiers were too
-  small or are gone.
+- **Model provider:** Gemini Flash-Lite's free tier, about 500 calls a day and
+  no card. Mistral was chosen first, but its Free plan only activates API keys
+  after you buy $10 of credits, and Mario would rather not pay. OpenCode's free
+  models answer only its own client. Groq's free tier is too small (200K tokens
+  a day), and Cerebras has dropped its free tier. Claude Haiku 5.5, at about $5
+  per staging season, remains the paid fallback. Prompts on a free tier may be
+  used for training, which is acceptable because the game data is made up.
 - **Smart models aren't needed.** The human beta catches subtle issues (Mario).
 - **Five testers**, with the personas above, leaving eleven teams to the AI.
-- **Cadence:** every four real hours, staggered, and once a real day for the
+- **Cadence:** every eight real hours, staggered (four hours was agreed first
+  and halved to fit the free tier's daily calls), and once a real day for the
   minimal-effort tester.
 - **Diary:** on a dedicated `beta-diaries` branch, one file per tester.
 - **Knowledge:** a one-page player's guide written for this ticket, plus the

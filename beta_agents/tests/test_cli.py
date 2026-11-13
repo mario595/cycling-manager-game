@@ -6,7 +6,9 @@ from beta_agents.game_api import Response
 
 def test_due(capsys):
     assert cli.main(["due", "--hour", "2"], env={}) == 0
-    assert capsys.readouterr().out.split() == ["money", "casual"]
+    assert capsys.readouterr().out.split() == ["trader"]
+    assert cli.main(["due", "--hour", "3"], env={}) == 0
+    assert capsys.readouterr().out.split() == ["casual"]
 
 
 def test_unknown_tester(capsys):
