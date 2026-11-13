@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
-DEFAULT_MODEL = "gemini-flash-lite-latest"
+DEFAULT_MODEL = "gemini-3.5-flash-lite"
 
 
 class LLMError(RuntimeError):
@@ -50,7 +50,7 @@ class ChatClient:
         post: Post = urllib_post,
         sleep: Callable[[float], None] = time.sleep,
         clock: Callable[[], float] = time.monotonic,
-        min_interval: float = 5.0,
+        min_interval: float = 6.0,
         max_retries: int = 3,
         timeout: float = 120.0,
     ):

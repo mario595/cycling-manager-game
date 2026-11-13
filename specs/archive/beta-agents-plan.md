@@ -36,7 +36,7 @@ runs the due testers every hour, keeping each one's diary on the
    endpoint.** Gemini's compatibility endpoint, Mistral, Groq and OpenRouter all
    speak it, so the provider is three settings: `BETA_LLM_BASE_URL` (default
    `https://generativelanguage.googleapis.com/v1beta/openai`), `BETA_LLM_MODEL`
-   (default `gemini-flash-lite-latest`) and `BETA_LLM_API_KEY`. Moving to Claude would
+   (default `gemini-3.5-flash-lite`) and `BETA_LLM_API_KEY`. Moving to Claude would
    take a second small client class behind the same `chat()` call, which is
    not built now.
 4. **One tool per API operation**, generated at the start of every visit from
@@ -53,8 +53,8 @@ runs the due testers every hour, keeping each one's diary on the
    the model stops calling tools without finishing, it is asked once for its
    diary entry. If the cap is hit, the harness writes the entry itself,
    saying the visit was cut short.
-7. **Pacing.** Model calls are spaced at least 5 s apart (the free tier
-   allows about 15 a minute). A `429` from either side is waited out using
+7. **Pacing.** Model calls are spaced at least 6 s apart (the free tier
+   allows 15 a minute and 250K input tokens a minute). A `429` from either side is waited out using
    `Retry-After`, up to three times. After that, the call fails.
 8. **Failure is a skipped visit.** If the schema can't be fetched, the key is
    refused, or the model errors after retries, the command exits non-zero

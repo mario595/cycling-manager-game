@@ -36,7 +36,7 @@ The limits hold whatever the model does:
 | Model calls per visit | 30 (`BETA_MAX_STEPS`) | `visit.py`. When the cap is hit, the harness writes the diary entry itself and says so. |
 | Reports per visit | 3 | `visit.py`. A fourth call gets a tool error and never reaches the server. |
 | Tool result size | 8,000 characters, with a note when cut | `tools.py` |
-| Gap between model calls | 5 s (`BETA_LLM_MIN_INTERVAL`) | `llm.py` |
+| Gap between model calls | 6 s (`BETA_LLM_MIN_INTERVAL`) | `llm.py` |
 | 429s waited out | 3 times, using `Retry-After` | `game_api.py` and `llm.py` |
 
 If the model stops calling tools before `finish_visit`, it is asked once more
@@ -123,8 +123,8 @@ changing these repository variables:
 | Variable | Default | Notes |
 |---|---|---|
 | `BETA_LLM_BASE_URL` | `https://generativelanguage.googleapis.com/v1beta/openai` | Gemini's OpenAI-compatible endpoint. Mistral is `https://api.mistral.ai/v1`. |
-| `BETA_LLM_MODEL` | `gemini-flash-lite-latest` | Gemini's alias for the newest Flash-Lite. Pin a dated id from AI Studio if the alias moves under you. On Mistral, `mistral-large-2512` allows 250K tokens a minute, while `mistral-small` allows only 20K, which is too few. |
-| `BETA_LLM_MIN_INTERVAL` | `5` (seconds) | Keep within the provider's requests per minute: 5 s suits a 15-a-minute tier. Raise it if visits hit tokens-per-minute 429s. |
+| `BETA_LLM_MODEL` | `gemini-3.5-flash-lite` | On AI Studio's free tier (November 2026): 15 requests a minute, 250K input tokens a minute, 500 requests a day. Limits are per model, and `gemini-3.1-flash-lite` has its own 500. On Mistral, `mistral-large-2512` allows 250K tokens a minute, while `mistral-small` allows only 20K, which is too few. |
+| `BETA_LLM_MIN_INTERVAL` | `6` (seconds) | Keep within the provider's per-minute limits. Six seconds is 10 calls a minute, which keeps a late-visit call of about 25K tokens inside 250K tokens a minute. |
 | `BETA_MAX_STEPS` | `30` | Model calls per visit |
 | `BETA_BASE_URL` | `https://velodra.fly.dev` | The game server |
 
