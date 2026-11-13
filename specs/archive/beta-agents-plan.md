@@ -36,7 +36,7 @@ runs the due testers every hour, keeping each one's diary on the
    endpoint.** Mistral, Groq, OpenRouter and Gemini's compatibility endpoint all
    speak it, so the provider is three settings: `BETA_LLM_BASE_URL` (default
    `https://api.mistral.ai/v1`), `BETA_LLM_MODEL` (default
-   `mistral-small-latest`) and `BETA_LLM_API_KEY`. Moving to Claude would
+   `mistral-large-2512`) and `BETA_LLM_API_KEY`. Moving to Claude would
    take a second small client class behind the same `chat()` call, which is
    not built now.
 4. **One tool per API operation**, generated at the start of every visit from
@@ -137,7 +137,7 @@ runs the due testers every hour, keeping each one's diary on the
 ## Risks
 
 - **Mistral's tool calling with 39 tools** may be shaky on the small model.
-  The fallback is `mistral-medium-latest`, changed by a single variable.
+  The model is a single variable.
 - **Free-tier limits are unpublished.** A visit's tool definitions are about
   8K tokens a call, which is fine at the reported 500K tokens a minute.
 - **Commits to `beta-diaries`** run about 26 a day. They're on their own

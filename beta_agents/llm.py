@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 DEFAULT_BASE_URL = "https://api.mistral.ai/v1"
-DEFAULT_MODEL = "mistral-small-latest"
+DEFAULT_MODEL = "mistral-large-2512"
 
 
 class LLMError(RuntimeError):

@@ -122,7 +122,7 @@ changing these repository variables:
 | Variable | Default | Notes |
 |---|---|---|
 | `BETA_LLM_BASE_URL` | `https://api.mistral.ai/v1` | Gemini: `https://generativelanguage.googleapis.com/v1beta/openai` |
-| `BETA_LLM_MODEL` | `mistral-small-latest` | For Gemini, the Flash-Lite model id AI Studio lists |
+| `BETA_LLM_MODEL` | `mistral-large-2512` | On Mistral's free tier (November 2026) it allows 250K tokens a minute at 1 request a second. `mistral-small` allows only 20K a minute, which is too few. For Gemini, use the Flash-Lite model id that AI Studio lists. |
 | `BETA_LLM_MIN_INTERVAL` | `1.2` (seconds) | Keep within the provider's requests per minute. For a 15-a-minute tier, use `5`. |
 | `BETA_MAX_STEPS` | `40` | Model calls per visit |
 | `BETA_BASE_URL` | `https://velodra.fly.dev` | The game server |
@@ -133,8 +133,9 @@ about 0.5M tokens and 30 calls per visit, and about 26 visits a real day at
 the default cadence. Claude would need a second small client behind the same
 `chat()` call, which isn't built.
 
-Free tiers move. In November 2026, Mistral's Free plan stopped activating API
-keys, Groq's free tier allowed 200K tokens a day (too few), and Gemini
+Free tiers move. In November 2026, Mistral's Free plan created API keys only
+once *API pay-as-you-go* was enabled on the Subscription page, and came with
+$10 a month of included usage, Groq's free tier allowed 200K tokens a day (too few), and Gemini
 Flash-Lite allowed about 500 calls a day. Check the provider's console for
 the numbers on your own project.
 
