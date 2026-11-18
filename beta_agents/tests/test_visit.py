@@ -136,3 +136,16 @@ def test_prompt_pieces():
     assert "24 times faster" in prompt  # the staging briefing
     assert "Keep it in step with the code" not in staging_briefing()  # its maintainers' note is left out
     assert "first visit" in opening_message([], "now")
+
+
+def test_provider_extras_on_a_tool_call_go_back_to_the_model(setup):
+    # Gemini 3 refuses a history whose tool calls lost their thought signature.
+    tester, box, diary, _ = setup
+    signed = call("get_me", {})
+    signed["extra_content"] = {"google": {"thought_signature": "sig-123"}}
+    llm = ScriptedLLM([{"tool_calls": [signed]}, {"tool_calls": [call("finish_visit", {"diary_entry": "ok"})]}])
+    run_visit(tester, box, llm, diary, now=NOW, echo=lambda _: None)
+    history, _ = llm.seen[1]
+    echoed = next(m for m in history if m["role"] == "assistant")["tool_calls"][0]
+    assert echoed["extra_content"] == {"google": {"thought_signature": "sig-123"}}
+    assert echoed["function"]["name"] == "get_me"

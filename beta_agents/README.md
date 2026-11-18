@@ -25,6 +25,9 @@ standard library, so it needs no install step.
 3. Runs the tool loop (`visit.py`). A game error, such as a 4xx or 5xx, goes
    back to the model as the tool's result. A wrong answer may be exactly what
    should be reported.
+   Each tool call goes back into the history with every field the provider
+   sent: Gemini 3 attaches a thought signature to its calls and answers 400
+   to a history that drops it.
 4. Ends when the model calls `finish_visit(diary_entry)`, which appends a
    `## <real UTC time>` section to `diaries/<tester>.md` with a line of visit
    stats.

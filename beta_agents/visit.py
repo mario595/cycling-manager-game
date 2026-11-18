@@ -163,19 +163,30 @@ def _with_footer(outcome: VisitOutcome) -> str:
 
 
 def _assistant_message(message: dict, calls: list[dict]) -> dict:
+    """The model's turn as it goes back into the history.
+
+    Each tool call is echoed with every field the provider sent, not only the
+    OpenAI ones: Gemini 3 attaches a thought signature to its calls
+    (`extra_content.google.thought_signature`) and answers 400 to a history
+    that drops it.
+    """
     out: dict = {"role": "assistant", "content": message.get("content") or ""}
     if calls:
-        out["tool_calls"] = [
-            {
-                "id": call.get("id", ""),
-                "type": "function",
-                "function": {
-                    "name": call.get("function", {}).get("name", ""),
-                    "arguments": call.get("function", {}).get("arguments", "{}"),
-                },
-            }
-            for call in calls
-        ]
+        echoed = []
+        for call in calls:
+            function = call.get("function", {})
+            arguments = function.get("arguments", "{}")
+            if not isinstance(arguments, str):
+                arguments = json.dumps(arguments)
+            echoed.append(
+                {
+                    **call,
+                    "id": call.get("id", ""),
+                    "type": "function",
+                    "function": {**function, "name": function.get("name", ""), "arguments": arguments},
+                }
+            )
+        out["tool_calls"] = echoed
     return out
 
 
