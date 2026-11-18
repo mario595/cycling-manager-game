@@ -20,3 +20,11 @@ def test_entry_starting_with_a_heading(tmp_path):
     diary = Diary(tmp_path, "x", "X")
     diary.append("## Summary\nok")
     assert len(diary.last_entries()) == 1
+
+
+def test_last_visit_at(tmp_path):
+    diary = Diary(tmp_path, "racer", "Beta Racer")
+    assert diary.last_visit_at() is None
+    diary.append("one", at=datetime(2026, 11, 13, 13, 25, tzinfo=timezone.utc))
+    diary.append("two\n\n## a heading the model wrote", at=datetime(2026, 11, 13, 13, 28, tzinfo=timezone.utc))
+    assert diary.last_visit_at() == datetime(2026, 11, 13, 13, 28, tzinfo=timezone.utc)

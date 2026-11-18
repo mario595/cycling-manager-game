@@ -1,16 +1,26 @@
 """The five beta testers: who they are, how they play, and when they visit.
 
-A tester visits when `hour % period == offset`, the hour being the current UTC
-hour. The four regular testers share period 8 with offsets 0, 2, 4 and 6, so
-one of them visits every even hour, and each visits every eight real hours
-(about eight game days on the staging clock). The minimal-effort tester visits
-once a real day, at an odd hour. The cadence is set by the free model tier's
-daily call allowance (specs/archive/beta-agents.md, Cadence).
+A tester is due once `period` real hours, less half an hour of slack, have passed
+since its last diary entry; a tester with no diary is due at once. The four
+regular testers have period 8, about eight game days on the staging clock, and
+the minimal-effort tester visits once a real day. The cadence is set by the
+free model tier's daily call allowance (specs/archive/beta-agents.md, Cadence).
+
+The rule reads the diary rather than the clock's hour because GitHub runs an
+hourly schedule only when it has room: in the first five days it ran 17 of
+about 120, hours late and at random, so an exact-hour rule left most testers
+with no visit at all. The slack lets a tester go whose last visit started a
+few minutes late, behind another tester in the same run, so that on a punctual
+schedule the cadence stays at exactly `period` hours.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Callable
+
+DUE_SLACK = timedelta(minutes=30)
 
 
 @dataclass(frozen=True)
@@ -18,7 +28,6 @@ class Tester:
     slug: str
     display_name: str
     period: int
-    offset: int
     persona: str
 
     @property
@@ -30,8 +39,10 @@ class Tester:
         """The environment variable (and GitHub secret) holding its API key."""
         return f"BETA_KEY_{self.slug.upper()}"
 
-    def is_due(self, hour: int) -> bool:
-        return hour % self.period == self.offset
+    def is_due(self, last_visit: datetime | None, now: datetime) -> bool:
+        if last_visit is None:
+            return True
+        return now - last_visit >= timedelta(hours=self.period) - DUE_SLACK
 
 
 TESTERS: tuple[Tester, ...] = (
@@ -39,7 +50,6 @@ TESTERS: tuple[Tester, ...] = (
         slug="youth",
         display_name="Beta Youth Builder",
         period=8,
-        offset=0,
         persona=(
             "You are a patient youth builder. You believe a team is built from "
             "its own development squad. Open a development squad as soon as you "
@@ -53,7 +63,6 @@ TESTERS: tuple[Tester, ...] = (
         slug="trader",
         display_name="Beta Trader",
         period=8,
-        offset=2,
         persona=(
             "You are an aggressive trader. Every visit, look at the auction "
             "market and the free-agent pool. Bid on riders who look undervalued, "
@@ -67,7 +76,6 @@ TESTERS: tuple[Tester, ...] = (
         slug="money",
         display_name="Beta Accountant",
         period=8,
-        offset=4,
         persona=(
             "You are a money-focused manager. Your aim is a healthy balance. "
             "Pick the sponsor offer you think will pay best, keep the wage bill "
@@ -80,7 +88,6 @@ TESTERS: tuple[Tester, ...] = (
         slug="racer",
         display_name="Beta Racer",
         period=8,
-        offset=6,
         persona=(
             "You are a racer. Results are all that matter to you. Before every "
             "upcoming race, read its course and pick the four riders best "
@@ -94,7 +101,6 @@ TESTERS: tuple[Tester, ...] = (
         slug="casual",
         display_name="Beta Casual",
         period=24,
-        offset=3,
         persona=(
             "You are a minimal-effort manager who rarely has time. Visit, check "
             "that nothing is on fire, and leave most things to their defaults. "
@@ -113,6 +119,10 @@ def get(slug: str) -> Tester:
     raise KeyError(f"No tester called {slug!r}. Known: {', '.join(t.slug for t in TESTERS)}")
 
 
-def due(hour: int) -> list[Tester]:
-    """The testers due to visit at this UTC hour, in a fixed order."""
-    return [t for t in TESTERS if t.is_due(hour)]
+def due(now: datetime, last_visit: Callable[[Tester], datetime | None]) -> list[Tester]:
+    """The testers due to visit now, longest-waiting first. `last_visit` gives
+    a tester's last diary entry, or None if it has none."""
+    waiting = [(t, last_visit(t)) for t in TESTERS]
+    ready = [(t, last) for t, last in waiting if t.is_due(last, now)]
+    ready.sort(key=lambda pair: pair[1] or datetime.min.replace(tzinfo=now.tzinfo))
+    return [t for t, _ in ready]

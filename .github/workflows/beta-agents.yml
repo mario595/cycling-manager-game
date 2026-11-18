@@ -1,8 +1,10 @@
 name: Beta testers
 
 # The LLM beta testers (#132; beta_agents/README.md). Every hour, the testers
-# due at that UTC hour visit the staging world one after another, and each
-# one's diary is committed to the beta-diaries branch.
+# whose last diary entry is old enough visit the staging world one after
+# another, and each one's diary is committed to the beta-diaries branch.
+# GitHub often skips or delays hourly runs, so dueness is read from the
+# diaries, never from the hour a run happens to land in.
 #
 # Pause them all: set the repository variable BETA_AGENTS_ENABLED to anything
 # but "true". A manual run of one named tester still works while paused.
@@ -66,7 +68,7 @@ jobs:
           BETA_KEY_CASUAL: ${{ secrets.BETA_KEY_CASUAL }}
           ONE_TESTER: ${{ inputs.tester }}
         run: |
-          if [ -n "$ONE_TESTER" ]; then due="$ONE_TESTER"; else due=$(python -m beta_agents due); fi
+          if [ -n "$ONE_TESTER" ]; then due="$ONE_TESTER"; else due=$(python -m beta_agents due --diary-dir diary); fi
           echo "Due: ${due:-nobody}"
           failed=0
           for tester in $due; do

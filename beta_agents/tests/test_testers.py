@@ -1,23 +1,47 @@
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 from beta_agents import testers
 
+NOW = datetime(2026, 11, 18, 15, 17, tzinfo=timezone.utc)
 
-def test_no_two_testers_share_an_hour():
-    for hour in range(24):
-        assert len(testers.due(hour)) <= 1
-    assert sum(len(testers.due(h)) for h in range(24)) == 4 * 3 + 1  # 13 visits a day
+
+def ago(hours):
+    return NOW - timedelta(hours=hours)
+
+
+def test_a_tester_with_no_diary_is_due():
+    assert testers.get("youth").is_due(None, NOW)
+
+
+def test_a_regular_tester_is_due_eight_hours_after_its_last_visit_with_half_an_hour_of_slack():
+    youth = testers.get("youth")
+    assert not youth.is_due(ago(7.4), NOW)
+    assert youth.is_due(ago(7.5), NOW)  # its last visit started late, behind another tester
+    assert youth.is_due(ago(30), NOW)  # GitHub skipped some runs
 
 
 def test_casual_visits_once_a_day():
-    hours = [h for h in range(24) if testers.get("casual") in testers.due(h)]
-    assert hours == [3]
+    casual = testers.get("casual")
+    assert not casual.is_due(ago(23), NOW)
+    assert casual.is_due(ago(24), NOW)
 
 
-def test_each_regular_tester_visits_every_eight_hours():
-    for tester in testers.TESTERS:
-        if tester.period == 8:
-            assert [h for h in range(24) if tester.is_due(h)] == list(range(tester.offset, 24, 8))
+def test_due_lists_the_longest_waiting_first():
+    last = {"youth": ago(9), "trader": ago(2), "money": None, "racer": ago(20), "casual": ago(5)}
+    assert [t.slug for t in testers.due(NOW, lambda t: last[t.slug])] == ["money", "racer", "youth"]
+
+
+def test_thirteen_visits_a_day_on_a_punctual_hourly_schedule():
+    last = {t.slug: None for t in testers.TESTERS}
+    visits_on_day_two = 0
+    for hour in range(48):
+        now = NOW + timedelta(hours=hour)
+        for tester in testers.due(now, lambda t: last[t.slug]):
+            last[tester.slug] = now
+            visits_on_day_two += hour >= 24
+    assert visits_on_day_two == 4 * 3 + 1
 
 
 def test_names_and_secrets():

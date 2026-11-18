@@ -1,14 +1,22 @@
 import json
 
+from datetime import datetime, timezone
+
 from beta_agents import __main__ as cli
+from beta_agents.diary import Diary
 from beta_agents.game_api import Response
 
 
-def test_due(capsys):
-    assert cli.main(["due", "--hour", "2"], env={}) == 0
-    assert capsys.readouterr().out.split() == ["trader"]
-    assert cli.main(["due", "--hour", "3"], env={}) == 0
-    assert capsys.readouterr().out.split() == ["casual"]
+def test_due_reads_the_diaries(capsys, tmp_path):
+    for slug, stamp in [("youth", "2026-11-18 10:17"), ("trader", "2026-11-18 03:00"), ("money", "2026-11-18 14:00"), ("racer", "2026-11-13 13:28"), ("casual", "2026-11-18 03:00")]:
+        Diary(tmp_path, slug, slug).append("visited", at=datetime.fromisoformat(stamp).replace(tzinfo=timezone.utc))
+    assert cli.main(["due", "--diary-dir", str(tmp_path), "--now", "2026-11-18T15:17"], env={}) == 0
+    assert capsys.readouterr().out.split() == ["racer", "trader"]
+
+
+def test_everyone_is_due_with_no_diaries(capsys, tmp_path):
+    assert cli.main(["due", "--diary-dir", str(tmp_path)], env={}) == 0
+    assert len(capsys.readouterr().out.split()) == 5
 
 
 def test_unknown_tester(capsys):
