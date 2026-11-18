@@ -52,25 +52,39 @@ and needs CSRF (`api/README.md`).
 
 ## The testers
 
-`testers.py`. A tester is due when `utc_hour % period == offset`.
+`testers.py`. A tester is due once `period` real hours, less half an hour of
+slack, have passed since the last entry in its diary. A tester with no diary
+is due at once.
 
 | Slug | Persona | Visits |
 |---|---|---|
-| `youth` | builds through the development squad | every 8 h, at 00, 08, 16 UTC |
-| `trader` | trades at auction and in the free-agent pool | every 8 h, at 02, 10, 18 |
-| `money` | chases sponsorship and a low wage bill, and audits the ledger | every 8 h, at 04, 12, 20 |
-| `racer` | picks a squad for every course, and sets training | every 8 h, at 06, 14, 22 |
-| `casual` | minimal effort, leaves squads to the auto-pick | once a day, at 03 UTC |
+| `youth` | builds through the development squad | every 8 h |
+| `trader` | trades at auction and in the free-agent pool | every 8 h |
+| `money` | chases sponsorship and a low wage bill, and audits the ledger | every 8 h |
+| `racer` | picks a squad for every course, and sets training | every 8 h |
+| `casual` | minimal effort, leaves squads to the auto-pick | once a day |
 
-No two testers visit in the same hour. Eight real hours is about eight game
-days on the staging clock, so a regular tester sees about one race in two
-before it starts. A race it misses is auto-picked, as for any player. Once a
-day stays well inside the 70-hour inactivity release.
+**Dueness comes from the diary, not the hour.** GitHub runs an hourly
+schedule only when it has room. In the testers' first five days it ran 17 of
+about 120 hourly runs, hours late and at no fixed hour, so a rule keyed on the
+UTC hour (the first version) left most testers with no visit at all. When
+several testers are due in one run, they visit one after another, the
+longest-waiting first. On a punctual schedule each keeps its 8 or 24 hours.
+On a patchy one, a tester visits at the first run after it falls due.
+
+A visit that is skipped before the model is reached, such as when the server
+is down, leaves the diary alone, so that tester is due again at the next run.
+
+Eight real hours is about eight game days on the staging clock, so a regular
+tester sees about one race in two before it starts. A race it misses is
+auto-picked, as for any player. Once a day stays well inside the 70-hour
+inactivity release, but a schedule that GitHub skips for days does not, and
+then a tester loses its team and claims a new one.
 
 ## The workflow
 
 `.github/workflows/beta-agents.yml` runs at minute 17 of every hour. It runs
-`python -m beta_agents due`, visits each due tester in turn, then commits
+`python -m beta_agents due --diary-dir diary`, visits each due tester in turn, then commits
 `diaries/` to the **`beta-diaries`** branch, creating the branch on its
 first run. That branch is never merged, and pushes to it trigger neither CI
 nor the deploy. Read a tester's diary at `diaries/<tester>.md` on that
@@ -137,8 +151,7 @@ about 0.5M tokens and 30 calls per visit, and 13 visits a real day at the
 default cadence, which is at most 390 calls. That's inside the roughly 500 a
 day that Gemini's free Flash-Lite allowed in November 2026. The cadence is set
 by that allowance. A provider with more headroom could take the regular
-testers back to every 4 hours by changing their `period` and `offset` in
-`testers.py`. Claude would need a second small client behind the same
+testers back to every 4 hours by changing their `period` in `testers.py`. Claude would need a second small client behind the same
 `chat()` call, which isn't built.
 
 Free tiers move. In November 2026, Mistral's Free plan created API keys only

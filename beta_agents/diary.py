@@ -4,10 +4,12 @@ that something changed oddly between two visits."""
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
 ENTRY_MARK = "\n## "
+STAMP = re.compile(r"^## (\d{4}-\d{2}-\d{2} \d{2}:\d{2}) UTC$", re.MULTILINE)
 
 
 class Diary:
@@ -21,6 +23,15 @@ class Diary:
         text = self.path.read_text(encoding="utf-8")
         sections = text.split(ENTRY_MARK)[1:]
         return ["## " + section.strip() for section in sections[-count:]]
+
+    def last_visit_at(self) -> datetime | None:
+        """When the last entry was written, or None for an empty diary."""
+        if not self.path.exists():
+            return None
+        stamps = STAMP.findall(self.path.read_text(encoding="utf-8"))
+        if not stamps:
+            return None
+        return datetime.strptime(stamps[-1], "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
 
     def append(self, entry: str, at: datetime | None = None) -> None:
         at = at or datetime.now(timezone.utc)

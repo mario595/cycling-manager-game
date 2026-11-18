@@ -1,7 +1,7 @@
 """`python -m beta_agents <command>`; see beta_agents/README.md.
 
     visit <tester>      one visit (reads BETA_KEY_<TESTER> and BETA_LLM_API_KEY)
-    due [--hour H]      the testers due at this UTC hour, one per line
+    due [--diary-dir D] the testers due now, by their diaries, one per line
     register <tester>   create the tester's account; prints the token command
     tools               list the tools generated from the server's schema
 """
@@ -36,7 +36,8 @@ def main(argv: list[str] | None = None, env: dict[str, str] | None = None) -> in
     visit.add_argument("--max-steps", type=int, default=int(env.get("BETA_MAX_STEPS") or DEFAULT_MAX_STEPS))
 
     due = sub.add_parser("due", help="list the testers due now")
-    due.add_argument("--hour", type=int, default=None)
+    due.add_argument("--diary-dir", default=env.get("BETA_DIARY_DIR", "."))
+    due.add_argument("--now", default=None, help="an ISO time in UTC, for trying the rule")
 
     register = sub.add_parser("register", help="create a tester's account")
     register.add_argument("tester")
@@ -46,8 +47,9 @@ def main(argv: list[str] | None = None, env: dict[str, str] | None = None) -> in
     args = parser.parse_args(argv)
     try:
         if args.command == "due":
-            hour = datetime.now(timezone.utc).hour if args.hour is None else args.hour
-            for tester in testers.due(hour):
+            now = datetime.fromisoformat(args.now).replace(tzinfo=timezone.utc) if args.now else datetime.now(timezone.utc)
+            diaries = lambda t: Diary(args.diary_dir, t.slug, t.display_name).last_visit_at()
+            for tester in testers.due(now, diaries):
                 print(tester.slug)
             return 0
         if args.command == "register":
