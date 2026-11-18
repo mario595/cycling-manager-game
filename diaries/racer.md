@@ -14,3 +14,9 @@ _Visit stats: 1 tool calls, 0 reports filed, cut short._
 Claimed team Velo Turbo (VTR). Signed the steady sponsor Northwind Gear. Hired trainer Pablo Moreno was already assigned to the team upon claim (sprint speciality). Set training focus to sprint. Picked our squad for Vuelta a Castilla y León Stage 1, choosing our best flat/rouleur/sprinter riders (Jorge Sanchez as leader, Pablo Castro, Diego Hernandez, Javier Rodriguez) for this flat course. Balance is 500k. Ready for the upcoming races!
 
 _Visit stats: 15 tool calls, 0 reports filed._
+
+## 2026-11-18 15:27 UTC
+
+Claimed team Velo Turbo (VTR) after previous manager inactivity. Roster inherited has 12 riders. Checked schedule: week 9, upcoming race is Subida a Urkiola (a steep climbing course featuring an HC climb at the finish). Picked our climbing squad with Ignacio Martin as leader, along with Pedro Ortiz, Juan Munoz, and Daniel Ruiz. Signed the steady sponsor Meridian Finance. Opened the Regional development squad for youth development. Training focus is on sprint with trainer Hugo Diaz. Balance stands at 470,000 (after dev squad opening fee). Ready for the mountain tests ahead!
+
+_Visit stats: 16 tool calls, 0 reports filed._
