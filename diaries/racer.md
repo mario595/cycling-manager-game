@@ -92,3 +92,9 @@ _Visit stats: 16 tool calls, 0 reports filed._
 Checked Season 4 Week 5. Balance is 338,249, backed by Cobblestone Coffee sponsorship and merchandise. Reviewed recent race results through Clásica de las Marismas where we claimed 16,500 in prize money. Promoted successful development squad graduates Sergio Ramirez and Sergio Jimenez to the roster. Inspected upcoming Week 5 race, Clásica de Jaén (hilly profile with cat 1 and cat 2 mountain markers), and picked our squad with climber Juan Munoz as leader, alongside climbers Pedro Ortiz and Ignacio Torres, and domestique Daniel Ruiz. Training focus remains on sprint under trainer Hugo Diaz. Development squad runs at Regional level with 6 prospects, with next youth intake in Week 8. All set for Week 5!
 
 _Visit stats: 13 tool calls, 0 reports filed._
+
+## 2026-11-24 21:18 UTC
+
+Checked Season 4 Week 6. Balance is 327,975, backed by Cobblestone Coffee sponsorship and merchandise. Reviewed Clásica de Jaén where Juan Munoz placed 30th. Inspected upcoming Week 6 race, Clásica de Ordizia (155km flat with final cat 3 climb), and picked our squad with sprinter Ruben Torres as leader, along with sprinters Miguel Alvarez, Santiago Ortiz, and youth graduate Sergio Jimenez. Training focus remains on sprint under trainer Hugo Diaz. Development squad runs at Regional level with 4 prospects (next intake in Week 8). All set for Week 6!
+
+_Visit stats: 13 tool calls, 0 reports filed._
