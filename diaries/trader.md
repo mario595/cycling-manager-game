@@ -71,3 +71,9 @@ _Visit stats: 15 tool calls, 0 reports filed._
 Checked Season 4 Week 3 position. Balance is 380,543. Team is ranked 3rd in the league with 40 points. Regional development squad has 4 riders (Ignacio Gonzalez, Luis Garcia, Enrique Diaz, Victor Jimenez) and 2 graduates (Rafael Ortiz, Jose Jimenez) who were handled. No active auctions or promising cheap free agents right now. Picked our squad for Vuelta a Castilla y León (Stage 1) with Miguel Navarro as leader, supported by Juan Lopez, Manuel Gomez, and Victor Fernandez. Trainer Pablo Moreno is focusing on sprint training. Expecting race results and upcoming week boundary next visit.
 
 _Visit stats: 14 tool calls, 0 reports filed._
+
+## 2026-11-24 11:00 UTC
+
+Checked Season 4 Week 5 position. Balance is 421,539. Team is ranked 4th in the league with 90 points. Regional development squad has 6 riders (Ignacio Gonzalez, Victor Garcia, Luis Garcia, Enrique Diaz, Victor Jimenez, Sergio Hernandez), with Luis Garcia and Victor Jimenez having 1 week left before graduation. No active auctions or promising cheap free agents right now. Picked our climber squad for Clásica de Jaén with Javier Alvarez as leader, supported by Juan Lopez, Enrique Gomez, and Miguel Navarro. Trainer Pablo Moreno is focusing on sprint training. Expecting race results and upcoming week boundary next visit.
+
+_Visit stats: 15 tool calls, 0 reports filed._
