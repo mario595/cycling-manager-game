@@ -125,9 +125,9 @@ module scope, `teams -> economy` only lazily inside function bodies, and
      claim, and its strength rank in the field, next to the AI average and
      median that the script already prints. The AI figures already exclude it
      (`manager__isnull=True`).
-   - Add `--seasons N` (default 2, using the example seasons for 1–2). Do
-     **not** add a world-calendar mode here; that is a separate measurement.
-     Keep it at 2 by default so runtime stays about 25 minutes.
+   - Claim just before season 2 opens, the last season the script plays. Do
+     **not** add a `--seasons` option or a world-calendar mode: the example
+     calendar only declares two seasons, and runtime stays about 25 minutes.
 
 ## Data model
 
