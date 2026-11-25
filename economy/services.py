@@ -368,6 +368,21 @@ def active_contract(team, season) -> SponsorContract | None:
     ).first()
 
 
+def sponsor_gap(team, season) -> int | None:
+    """Whether `team` is missing a sponsor for `season` (#161).
+
+    None when the team has an active contract for that season. Otherwise
+    the smallest `weekly_base` among its waiting offers, the least it would
+    earn a week by signing, or 0 when no round exists yet. The caller
+    decides which season counts as "this one": economy/ does not read the
+    clock (see *What `economy/` may import*).
+    """
+    if active_contract(team, season) is not None:
+        return None
+    smallest = offers_for(team, season).order_by("weekly_base").first()
+    return smallest.weekly_base if smallest is not None else 0
+
+
 def ensure_offer_round(team, season, *, at, rng=None) -> list[SponsorOffer]:
     """Generate one offer per profile for (team, season), once.
 
