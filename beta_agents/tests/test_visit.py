@@ -1,3 +1,4 @@
+import dataclasses
 import json
 from datetime import datetime, timezone
 
@@ -14,6 +15,7 @@ from beta_agents.visit import run_visit
 from .conftest import FakeTransport
 
 NOW = datetime(2026, 11, 13, 12, 17, tzinfo=timezone.utc)
+DONE = "ok. Critical observation: the market was empty."
 
 
 def call(name, args, id_="c1"):
@@ -43,7 +45,9 @@ def setup(schema, tmp_path):
         }
     )
     box = Toolbox(GameAPI("http://g", "k", transport=transport), operations_from_schema(schema))
-    tester = testers.get("racer")
+    # These tests are about the tool loop, so the tester may finish early. The
+    # minimum-effort rule has its own tests below, with the real racer.
+    tester = dataclasses.replace(testers.get("racer"), min_tool_calls=0)
     return tester, box, Diary(tmp_path, tester.slug, tester.display_name), transport
 
 
@@ -54,7 +58,7 @@ def test_a_full_visit(setup):
         [
             {"content": "Let me look.", "tool_calls": [call("get_me", {})]},
             {"tool_calls": [call("fire_trainer", {}, "a"), call("report_a_problem", {"category": "bug", "text": "500"}, "b")]},
-            {"tool_calls": [call("finish_visit", {"diary_entry": "Fired nobody; reported a 500."})]},
+            {"tool_calls": [call("finish_visit", {"diary_entry": "Fired nobody; reported a 500. Critical observation: firing gave a 500."})]},
         ]
     )
     outcome = run_visit(tester, box, llm, diary, now=NOW, echo=lambda *_: None)
@@ -78,7 +82,7 @@ def test_report_cap_holds(setup):
     llm = ScriptedLLM(
         [
             {"tool_calls": [report(1), report(2), report(3), report(4)]},
-            {"tool_calls": [call("finish_visit", {"diary_entry": "done"})]},
+            {"tool_calls": [call("finish_visit", {"diary_entry": DONE})]},
         ]
     )
     outcome = run_visit(tester, box, llm, diary, now=NOW, echo=lambda *_: None)
@@ -96,7 +100,7 @@ def test_step_cap_writes_a_harness_entry(setup):
 
 def test_a_model_that_stops_is_nudged_once(setup):
     tester, box, diary, _ = setup
-    llm = ScriptedLLM([{"content": "All good."}, {"tool_calls": [call("finish_visit", {"diary_entry": "ok"})]}])
+    llm = ScriptedLLM([{"content": "All good."}, {"tool_calls": [call("finish_visit", {"diary_entry": DONE})]}])
     outcome = run_visit(tester, box, llm, diary, now=NOW, echo=lambda *_: None)
     assert outcome.finished
     assert "finish_visit" in llm.seen[1][0][-1]["content"]
@@ -124,7 +128,7 @@ def test_model_failure_mid_visit_is_recorded(setup):
 def test_bad_arguments_are_tolerated(setup):
     tester, box, diary, _ = setup
     broken = {"id": "x", "function": {"name": "get_me", "arguments": "{not json"}}
-    llm = ScriptedLLM([{"tool_calls": [broken]}, {"tool_calls": [call("finish_visit", {"diary_entry": "ok"})]}])
+    llm = ScriptedLLM([{"tool_calls": [broken]}, {"tool_calls": [call("finish_visit", {"diary_entry": DONE})]}])
     assert run_visit(tester, box, llm, diary, now=NOW, echo=lambda *_: None).finished
 
 
@@ -143,9 +147,86 @@ def test_provider_extras_on_a_tool_call_go_back_to_the_model(setup):
     tester, box, diary, _ = setup
     signed = call("get_me", {})
     signed["extra_content"] = {"google": {"thought_signature": "sig-123"}}
-    llm = ScriptedLLM([{"tool_calls": [signed]}, {"tool_calls": [call("finish_visit", {"diary_entry": "ok"})]}])
+    llm = ScriptedLLM([{"tool_calls": [signed]}, {"tool_calls": [call("finish_visit", {"diary_entry": DONE})]}])
     run_visit(tester, box, llm, diary, now=NOW, echo=lambda _: None)
     history, _ = llm.seen[1]
     echoed = next(m for m in history if m["role"] == "assistant")["tool_calls"][0]
     assert echoed["extra_content"] == {"google": {"thought_signature": "sig-123"}}
     assert echoed["function"]["name"] == "get_me"
+
+
+def finish(text=DONE, id_="f"):
+    return {"tool_calls": [call("finish_visit", {"diary_entry": text}, id_)]}
+
+
+def looks(n):
+    return {"tool_calls": [call("get_me", {}, f"g{i}") for i in range(n)]}
+
+
+def test_an_early_finish_is_pushed_back_once_then_saves(setup):
+    _, box, diary, _ = setup
+    racer = testers.get("racer")
+    llm = ScriptedLLM([looks(3), finish(id_="f1"), finish(id_="f2")])
+    outcome = run_visit(racer, box, llm, diary, now=NOW, echo=lambda *_: None)
+    assert outcome.finished and outcome.pushbacks == 1
+    refusal = next(m for m in llm.seen[2][0] if m.get("tool_call_id") == "f1")
+    assert '"saved": false' in refusal["content"] and "only 3 tool calls" in refusal["content"]
+    assert "focus area, finances" in refusal["content"]  # the first visit's focus
+
+
+def test_enough_looking_is_not_pushed_back(setup):
+    _, box, diary, _ = setup
+    llm = ScriptedLLM([looks(12), finish()])
+    outcome = run_visit(testers.get("racer"), box, llm, diary, now=NOW, echo=lambda *_: None)
+    assert outcome.finished and outcome.pushbacks == 0
+
+
+def test_casual_may_keep_its_visits_short_and_has_no_focus(setup):
+    _, box, diary, _ = setup
+    casual = testers.get("casual")
+    llm = ScriptedLLM([looks(2), finish()])
+    outcome = run_visit(casual, box, llm, diary, now=NOW, echo=lambda *_: None)
+    assert outcome.finished and outcome.pushbacks == 0 and outcome.focus == ""
+    assert "focus" not in llm.seen[0][0][1]["content"].lower()
+    assert "focus" not in diary.last_entries()[-1]
+
+
+def test_an_entry_without_a_critical_observation_is_pushed_back_once(setup):
+    tester, box, diary, _ = setup
+    llm = ScriptedLLM([finish("Everything is running smoothly.", "f1"), finish("Still smooth.", "f2")])
+    outcome = run_visit(tester, box, llm, diary, now=NOW, echo=lambda *_: None)
+    assert outcome.finished and outcome.pushbacks == 1
+    refusal = next(m for m in llm.seen[1][0] if m.get("tool_call_id") == "f1")
+    assert "Critical observation:" in refusal["content"]
+    assert "Still smooth." in diary.last_entries()[-1]  # the second try saves, whatever it says
+
+
+def test_the_focus_rotates_with_the_diary(setup):
+    tester, box, diary, _ = setup
+    seen = []
+    for day in range(1, 8):
+        llm = ScriptedLLM([finish()])
+        seen.append(run_visit(tester, box, llm, diary, now=datetime(2026, 11, day, tzinfo=timezone.utc), echo=lambda *_: None).focus)
+    assert seen == ["finances", "roster", "market", "racing", "development", "staff_and_sponsors", "finances"]
+    assert "focus: roster, 24.0 h since the last visit" in diary.last_entries(6)[0]
+
+
+def test_the_visit_opens_with_what_changed_and_saves_the_reading(setup):
+    tester, box, diary, _ = setup
+    before = {"team": {"id": 7, "name": "Velo", "code": "VTR"}, "season": 3, "week": 5, "balance": 441908}
+    diary.append("last visit. Critical observation: x", at=datetime(2026, 11, 13, 4, 17, tzinfo=timezone.utc), reading=before)
+    now = dict(before, week=7, balance=429927)
+    llm = ScriptedLLM([finish()])
+    run_visit(tester, box, llm, diary, now=NOW, echo=lambda *_: None, reading=now)
+    opening = llm.seen[0][0][1]["content"]
+    assert "Your last visit was 8 real hours ago" in opening
+    assert "- balance: $441,908 → $429,927 (-$11,981)" in opening
+    assert "- Season 3 Week 5 → Season 3 Week 7" in opening
+    assert diary.last_reading() == now
+
+
+def test_a_visit_cut_short_saves_no_reading(setup):
+    tester, box, diary, _ = setup
+    llm = ScriptedLLM([looks(1)] * 2)
+    run_visit(tester, box, llm, diary, max_steps=2, now=NOW, echo=lambda *_: None, reading={"team": None})
+    assert diary.last_reading() is None

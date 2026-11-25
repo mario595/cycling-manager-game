@@ -14,9 +14,10 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
+from . import snapshot
 from .diary import Diary
 from .llm import ChatClient, LLMError
-from .prompt import MAX_REPORTS_PER_VISIT, opening_message, system_prompt
+from .prompt import MAX_REPORTS_PER_VISIT, focus_for, opening_message, system_prompt
 from .testers import Tester
 from .tools import Toolbox
 
@@ -39,6 +40,22 @@ FINISH_TOOL = {
     },
 }
 
+OBSERVATION_MARK = "critical observation"
+
+EARLY_FINISH = (
+    "Not saved: you have made only {calls} tool calls this visit, which is not "
+    "enough to have looked properly. Keep going{focus}: cross-check what you "
+    "see against the guide, the ledger and other endpoints, and report what "
+    "you cannot explain. Then call `finish_visit` again."
+)
+
+NO_OBSERVATION = (
+    "Not saved: your diary entry has no line starting `Critical observation:`. "
+    "Name at least one thing this visit that was confusing, surprising, "
+    "missing or suspicious (\"everything is fine\" does not count), and call "
+    "`finish_visit` again with the whole entry."
+)
+
 NUDGE = (
     "You stopped without calling `finish_visit`. Call `finish_visit` now with "
     "your diary entry for this visit."
@@ -54,6 +71,9 @@ class VisitOutcome:
     reports_filed: int = 0
     reports_refused: int = 0
     api_errors: int = 0
+    pushbacks: int = 0
+    focus: str = ""
+    hours_since: float | None = None
     diary_entry: str = ""
     error: str = ""
     log: list[str] = field(default_factory=list)
@@ -62,6 +82,7 @@ class VisitOutcome:
         return (
             f"steps={self.steps} tool_calls={self.tool_calls} reports={self.reports_filed} "
             f"refused_reports={self.reports_refused} api_errors={self.api_errors} "
+            f"pushbacks={self.pushbacks} focus={self.focus or '-'} "
             f"finished={self.finished} cut_short={self.cut_short}"
         )
 
@@ -74,15 +95,35 @@ def run_visit(
     max_steps: int = DEFAULT_MAX_STEPS,
     now: datetime | None = None,
     echo=print,
+    reading: dict | None = None,
 ) -> VisitOutcome:
+    """`reading` is the harness's reading of the team (snapshot.take), taken
+    before the visit. It opens the visit with what changed since the last
+    reading, and is saved with the new entry for the next visit."""
     now = now or datetime.now(timezone.utc)
     outcome = VisitOutcome()
+    last_visit = diary.last_visit_at()
+    if last_visit is not None:
+        outcome.hours_since = (now - last_visit).total_seconds() / 3600
+    focus = focus_for(tester, diary.entry_count())
+    outcome.focus = focus[0] if focus else ""
+    changes = snapshot.describe_changes(diary.last_reading(), reading) if reading is not None else None
     tools = toolbox.tools() + [FINISH_TOOL]
     messages: list[dict] = [
         {"role": "system", "content": system_prompt(tester)},
-        {"role": "user", "content": opening_message(diary.last_entries(DIARY_ENTRIES_READ), now.strftime("%Y-%m-%d %H:%M UTC"))},
+        {
+            "role": "user",
+            "content": opening_message(
+                diary.last_entries(DIARY_ENTRIES_READ),
+                now.strftime("%Y-%m-%d %H:%M UTC"),
+                changes=changes,
+                focus=focus,
+                hours_since=outcome.hours_since,
+            ),
+        },
     ]
     nudged = False
+    pushed_early = pushed_observation = False
 
     def note(line: str) -> None:
         outcome.log.append(line)
@@ -112,7 +153,27 @@ def run_visit(
             name = call.get("function", {}).get("name", "")
             arguments = _arguments(call)
             outcome.tool_calls += 1
-            if name == "finish_visit":
+            entry = str(arguments.get("diary_entry", "")) if name == "finish_visit" else ""
+            if name == "finish_visit" and outcome.finished:
+                result = json.dumps({"saved": True})  # a second call in the same turn
+            elif name == "finish_visit" and not pushed_early and outcome.tool_calls - 1 < tester.min_tool_calls:
+                pushed_early = True
+                outcome.pushbacks += 1
+                result = json.dumps(
+                    {
+                        "saved": False,
+                        "error": EARLY_FINISH.format(
+                            calls=outcome.tool_calls - 1, focus=f" on your focus area, {focus[0]}" if focus else ""
+                        ),
+                    }
+                )
+                note(f"[{tester.slug}] finish_visit pushed back: only {outcome.tool_calls - 1} tool calls")
+            elif name == "finish_visit" and not pushed_observation and OBSERVATION_MARK not in entry.lower():
+                pushed_observation = True
+                outcome.pushbacks += 1
+                result = json.dumps({"saved": False, "error": NO_OBSERVATION})
+                note(f"[{tester.slug}] finish_visit pushed back: no critical observation")
+            elif name == "finish_visit":
                 outcome.finished = True
                 outcome.diary_entry = str(arguments.get("diary_entry", "")).strip()
                 result = json.dumps({"saved": True})
@@ -148,7 +209,9 @@ def run_visit(
             f"after {outcome.steps} steps and {outcome.tool_calls} tool calls. "
             "Start the next visit by checking the team's state from scratch.)"
         )
-    diary.append(_with_footer(outcome), at=now)
+    # A visit cut short never accounted for the changes, so it saves no
+    # reading: the next visit compares with nothing rather than half a story.
+    diary.append(_with_footer(outcome), at=now, reading=reading if outcome.finished else None)
     note(f"[{tester.slug}] visit over: {outcome.summary()}")
     return outcome
 
@@ -157,6 +220,8 @@ def _with_footer(outcome: VisitOutcome) -> str:
     return (
         f"{outcome.diary_entry}\n\n"
         f"_Visit stats: {outcome.tool_calls} tool calls, {outcome.reports_filed} reports filed"
+        + (f", focus: {outcome.focus}" if outcome.focus else "")
+        + (f", {outcome.hours_since:.1f} h since the last visit" if outcome.hours_since is not None else "")
         + (", cut short" if outcome.cut_short else "")
         + "._"
     )
