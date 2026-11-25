@@ -22,7 +22,7 @@ A registered user with no team calls `claim_team(user, name=..., code=..., at=..
    first team still unmanaged with `select_for_update(skip_locked=True)`, so
    a concurrent claimer moves on to the next candidate instead of blocking.
    Locking every unmanaged team up front would serialise claims. Before #156
-   this step took the lowest `pk`, which `specs/claimed-team-keeps-its-riders.md`
+   this step took the lowest `pk`, which `specs/archive/claimed-team-keeps-its-riders.md`
    explains.
 2. Sets `manager`, `name`, `code` on it, and calls `full_clean(exclude=["manager"])`
    before saving — **`team_code_validator` is a field validator and does not

@@ -1,6 +1,6 @@
 # A claimed team keeps its riders — Implementation Plan
 
-**Spec:** `specs/claimed-team-keeps-its-riders.md` · **Issue:** #156 · **Status:** proposed
+**Spec:** `specs/archive/claimed-team-keeps-its-riders.md` · **Issue:** #156 · **Status:** implemented
 **Apps touched:** `teams/`, `api/` (description only), `scripts/measure_economy.py`, `beta_agents/` (guide), docs
 
 ## Context you need

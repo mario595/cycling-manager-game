@@ -22,7 +22,7 @@ ROSTER_SIZE = 12
 #: How many of a team's best riders its squad strength averages: two squads'
 #: worth, enough to cover a rotation and a stage race's fatigue. Missing places
 #: count as zero, so a stripped roster ranks as weak (#156,
-#: specs/claimed-team-keeps-its-riders-plan.md, Design decision 1).
+#: specs/archive/claimed-team-keeps-its-riders-plan.md, Design decision 1).
 SQUAD_STRENGTH_DEPTH = 8
 
 

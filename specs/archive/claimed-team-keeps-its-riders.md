@@ -1,6 +1,6 @@
 # A claimed team keeps its riders
 
-**Status:** approved
+**Status:** implemented
 **Domain(s):** `teams/`, `riders/`, `world/` (the measurement), `beta_agents/` (the players' guide), `frontend/` (claim wording)
 **One-liner:** Taking over a team means taking over its squad, and new managers
 are given the free team from the middle of the field, so joining late is no
