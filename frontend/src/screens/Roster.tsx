@@ -692,6 +692,15 @@ function signedMoney(amount: number): string {
   return formatMoney(amount)
 }
 
+/** The salary review's line on the field (#166): wages are priced against
+ * the whole world's riders, so a pay cut for a rider who improved needs
+ * saying why. Nothing when the field didn't move, or on an older review. */
+export function fieldChangeNote(percent: number | null): string | null {
+  if (percent === null || percent === 0) return null
+  const direction = percent > 0 ? 'stronger' : 'weaker'
+  return `The field got ${Math.abs(percent)}% ${direction} this season, and wages are set against it.`
+}
+
 function SalaryReviewCard({ review }: { review: SalaryReview }) {
   const changes = [...review.changes].sort(
     (a, b) => Math.abs(b.to_value - b.from_value) - Math.abs(a.to_value - a.from_value),
@@ -732,6 +741,18 @@ function SalaryReviewCard({ review }: { review: SalaryReview }) {
           </span>
         </div>
       </div>
+      {fieldChangeNote(review.field_change_percent) ? (
+        <div
+          style={{
+            padding: '10px 20px',
+            borderTop: `1px solid ${color.dividerStrong}`,
+            fontSize: 12.5,
+            color: color.muted,
+          }}
+        >
+          {fieldChangeNote(review.field_change_percent)}
+        </div>
+      ) : null}
       {changes.map((change) => {
         const delta = change.to_value - change.from_value
         return (

@@ -329,6 +329,29 @@ formula value, but only returns the riders whose salary moved by at least
 write, so a stored salary can never drift from the formula on behalf of a
 quiet rounding step.
 
+**Priced against the field, not in absolute terms
+([#166](https://github.com/mario595/cycling-manager/issues/166)).** Riders
+train every week, so a world gets stronger every season while income
+stays flat; priced on absolute strength, the average wage bill grew about
+$15k a season and median teams went into the red by season 4. So
+`weekly_salary_for(rider, field_factor)` multiplies `strength()` by a
+**field factor** before the curve. At each season close `reprice_all()`
+calls `measure_field_level()`, which takes the **rostered** active riders
+(team set: free agents, development squad youth and retired riders are not
+the field), solves with `pricing.solve_field_factor()` the factor at which
+they average `FIELD_AVERAGE_SALARY` (1,200, the flat wage) a week, and
+appends a `FieldLevel` row. The factor is bounded to 0.5-2.0, and a field
+under `FIELD_MIN_RIDERS` (40) records nothing and keeps the current
+factor. `field_level.current_field_factor()` is the newest row's factor,
+or 1.0 before any close, so a new world prices exactly as before, and every
+price set during a season (generation, free-agent and youth intake, a
+squad promotion, a claim's top-up) passes it in: the level is frozen
+between closes. The pure functions default to 1.0, which is what the
+historical data migrations rely on. Calibration is to the field's
+**average**: how pay splits between strong and weak riders still follows
+the curve, so a rider who improved less than the field can earn slightly
+less. A world that gets weaker (a wave of retirements) prices back up.
+
 **Calibrated against generated rosters, not the 1-100 range.** A
 generated rider's attributes cluster well under 100 (`QUALITY_SPREAD`,
 `_MAX_STARTING_ATTRIBUTE` above), so `pricing.py`'s constants

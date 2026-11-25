@@ -6,6 +6,7 @@ from collections import defaultdict
 from django.db import transaction
 
 from riders.development_squad import close_squad
+from riders.field_level import current_field_factor
 from riders.generation import generate_roster
 from riders.models import ENGINE_ATTRIBUTES, Rider
 from riders.pricing import strength
@@ -130,7 +131,9 @@ def claim_team(user, *, name: str, code: str, roster_size: int = ROSTER_SIZE, at
         # Fill only the gap. A roster above roster_size is never trimmed.
         missing = max(0, roster_size - len(kept))
         if missing:
-            top_up = Rider.objects.bulk_create(generate_roster(missing, team=team))
+            top_up = Rider.objects.bulk_create(generate_roster(
+                missing, team=team, field_factor=current_field_factor(),
+            ))
             mark_team_change(top_up, team_now=team, at=at)
             record_initial_snapshots(top_up)
 

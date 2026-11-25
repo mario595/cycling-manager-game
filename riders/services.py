@@ -15,8 +15,14 @@ from django.db.models.functions import Greatest
 
 from .display import to_display_scale
 from .generation import PEAK_AGE_RANGE, SPECIALITY_PROFILES
-from .models import ENGINE_ATTRIBUTES, Rider, RiderAttributeSnapshot
-from .pricing import SALARY_REVIEW_THRESHOLD, weekly_salary_for
+from .field_level import current_field_factor
+from .models import ENGINE_ATTRIBUTES, FieldLevel, Rider, RiderAttributeSnapshot
+from .pricing import SALARY_REVIEW_THRESHOLD, solve_field_factor, weekly_salary_for
+
+#: Fewer rostered riders than this and a season close leaves the field level
+#: where it was: too small a field to say what the world pays (#166, spec's
+#: *Rules and edge cases*). About four teams' worth.
+FIELD_MIN_RIDERS = 40
 
 #: Fraction of the remaining gap to its ceiling an attribute closes each
 #: week, at maximum growth. Tuned so a young rider well below potential
@@ -350,6 +356,21 @@ def advance_ages() -> int:
     return Rider.objects.active().filter(age__lt=40).update(age=F("age") + 1)
 
 
+def measure_field_level(riders: list[Rider]) -> float:
+    """Solve and record the field's pay level from `riders`' rostered ones
+    (team set: free agents, development squad youth and retired riders are
+    not the field), returning the factor now in force.
+
+    A field under FIELD_MIN_RIDERS records nothing and keeps the current
+    factor. Otherwise one FieldLevel row is appended (#166)."""
+    field = [r for r in riders if r.team_id is not None]
+    if len(field) < FIELD_MIN_RIDERS:
+        return current_field_factor()
+    factor = solve_field_factor(field)
+    FieldLevel.objects.create(factor=factor)
+    return factor
+
+
 def reprice_all() -> list[dict]:
     """Recompute every rider's weekly_salary from riders.pricing and save.
 
@@ -359,17 +380,24 @@ def reprice_all() -> list[dict]:
     regardless of the threshold; the threshold filters only what is
     returned (plan D4).
 
+    Since #166 it first measures the field (measure_field_level) and prices
+    every rider against it, so the field's average wage stays level as the
+    world gets stronger.
+
     Pure with respect to time, like advance_ages() and
     apply_weekly_growth(): this app knows nothing about seasons or the
     clock. world.services.tick() decides when to call it.
     """
-    changes = []
-    updated = []
-    for rider in Rider.objects.active().only(
+    riders = list(Rider.objects.active().only(
         "id", "name", "team_id", "speciality", "age",
         "weekly_salary", *ENGINE_ATTRIBUTES,
-    ):
-        new_salary = weekly_salary_for(rider)
+    ))
+    factor = measure_field_level(riders)
+
+    changes = []
+    updated = []
+    for rider in riders:
+        new_salary = weekly_salary_for(rider, factor)
         if new_salary == rider.weekly_salary:
             continue
         if abs(new_salary - rider.weekly_salary) >= SALARY_REVIEW_THRESHOLD:

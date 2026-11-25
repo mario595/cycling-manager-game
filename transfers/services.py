@@ -21,6 +21,7 @@ from datetime import timedelta
 from django.db import IntegrityError, transaction
 from django.db.models import Exists, OuterRef, QuerySet
 
+from riders.field_level import current_field_factor
 from riders.models import Rider
 from riders.services import mark_team_change
 from riders.youth_triage import belongs_to, lock_rider, release_graduates
@@ -128,7 +129,9 @@ def free_agents() -> QuerySet[Rider]:
     ).exclude(Exists(being_sold)).order_by("name")
 
 
-def release_cost_for(team, rider: Rider, *, weeks_opened: int) -> int:
+def release_cost_for(
+    team, rider: Rider, *, weeks_opened: int, field_factor: float | None = None,
+) -> int:
     """What releasing `rider` from `team` would currently charge, without
     changing anything — the figure the roster screen shows per rider,
     including 0. Pure read; safe to call for every rider on a GET.
@@ -138,11 +141,14 @@ def release_cost_for(team, rider: Rider, *, weeks_opened: int) -> int:
     rider signed in afterward — pays severance_fee_for. `weeks_opened` is
     the in-season weeks that have opened between `team.managed_since` and
     the relevant boundary (now on a roster GET, `at` on a release), counted
-    by the caller.
+    by the caller. `field_factor` defaults to `current_field_factor()`; a
+    caller pricing a whole roster reads it once and passes it (#166).
     """
     if _claim_cooldown_exempt(team, rider, weeks_opened):
         return 0
-    return severance_fee_for(rider)
+    if field_factor is None:
+        field_factor = current_field_factor()
+    return severance_fee_for(rider, field_factor)
 
 
 def _claim_cooldown_exempt(team, rider: Rider, weeks_opened: int) -> bool:
@@ -207,7 +213,7 @@ def sign_free_agent(team, rider_id: int, *, at, charge=None) -> Rider:
             raise RosterFull(f"Your team already has {ROSTER_CAP} riders.")
 
         if charge is not None:
-            charge(rider, signing_fee_for(rider))
+            charge(rider, signing_fee_for(rider, current_field_factor()))
 
         rider.team = team
         mark_team_change([rider], team_now=team, at=at)
@@ -270,7 +276,7 @@ def list_for_auction(team, rider_id: int, *, at) -> Auction:
         if not belongs_to(rider, team):
             raise RiderNotOnRoster("That rider is not on your team.")
 
-        reserve = reserve_price_for(rider)
+        reserve = reserve_price_for(rider, current_field_factor())
         increment = min_increment_for(reserve)
 
         try:
@@ -324,7 +330,7 @@ def force_list_for_auction(team, rider_id: int, *, at) -> Auction:
             auction.forced = True
             auction.save(update_fields=["forced", "updated_at"])
         else:
-            reserve = reserve_price_for(rider)
+            reserve = reserve_price_for(rider, current_field_factor())
             auction = Auction.objects.create(
                 rider=rider,
                 seller_team=team,

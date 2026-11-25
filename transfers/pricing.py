@@ -57,13 +57,17 @@ def career_horizon(age: int) -> float:
     return 1.0 - (1.0 - _HORIZON_AT_MAX_AGE) * fraction
 
 
-def market_value_for(rider) -> int:
+def market_value_for(rider, field_factor: float = 1.0) -> int:
     """This rider's market value in whole credits. Pure: no database
     access, safe on an unsaved Rider. No floor above zero — a rider far
     past their best with little season left is worth very little, and the
     number says so plainly rather than being propped up (spec's *Rules and
-    edge cases*)."""
-    scaled = max(0.0, min(1.0, strength(rider) / 100)) ** _STRENGTH_EXPONENT
+    edge cases*).
+
+    `field_factor` values the rider against the field, the same factor
+    salaries use (#166, riders.models.FieldLevel). Live callers pass
+    riders.field_level.current_field_factor(); 1.0 is a fresh world."""
+    scaled = max(0.0, min(1.0, strength(rider) * field_factor / 100)) ** _STRENGTH_EXPONENT
     base = VALUE_AT_MIN_STRENGTH + (VALUE_AT_MAX_STRENGTH - VALUE_AT_MIN_STRENGTH) * scaled
     base *= career_horizon(rider.age)
     return max(0, _round_to_nearest_1000(base))
@@ -78,16 +82,16 @@ SIGNING_FEE_RATE = 0.60
 SEVERANCE_FEE_RATE = 0.30
 
 
-def signing_fee_for(rider) -> int:
+def signing_fee_for(rider, field_factor: float = 1.0) -> int:
     """SIGNING_FEE_RATE of this rider's market value, rounded the same way
     market_value_for rounds (nearest 1,000)."""
-    return _round_to_nearest_1000(SIGNING_FEE_RATE * market_value_for(rider))
+    return _round_to_nearest_1000(SIGNING_FEE_RATE * market_value_for(rider, field_factor))
 
 
-def severance_fee_for(rider) -> int:
+def severance_fee_for(rider, field_factor: float = 1.0) -> int:
     """SEVERANCE_FEE_RATE of this rider's market value, rounded the same
     way."""
-    return _round_to_nearest_1000(SEVERANCE_FEE_RATE * market_value_for(rider))
+    return _round_to_nearest_1000(SEVERANCE_FEE_RATE * market_value_for(rider, field_factor))
 
 
 #: Reserve price as a fraction of market_value_for — the auction's
@@ -104,10 +108,10 @@ RESERVE_RATE = 0.50
 MIN_INCREMENT_RATE = 0.05
 
 
-def reserve_price_for(rider) -> int:
+def reserve_price_for(rider, field_factor: float = 1.0) -> int:
     """RESERVE_RATE of this rider's market value, rounded the same way
     market_value_for rounds (nearest 1,000)."""
-    return _round_to_nearest_1000(RESERVE_RATE * market_value_for(rider))
+    return _round_to_nearest_1000(RESERVE_RATE * market_value_for(rider, field_factor))
 
 
 def min_increment_for(reserve_price: int) -> int:

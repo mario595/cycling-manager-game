@@ -6,9 +6,13 @@ import statistics
 from riders.generation import generate_rider
 from riders.models import Rider
 from riders.pricing import (
+    FIELD_AVERAGE_SALARY,
+    FIELD_FACTOR_MAX,
+    FIELD_FACTOR_MIN,
     SALARY_AT_MIN_STRENGTH,
     _AGE_PENALTY_MAX,
     age_multiplier,
+    solve_field_factor,
     weekly_salary_for,
 )
 
@@ -144,3 +148,61 @@ def test_a_linear_interpolation_would_fail_the_spread_check():
     p95 = salaries[int(0.95 * len(salaries))]
 
     assert not (7 <= p95 / p5 <= 13)
+
+
+# --- Field-relative pricing (#166) -----------------------------------------
+
+
+def _strengthened(rider: Rider, by: int) -> Rider:
+    for attr in ("climb", "sprint", "flat", "resistance", "positioning"):
+        setattr(rider, attr, min(100, getattr(rider, attr) + by))
+    return rider
+
+
+def test_field_factor_one_prices_as_before():
+    rider = _rider(climb=70)
+
+    assert weekly_salary_for(rider, 1.0) == weekly_salary_for(rider)
+
+
+def test_a_higher_field_factor_prices_a_rider_higher():
+    rider = _rider(climb=70)
+
+    assert weekly_salary_for(rider, 1.1) > weekly_salary_for(rider)
+    assert weekly_salary_for(rider, 0.9) < weekly_salary_for(rider)
+
+
+def test_a_freshly_generated_field_solves_close_to_one():
+    # Spec In scope 4: a new world prices as today. The generated mean is
+    # within a few credits of 1,200, so the solved factor is near 1.0.
+    rng = random.Random(20261125)
+    riders = [generate_rider(rng=rng) for _ in range(1000)]
+
+    assert abs(solve_field_factor(riders) - 1.0) < 0.03
+
+
+def test_a_stronger_field_is_repriced_back_to_the_average():
+    rng = random.Random(20261125)
+    riders = [_strengthened(generate_rider(rng=rng), 8) for _ in range(1000)]
+
+    factor = solve_field_factor(riders)
+    mean = statistics.mean(weekly_salary_for(r, factor) for r in riders)
+
+    assert factor < 1.0
+    assert abs(mean - FIELD_AVERAGE_SALARY) < 5
+
+
+def test_field_average_is_the_flat_wage():
+    assert FIELD_AVERAGE_SALARY == _WEEKLY_WAGE_PER_RIDER
+
+
+def test_solve_field_factor_is_bounded():
+    floor = [_rider(climb=1, sprint=1, flat=1, resistance=1, positioning=1)] * 10
+    ceiling = [_rider(climb=100, sprint=100, flat=100, resistance=100, positioning=100)] * 10
+
+    assert solve_field_factor(floor) == FIELD_FACTOR_MAX
+    assert solve_field_factor(ceiling) == FIELD_FACTOR_MIN
+
+
+def test_an_empty_field_solves_to_one():
+    assert solve_field_factor([]) == 1.0

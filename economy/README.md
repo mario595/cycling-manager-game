@@ -151,6 +151,17 @@ enclosing transaction in Django, so catching it inside a shared one fails
 the next statement with `TransactionManagementError`. Copy the
 `process_transitions()` shape, never one `atomic()` around the whole loop.
 
+**How far the field moved (#166).** Salaries are priced against the
+field's level (`riders/README.md`, *Salary*), so a rider who improved less
+than everyone else can see a pay cut. `write_salary_reviews` therefore
+takes `field_change_percent`, how much stronger (positive) or weaker the
+rostered field got that close, worked out in `world.services.
+field_change_percent(before, after)` from the factor before and after
+repricing, and stores it on every report of that season. The roster screen
+shows it as one line ("The field got 6% stronger this season, and wages are
+set against it."). It is null for reports written before #166 and is 0
+when the level did not move, and neither shows a line.
+
 **Free agents are repriced but generate no report.** `reprice_all()`
 covers every rider; `write_salary_reviews` iterates managed teams only, so
 an unrostered rider's salary move is silent. A managed team with no

@@ -9,10 +9,21 @@ from riders.models import ENGINE_ATTRIBUTES, DevelopmentSquad
 from riders.services import is_due_to_retire
 from schedule.services import current_position
 from staff.pricing import hire_fee, weekly_salary
+from riders.field_level import current_field_factor
 from transfers.pricing import market_value_for, signing_fee_for
 from transfers.services import release_cost_for
 from world.services import now
 
+
+
+def _field_factor(serializer) -> float:
+    """The field's pay level (#166), read once per response and kept in the
+    serializer's `context`, which DRF shares with every nested and listed
+    serializer, so a roster of thirty riders costs one query, not thirty."""
+    context = serializer.context
+    if "field_factor" not in context:
+        context["field_factor"] = current_field_factor()
+    return context["field_factor"]
 
 class ClockSerializer(serializers.Serializer):
     current = serializers.DateTimeField()
@@ -148,7 +159,7 @@ class RiderSerializer(serializers.Serializer):
         return _display_freshness(instance)
 
     def get_market_value(self, instance) -> int:
-        return market_value_for(instance)
+        return market_value_for(instance, _field_factor(self))
 
     def get_release_cost(self, instance) -> int | None:
         """What releasing this rider would charge right now, via
@@ -162,7 +173,9 @@ class RiderSerializer(serializers.Serializer):
         weeks_opened = self.context.get("weeks_opened")
         if team is None or weeks_opened is None:
             return None
-        return release_cost_for(team, instance, weeks_opened=weeks_opened)
+        return release_cost_for(
+            team, instance, weeks_opened=weeks_opened, field_factor=_field_factor(self),
+        )
 
     def get_final_season(self, instance) -> bool:
         """Whether this rider retires when the running season closes (#42).
@@ -190,6 +203,10 @@ class SalaryReviewSerializer(serializers.Serializer):
     season_number = serializers.IntegerField()
     payroll_before = serializers.IntegerField()
     payroll_after = serializers.IntegerField()
+    field_change_percent = serializers.IntegerField(
+        allow_null=True,
+        help_text="How much stronger the field got this season (negative: weaker). Wages are set against the field. Null on older reviews.",
+    )
     changes = SalaryChangeSerializer(many=True)
 
 
@@ -243,6 +260,7 @@ class RosterSerializer(serializers.Serializer):
             "season_number": report.season.number,
             "payroll_before": report.payroll_before,
             "payroll_after": report.payroll_after,
+            "field_change_percent": report.field_change_percent,
             "changes": SalaryChangeSerializer(report.changes, many=True).data,
         }
 
@@ -259,7 +277,7 @@ class FreeAgentSerializer(RiderSerializer):
     signing_fee = serializers.SerializerMethodField()
 
     def get_signing_fee(self, instance) -> int:
-        return signing_fee_for(instance)
+        return signing_fee_for(instance, _field_factor(self))
 
 
 class FreeAgentPoolSerializer(serializers.Serializer):

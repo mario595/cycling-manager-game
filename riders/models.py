@@ -390,3 +390,29 @@ class RiderAttributeSnapshot(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.rider} @ {self.week or 'baseline'}"
+
+
+class FieldLevel(TimeStampedModel):
+    """The pay level of the whole field, measured at a season close (#166).
+
+    `factor` multiplies a rider's strength before it goes through the salary
+    and market value curves (riders.pricing.weekly_salary_for,
+    transfers.pricing.market_value_for). It is solved at each close so that
+    the field's average salary stays at what a freshly generated world pays
+    (riders.pricing.solve_field_factor): a world that has grown stronger gets
+    a factor below 1, and everyone is priced against it.
+
+    Append-only: one row per measurement, the newest (highest pk) is current.
+    A world with no row has never closed a season and prices at 1.0, exactly
+    as before #166. See riders/README.md, *Salary*.
+    """
+
+    factor = models.FloatField(
+        help_text="Strength multiplier for pricing. 1.0 = a freshly generated world.",
+    )
+
+    class Meta:
+        ordering = ["pk"]
+
+    def __str__(self) -> str:
+        return f"field level {self.factor:.3f}"

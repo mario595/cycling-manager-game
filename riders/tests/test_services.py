@@ -4,10 +4,18 @@ from datetime import datetime, timedelta, timezone as dt_timezone
 
 import pytest
 
+from riders.field_level import current_field_factor
 from riders.generation import SPECIALITY_PROFILES, generate_rider
-from riders.models import ENGINE_ATTRIBUTES, DevelopmentSquad, Rider, RiderAttributeSnapshot
+from riders.models import (
+    ENGINE_ATTRIBUTES,
+    DevelopmentSquad,
+    FieldLevel,
+    Rider,
+    RiderAttributeSnapshot,
+)
 from riders.pricing import weekly_salary_for
 from riders.services import (
+    FIELD_MIN_RIDERS,
     FRESHNESS_FLOOR,
     FRESHNESS_MAX,
     MAX_ATTRIBUTE,
@@ -834,3 +842,60 @@ def test_retired_rider_is_not_repriced(db):
 
     assert rider.weekly_salary == original_salary
     assert changes == []
+
+
+# --- The field's level (#166) ----------------------------------------------
+
+
+def _field(team, count: int, level: int = 60) -> list[Rider]:
+    return [
+        Rider.objects.create(
+            name=f"Field {i}", team=team, speciality=Rider.Speciality.ROULEUR, age=27,
+            climb=level, sprint=level, flat=level, resistance=level, positioning=level,
+        )
+        for i in range(count)
+    ]
+
+
+def test_current_field_factor_is_one_before_any_close(db):
+    assert current_field_factor() == 1.0
+
+
+def test_current_field_factor_is_the_newest_level(db):
+    FieldLevel.objects.create(factor=0.9)
+    FieldLevel.objects.create(factor=0.8)
+
+    assert current_field_factor() == 0.8
+
+
+def test_reprice_all_measures_the_rostered_field(db, team):
+    riders = _field(team, FIELD_MIN_RIDERS)
+
+    reprice_all()
+
+    level = FieldLevel.objects.get()
+    riders[0].refresh_from_db()
+    assert level.factor < 1.0  # a strong field is priced down
+    assert riders[0].weekly_salary == weekly_salary_for(riders[0], level.factor)
+    # Calibrated: the field averages the flat wage.
+    assert abs(riders[0].weekly_salary - 1_200) < 5
+
+
+def test_free_agents_are_not_the_field(db, team):
+    _field(team, FIELD_MIN_RIDERS - 1)
+    _field(None, 10)
+
+    reprice_all()
+
+    assert not FieldLevel.objects.exists()
+
+
+def test_a_small_field_keeps_the_current_level(db, team):
+    FieldLevel.objects.create(factor=0.9)
+    rider = _field(team, 3)[0]
+
+    reprice_all()
+    rider.refresh_from_db()
+
+    assert FieldLevel.objects.count() == 1
+    assert rider.weekly_salary == weekly_salary_for(rider, 0.9)

@@ -19,6 +19,7 @@ from django.db import transaction
 from teams.models import Team
 
 from .development_squad import squad_for
+from .field_level import current_field_factor
 from .generation import generate_rider
 from .models import DevelopmentSquad, Rider
 from .services import record_initial_snapshots
@@ -75,7 +76,10 @@ def generate_youth_rider(level: int, *, rng: random.Random):
     potential = rng.randint(low, high)
     quality = max(1, round(potential * rng.uniform(*YOUTH_QUALITY_FRACTION)))
     age = rng.randint(*INTAKE_AGE_RANGE)
-    return generate_rider(quality=quality, age=age, potential=potential, rng=rng)
+    return generate_rider(
+        quality=quality, age=age, potential=potential, rng=rng,
+        field_factor=current_field_factor(),
+    )
 
 
 @dataclass(frozen=True)

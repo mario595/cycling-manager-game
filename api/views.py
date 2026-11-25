@@ -92,6 +92,7 @@ from riders.models import (
     Rider,
     RiderAttributeSnapshot,
 )
+from riders.field_level import current_field_factor
 from riders.pricing import strength, weekly_salary_for
 from riders.youth_intake import INTAKE_BATCH_SIZE, INTAKE_INTERVAL_WEEKS, is_intake_week
 from riders.youth_triage import (
@@ -724,11 +725,13 @@ class RiderListView(APIView):
                 rider__in=riders,
             ).annotate(bid_count=Count("bids", filter=Q(bids__withdrawn_at__isnull=True)))
         }
+        factor = current_field_factor()
         return Response(RosterSerializer({
             "riders": riders,
-            "squad_value": sum(market_value_for(r) for r in riders),
+            "squad_value": sum(market_value_for(r, factor) for r in riders),
             "salary_review": latest_salary_review(team),
         }, context={
+            "field_factor": factor,
             "team": team,
             "weeks_opened": _cooldown_weeks_opened(team, now()),
             "open_auctions": open_auctions,
@@ -1858,6 +1861,7 @@ class DevelopmentSquadView(APIView):
         if squad is not None:
             prospects = sorted(in_squad(squad), key=strength, reverse=True)
             finished = sorted(graduates(squad), key=strength, reverse=True)
+            factor = current_field_factor()
             opened = _week_starts_since(
                 [r.intake_at for r in prospects] + [r.graduated_at for r in finished], at,
             )
@@ -1867,10 +1871,10 @@ class DevelopmentSquadView(APIView):
                 graduate_weeks_left[rider.pk] = _weeks_left(
                     rider.graduated_at, GRADUATE_WINDOW_WEEKS, opened,
                 )
-                promotion_salaries[rider.pk] = weekly_salary_for(rider)
-                market_values[rider.pk] = market_value_for(rider)
+                promotion_salaries[rider.pk] = weekly_salary_for(rider, factor)
+                market_values[rider.pk] = market_value_for(rider, factor)
             for rider in prospects:
-                promotion_salaries[rider.pk] = weekly_salary_for(rider)
+                promotion_salaries[rider.pk] = weekly_salary_for(rider, factor)
             listed = {
                 rider_id: True
                 for rider_id in Auction.objects.filter(

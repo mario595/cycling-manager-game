@@ -1056,3 +1056,36 @@ def test_three_missed_weeks_recover_three_times(db, team, monkeypatch):
     assert len(calls) == 3
     rider.refresh_from_db()
     assert rider.freshness == 30 + 3 * 14  # recovery_rate 50 -> ~14/week
+
+
+# --- The field's level at season close (#166) -------------------------------
+
+def test_field_change_percent_reads_as_the_field_getting_stronger():
+    # The factor falls as the field strengthens: 1.0 -> 0.943 is ~6% stronger.
+    assert world_services.field_change_percent(1.0, 1.0 / 1.06) == 6
+    assert world_services.field_change_percent(1.0, 1.0 / 0.97) == -3
+    assert world_services.field_change_percent(0.9, 0.9) == 0
+
+
+def test_season_close_prices_against_the_field_and_says_so(db, team, managed_team):
+    from riders.models import FieldLevel
+    from riders.services import FIELD_MIN_RIDERS
+
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    for i in range(FIELD_MIN_RIDERS):
+        Rider.objects.create(
+            name=f"Strong {i}", team=managed_team if i % 2 else team,
+            speciality=Rider.Speciality.ROULEUR, age=27, peak_age=27, decline_rate=1,
+            climb=60, sprint=60, flat=60, resistance=60, positioning=60,
+            weekly_salary=1000,
+        )
+    clock.set(season.ends_at + timedelta(hours=1))
+
+    tick()
+
+    factor = FieldLevel.objects.get().factor
+    report = SalaryReviewReport.objects.get(team=managed_team)
+    assert factor < 1.0
+    assert report.field_change_percent == world_services.field_change_percent(1.0, factor)
+    assert report.field_change_percent > 0

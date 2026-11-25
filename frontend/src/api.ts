@@ -303,6 +303,10 @@ export interface SalaryReview {
   season_number: number
   payroll_before: number
   payroll_after: number
+  /** How much stronger the field got this season (negative: weaker), in
+   * whole percent. Wages are priced against the field (#166). `null` on
+   * reviews written before it. */
+  field_change_percent: number | null
   changes: SalaryChange[]
 }
 

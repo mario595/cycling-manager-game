@@ -48,3 +48,16 @@ def test_every_intake_rider_gets_a_baseline_snapshot(db):
     assert RiderAttributeSnapshot.objects.filter(
         rider__in=created, week=None,
     ).count() == FREE_AGENT_INTAKE_SIZE
+
+
+def test_intake_riders_are_priced_at_the_last_measured_field_level(db):
+    # #166: a price set mid-season uses the level from the last close.
+    from riders.models import FieldLevel
+    from riders.pricing import weekly_salary_for
+
+    FieldLevel.objects.create(factor=0.9)
+
+    created = run_free_agent_intake(at=AT, rng=random.Random(3))
+
+    for rider in created:
+        assert rider.weekly_salary == weekly_salary_for(rider, 0.9)
