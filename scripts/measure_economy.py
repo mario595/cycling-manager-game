@@ -13,6 +13,13 @@ run it only in a checkout whose dev data you do not mind losing:
 
 Season 2 is the steady state (season 1 carries one-off costs such as a
 trainer's hire fee), so it is the figure the targets are checked against.
+
+Just before season 2 opens it also **claims a team** with a throwaway
+account, the way a player joining late would (#156), signs that team's
+steady sponsor once the season opens and otherwise leaves it alone, and
+prints its season beside the unmanaged field's. A claimed team should land
+in the middle of the field; one in the bottom quarter means claiming has
+started handing out weaker squads than the world's again.
 """
 
 from __future__ import annotations
@@ -82,9 +89,16 @@ def main() -> None:
 
     call_command("mock_clock", "set", first.isoformat(), **quiet)
     devnull = open(os.devnull, "w")
+    measured = seasons[-1]
+    claimed = None
+    sponsored = False
     day = first
     while day <= last + timedelta(days=1):
+        if claimed is None and day >= measured.starts_at:
+            claimed, claim_report = _claim_a_team(day)
         call_command("tick", stdout=devnull, stderr=devnull)
+        if claimed is not None and not sponsored:
+            sponsored = _sign_steady_sponsor(claimed, measured, day)
         day += timedelta(days=1)
         call_command("mock_clock", "advance", "--by", "1d", stdout=devnull)
 
@@ -129,6 +143,66 @@ def main() -> None:
     print(f"\nBalances after season {seasons[-1].number}: "
           f"lowest {balances[0]:,}, median {balances[len(balances) // 2]:,}, "
           f"highest {balances[-1]:,}")
+
+    claimed_net = LedgerEntry.objects.filter(
+        team=claimed,
+        occurred_at__gte=measured.starts_at,
+        occurred_at__lt=measured.ends_at,
+    ).exclude(kind__in=OPENING_KINDS + ("transfer_fee",)).aggregate(s=Sum("amount"))["s"] or 0
+    beaten = sum(1 for net in steady if net < claimed_net)
+    print(f"\nClaimed team (claimed just before season {measured.number} opened):")
+    print(f"  {claim_report}")
+    print(f"  steady sponsor signed  {'yes' if sponsored else 'NO'}")
+    print(f"  season {measured.number} net         {claimed_net:>12,.0f}"
+          f"   (ahead of {beaten} of {len(steady)} unmanaged teams)")
+
+
+def _claim_a_team(at):
+    """Claim a team the way ClaimTeamView does, with a throwaway account.
+
+    Returns the team and a line describing where its squad sat in the field
+    at the claim. The account never stamps last_seen_at, which exempts it
+    from the inactivity release."""
+    from accounts.models import User
+    from django.db import transaction
+    from riders.models import Rider
+    from teams.models import Team
+    from teams.services import claim_team, squad_strength
+    from transfers.services import cancel_listings, withdraw_bids
+
+    user = User.objects.create_user(email="measure-claim@example.com", password="unused-x9")
+    with transaction.atomic():
+        team = claim_team(user, name="Measured Claim", code="MSR", at=at)
+        withdraw_bids(team, at=at)
+        cancel_listings(team, at=at)
+    scores = sorted(
+        squad_strength(list(Rider.objects.filter(team=t))) for t in Team.objects.all()
+    )
+    own = squad_strength(list(Rider.objects.filter(team=team)))
+    rank = sum(1 for score in scores if score > own) + 1
+    return team, (
+        f"squad strength {own:.1f}, rank {rank} of {len(scores)} "
+        f"(field {scores[0]:.1f} to {scores[-1]:.1f}), {team.riders.count()} riders"
+    )
+
+
+def _sign_steady_sponsor(team, season, at) -> bool:
+    """Sign `season`'s steady offer for `team`, as the AI does for its own
+    teams. False until the season has opened and the offer exists."""
+    from economy.models import SponsorOffer
+    from economy.services import active_contract, ensure_offer_round, sign_offer
+    from world.ai_management import AI_SPONSOR_PROFILE
+
+    if at < season.starts_at:
+        return False
+    if active_contract(team, season) is not None:
+        return True
+    ensure_offer_round(team, season, at=at)
+    offer = SponsorOffer.objects.filter(team=team, season=season, profile=AI_SPONSOR_PROFILE).first()
+    if offer is None:
+        return False
+    sign_offer(team, offer.pk, at=at)
+    return True
 
 
 if __name__ == "__main__":
