@@ -11,5 +11,10 @@
 # The tick: world/README.md, "Deployment requirement".
 @TICK_SCHEDULE@ /app/deploy/tick.sh
 
+# The LLM beta testers (#160, beta_agents/README.md): start their GitHub
+# workflow when one is due. A no-op without BETA_DISPATCH_TOKEN, which only
+# staging sets. Minute 5, away from GitHub's own schedule at minute 17.
+5 * * * * cd /app && python -m beta_agents dispatch
+
 # Nightly off-box backup of the database and the race logs.
 30 3 * * * cd /app && python -m deploy.backup

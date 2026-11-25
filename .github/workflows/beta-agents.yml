@@ -1,13 +1,18 @@
 name: Beta testers
 
-# The LLM beta testers (#132; beta_agents/README.md). Every hour, the testers
-# whose last diary entry is old enough visit the staging world one after
-# another, and each one's diary is committed to the beta-diaries branch.
-# GitHub often skips or delays hourly runs, so dueness is read from the
-# diaries, never from the hour a run happens to land in.
+# The LLM beta testers (#132; beta_agents/README.md). The testers whose last
+# diary entry is old enough visit the staging world one after another, and
+# each one's diary is committed to the beta-diaries branch.
+#
+# Two things start a run (#160). The staging machine checks the diaries every
+# hour and dispatches this workflow with `tester: due` when someone is due
+# (`python -m beta_agents dispatch`, deploy/crontab). GitHub's own hourly
+# schedule below is the backup: it fires only when GitHub has room, about one
+# hour in eight in practice. Either way, dueness is read from the diaries.
 #
 # Pause them all: set the repository variable BETA_AGENTS_ENABLED to anything
-# but "true". A manual run of one named tester still works while paused.
+# but "true". That pauses the machine's `due` runs too. A manual run of one
+# named tester still works while paused.
 #
 # Scheduled workflows run only from the default branch, so this starts once it
 # is merged to master.
@@ -17,10 +22,11 @@ on:
   workflow_dispatch:
     inputs:
       tester:
-        description: "One tester to visit now (youth, trader, money, racer, casual)"
+        description: "One tester to visit now, or `due` for whoever is due (what the staging machine sends)"
         required: true
         type: choice
-        options: [youth, trader, money, racer, casual]
+        default: due
+        options: [due, youth, trader, money, racer, casual]
 
 # One run at a time: a visit is never interrupted, and two runs never write
 # the diary branch at once.
@@ -33,7 +39,7 @@ permissions:
 
 jobs:
   visit:
-    if: github.event_name == 'workflow_dispatch' || vars.BETA_AGENTS_ENABLED == 'true'
+    if: vars.BETA_AGENTS_ENABLED == 'true' || (github.event_name == 'workflow_dispatch' && inputs.tester != 'due')
     runs-on: ubuntu-24.04
     timeout-minutes: 50
     steps:
@@ -68,7 +74,7 @@ jobs:
           BETA_KEY_CASUAL: ${{ secrets.BETA_KEY_CASUAL }}
           ONE_TESTER: ${{ inputs.tester }}
         run: |
-          if [ -n "$ONE_TESTER" ]; then due="$ONE_TESTER"; else due=$(python -m beta_agents due --diary-dir diary); fi
+          if [ -n "$ONE_TESTER" ] && [ "$ONE_TESTER" != due ]; then due="$ONE_TESTER"; else due=$(python -m beta_agents due --diary-dir diary); fi
           echo "Due: ${due:-nobody}"
           failed=0
           for tester in $due; do
