@@ -23,6 +23,7 @@ from django.db.models import Exists, OuterRef, QuerySet
 
 from riders.models import Rider
 from riders.services import mark_team_change
+from riders.departures import record_sale
 from riders.youth_triage import belongs_to, lock_rider, release_graduates
 
 from .models import Auction, Bid
@@ -494,6 +495,10 @@ def resolve_auction(auction, *, at, pay_seller=None, charge_buyer=None) -> Aucti
         rider.development_squad = None
         mark_team_change([rider], team_now=winner, at=at)
         rider.save(update_fields=["team", "development_squad", "updated_at"])
+        # The seller learns of the sale after the fact, so it is a departure
+        # (#158). auction.seller_team, not the rider's old team: a forced
+        # sale took the rider off the roster at listing (#27).
+        record_sale(rider, seller=auction.seller_team, buyer=winner, fee=amount, at=at)
 
         auction.status = Auction.Status.SOLD
         auction.resolved_at = at
@@ -512,7 +517,7 @@ def _resolve_unsold(auction, rider, at) -> None:
     leaves the auction OPEN for the next tick to retry.
     """
     if rider.team_id is None and rider.development_squad_id is not None:
-        release_graduates([rider.pk], at=at)
+        release_graduates([rider.pk], at=at, record=True)
     auction.status = Auction.Status.UNSOLD
     auction.resolved_at = at
     auction.save(update_fields=["status", "resolved_at", "updated_at"])
