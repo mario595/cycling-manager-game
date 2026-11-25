@@ -1955,8 +1955,7 @@ def test_claim_cancels_the_claimed_teams_open_listings(
 ):
     from transfers.services import list_for_auction, place_bid
 
-    # Created first so the claim — which takes the lowest-pk unmanaged team —
-    # takes the seller, not some other unmanaged team.
+    # The only unmanaged team, so the claim takes the seller.
     seller = Team.objects.create(name="Claimable Seller", code="CSL")
     rider = _market_rider(name="For Sale", team=seller)
     auction = list_for_auction(seller, rider.pk, at=now())
@@ -1971,7 +1970,9 @@ def test_claim_cancels_the_claimed_teams_open_listings(
     assert response.status_code == 201
     assert auction.status == Auction.Status.CANCELLED
     assert auction.resolved_at is not None
-    assert rider.team_id is None
+    # The listing is cancelled and the rider stays: a claimed team keeps its
+    # riders (#156).
+    assert rider.team_id == seller.pk
 
     market = market_client.get("/api/transfers/auctions/")
     mine = market_client.get("/api/transfers/auctions/mine/")
