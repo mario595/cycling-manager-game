@@ -884,7 +884,8 @@ class ReleaseRiderView(APIView):
             f"severance ({pct(SEVERANCE_FEE_RATE)}% of market value), except for "
             f"riders inherited with a team you claimed within the cooldown, who leave "
             f"for free. Severance is charged even if it takes your balance negative. "
-            f"The roster's `release_cost` shows the price first."
+            f"The roster's `release_cost` shows the price first. A listed rider's "
+            f"open auction is cancelled, and no money changes hands for it."
         ),
         request=ReleaseRiderSerializer,
         responses={204: None, **refused(r403=NO_TEAM, r409="That rider is not on your roster.")},
@@ -905,13 +906,19 @@ class ReleaseRiderView(APIView):
                 )
 
         try:
-            release_rider(
-                team,
-                serializer.validated_data["rider_id"],
-                at=at,
-                weeks_opened=_cooldown_weeks_opened(team, at),
-                charge=charge,
-            )
+            # A listed rider's auction is cancelled in the same transaction
+            # (#152): left open, it would sit in the seller's Sell section and
+            # stay biddable under Buy beside the same rider as a free agent,
+            # only to be cancelled at its deadline anyway.
+            with transaction.atomic():
+                release_rider(
+                    team,
+                    serializer.validated_data["rider_id"],
+                    at=at,
+                    weeks_opened=_cooldown_weeks_opened(team, at),
+                    charge=charge,
+                )
+                cancel_unowned_listings(team, at=at)
         except RiderNotOnRoster as exc:
             return Response({"detail": str(exc)}, status=409)
 

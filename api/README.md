@@ -196,7 +196,11 @@ Since #29 each rider also carries `release_cost`
   writes a `TRANSFER_FEE` row (description "Released X") **only when the
   fee is positive** — a $0 cooldown-exempt release moves no money and
   leaves the ledger untouched. A rider not on the caller's roster is a
-  409. Success is 204.
+  409. Success is 204. Since #152 the release and
+  `transfers.services.cancel_unowned_listings` share one transaction, so a
+  listed rider's auction is cancelled at once, with no money moving, rather
+  than staying biddable until its deadline (the squad close already does the
+  same for released graduates).
 - `GET /api/transfers/auctions/` (`AuctionMarketSerializer`,
   `AuctionMarketView`) — every open auction plus the caller's balance,
   the same both-keys shape `FreeAgentsView` uses. Each entry carries the

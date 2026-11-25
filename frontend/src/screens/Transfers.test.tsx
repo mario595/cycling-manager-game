@@ -421,6 +421,29 @@ describe('Transfers', () => {
       expect(container.querySelector('#auction-1')).not.toBeNull()
     })
 
+    it('scrolls to a linked listing once, not on every market refresh', () => {
+      const scrollIntoView = vi.fn()
+      Element.prototype.scrollIntoView = scrollIntoView
+      const own = { ...auctionMarket, auctions: [{ ...auctionMarket.auctions[0], is_own_listing: true }] }
+      mockUseAuctions.mockReturnValue({ market: own, loading: false, error: false, refresh: vi.fn() })
+
+      const view = render(
+        <MemoryRouter initialEntries={['/transfers#auction-1']}>
+          <Transfers />
+        </MemoryRouter>,
+      )
+      expect(scrollIntoView).toHaveBeenCalledTimes(1)
+
+      // A poll hands back a fresh market object while the hash is unchanged.
+      mockUseAuctions.mockReturnValue({ market: { ...own }, loading: false, error: false, refresh: vi.fn() })
+      view.rerender(
+        <MemoryRouter initialEntries={['/transfers#auction-1']}>
+          <Transfers />
+        </MemoryRouter>,
+      )
+      expect(scrollIntoView).toHaveBeenCalledTimes(1)
+    })
+
     it('tags each Buy card as a free agent or an auction', () => {
       renderTransfers()
 

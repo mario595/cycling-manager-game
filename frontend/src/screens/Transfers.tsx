@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 
 import { placeBid, signFreeAgent, type AuctionListing, type FreeAgent } from '../api'
@@ -102,10 +102,17 @@ export function Transfers() {
   }, [buyItems, filter, sort])
 
   // The Roster's "View on Transfers" link (#152) lands on #auction-<id>:
-  // bring that listing's card into view once the market has loaded.
+  // bring that listing's card into view once the market has loaded, and
+  // only once per hash. The market re-polls every 30 s and after each bid,
+  // and the hash stays in the URL, so without the ref every refresh would
+  // pull the manager back up from wherever they had scrolled to.
+  const scrolledTo = useRef<string | null>(null)
   useEffect(() => {
-    if (!hash || !market) return
-    document.getElementById(hash.slice(1))?.scrollIntoView?.({ block: 'center' })
+    if (!hash || !market || scrolledTo.current === hash) return
+    const card = document.getElementById(hash.slice(1))
+    if (!card) return
+    card.scrollIntoView?.({ block: 'center' })
+    scrolledTo.current = hash
   }, [hash, market])
 
   const outbid = myBids.filter((bid) => !bid.is_high_bidder)

@@ -2967,6 +2967,25 @@ def test_release_rider_is_free_within_claim_cooldown(market_client, market_team)
     assert not LedgerEntry.objects.filter(team=market_team, kind="transfer_fee").exists()
 
 
+def test_release_cancels_the_riders_open_auction(market_client, market_team, bidder_team):
+    # #152: the Roster's note says releasing cancels the auction, so it must,
+    # at once rather than at the deadline.
+    rider = _market_rider(name="Listed", team=market_team)
+    kept = _market_rider(name="Still Listed", team=market_team)
+    auction = list_for_auction(market_team, rider.pk, at=now())
+    other = list_for_auction(market_team, kept.pk, at=now())
+    Bid.objects.create(auction=auction, bidder_team=bidder_team, amount=auction.reserve_price, placed_at=now())
+
+    response = market_client.post("/api/transfers/riders/release/", {"rider_id": rider.pk})
+
+    assert response.status_code == 204
+    auction.refresh_from_db()
+    other.refresh_from_db()
+    assert auction.status == Auction.Status.CANCELLED
+    assert other.status == Auction.Status.OPEN
+    assert not LedgerEntry.objects.filter(team=bidder_team, kind="transfer_fee").exists()
+
+
 def test_release_rider_charges_severance_after_cooldown(market_client, market_team):
     # One in-season Week opened since the claim, so the cooldown has run
     # out and the release costs severance (Design decision 2).
