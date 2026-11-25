@@ -4,6 +4,8 @@
     due [--diary-dir D] the testers due now, by their diaries, one per line
     register <tester>   create the tester's account; prints the token command
     tools               list the tools generated from the server's schema
+    dispatch            start the workflow on GitHub if a tester is due
+                        (the staging machine's hourly job; reads BETA_DISPATCH_TOKEN)
 """
 
 from __future__ import annotations
@@ -14,7 +16,8 @@ import secrets
 import sys
 from datetime import datetime, timezone
 
-from . import testers
+from . import snapshot, testers
+from .dispatch import dispatch
 from .diary import Diary
 from .game_api import GameAPI, GameAPIError
 from .llm import DEFAULT_BASE_URL, DEFAULT_MODEL, ChatClient, LLMError
@@ -44,6 +47,9 @@ def main(argv: list[str] | None = None, env: dict[str, str] | None = None) -> in
 
     sub.add_parser("tools", help="list the generated tools")
 
+    dispatch_cmd = sub.add_parser("dispatch", help="start the workflow if a tester is due")
+    dispatch_cmd.add_argument("--now", default=None, help="an ISO time in UTC, for trying the rule")
+
     args = parser.parse_args(argv)
     try:
         if args.command == "due":
@@ -52,6 +58,9 @@ def main(argv: list[str] | None = None, env: dict[str, str] | None = None) -> in
             for tester in testers.due(now, diaries):
                 print(tester.slug)
             return 0
+        if args.command == "dispatch":
+            now = datetime.fromisoformat(args.now).replace(tzinfo=timezone.utc) if args.now else datetime.now(timezone.utc)
+            return dispatch(env, now)
         if args.command == "register":
             return _register(testers.get(args.tester), args.base_url)
         if args.command == "tools":
@@ -84,7 +93,8 @@ def _visit(tester: testers.Tester, args, env: dict[str, str]) -> int:
     )
     diary = Diary(args.diary_dir, tester.slug, tester.display_name)
     print(f"[{tester.slug}] visiting {args.base_url} with {llm.model}")
-    outcome = run_visit(tester, toolbox, llm, diary, max_steps=args.max_steps)
+    reading = snapshot.take(api)
+    outcome = run_visit(tester, toolbox, llm, diary, max_steps=args.max_steps, reading=reading)
     print(
         f"[{tester.slug}] model calls={llm.calls} prompt_tokens={llm.prompt_tokens} "
         f"completion_tokens={llm.completion_tokens} game_requests={api.calls}"

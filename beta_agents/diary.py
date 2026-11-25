@@ -55,10 +55,7 @@ class Diary:
         """When the last entry was written, or None for an empty diary."""
         if not self.path.exists():
             return None
-        stamps = STAMP.findall(self.path.read_text(encoding="utf-8"))
-        if not stamps:
-            return None
-        return datetime.strptime(stamps[-1], "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+        return last_stamp(self.path.read_text(encoding="utf-8"))
 
     def append(self, entry: str, at: datetime | None = None, reading: dict | None = None) -> None:
         at = at or datetime.now(timezone.utc)
@@ -75,3 +72,12 @@ class Diary:
             body += "\n\n<!-- reading: " + json.dumps(reading, ensure_ascii=False, sort_keys=True).replace("--", "- -") + " -->"
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(f"\n## {stamp}\n\n{body}\n")
+
+
+def last_stamp(text: str) -> datetime | None:
+    """The time of a diary's last entry, from its text, or None if it has
+    none. The dispatcher (dispatch.py) reads diaries this way from GitHub."""
+    stamps = STAMP.findall(text)
+    if not stamps:
+        return None
+    return datetime.strptime(stamps[-1], "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
