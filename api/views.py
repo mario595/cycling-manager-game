@@ -472,12 +472,12 @@ def _sponsor_fields(team) -> dict:
     is idempotent (economy/README.md, *Sponsorship*)."""
     position = current_position(now())
     if position.state != "in_season":
-        return {"sponsor_missing": False, "smallest_offer_weekly": None}
+        return {"sponsor_missing": False, "guaranteed_weekly": None}
     ensure_offer_round(team, position.season, at=now())
     gap = sponsor_gap(team, position.season)
     return {
         "sponsor_missing": gap is not None,
-        "smallest_offer_weekly": gap or None,
+        "guaranteed_weekly": gap or None,
     }
 
 

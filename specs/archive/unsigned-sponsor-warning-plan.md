@@ -1,7 +1,7 @@
 # Warn a manager who has not signed a sponsor — Implementation Plan
 
-**Status:** approved
-**Spec:** `specs/unsigned-sponsor-warning.md` (#161)
+**Status:** implemented
+**Spec:** `specs/archive/unsigned-sponsor-warning.md` (#161)
 
 ## Context you need
 
@@ -18,15 +18,16 @@
 ## Goal
 
 `GET /api/accounts/me/` tells a manager whose team has no sponsor this
-season, with the smallest waiting offer's weekly amount. The dashboard shows
+season, with the most a week signing can guarantee. The dashboard shows
 a banner and the sidebar's Sponsors entry shows a dot while it is so. The
 players' guide says so.
 
 ## Design decisions (settled — implement these, do not substitute)
 
 - **D1. The fact lives on `me.team`**, as `sponsor_missing` (bool) and
-  `smallest_offer_weekly` (int or null, the smallest `weekly_base` among
-  the waiting offers). It sits on `team` because it is a fact about the team.
+  `guaranteed_weekly` (int or null, the highest `floor_amount` among
+  the waiting offers: the most a week signing can guarantee. Not
+  `weekly_base`, which the Sponsors screen never shows on its own). It sits on `team` because it is a fact about the team.
   A user with no team has `team: null` and so no field to misread.
 - **D2. Only `in_season` warns.** Off season and no season give
   `sponsor_missing: false`. In the off season the finished season's contract
@@ -37,8 +38,8 @@ players' guide says so.
   no-op once a round or contract exists.
 - **D4. One helper in `economy/services.py`**, `sponsor_gap(team, season)`,
   returning `None` when the team has an active contract, otherwise the
-  smallest waiting offer's `weekly_base` or `0` if there are none. `MeView`
-  maps `0` to `smallest_offer_weekly: null`. `economy/` stays free of
+  highest waiting `floor_amount` or `0` if there are none. `MeView`
+  maps `0` to `guaranteed_weekly: null`. `economy/` stays free of
   `schedule/`'s position logic: the caller passes the season.
 - **D5. The SPA refreshes `me`.** `AuthProvider` gains `refresh()` and polls
   `getMe` every 60 seconds, the same cadence as `useSponsors` and
@@ -58,7 +59,7 @@ None.
 ## `api/serializers.py`, `api/views.py`
 
 `MeTeamSerializer` gains `sponsor_missing = BooleanField()` and
-`smallest_offer_weekly = IntegerField(allow_null=True)`, both described in
+`guaranteed_weekly = IntegerField(allow_null=True)`, both described in
 the schema. `MeView.get` builds them through a small `_sponsor_fields(team)`.
 The `get_me` operation description mentions the new fields.
 

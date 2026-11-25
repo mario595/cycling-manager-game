@@ -1,6 +1,6 @@
 # Warn a manager who has not signed a sponsor
 
-**Status:** approved
+**Status:** implemented
 **Issue:** #161
 **Domain(s):** `economy/`, `api/`, `frontend/`, `beta_agents/` (players' guide)
 **One-liner:** When your team has no sponsor for the season, the game says so plainly, on the dashboard, in the sidebar and in the API, until you sign one.
@@ -23,7 +23,7 @@ should also be one of the hardest to miss.
 
 A new season opens. The manager logs in and the dashboard, above everything
 else, shows a warning: *No sponsor this season. You are earning nothing from
-sponsorship. Offers start at $9,640 a week.* with a link to Sponsors. The
+sponsorship. Signing can guarantee you $9,640 a week.* with a link to Sponsors. The
 Sponsors entry in the sidebar carries a small dot, so the cue is visible from
 any screen. The manager follows the link, picks one of the three offers, and
 both the banner and the dot are gone.
@@ -33,7 +33,7 @@ since a claimed team starts without a sponsor.
 
 A client playing through the API, like the LLM beta testers, gets the same fact
 on the "who am I" answer it reads at the start of every visit, together with
-the smallest offer's weekly amount. The players' guide tells it that a sponsor
+the most a week that signing can guarantee. The players' guide tells it that a sponsor
 must be signed every season and that this field says when one is missing.
 
 ## In scope
@@ -41,16 +41,16 @@ must be signed every season and that this field says when one is missing.
 1. While the current season has started and the manager's team has no sponsor
    for it, the dashboard shows a warning banner above the rest of the page.
 2. The banner says the team has no sponsor this season, that it is earning
-   nothing from sponsorship, and the weekly amount of the smallest offer
-   waiting. It links to the Sponsors screen.
+   nothing from sponsorship, and the most a week that signing one of the
+   waiting offers can guarantee. It links to the Sponsors screen.
 3. While the same is true, the sidebar's Sponsors entry shows a dot.
 4. The banner and the dot disappear once the team signs, with no reload of the
    page needed beyond the signing itself.
 5. The banner cannot be dismissed.
 6. A team claimed mid-season sees the warning at once.
 7. The API's "who am I" answer says whether the manager's team is missing a
-   sponsor for the current season and, if so, the smallest offer's weekly
-   amount.
+   sponsor for the current season and, if so, the most a week that signing
+   can guarantee.
 8. The players' guide says a sponsor has to be signed each season, that every
    unsigned week pays nothing, and where the API says one is missing.
 
@@ -61,8 +61,8 @@ must be signed every season and that this field says when one is missing.
   real cause. Revisit if testers still miss it.
 - **Back-paying unsigned weeks on a late signing.** No. A late signing costing
   money is what gives the warning meaning.
-- **An estimate of money already lost.** Not shown. The smallest offer's
-  weekly amount makes the stake concrete without guessing at a figure.
+- **An estimate of money already lost.** Not shown. The guaranteed weekly
+  amount makes the stake concrete without guessing at a figure.
 - **Any warning ahead of the next season**, such as "your sponsor deal ends at
   season close". Belongs to sponsor renewal (#23).
 - **Email or other out-of-game notifications.** There are none in the game yet.
@@ -87,7 +87,7 @@ must be signed every season and that this field says when one is missing.
 - Where it shows: a dashboard banner and a dot on the sidebar's Sponsors entry. (Mario, 2026-11-25.)
 - API: on the "who am I" answer, plus a line in the players' guide. (Mario, 2026-11-25.)
 - Shown from season open or claim until signing, with no dismiss. (Mario, 2026-11-25.)
-- The message names the smallest waiting offer's weekly amount. (Mario, 2026-11-25.)
+- The message names a weekly amount from the waiting offers. (Mario, 2026-11-25.) It is the most a week signing can *guarantee*, the best offer's floor, rather than an offer's headline weekly figure: the Sponsors screen deliberately never shows that figure on its own, because players read it as a promise. Today this is the steady offer's flat payment, which is the number Mario's example used.
 - No auto-sign, deferred. (Mario, 2026-11-25.)
 - No back-pay. (Mario, 2026-11-25.)
 

@@ -491,6 +491,18 @@ matters because `_season_average_points` reads settled `FanbaseEntry` rows;
 by the time sponsorship pays, this week's own fanbase row already exists
 but is excluded (`week__number__lt`), so only genuinely prior weeks count.
 
+**Telling a manager they have no sponsor (#161).** `sponsor_gap(team,
+season)` is `None` when the team has an active contract for that season,
+otherwise the highest `floor_amount` among its waiting offers (the most a
+week signing can guarantee) or `0` when there is no round yet. It reports
+the floor, never `weekly_base`, for the same reason the Sponsors screen
+never shows the base on its own. `economy/` does not decide which season is
+"this one": `api.views.MeView` passes the current in-season `Season` and
+turns the answer into `me.team.sponsor_missing` and
+`me.team.guaranteed_weekly`, which the dashboard banner and the sidebar dot
+read. There is deliberately no auto-sign for managed teams and no back-pay
+of unsigned weeks; see `specs/archive/unsigned-sponsor-warning.md`.
+
 ## Insolvency
 
 A managed team is **insolvent** when its balance is negative after a week's

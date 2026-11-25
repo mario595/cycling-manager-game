@@ -24,8 +24,8 @@ export function SponsorBanner() {
           No sponsor this season. You are earning nothing from sponsorship.
         </div>
         <div style={{ fontSize: 13, color: color.muted }}>
-          {team.smallest_offer_weekly
-            ? `Offers start at ${formatMoney(team.smallest_offer_weekly)} a week. `
+          {team.guaranteed_weekly
+            ? `Signing can guarantee you ${formatMoney(team.guaranteed_weekly)} a week. `
             : null}
           <Link to="/sponsors" style={{ color: color.accentInk, fontWeight: 600 }}>
             Pick an offer

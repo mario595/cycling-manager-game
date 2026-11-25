@@ -56,8 +56,14 @@ so neither belongs in the sidebar.
 
 ## Identity
 
-`useAuth.tsx`'s `AuthProvider` learns who is logged in **once**, on mount,
-via `GET /api/accounts/me/`, and shares it through `useAuth()` — the
+`useAuth.tsx`'s `AuthProvider` learns who is logged in on mount, via
+`GET /api/accounts/me/`, then **re-reads it every 60 seconds** (#161),
+because `me.team.sponsor_missing` turns true when a season opens and an open
+tab should show that without a reload. A poll that brings back the same
+JSON does not call `setMe`, so it does not re-render the app. `refresh()`
+re-reads at once; the Sponsors screen calls it after signing, which clears
+the dashboard's `SponsorBanner` and the sidebar's dot on the Sponsors entry
+(both read `me.team.sponsor_missing`). It shares `me` through `useAuth()` — the
 sidebar, the race screen, the roster screen, and the login/register screens
 all read the same `me` rather than each fetching it themselves. This is
 also what makes a session survive a page reload: the browser still holds
@@ -408,6 +414,13 @@ should read the offer by; a tight range already conveys "steady" and a wide
 one already conveys "volatile" without a separate profile label or blurb.
 Every money figure carries the `$` prefix (`AGENTS.md`, *Displaying game
 money*) — including both ends of the range, since the range is money too.
+`SponsorBanner.tsx` (#161) sits on the dashboard under the insolvency
+banner while `me.team.sponsor_missing`: a warning in the accent, not an
+alarm in red, with no dismiss, saying the team earns nothing from
+sponsorship and, from `guaranteed_weekly`, how much a week signing can
+guarantee, linking to Sponsors. That figure is a floor, never `weekly_base`,
+for the reason above. The sidebar shows a dot on the Sponsors entry under
+the same condition.
 `useSponsors.ts` polls the same way `useStaff.ts` does, and exposes
 `refresh()` so signing updates the screen immediately rather than waiting
 for the next poll.

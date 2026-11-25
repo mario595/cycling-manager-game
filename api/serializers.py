@@ -377,11 +377,12 @@ class MeTeamSerializer(serializers.Serializer):
             "offer from `GET /api/economy/sponsors/`."
         ),
     )
-    smallest_offer_weekly = serializers.IntegerField(
+    guaranteed_weekly = serializers.IntegerField(
         allow_null=True,
         help_text=(
-            "While `sponsor_missing` is true, the weekly base of the smallest offer "
-            "waiting, the least signing would earn a week. Null otherwise."
+            "While `sponsor_missing` is true, the most a week that signing one of "
+            "the waiting offers can guarantee: the highest floor among them. Null "
+            "otherwise."
         ),
     )
 

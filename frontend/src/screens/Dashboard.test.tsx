@@ -42,7 +42,7 @@ const mockPlaceBid = vi.mocked(placeBid)
 const manager: Me = {
   authenticated: true,
   display_name: 'Mario',
-  team: { id: 1, name: 'Squad Team', code: 'SQD', sponsor_missing: false, smallest_offer_weekly: null },
+  team: { id: 1, name: 'Squad Team', code: 'SQD', sponsor_missing: false, guaranteed_weekly: null },
   lost_team: null,
 }
 

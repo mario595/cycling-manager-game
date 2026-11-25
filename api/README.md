@@ -601,7 +601,13 @@ Since #29 each rider also carries `release_cost`
   see into a `500`.
 - `GET /api/accounts/me/` (`MeSerializer`, `MeView`) — whether anyone is
   logged in, their display name, their team (`id`/`name`/`code`, or
-  `null`), and `lost_team` (#62). Lives here rather than in `accounts/`
+  `null`), and `lost_team` (#62). The team also carries `sponsor_missing`
+  and `guaranteed_weekly` (#161): true, with the best waiting offer's floor,
+  while a season is running and the team has no contract for it. Off season
+  and before any season it is `false`/`null`. Like `SponsorsView`, `MeView`
+  calls `ensure_offer_round` first, so a team claimed mid-season gets its
+  amount on the very first read. `POST /api/teams/claim/` answers with the
+  same team shape, fields included. Lives here rather than in `accounts/`
   because answering "does this user have a team" needs both `accounts` and
   `teams`, and `accounts/` may import neither — see `accounts/README.md`,
   *What `accounts/` may import*. `@ensure_csrf_cookie`: this is the request

@@ -13,7 +13,7 @@ const mockUseAuth = vi.mocked(useAuth)
 const signed: Me = {
   authenticated: true,
   display_name: 'Mario',
-  team: { id: 1, name: 'Squad Team', code: 'SQD', sponsor_missing: false, smallest_offer_weekly: null },
+  team: { id: 1, name: 'Squad Team', code: 'SQD', sponsor_missing: false, guaranteed_weekly: null },
   lost_team: null,
 }
 
@@ -36,7 +36,7 @@ function show(me: Me | null) {
 }
 
 function unsigned(smallest: number | null): Me {
-  return { ...signed, team: { ...signed.team!, sponsor_missing: true, smallest_offer_weekly: smallest } }
+  return { ...signed, team: { ...signed.team!, sponsor_missing: true, guaranteed_weekly: smallest } }
 }
 
 describe('SponsorBanner', () => {
@@ -52,11 +52,11 @@ describe('SponsorBanner', () => {
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('warns, names the smallest offer and links to Sponsors', () => {
+  it('warns, names the guaranteed amount and links to Sponsors', () => {
     show(unsigned(9_640))
 
     expect(screen.getByText(/No sponsor this season/)).toBeInTheDocument()
-    expect(screen.getByText(/Offers start at \$9,640 a week/)).toBeInTheDocument()
+    expect(screen.getByText(/Signing can guarantee you \$9,640 a week/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Pick an offer' })).toHaveAttribute('href', '/sponsors')
   })
 
@@ -64,6 +64,6 @@ describe('SponsorBanner', () => {
     show(unsigned(null))
 
     expect(screen.getByText(/No sponsor this season/)).toBeInTheDocument()
-    expect(screen.queryByText(/Offers start at/)).toBeNull()
+    expect(screen.queryByText(/Signing can guarantee/)).toBeNull()
   })
 })

@@ -276,9 +276,10 @@ def test_no_settled_week_pays_the_baseline(db, team, season, weeks):
 # ── sponsor_gap (#161) ────────────────────────────────────────────────────
 
 
-def test_gap_is_the_smallest_waiting_offer(db, team, season):
+def test_gap_is_the_best_floor_waiting(db, team, season):
+    ensure_starting_fanbase(team, at=season.starts_at)
     offers = ensure_offer_round(team, season, at=season.starts_at, rng=random.Random(1))
-    assert sponsor_gap(team, season) == min(o.weekly_base for o in offers)
+    assert sponsor_gap(team, season) == max(o.floor_amount for o in offers) > 0
 
 
 def test_no_gap_once_signed(db, team, season):

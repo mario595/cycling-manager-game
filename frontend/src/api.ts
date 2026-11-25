@@ -143,8 +143,12 @@ export interface MeTeam {
    * for it (#161). Drives the dashboard's SponsorBanner and the sidebar dot.
    */
   sponsor_missing: boolean
-  /** The smallest waiting offer's weekly base while `sponsor_missing`, else null. */
-  smallest_offer_weekly: number | null
+  /**
+   * While `sponsor_missing`, the most a week signing can guarantee (the best
+   * waiting offer's floor), else null. A floor, never `weekly_base`, which is
+   * not a promised amount (see the Sponsors screen in frontend/README.md).
+   */
+  guaranteed_weekly: number | null
 }
 
 export interface LostTeam {

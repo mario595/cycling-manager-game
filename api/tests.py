@@ -2797,7 +2797,7 @@ def test_sponsors_returns_the_contract_once_signed(sponsors_client, sponsors_tea
 
 def test_me_warns_when_no_sponsor_is_signed(sponsors_client, sponsors_team, sponsors_season):
     """#161: a team with no contract this season is told so on `me`, with
-    the smallest waiting offer's weekly base. The round is made on this read,
+    the most a week signing can guarantee, the best waiting floor. The round is made on this read,
     so a freshly claimed team need not open Sponsors first."""
     ensure_starting_fanbase(sponsors_team, at=sponsors_season.starts_at)  # offers are sized to fanbase
     response = sponsors_client.get("/api/accounts/me/")
@@ -2805,7 +2805,7 @@ def test_me_warns_when_no_sponsor_is_signed(sponsors_client, sponsors_team, spon
     team = response.data["team"]
     assert team["sponsor_missing"] is True
     offers = sponsors_client.get("/api/economy/sponsors/").data["offers"]
-    assert team["smallest_offer_weekly"] == min(o["weekly_base"] for o in offers)
+    assert team["guaranteed_weekly"] == max(o["floor_amount"] for o in offers)
 
 
 def test_me_stops_warning_once_signed(sponsors_client, sponsors_team, sponsors_season):
@@ -2815,7 +2815,7 @@ def test_me_stops_warning_once_signed(sponsors_client, sponsors_team, sponsors_s
     team = sponsors_client.get("/api/accounts/me/").data["team"]
 
     assert team["sponsor_missing"] is False
-    assert team["smallest_offer_weekly"] is None
+    assert team["guaranteed_weekly"] is None
 
 
 def test_me_does_not_warn_off_season(sponsors_client, sponsors_team, sponsors_season):
@@ -2826,7 +2826,7 @@ def test_me_does_not_warn_off_season(sponsors_client, sponsors_team, sponsors_se
     team = sponsors_client.get("/api/accounts/me/").data["team"]
 
     assert team["sponsor_missing"] is False
-    assert team["smallest_offer_weekly"] is None
+    assert team["guaranteed_weekly"] is None
 
 
 @override_settings(GAME_CLOCK_CLASS="world.clocks.MockClock")
