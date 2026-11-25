@@ -13,21 +13,33 @@ rosters (`riders/` owns `Rider`), not standings (`competitions/`), not money
 A registered user with no team calls `claim_team(user, name=..., code=..., at=...)`
 (exposed as `POST /api/teams/claim/`, `api/README.md`). One transaction:
 
-1. Locks the lowest-`pk` unmanaged team with `select_for_update(skip_locked=True)`
-   — deterministic and testable, and `skip_locked` means a concurrent claimer
-   takes the *next* free team instead of blocking on this one.
+1. Picks the unmanaged team whose **squad strength** is nearest the median of
+   the whole field, managed teams included, with lower `pk` breaking ties
+   (#156). Squad strength is the mean `riders.pricing.strength()` of a team's
+   best `SQUAD_STRENGTH_DEPTH = 8` riders, with a missing place counting as 0
+   so that a stripped roster ranks as weak (`squad_strength`). `_claim_candidates()`
+   ranks without a lock; `claim_team` then walks that ranking and locks the
+   first team still unmanaged with `select_for_update(skip_locked=True)`, so
+   a concurrent claimer moves on to the next candidate instead of blocking.
+   Locking every unmanaged team up front would serialise claims. Before #156
+   this step took the lowest `pk`, which `specs/claimed-team-keeps-its-riders.md`
+   explains.
 2. Sets `manager`, `name`, `code` on it, and calls `full_clean(exclude=["manager"])`
    before saving — **`team_code_validator` is a field validator and does not
    run on `.save()`**; without the explicit `full_clean()` a malformed code
    would reach the database.
-3. Releases every rider currently on the team (`mark_team_change` stamps
-    them `unattached_since = at` first, then `team.riders.update(team=None)`)
-    — they become free agents, not deleted. Deleting them would cascade-delete
-    their `racing.RaceResult` and `racing.RaceSquadRider` rows, silently
-    erasing the team's race history.
-4. Generates a fresh roster via `riders.generation.generate_roster()` and
-   assigns it to the team, stamping each new rider's `joined_team_at = at`
-   (`riders/README.md`, *Team membership stamps*).
+3. **Keeps every rider on the team** (#156). Until #156 a claim released
+   them and generated a fresh, day-one roster, which put every late claimant
+   below the whole field once the AI teams had trained for a few seasons.
+   The kept riders are re-stamped `joined_team_at = at` (`mark_team_change`):
+   the claim cooldown's free release (`transfers._claim_cooldown_exempt`)
+   recognises the claimed roster by `joined_team_at == managed_since`. They
+   get no new baseline snapshot, because they already have their history.
+4. **Tops a short roster up** to `roster_size` (`ROSTER_SIZE`, 12) with riders
+   from `riders.generation.generate_roster()`, stamped `joined_team_at = at`
+   and given baseline snapshots (`riders/README.md`, *Team membership stamps*).
+   Only the gap is filled. A roster above twelve is never trimmed, and
+   `roster_size=0` means no top-up.
 5. **Closes any development squad** the last manager left open —
    `riders.development_squad.close_squad(team, at=at)`, imported at module
    scope since `teams -> riders` is allowed and this module already imports

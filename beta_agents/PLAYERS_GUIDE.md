@@ -95,7 +95,10 @@ they are released to the free-agent pool.
 ## Managing
 
 You can manage only one team. If nobody manages a team, the game runs it. You
-can **claim** any team nobody manages. Its balance and fanbase are reset to
-the starting values. A manager who doesn't visit for **10 game weeks** loses
+can **claim** a team nobody manages: you are given the free team nearest the
+middle of the field. It comes with its riders, its trainer and its place in
+the standings, and a roster under twelve is topped up with new riders. Its
+balance and fanbase are reset to the starting values, and its sponsor deal
+ends, so sign a new one. A manager who doesn't visit for **10 game weeks** loses
 their team, and so does one whose team reaches the fourth insolvency strike.
 After losing a team, you can claim another.

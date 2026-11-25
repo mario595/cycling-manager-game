@@ -365,7 +365,8 @@ used by every team move so the two stamps can never drift out of step with
 `team`:
 
 - `teams.services.claim_team` stamps every rider claimed with
-  `joined_team_at = at` (the claim instant), so a claimed roster is exactly
+  `joined_team_at = at` (the claim instant), the riders the team kept and any
+  generated to top it up alike (#156). A claimed roster is therefore exactly
   the riders whose stamp equals the team's `managed_since`.
 - `transfers.services.sign_free_agent` and `release_rider` stamp signings
   and releases the same way — releasing sets `team = None` **and**
@@ -831,8 +832,8 @@ Every generation function takes an optional `rng: random.Random` so tests
 do not care can omit it.
 
 `generate_roster` has two callers: `reset_riders` below, and
-`teams.services.claim_team` — a newly claimed team's roster is generated the
-same way, with the same quality spread, as a full population reset. See
+`teams.services.claim_team`, which since #156 uses it only to top a claimed
+team's roster up to twelve: a claim keeps the team's own riders. See
 `teams/README.md`, *Claiming a team*.
 
 ## `reset_riders` — replacing the population
