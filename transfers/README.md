@@ -52,7 +52,11 @@ lapsed decision window or an unsold auction, each of which stamps
 `unattached_since` on the way out (`riders/README.md`, *Youth triage*) — the
 same stamp every other released or unsigned rider carries, so a youth nobody
 wants expires by the same rule as anyone else. A rider still *in* the squad is
-never in the pool: closing discards them. Two actions
+never in the pool: closing discards them. The pool's other steady source is
+**free-agent intake** (#157): six generated riders every other week,
+stamped `unattached_since` like everyone else (`riders/README.md`,
+*Free-agent intake*). Unmanaged teams sign from the pool too
+(`world/README.md`, *The AI market*). Two actions
 move riders in and out of the pool, both
 row-locked write paths in `transfers/services.py` that charge an **injected**
 `charge(rider, fee)` callback the way `hire_trainer` does — `transfers/` may

@@ -57,6 +57,7 @@ from riders.services import (
     retire_riders,
     training_deltas,
 )
+from riders.free_agent_intake import is_free_agent_intake_week, run_free_agent_intake
 from riders.youth_intake import is_intake_week, run_intake
 from riders.youth_triage import (
     GRADUATE_WINDOW_WEEKS,
@@ -90,13 +91,8 @@ from transfers.services import (
     withdraw_bids,
 )
 
-from .ai_management import (
-    hire_ai_trainers,
-    replenish_ai_rosters,
-    set_ai_focuses,
-    sign_ai_sponsors,
-)
-from .ai_market import list_ai_riders, place_ai_bids
+from .ai_management import hire_ai_trainers, set_ai_focuses, sign_ai_sponsors
+from .ai_market import list_ai_riders, place_ai_bids, sign_ai_free_agents
 from .clocks import Clock
 from .models import GameClock, TickRun
 
@@ -673,19 +669,6 @@ def tick() -> TickRun:
         riders_repriced += len(changes)
         salary_reviews += write_salary_reviews(transition.season, changes)
 
-    # Unmanaged teams get the places retirement just emptied back (#157),
-    # once per crossed close, after the loop: the replacements are already
-    # the age they will race at, and generate_rider prices them itself, so
-    # neither ageing nor repricing must touch them. Guarded like the rest of
-    # the AI: a failed top-up is not worth losing the tick for.
-    ai_riders_added = 0
-    ai_roster_error = ""
-    if closed:
-        try:
-            ai_riders_added, ai_roster_error = replenish_ai_rosters()
-        except Exception:
-            ai_roster_error = f"ai roster replenishment:\n{traceback.format_exc()}\n"
-
     # One offer round per team per crossed season open — ensure_offer_round
     # is idempotent per (team, season) itself (economy/README.md, D8), so a
     # tick that runs twice, or catches up late, cannot double-generate.
@@ -725,6 +708,7 @@ def tick() -> TickRun:
     solvency_error = ""
     agents_expired = 0
     agents_retired = 0
+    free_agents_generated = 0
     inactivity_error = ""
 
     # Built once, outside the loop: a trainer's skill does not move between
@@ -823,6 +807,12 @@ def tick() -> TickRun:
         agents_retired += retired
         agents_expired += expired
 
+        # After expiry, so a pass never weighs a batch that has only just
+        # arrived against the pool it joins: the newcomers are stamped with
+        # this boundary and start their EXPIRY_WEEKS from it (#157).
+        if is_free_agent_intake_week(week.number):
+            free_agents_generated += len(run_free_agent_intake(at=week.starts_at))
+
     # The AI's hires after the week loop, so salary_by_team stayed true for
     # every week above and a new trainer's first salary is charged at the
     # next boundary. Retried at every boundary, so a team that could not
@@ -862,10 +852,15 @@ def tick() -> TickRun:
     # An AI market that cannot run this tick is not worth losing the tick for.
     ai_listings_created = 0
     ai_bids_placed = 0
+    ai_free_agents_signed = 0
     ai_market_error = ""
     try:
         if weeks:
-            ai_listings_created, ai_market_error = list_ai_riders(weeks[-1].week, at)
+            # Signing before listing: a team a signing brings back above
+            # AI_MIN_ROSTER can list this same pass (#157).
+            ai_free_agents_signed, ai_market_error = sign_ai_free_agents(weeks[-1].week, at)
+            ai_listings_created, listing_error = list_ai_riders(weeks[-1].week, at)
+            ai_market_error += listing_error
         ai_bids_placed, bid_error = place_ai_bids(at)
         ai_market_error += bid_error
     except Exception:
@@ -902,11 +897,12 @@ def tick() -> TickRun:
         ai_bids_placed=ai_bids_placed,
         ai_listings_created=ai_listings_created,
         ai_trainers_hired=ai_trainers_hired,
-        ai_riders_added=ai_riders_added,
+        ai_free_agents_signed=ai_free_agents_signed,
+        free_agents_generated=free_agents_generated,
         ai_sponsors_signed=ai_sponsors_signed,
         error=(
             season_error + inactivity_error + solvency_error + auction_error + ai_market_error
-            + ai_management_error + ai_roster_error
+            + ai_management_error
         ),
     )
     _execute(reclaimed + claimed, run, at=at)

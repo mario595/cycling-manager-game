@@ -12,10 +12,7 @@ a rider's speciality and the hire from a trainer's price, both visible.
 
 from __future__ import annotations
 
-import random
 import traceback
-
-from django.db import transaction
 
 from economy.models import SponsorOffer
 from economy.services import (
@@ -28,9 +25,8 @@ from economy.services import (
     payroll_for,
     sign_offer,
 )
-from riders.generation import SPECIALITY_PROFILES, generate_rider
+from riders.generation import SPECIALITY_PROFILES
 from riders.models import ENGINE_ATTRIBUTES, Rider
-from riders.services import record_initial_snapshots
 from staff.models import Trainer
 from staff.pricing import hire_fee, weekly_salary
 from staff.services import (
@@ -43,7 +39,6 @@ from staff.services import (
     trainer_for,
 )
 from teams.models import Team
-from teams.services import ROSTER_SIZE
 
 #: A season of outgoings — wages plus the new trainer's salary — must still
 #: be covered after the hire fee is paid. A runway check, deliberately not
@@ -51,9 +46,6 @@ from teams.services import ROSTER_SIZE
 AI_STAFF_RESERVE_WEEKS = 12
 #: Unmanaged teams always sign the low-variance offer.
 AI_SPONSOR_PROFILE = "steady"
-#: The ages a replacement rider joins an unmanaged team at (#157): young
-#: enough to be years from the retirement window, old enough to race now.
-AI_REPLACEMENT_AGE_RANGE = (19, 23)
 
 
 def dominant_attribute(speciality: str) -> str:
@@ -96,35 +88,6 @@ def can_afford_trainer(balance: int, payroll: int, trainer: Trainer) -> bool:
     of wages plus this trainer's salary?"""
     reserve = AI_STAFF_RESERVE_WEEKS * (payroll + weekly_salary(trainer))
     return balance - hire_fee(trainer) >= reserve
-
-
-def thinnest_speciality(roster: list[Rider]) -> str:
-    """The speciality this roster has fewest riders of, so a replacement
-    fills the gap a retirement left. Ties go to the first in the
-    Speciality enum's order, so the answer is deterministic."""
-    counts = {speciality: 0 for speciality in Rider.Speciality.values}
-    for rider in roster:
-        counts[rider.speciality] += 1
-    return min(counts, key=lambda speciality: counts[speciality])
-
-
-def replacements_for(roster: list[Rider], rng: random.Random) -> list[Rider]:
-    """Unsaved riders that bring this roster back up to `ROSTER_SIZE`: one
-    per missing place, each of the speciality the roster is then thinnest
-    in, aged within `AI_REPLACEMENT_AGE_RANGE`. Empty for a roster already
-    at or above `ROSTER_SIZE`. Quality is rolled like any generated rider's,
-    so a replacement is a fresh face, not a guaranteed star."""
-    roster = list(roster)
-    added: list[Rider] = []
-    while len(roster) < ROSTER_SIZE:
-        rider = generate_rider(
-            speciality=thinnest_speciality(roster),
-            age=rng.randint(*AI_REPLACEMENT_AGE_RANGE),
-            rng=rng,
-        )
-        roster.append(rider)
-        added.append(rider)
-    return added
 
 
 def _unmanaged_teams():
@@ -224,37 +187,3 @@ def sign_ai_sponsors(season, at) -> tuple[int, str]:
             continue
         signed += 1
     return signed, error
-
-
-def replenish_ai_rosters(rng: random.Random | None = None) -> tuple[int, str]:
-    """Bring every unmanaged team back up to `ROSTER_SIZE` with freshly
-    generated young riders (#157). Called once per season close, after
-    retirement, so the places retirement emptied are filled before the next
-    season opens.
-
-    Without it an unmanaged roster only ever shrinks: the AI never signs a
-    free agent, and a fresh world has none to sign. Once a roster is down to
-    `AI_MIN_ROSTER` the team can no longer list a rider (`ai_market`), and
-    after a few seasons it cannot field a full squad either.
-
-    Free, like the roster a seeded team starts with: no ledger entry. A team
-    above `ROSTER_SIZE` is left alone. Returns (riders added, error text);
-    one team's failure does not stop the others.
-    """
-    rng = rng or random.Random()
-    added = 0
-    error = ""
-    for team in _unmanaged_teams():
-        try:
-            new = replacements_for(list(team.riders.all()), rng)
-            if not new:
-                continue
-            for rider in new:
-                rider.team = team
-            with transaction.atomic():
-                created = Rider.objects.bulk_create(new)
-                record_initial_snapshots(created)
-            added += len(created)
-        except Exception:
-            error += f"ai roster replenishment for team {team.pk}:\n{traceback.format_exc()}\n"
-    return added, error

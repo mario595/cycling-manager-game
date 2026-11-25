@@ -17,7 +17,6 @@ from staff.models import Trainer, TrainingWeekReport
 from staff.services import set_focus
 from teams.models import Team
 from teams.services import ROSTER_SIZE
-from world.ai_management import AI_REPLACEMENT_AGE_RANGE
 from world.clocks import MockClock
 from world.models import GameClock
 from world.services import get_clock, now, tick
@@ -679,53 +678,41 @@ def test_tick_records_riders_retired(db, team):
     assert run.agents_retired == 0  # age-driven, not free-agent expiry
 
 
-def test_season_close_replaces_an_unmanaged_teams_retirees(db, team):
-    """#157: without replacements an unmanaged roster only shrinks, and a
-    team at AI_MIN_ROSTER can no longer list a rider."""
+def test_an_intake_week_adds_free_agents_and_counts_them(db):
+    from riders.free_agent_intake import FREE_AGENT_INTAKE_SIZE
+    from transfers.services import free_agents
+
     clock: MockClock = get_clock()
     season = make_season_with_weeks(1, now())
-    for i in range(3):
-        _veteran(f"Due {i}", age=38, team=team)
-    for i in range(ROSTER_SIZE - 3):
+    week_two = season.weeks.get(number=2)
+    clock.set(week_two.starts_at + timedelta(hours=1))
+
+    run = tick()
+
+    # Weeks 1 and 2 are crossed; only week 2 is an intake week.
+    assert run.free_agents_generated == FREE_AGENT_INTAKE_SIZE
+    assert free_agents().filter(unattached_since=week_two.starts_at).count() == FREE_AGENT_INTAKE_SIZE
+
+
+def test_a_short_unmanaged_team_signs_a_free_agent_at_the_next_boundary(db, team):
+    """#157 end to end: the intake fills the pool, and a week later the AI
+    team that retirement left short signs from it."""
+    from economy.services import ensure_opening_balance
+
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    ensure_opening_balance(team, at=now())
+    for i in range(ROSTER_SIZE - 1):
         _veteran(f"Stays {i}", age=25, team=team)
-    clock.set(season.ends_at + timedelta(hours=1))
-
-    run = tick()
-
-    assert run.riders_retired == 3
-    assert run.ai_riders_added == 3
-    assert team.riders.count() == ROSTER_SIZE
-    # Added after ageing, so they join at the age they were generated at,
-    # with the wage generation priced them at.
-    low, high = AI_REPLACEMENT_AGE_RANGE
-    for rider in team.riders.exclude(name__startswith="Stays"):
-        assert low <= rider.age <= high
-        assert rider.weekly_salary > 0
-
-
-def test_season_close_leaves_a_managed_teams_roster_alone(db, managed_team):
-    clock: MockClock = get_clock()
-    season = make_season_with_weeks(1, now())
-    _veteran("Due", age=38, team=managed_team)
-    _veteran("Stays", age=25, team=managed_team)
-    clock.set(season.ends_at + timedelta(hours=1))
-
-    run = tick()
-
-    assert run.ai_riders_added == 0
-    assert managed_team.riders.count() == 1
-
-
-def test_no_replacements_mid_season(db, team):
-    clock: MockClock = get_clock()
-    season = make_season_with_weeks(1, now())
-    _veteran("Alone", age=25, team=team)
     clock.set(season.weeks.get(number=2).starts_at + timedelta(hours=1))
+    first = tick()
+    clock.set(season.weeks.get(number=3).starts_at + timedelta(hours=1))
 
-    run = tick()
+    second = tick()
 
-    assert run.ai_riders_added == 0
-    assert team.riders.count() == 1
+    assert first.ai_free_agents_signed == 0  # the intake is a week old first
+    assert second.ai_free_agents_signed == 1
+    assert team.riders.count() == ROSTER_SIZE
 
 
 def test_tick_reprices_riders_at_season_close(db, team):

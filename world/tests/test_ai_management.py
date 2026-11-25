@@ -8,7 +8,6 @@ ledger.
 
 from __future__ import annotations
 
-import random
 from datetime import datetime, timedelta, timezone as dt_timezone
 
 import pytest
@@ -23,28 +22,23 @@ from economy.services import (
     sign_offer,
     void_sponsorship,
 )
-from riders.models import Rider, RiderAttributeSnapshot
+from riders.models import Rider
 from staff.models import Trainer
 from staff.pricing import hire_fee, weekly_salary
 from schedule.models import Season, Week
 from staff.models import TrainingFocus
 from staff.services import focus_for, trainer_for
 from teams.models import Team
-from teams.services import ROSTER_SIZE
 from world import ai_management
 from world.ai_management import (
-    AI_REPLACEMENT_AGE_RANGE,
     AI_STAFF_RESERVE_WEEKS,
     can_afford_trainer,
     cheapest_trainer,
     dominant_attribute,
     focus_for_week,
     hire_ai_trainers,
-    replacements_for,
-    replenish_ai_rosters,
     set_ai_focuses,
     sign_ai_sponsors,
-    thinnest_speciality,
 )
 from world.services import now
 
@@ -324,124 +318,3 @@ def test_sign_ai_sponsors_never_touches_a_managed_team(db, season):
     assert sign_ai_sponsors(season, now()) == (0, "")
     assert active_contract(team, season) is None
     assert not SponsorOffer.objects.filter(team=team).exists()
-
-
-# --- Roster replenishment (#157) ---------------------------------------------
-
-
-def test_thinnest_speciality_is_the_one_the_roster_has_fewest_of():
-    roster = [
-        _rider(pk, speciality)
-        for pk, speciality in enumerate(
-            [
-                Rider.Speciality.CLIMBER, Rider.Speciality.CLIMBER,
-                Rider.Speciality.SPRINTER, Rider.Speciality.SPRINTER,
-                Rider.Speciality.ROULEUR, Rider.Speciality.ROULEUR,
-                Rider.Speciality.PUNCHEUR,
-                Rider.Speciality.DOMESTIQUE, Rider.Speciality.DOMESTIQUE,
-            ],
-            start=1,
-        )
-    ]
-
-    assert thinnest_speciality(roster) == Rider.Speciality.PUNCHEUR
-
-
-def test_thinnest_speciality_breaks_a_tie_by_enum_order():
-    assert thinnest_speciality([]) == Rider.Speciality.values[0]
-
-
-def test_replacements_bring_a_short_roster_up_to_roster_size():
-    roster = [_rider(pk, Rider.Speciality.CLIMBER) for pk in range(1, 10)]
-
-    added = replacements_for(roster, random.Random(1))
-
-    assert len(roster) + len(added) == ROSTER_SIZE
-    assert all(rider.pk is None and rider.team_id is None for rider in added)
-    low, high = AI_REPLACEMENT_AGE_RANGE
-    assert all(low <= rider.age <= high for rider in added)
-    # Each fills the roster's thinnest speciality at the time, so a roster
-    # of nine climbers gets one of every other speciality first.
-    assert Rider.Speciality.CLIMBER not in {rider.speciality for rider in added}
-
-
-def test_no_replacements_for_a_full_or_oversized_roster():
-    full = [_rider(pk, Rider.Speciality.CLIMBER) for pk in range(1, ROSTER_SIZE + 1)]
-    oversized = full + [_rider(99, Rider.Speciality.SPRINTER)]
-
-    assert replacements_for(full, random.Random(1)) == []
-    assert replacements_for(oversized, random.Random(1)) == []
-
-
-def _roster_of(team: Team, size: int) -> list[Rider]:
-    return [
-        Rider.objects.create(
-            name=f"{team.code} {i}", team=team, speciality=Rider.Speciality.CLIMBER,
-            age=26, climb=40, sprint=40, flat=40, resistance=40, positioning=40,
-        )
-        for i in range(size)
-    ]
-
-
-def test_replenish_tops_unmanaged_teams_up_and_leaves_the_rest(db):
-    short = _team("SHT")
-    _roster_of(short, 8)
-    full = _team("FUL")
-    _roster_of(full, ROSTER_SIZE + 1)
-    human = _team("HUM", manager=_human("HUM"))
-    _roster_of(human, 5)
-    ledger_before = LedgerEntry.objects.count()
-
-    added, error = replenish_ai_rosters(random.Random(7))
-
-    assert error == ""
-    assert added == ROSTER_SIZE - 8
-    assert short.riders.count() == ROSTER_SIZE
-    assert full.riders.count() == ROSTER_SIZE + 1
-    assert human.riders.count() == 5
-    # Free, like a seeded roster: nothing is charged for them.
-    assert LedgerEntry.objects.count() == ledger_before
-
-
-def test_replacements_get_a_baseline_attribute_snapshot(db):
-    team = _team("SNP")
-    _roster_of(team, ROSTER_SIZE - 2)
-
-    replenish_ai_rosters(random.Random(3))
-
-    new = team.riders.filter(age__lte=AI_REPLACEMENT_AGE_RANGE[1])
-    assert new.count() == 2
-    assert RiderAttributeSnapshot.objects.filter(rider__in=new, week=None).count() == 2
-
-
-def test_replenishing_twice_adds_nothing_the_second_time(db):
-    team = _team("TWC")
-    _roster_of(team, 6)
-
-    replenish_ai_rosters(random.Random(1))
-    added, _ = replenish_ai_rosters(random.Random(2))
-
-    assert added == 0
-    assert team.riders.count() == ROSTER_SIZE
-
-
-def test_one_team_failing_does_not_stop_the_others(db, monkeypatch):
-    first = _team("ONE")
-    _roster_of(first, 10)
-    second = _team("TWO")
-    _roster_of(second, 10)
-    real = ai_management.replacements_for
-
-    def flaky(roster, rng):
-        if roster and roster[0].team_id == first.pk:
-            raise RuntimeError("boom")
-        return real(roster, rng)
-
-    monkeypatch.setattr(ai_management, "replacements_for", flaky)
-
-    added, error = replenish_ai_rosters(random.Random(1))
-
-    assert added == 2
-    assert f"team {first.pk}" in error and "boom" in error
-    assert first.riders.count() == 10
-    assert second.riders.count() == ROSTER_SIZE
