@@ -1,6 +1,6 @@
 # Rider departures, and the graduate's deadline
 
-**Status:** approved
+**Status:** implemented
 **Domain(s):** riders, transfers, world, api, frontend
 **One-liner:** When a rider leaves your team or development squad while you are away, the game tells you who went, when and why; and a graduate shows the exact week they will be released if you do nothing.
 

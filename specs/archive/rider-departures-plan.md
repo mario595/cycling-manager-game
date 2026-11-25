@@ -1,6 +1,6 @@
 # Rider departures, and the graduate's deadline — Implementation Plan
 
-**Spec:** `specs/rider-departures.md` · **Issues:** #158, #162 · **Status:** proposed
+**Spec:** `specs/archive/rider-departures.md` · **Issues:** #158, #162 · **Status:** implemented
 **Apps touched:** `riders/`, `transfers/`, `api/`, `frontend/`
 
 ## Context

@@ -93,7 +93,13 @@ Closing the squad discards the riders in it, and a reopened squad starts at
 the bottom again. Every four weeks the squad receives **two riders aged
 17–19**. They develop for **14 weeks** and then **graduate**. A graduate has
 **two weeks** to be promoted to your roster or listed for auction. Otherwise
-they are released to the free-agent pool.
+they are released to the free-agent pool. Each graduate's `decision_due` is
+the season and week at whose start that release happens.
+
+Riders who leave your team while you are away are listed in your
+**departures** (`GET /api/riders/departures/`): who retired at a season close,
+which graduates were released to the free agents, and who was sold at auction,
+to whom and for how much.
 
 ## Managing
 
