@@ -29,6 +29,12 @@ class Tester:
     display_name: str
     period: int
     persona: str
+    # A tester that tries to finish before this many tool calls is pushed back
+    # once (#159). The minimal-effort tester is exempt: short visits are its
+    # persona.
+    min_tool_calls: int = 12
+    # Whether its visits get a rotating focus area to dig into (#159).
+    probes: bool = True
 
     @property
     def email(self) -> str:
@@ -108,6 +114,8 @@ TESTERS: tuple[Tester, ...] = (
             "something needs you, such as an unsigned sponsor, money running "
             "out, or a lost team. Keep your visits short."
         ),
+        min_tool_calls=0,
+        probes=False,
     ),
 )
 
