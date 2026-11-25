@@ -589,6 +589,25 @@ describe('DevelopmentSquad', () => {
     ).toBeInTheDocument()
   })
 
+  it('shows no deadline for a listed graduate: the auction decides (#162)', () => {
+    mockSquad(
+      payload(1, 500_000, {
+        graduates: [
+          developmentSquadGraduate({
+            id: 5, name: 'Graduate', weeks_left: 1, listed: true,
+            decision_due: { season: 4, week: 6 },
+          }),
+        ],
+      }),
+    )
+
+    renderScreen()
+
+    expect(screen.getByText('On auction: the auction decides')).toBeInTheDocument()
+    expect(screen.queryByText(/Decide before/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/If you do nothing/)).not.toBeInTheDocument()
+  })
+
   it("lists this season's graduate releases, and only those (#162)", () => {
     mockSquad(payload(1, 500_000))
     const departure = (id: number, name: string, kind: 'released' | 'retired', season: number) => ({

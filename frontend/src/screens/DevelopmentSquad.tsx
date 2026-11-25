@@ -530,16 +530,22 @@ export function DevelopmentSquad() {
                     textAlign: 'right',
                   }}
                 >
-                  <div style={{ color: rider.weeks_left === 1 ? color.accentInk : undefined }}>
-                    {graduateDeadline(rider)}
-                  </div>
                   {/* What happens at zero, said every time (#162): the count
                       alone read as a figure, not a deadline. A listed
-                      graduate's auction decides instead. */}
-                  {rider.listed ? null : (
-                    <div style={{ marginTop: 3 }}>
-                      If you do nothing, they're released to the free agents.
-                    </div>
+                      graduate has no deadline: the auction decides, and it
+                      can outlast the window, so a named week could already
+                      have started. */}
+                  {rider.listed ? (
+                    <div>On auction: the auction decides</div>
+                  ) : (
+                    <>
+                      <div style={{ color: rider.weeks_left === 1 ? color.accentInk : undefined }}>
+                        {graduateDeadline(rider)}
+                      </div>
+                      <div style={{ marginTop: 3 }}>
+                        If you do nothing, they're released to the free agents.
+                      </div>
+                    </>
                   )}
                   <div style={{ marginTop: 3 }}>
                     Salary {formatMoney(rider.promotion_salary)} · Value{' '}

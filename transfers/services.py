@@ -21,9 +21,9 @@ from datetime import timedelta
 from django.db import IntegrityError, transaction
 from django.db.models import Exists, OuterRef, QuerySet
 
+from riders.departures import record_sale
 from riders.models import Rider
 from riders.services import mark_team_change
-from riders.departures import record_sale
 from riders.youth_triage import belongs_to, lock_rider, release_graduates
 
 from .models import Auction, Bid

@@ -108,7 +108,12 @@ from riders.youth_triage import (
     promote,
 )
 from schedule.models import SEASON_WEEKS, Week
-from schedule.services import current_position, weeks_ago_cutoff, weeks_opened_between
+from schedule.services import (
+    current_position,
+    season_and_week_of,
+    weeks_ago_cutoff,
+    weeks_opened_between,
+)
 from staff.pricing import hire_fee, weekly_salary
 from staff.services import (
     InsufficientFunds,
@@ -746,8 +751,9 @@ class DeparturesView(APIView):
     The whole history in one response: a team gains a few a season, so there
     is nothing to page, and the screens filter it themselves (the dashboard
     to the last two game weeks, the roster to this season and the last
-    close). The season and week are resolved here from one query of the
-    calendar rather than one `current_position` per row.
+    close). The season and week come from `season_and_week_of`, which places
+    every row by `current_position`'s rule in two queries rather than three
+    per row.
     """
 
     @extend_schema(
@@ -774,25 +780,10 @@ class DeparturesView(APIView):
         departures = list(
             Departure.objects.filter(team=team).select_related("buyer")
         )
-        weeks = list(
-            Week.objects.select_related("season").order_by("starts_at")
-        ) if departures else []
-        starts = [week.starts_at for week in weeks]
-
-        def place(at):
-            index = bisect_right(starts, at) - 1
-            if index < 0:
-                return None, None
-            week = weeks[index]
-            if at < week.ends_at:
-                return week.season.number, week.number
-            # Between seasons: after a season's last week and before the
-            # next one opens.
-            return (week.season.number, None) if at < week.season.ends_at else (None, None)
+        places = season_and_week_of([departure.at for departure in departures])
 
         rows = []
-        for departure in departures:
-            season, week = place(departure.at)
+        for departure, (season, week) in zip(departures, places):
             rows.append({
                 "id": departure.pk,
                 "kind": departure.kind,
