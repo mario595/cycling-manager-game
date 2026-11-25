@@ -2,12 +2,15 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { placeBid, type AuctionMarket, type Calendar, type Me, type MyBidStatus, type Position, type Solvency, type Standings } from '../api'
+import { placeBid, type AuctionMarket, type Departure, type DevelopmentSquad, type RosterRider, type Calendar, type Me, type MyBidStatus, type Position, type Solvency, type Standings } from '../api'
 import { useAuctions } from '../useAuctions'
 import { useAuth } from '../useAuth'
 import { useSolvency } from '../useSolvency'
 import { useCalendar } from '../useCalendar'
 import { useClock } from '../useClock'
+import { useDepartures } from '../useDepartures'
+import { useDevelopmentSquad } from '../useDevelopmentSquad'
+import { useRoster } from '../useRoster'
 import { useMyBids } from '../useMyBids'
 import { useNextRaceSquad } from '../useNextRaceSquad'
 import { useSeason } from '../useSeason'
@@ -27,6 +30,9 @@ vi.mock('../useAuctions', () => ({ useAuctions: vi.fn() }))
 vi.mock('../useMyBids', () => ({ useMyBids: vi.fn() }))
 vi.mock('../useClock', () => ({ useClock: vi.fn() }))
 vi.mock('../useSolvency', () => ({ useSolvency: vi.fn() }))
+vi.mock('../useDepartures', () => ({ useDepartures: vi.fn() }))
+vi.mock('../useDevelopmentSquad', () => ({ useDevelopmentSquad: vi.fn() }))
+vi.mock('../useRoster', () => ({ useRoster: vi.fn() }))
 
 const mockUseAuth = vi.mocked(useAuth)
 const mockUseSeason = vi.mocked(useSeason)
@@ -38,6 +44,9 @@ const mockUseMyBids = vi.mocked(useMyBids)
 const mockUseClock = vi.mocked(useClock)
 const mockUseSolvency = vi.mocked(useSolvency)
 const mockPlaceBid = vi.mocked(placeBid)
+const mockUseDepartures = vi.mocked(useDepartures)
+const mockUseDevelopmentSquad = vi.mocked(useDevelopmentSquad)
+const mockUseRoster = vi.mocked(useRoster)
 
 const manager: Me = {
   authenticated: true,
@@ -51,6 +60,7 @@ const position: Position = {
   season: 1,
   week: 1,
   week_ends_at: '2026-09-21T00:00:00Z',
+  weeks_in_season: 12,
 }
 
 const calendar: Calendar = {
@@ -105,6 +115,11 @@ function renderDashboard() {
 }
 
 beforeEach(() => {
+  mockUseDepartures.mockReturnValue({ departures: [], loading: false, error: false })
+  mockUseDevelopmentSquad.mockReturnValue({ squad: null, loading: false, error: false, refresh: vi.fn() })
+  mockUseRoster.mockReturnValue({
+    riders: [], squadValue: 0, salaryReview: null, loading: false, error: false, refresh: vi.fn(),
+  })
   mockUseAuth.mockReturnValue({
     me: manager,
     loading: false,
@@ -477,5 +492,69 @@ describe('Dashboard', () => {
     await waitFor(() => expect(mockPlaceBid).toHaveBeenCalledWith(5, 21_000))
     await waitFor(() => expect(refreshMarket).toHaveBeenCalled())
     await waitFor(() => expect(refreshMyBids).toHaveBeenCalled())
+  })
+})
+
+describe('what changed while you were away (#158, #162)', () => {
+  const departure = (overrides: Partial<Departure>): Departure => ({
+    id: 1, kind: 'released', at: '2027-02-25T00:00:00Z', season: 1, week: 1,
+    rider: { id: 7, name: 'Luis Garcia', speciality: 'sprinter', age: 19 },
+    buyer: null, fee: null, ...overrides,
+  })
+  const graduate = (weeksLeft: number, listed = false) =>
+    ({ id: weeksLeft * 10 + (listed ? 1 : 0), weeks_left: weeksLeft, listed }) as DevelopmentSquad['graduates'][number]
+  const squadWith = (graduates: DevelopmentSquad['graduates']) =>
+    mockUseDevelopmentSquad.mockReturnValue({
+      squad: { graduates } as DevelopmentSquad, loading: false, error: false, refresh: vi.fn(),
+    })
+
+  it('lists departures from the last two game weeks only', () => {
+    mockUseDepartures.mockReturnValue({
+      departures: [
+        departure({}),
+        departure({ id: 2, at: '2027-02-01T00:00:00Z', rider: { id: 8, name: 'Long Gone', speciality: 'climber', age: 35 } }),
+      ],
+      loading: false,
+      error: false,
+    })
+
+    renderDashboard()
+
+    expect(screen.getByText('Riders who left')).toBeInTheDocument()
+    expect(screen.getByText('Luis Garcia')).toBeInTheDocument()
+    expect(screen.queryByText('Long Gone')).not.toBeInTheDocument()
+  })
+
+  it('cues undecided graduates, ignoring a listed one', () => {
+    squadWith([graduate(2), graduate(2, true)])
+
+    renderDashboard()
+
+    expect(screen.getByText('1 graduate is waiting for your decision →')).toBeInTheDocument()
+  })
+
+  it("turns urgent in a graduate's last week", () => {
+    squadWith([graduate(1), graduate(2)])
+
+    renderDashboard()
+
+    expect(
+      screen.getByText('1 graduate is released to the free agents at the start of next week unless you decide →'),
+    ).toBeInTheDocument()
+  })
+
+  it('warns of retirements in the last two weeks of a season only', () => {
+    const tagged = [{ id: 1, final_season: true }, { id: 2, final_season: false }] as RosterRider[]
+    mockUseRoster.mockReturnValue({
+      riders: tagged, squadValue: 0, salaryReview: null, loading: false, error: false, refresh: vi.fn(),
+    })
+
+    const { unmount } = renderDashboard()
+    expect(screen.queryByText(/retires at the end of this season/)).not.toBeInTheDocument()
+    unmount()
+
+    mockUseSeason.mockReturnValue({ position: { ...position, week: 11 }, loading: false, error: false })
+    renderDashboard()
+    expect(screen.getByText('1 rider retires at the end of this season →')).toBeInTheDocument()
   })
 })
