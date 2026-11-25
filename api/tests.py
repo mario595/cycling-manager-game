@@ -768,6 +768,46 @@ def test_roster_includes_salary_review_when_one_exists(roster_team, roster_clien
     }]
 
 
+def test_roster_rider_not_listed_has_no_auction(roster_rider, roster_client):
+    response = roster_client.get("/api/riders/")
+
+    assert response.data["riders"][0]["auction"] is None
+
+
+def test_roster_rider_on_auction_carries_its_open_auction(roster_team, roster_rider, roster_client):
+    # #152: the Roster screen cues a listed rider from this, not by fetching
+    # the whole market and matching on is_own_listing.
+    auction = Auction.objects.create(
+        rider=roster_rider, seller_team=roster_team,
+        reserve_price=50_000, current_price=55_000, min_increment=2_500,
+        deadline=now() + timedelta(days=3), listed_at=now(),
+    )
+    bidder_team = Team.objects.create(name="Bidder", code="BDR")
+    Bid.objects.create(auction=auction, bidder_team=bidder_team, amount=52_500, placed_at=now())
+    Bid.objects.create(auction=auction, bidder_team=bidder_team, amount=55_000, placed_at=now())
+    Bid.objects.create(
+        auction=auction, bidder_team=bidder_team, amount=50_000,
+        placed_at=now(), withdrawn_at=now(),
+    )
+
+    data = roster_client.get("/api/riders/").data["riders"][0]["auction"]
+
+    assert data["id"] == auction.pk
+    assert data["current_price"] == 55_000
+    assert data["bid_count"] == 2  # the withdrawn bid is not counted
+    assert data["deadline"]
+
+
+def test_roster_rider_ignores_a_closed_auction(roster_team, roster_rider, roster_client):
+    Auction.objects.create(
+        rider=roster_rider, seller_team=roster_team, status=Auction.Status.UNSOLD,
+        reserve_price=50_000, current_price=50_000, min_increment=2_500,
+        deadline=now(), listed_at=now(),
+    )
+
+    assert roster_client.get("/api/riders/").data["riders"][0]["auction"] is None
+
+
 def test_roster_salary_review_is_null_without_one(roster_team, roster_client):
     response = roster_client.get("/api/riders/")
 
@@ -3403,7 +3443,8 @@ def test_rider_profile_identity_matches_roster_payload(profile_rider, profile_ow
     response = profile_owner_client.get(f"/api/riders/{profile_rider.pk}/")
 
     for key, value in roster_rider.items():
-        if key == "release_cost":
+        # release_cost and auction (#152) are the owner's roster's own keys.
+        if key in ("release_cost", "auction"):
             continue
         assert response.data[key] == value, key
 

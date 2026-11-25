@@ -77,3 +77,9 @@ export function racePath(id: number): string {
 export function replayPath(id: number): string {
   return `/race/${id}/replay`
 }
+
+/** The one way to link to one of the caller's own auctions: the Transfers
+ * screen's Sell section, scrolled to that listing's card (#152). */
+export function auctionPath(id: number): string {
+  return `/transfers#auction-${id}`
+}

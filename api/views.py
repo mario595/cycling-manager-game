@@ -5,7 +5,7 @@ from bisect import bisect_right
 import brotli
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
-from django.db.models import Prefetch, Sum
+from django.db.models import Count, Prefetch, Q, Sum
 from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -695,7 +695,9 @@ class RiderListView(APIView):
         description=(
             f"Your team's riders, with age, speciality, attributes and freshness on "
             f"the 0–10 scale, weekly salary, market value and what releasing them "
-            f"would cost. `final_season` is true for a rider who will retire at this "
+            f"would cost. `auction` is the rider's open auction (price, live bids, "
+            f"deadline), or null when they are not listed. "
+            f"`final_season` is true for a rider who will retire at this "
             f"season's close. `squad_value` is the roster's total market value. "
             f"`salary_review` is the last season-end salary review: wages are repriced "
             f"at every season close from each rider's strength. Your roster holds at "
@@ -709,6 +711,16 @@ class RiderListView(APIView):
             return Response({"detail": "You do not manage a team."}, status=403)
 
         riders = list(Rider.objects.filter(team=team))
+        # One query for the whole roster's open listings (#152), not one per
+        # rider. Only live bids count, the same set place_bid prices from.
+        open_auctions = {
+            auction.rider_id: auction
+            for auction in Auction.objects.filter(
+                seller_team=team,
+                status=Auction.Status.OPEN,
+                rider__in=riders,
+            ).annotate(bid_count=Count("bids", filter=Q(bids__withdrawn_at__isnull=True)))
+        }
         return Response(RosterSerializer({
             "riders": riders,
             "squad_value": sum(market_value_for(r) for r in riders),
@@ -716,6 +728,7 @@ class RiderListView(APIView):
         }, context={
             "team": team,
             "weeks_opened": _cooldown_weeks_opened(team, now()),
+            "open_auctions": open_auctions,
         }).data)
 
 
