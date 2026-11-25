@@ -40,7 +40,9 @@ FINISH_TOOL = {
     },
 }
 
-OBSERVATION_MARK = "critical observation"
+# A line starting "Critical observation", allowing Markdown emphasis or a
+# list marker in front, as the prompt asks.
+OBSERVATION_LINE = re.compile(r"^[\s>*_\-]*critical observation", re.IGNORECASE | re.MULTILINE)
 
 EARLY_FINISH = (
     "Not saved: you have made only {calls} tool calls this visit, which is not "
@@ -154,9 +156,12 @@ def run_visit(
             arguments = _arguments(call)
             outcome.tool_calls += 1
             entry = str(arguments.get("diary_entry", "")) if name == "finish_visit" else ""
+            # No pushback on the visit's last step: there is no step left to
+            # act on it, and the entry the tester wrote would be lost.
+            last_step = outcome.steps >= max_steps
             if name == "finish_visit" and outcome.finished:
                 result = json.dumps({"saved": True})  # a second call in the same turn
-            elif name == "finish_visit" and not pushed_early and outcome.tool_calls - 1 < tester.min_tool_calls:
+            elif name == "finish_visit" and not last_step and not pushed_early and outcome.tool_calls - 1 < tester.min_tool_calls:
                 pushed_early = True
                 outcome.pushbacks += 1
                 result = json.dumps(
@@ -168,7 +173,7 @@ def run_visit(
                     }
                 )
                 note(f"[{tester.slug}] finish_visit pushed back: only {outcome.tool_calls - 1} tool calls")
-            elif name == "finish_visit" and not pushed_observation and OBSERVATION_MARK not in entry.lower():
+            elif name == "finish_visit" and not last_step and not pushed_observation and not OBSERVATION_LINE.search(entry):
                 pushed_observation = True
                 outcome.pushbacks += 1
                 result = json.dumps({"saved": False, "error": NO_OBSERVATION})
@@ -211,7 +216,10 @@ def run_visit(
         )
     # A visit cut short never accounted for the changes, so it saves no
     # reading: the next visit compares with nothing rather than half a story.
-    diary.append(_with_footer(outcome), at=now, reading=reading if outcome.finished else None)
+    # Nor does a reading whose team could not be read: the next visit would
+    # take it for a lost team.
+    keep = reading if outcome.finished and reading is not None and "team" not in reading.get("errors", {}) else None
+    diary.append(_with_footer(outcome), at=now, reading=keep)
     note(f"[{tester.slug}] visit over: {outcome.summary()}")
     return outcome
 

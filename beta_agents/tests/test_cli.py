@@ -141,3 +141,8 @@ def test_a_refused_dispatch_fails():
     github = FakeGitHub({}, dispatch=403)
     code, out = run_dispatch(github)
     assert code == 1 and "answered 403" in out[-1]
+
+
+def test_now_with_an_offset_is_converted_to_utc():
+    assert cli._parse_now("2026-11-25T16:05+01:00") == datetime(2026, 11, 25, 15, 5, tzinfo=timezone.utc)
+    assert cli._parse_now("2026-11-25T15:05") == datetime(2026, 11, 25, 15, 5, tzinfo=timezone.utc)

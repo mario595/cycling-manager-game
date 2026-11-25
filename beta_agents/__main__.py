@@ -53,13 +53,13 @@ def main(argv: list[str] | None = None, env: dict[str, str] | None = None) -> in
     args = parser.parse_args(argv)
     try:
         if args.command == "due":
-            now = datetime.fromisoformat(args.now).replace(tzinfo=timezone.utc) if args.now else datetime.now(timezone.utc)
+            now = _parse_now(args.now)
             diaries = lambda t: Diary(args.diary_dir, t.slug, t.display_name).last_visit_at()
             for tester in testers.due(now, diaries):
                 print(tester.slug)
             return 0
         if args.command == "dispatch":
-            now = datetime.fromisoformat(args.now).replace(tzinfo=timezone.utc) if args.now else datetime.now(timezone.utc)
+            now = _parse_now(args.now)
             return dispatch(env, now)
         if args.command == "register":
             return _register(testers.get(args.tester), args.base_url)
@@ -115,6 +115,15 @@ def _register(tester: testers.Tester, base_url: str) -> int:
     print(f"Registered {tester.email}. Now issue its key on the server and store it as {tester.secret_name}:")
     print(f"  fly ssh console --app velodra -C \"su app -s /bin/sh -c 'cd /app && python manage.py issue_api_token {tester.email}'\"")
     return 0
+
+
+def _parse_now(text: str | None) -> datetime:
+    """`--now`, in UTC. A time with no offset is taken as UTC; one with an
+    offset is converted, not overridden."""
+    if not text:
+        return datetime.now(timezone.utc)
+    parsed = datetime.fromisoformat(text)
+    return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
 
 
 def _first_key(env: dict[str, str]) -> str | None:

@@ -90,6 +90,8 @@ def describe_changes(previous: dict | None, current: dict) -> list[str]:
     """What moved between the last visit's reading and this one, one plain line
     per thing. Without a previous reading, or after a change of team, there is
     nothing to compare, and the lines say so."""
+    if "team" in (current.get("errors") or {}):
+        return ["Which team you manage could not be read just now, so nothing is compared. Check `get_me` yourself."] + _error_lines(current)
     if previous is None:
         return ["No reading from your last visit to compare with. The team now:"] + describe_current(current)
     old_team, new_team = previous.get("team"), current.get("team")

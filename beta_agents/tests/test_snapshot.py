@@ -89,3 +89,11 @@ def test_a_change_of_team_is_not_compared():
     lines = snapshot.describe_changes(before, after)
     assert lines[0] == "You managed Velo Turbo (VTR, id 7) last visit, and now Casa (CAS, id 8), so nothing is compared. The team now:"
     assert not any("→" in line for line in lines)
+
+
+def test_an_unreadable_account_is_not_taken_for_a_lost_team():
+    reading = take({("GET", "/api/accounts/me/"): (500, "Server Error")})
+    assert reading["team"] is None and "team" in reading["errors"]
+    lines = snapshot.describe_changes(take(), reading)
+    assert lines[0].startswith("Which team you manage could not be read")
+    assert not any("now no team" in line for line in lines)

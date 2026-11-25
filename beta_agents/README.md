@@ -57,6 +57,10 @@ $96,000. So:
   casual). The second call always saves.
 - **One pushback without a critical observation.** An entry with no line
   `Critical observation:` is sent back once, for every tester.
+- **Never on the last step.** A `finish_visit` on the visit's final model call
+  always saves, or the entry would be lost to the step cap.
+- **A reading whose team could not be read is not saved,** and the visit is
+  told so rather than that it lost its team.
 - **The reporting bar is stated plainly.** A dismissed report costs nothing,
   `looks_wrong` is for what they can't explain, and three visits without a
   report means they aren't looking.

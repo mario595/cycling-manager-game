@@ -15,7 +15,7 @@ from beta_agents.visit import run_visit
 from .conftest import FakeTransport
 
 NOW = datetime(2026, 11, 13, 12, 17, tzinfo=timezone.utc)
-DONE = "ok. Critical observation: the market was empty."
+DONE = "ok.\nCritical observation: the market was empty."
 
 
 def call(name, args, id_="c1"):
@@ -58,7 +58,7 @@ def test_a_full_visit(setup):
         [
             {"content": "Let me look.", "tool_calls": [call("get_me", {})]},
             {"tool_calls": [call("fire_trainer", {}, "a"), call("report_a_problem", {"category": "bug", "text": "500"}, "b")]},
-            {"tool_calls": [call("finish_visit", {"diary_entry": "Fired nobody; reported a 500. Critical observation: firing gave a 500."})]},
+            {"tool_calls": [call("finish_visit", {"diary_entry": "Fired nobody; reported a 500.\nCritical observation: firing gave a 500."})]},
         ]
     )
     outcome = run_visit(tester, box, llm, diary, now=NOW, echo=lambda *_: None)
@@ -214,7 +214,7 @@ def test_the_focus_rotates_with_the_diary(setup):
 def test_the_visit_opens_with_what_changed_and_saves_the_reading(setup):
     tester, box, diary, _ = setup
     before = {"team": {"id": 7, "name": "Velo", "code": "VTR"}, "season": 3, "week": 5, "balance": 441908}
-    diary.append("last visit. Critical observation: x", at=datetime(2026, 11, 13, 4, 17, tzinfo=timezone.utc), reading=before)
+    diary.append("last visit.\nCritical observation: x", at=datetime(2026, 11, 13, 4, 17, tzinfo=timezone.utc), reading=before)
     now = dict(before, week=7, balance=429927)
     llm = ScriptedLLM([finish()])
     run_visit(tester, box, llm, diary, now=NOW, echo=lambda *_: None, reading=now)
@@ -229,4 +229,28 @@ def test_a_visit_cut_short_saves_no_reading(setup):
     tester, box, diary, _ = setup
     llm = ScriptedLLM([looks(1)] * 2)
     run_visit(tester, box, llm, diary, max_steps=2, now=NOW, echo=lambda *_: None, reading={"team": None})
+    assert diary.last_reading() is None
+
+
+def test_no_pushback_on_the_last_step_so_the_entry_is_kept(setup):
+    _, box, diary, _ = setup
+    racer = testers.get("racer")
+    llm = ScriptedLLM([looks(1), finish("Short and smooth.")])
+    outcome = run_visit(racer, box, llm, diary, max_steps=2, now=NOW, echo=lambda *_: None, reading={"team": None})
+    assert outcome.finished and not outcome.cut_short and outcome.pushbacks == 0
+    assert "Short and smooth." in diary.last_entries()[-1] and "cut short" not in diary.last_entries()[-1]
+    assert diary.last_reading() == {"team": None}
+
+
+def test_the_observation_must_start_a_line(setup):
+    tester, box, diary, _ = setup
+    llm = ScriptedLLM([finish("I had no critical observation today.", "f1"), finish("- **Critical observation:** the market is empty.", "f2")])
+    outcome = run_visit(tester, box, llm, diary, now=NOW, echo=lambda *_: None)
+    assert outcome.pushbacks == 1 and "market is empty" in diary.last_entries()[-1]
+
+
+def test_a_reading_with_an_unreadable_team_is_not_saved(setup):
+    tester, box, diary, _ = setup
+    reading = {"team": None, "errors": {"team": "GET /api/accounts/me/ answered 500"}}
+    run_visit(tester, box, ScriptedLLM([finish()]), diary, now=NOW, echo=lambda *_: None, reading=reading)
     assert diary.last_reading() is None
