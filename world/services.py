@@ -90,7 +90,12 @@ from transfers.services import (
     withdraw_bids,
 )
 
-from .ai_management import hire_ai_trainers, set_ai_focuses, sign_ai_sponsors
+from .ai_management import (
+    hire_ai_trainers,
+    replenish_ai_rosters,
+    set_ai_focuses,
+    sign_ai_sponsors,
+)
 from .ai_market import list_ai_riders, place_ai_bids
 from .clocks import Clock
 from .models import GameClock, TickRun
@@ -668,6 +673,19 @@ def tick() -> TickRun:
         riders_repriced += len(changes)
         salary_reviews += write_salary_reviews(transition.season, changes)
 
+    # Unmanaged teams get the places retirement just emptied back (#157),
+    # once per crossed close, after the loop: the replacements are already
+    # the age they will race at, and generate_rider prices them itself, so
+    # neither ageing nor repricing must touch them. Guarded like the rest of
+    # the AI: a failed top-up is not worth losing the tick for.
+    ai_riders_added = 0
+    ai_roster_error = ""
+    if closed:
+        try:
+            ai_riders_added, ai_roster_error = replenish_ai_rosters()
+        except Exception:
+            ai_roster_error = f"ai roster replenishment:\n{traceback.format_exc()}\n"
+
     # One offer round per team per crossed season open — ensure_offer_round
     # is idempotent per (team, season) itself (economy/README.md, D8), so a
     # tick that runs twice, or catches up late, cannot double-generate.
@@ -884,10 +902,11 @@ def tick() -> TickRun:
         ai_bids_placed=ai_bids_placed,
         ai_listings_created=ai_listings_created,
         ai_trainers_hired=ai_trainers_hired,
+        ai_riders_added=ai_riders_added,
         ai_sponsors_signed=ai_sponsors_signed,
         error=(
             season_error + inactivity_error + solvency_error + auction_error + ai_market_error
-            + ai_management_error
+            + ai_management_error + ai_roster_error
         ),
     )
     _execute(reclaimed + claimed, run, at=at)

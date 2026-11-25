@@ -191,6 +191,10 @@ class TickRun(models.Model):
         default=0,
         help_text="Auctions opened by unmanaged teams this tick (#30).",
     )
+    ai_riders_added = models.PositiveIntegerField(
+        default=0,
+        help_text="Replacement riders generated for unmanaged teams at a season close (#157).",
+    )
     ai_trainers_hired = models.PositiveIntegerField(
         default=0,
         help_text="Trainers hired by unmanaged teams this tick (#45).",
