@@ -51,6 +51,7 @@ from economy.services import (
     offers_for,
     payroll_for,
     sign_offer,
+    sponsor_gap,
 )
 from economy.solvency import EMBARGO_MESSAGE, SolvencyStatus, is_embargoed, solvency_status
 from economy.sponsors import PROFILES_BY_KEY
@@ -424,8 +425,10 @@ class MeView(APIView):
             'Your display name and the team you manage (`id`, `name`, `code`), or '
             '`team: null` if you manage none. If you lost a team — released for '
             'inactivity or insolvency — and have not claimed another, `lost_team` '
-            'says which and why until you acknowledge it. Readable without logging '
-            'in: then `authenticated` is false.'
+            'says which and why until you acknowledge it. While a season is running '
+            'and your team has not signed a sponsor for it, `team.sponsor_missing` is '
+            'true: you earn nothing from sponsorship until you sign one. Readable '
+            'without logging in: then `authenticated` is false.'
         ),
         responses=MeSerializer,
     )
@@ -450,10 +453,32 @@ class MeView(APIView):
         payload = {
             "authenticated": user.is_authenticated,
             "display_name": user.display_name if user.is_authenticated else None,
-            "team": {"id": team.pk, "name": team.name, "code": team.code} if team else None,
+            "team": (
+                {"id": team.pk, "name": team.name, "code": team.code, **_sponsor_fields(team)}
+                if team else None
+            ),
             "lost_team": lost_team,
         }
         return Response(MeSerializer(payload).data)
+
+
+def _sponsor_fields(team) -> dict:
+    """Whether `team` is missing a sponsor this season (#161), for `me`.
+
+    Only an in-season position warns: off season the finished season's
+    contract is history, and the next round comes at season open. The round
+    is made here if it does not exist yet, as SponsorsView does, so a team
+    claimed mid-season sees the amount on its first read. ensure_offer_round
+    is idempotent (economy/README.md, *Sponsorship*)."""
+    position = current_position(now())
+    if position.state != "in_season":
+        return {"sponsor_missing": False, "guaranteed_weekly": None}
+    ensure_offer_round(team, position.season, at=now())
+    gap = sponsor_gap(team, position.season)
+    return {
+        "sponsor_missing": gap is not None,
+        "guaranteed_weekly": gap or None,
+    }
 
 
 def _later_stage(race) -> bool:
@@ -648,7 +673,7 @@ class ClaimTeamView(APIView):
             return Response({"detail": "That team name is already taken."}, status=400)
 
         return Response(
-            MeTeamSerializer({"id": team.pk, "name": team.name, "code": team.code}).data,
+            MeTeamSerializer({"id": team.pk, "name": team.name, "code": team.code, **_sponsor_fields(team)}).data,
             status=201,
         )
 

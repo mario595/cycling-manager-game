@@ -138,6 +138,17 @@ export interface MeTeam {
   id: number
   name: string
   code: string
+  /**
+   * True while a season is running and the team has not signed a sponsor
+   * for it (#161). Drives the dashboard's SponsorBanner and the sidebar dot.
+   */
+  sponsor_missing: boolean
+  /**
+   * While `sponsor_missing`, the most a week signing can guarantee (the best
+   * waiting offer's floor), else null. A floor, never `weekly_base`, which is
+   * not a promised amount (see the Sponsors screen in frontend/README.md).
+   */
+  guaranteed_weekly: number | null
 }
 
 export interface LostTeam {

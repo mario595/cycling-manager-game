@@ -16,7 +16,7 @@ const mockUseStaff = vi.mocked(useStaff)
 const manager: Me = {
   authenticated: true,
   display_name: 'Mario',
-  team: { id: 1, name: 'Squad Team', code: 'SQD' },
+  team: { id: 1, name: 'Squad Team', code: 'SQD', sponsor_missing: false, guaranteed_weekly: null },
   lost_team: null,
 }
 
@@ -75,6 +75,7 @@ beforeEach(() => {
     logout: vi.fn(),
     claim: vi.fn(),
     acknowledgeLostTeam: vi.fn(),
+    refresh: vi.fn(),
   })
   mockUseStaff.mockReturnValue({ staff, loading: false, error: false, refresh: vi.fn() })
 })

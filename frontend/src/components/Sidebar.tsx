@@ -160,6 +160,20 @@ export function Sidebar({ mobile, open, onNavigate }: SidebarProps) {
                       />
                       <span>{item.name}</span>
                     </span>
+                    {item.path === '/sponsors' && team?.sponsor_missing ? (
+                      <span
+                        role="img"
+                        aria-label="No sponsor this season"
+                        title="No sponsor this season"
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: 4,
+                          background: color.accent,
+                          flex: '0 0 8px',
+                        }}
+                      />
+                    ) : null}
                   </>
                 )}
               </NavLink>

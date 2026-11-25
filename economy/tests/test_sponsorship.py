@@ -15,6 +15,7 @@ from economy.services import (
     offers_for,
     pay_sponsorship,
     sign_offer,
+    sponsor_gap,
     void_sponsorship,
 )
 from schedule.models import Season, Week
@@ -270,3 +271,35 @@ def test_no_settled_week_pays_the_baseline(db, team, season, weeks):
 
     entry = LedgerEntry.objects.get(team=team, kind=LedgerEntry.Kind.SPONSORSHIP, week=weeks[0])
     assert entry.amount == contract.weekly_base
+
+
+# ── sponsor_gap (#161) ────────────────────────────────────────────────────
+
+
+def test_gap_is_the_best_floor_waiting(db, team, season):
+    ensure_starting_fanbase(team, at=season.starts_at)
+    offers = ensure_offer_round(team, season, at=season.starts_at, rng=random.Random(1))
+    assert sponsor_gap(team, season) == max(o.floor_amount for o in offers) > 0
+
+
+def test_no_gap_once_signed(db, team, season):
+    offers = ensure_offer_round(team, season, at=season.starts_at, rng=random.Random(1))
+    sign_offer(team, offers[0].pk, at=season.starts_at)
+    assert sponsor_gap(team, season) is None
+
+
+def test_gap_with_no_round_yet_is_zero(db, team, season):
+    assert sponsor_gap(team, season) == 0
+
+
+def test_voided_contract_leaves_a_gap(db, team, season):
+    offers = ensure_offer_round(team, season, at=season.starts_at, rng=random.Random(1))
+    sign_offer(team, offers[0].pk, at=season.starts_at)
+    void_sponsorship(team, at=season.starts_at + timedelta(weeks=1))
+    assert sponsor_gap(team, season) == 0
+
+
+def test_contract_in_another_season_does_not_count(db, team, season, other_season):
+    offers = ensure_offer_round(team, season, at=season.starts_at, rng=random.Random(1))
+    sign_offer(team, offers[0].pk, at=season.starts_at)
+    assert sponsor_gap(team, other_season) == 0

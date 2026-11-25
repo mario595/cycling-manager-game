@@ -370,6 +370,21 @@ class MeTeamSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     name = serializers.CharField()
     code = serializers.CharField()
+    sponsor_missing = serializers.BooleanField(
+        help_text=(
+            "True while a season is running and your team has not signed a sponsor "
+            "for it. Every week without one pays nothing from sponsorship. Sign an "
+            "offer from `GET /api/economy/sponsors/`."
+        ),
+    )
+    guaranteed_weekly = serializers.IntegerField(
+        allow_null=True,
+        help_text=(
+            "While `sponsor_missing` is true, the most a week that signing one of "
+            "the waiting offers can guarantee: the highest floor among them. Null "
+            "otherwise."
+        ),
+    )
 
 
 class ClaimTeamSerializer(serializers.Serializer):
