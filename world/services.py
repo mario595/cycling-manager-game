@@ -338,7 +338,7 @@ def _release_expired_graduates(week) -> int:
         )
         .values_list("pk", flat=True)
     )
-    return len(release_graduates(expired, at=week.starts_at))
+    return len(release_graduates(expired, at=week.starts_at, record=True))
 
 
 def _settle_solvency(week, *, salary_by_team, squad_cost_by_team) -> tuple[int, int, str]:

@@ -390,3 +390,66 @@ class RiderAttributeSnapshot(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.rider} @ {self.week or 'baseline'}"
+
+
+class Departure(TimeStampedModel):
+    """A rider who left a team, or its development squad, without the
+    manager acting in that moment (#158, #162; riders/README.md,
+    *Departures*): retired by age at a season close, a graduate released to
+    the free agents, or a rider sold at auction.
+
+    Written where the rider leaves, in the same transaction as the move, so
+    the record and the move stand or fall together. Departures a manager
+    causes with a click (release, discard, promote, closing the squad) are
+    deliberately not recorded: the manager was there.
+
+    The rider is snapshotted (name, speciality, age at the time) and the FK is
+    `SET_NULL`, because free-agent expiry deletes a never-raced rider — a
+    released graduate among them — and the manager should still see who it
+    was. `at` is game time; the season and week are derived when read, as the
+    rider profile's retirement label is, since this app may not reference
+    `schedule/`.
+    """
+
+    class Kind(models.TextChoices):
+        RETIRED = "retired", "Retired"
+        RELEASED = "released", "Released to the free agents"
+        SOLD = "sold", "Sold at auction"
+
+    team = models.ForeignKey(
+        "teams.Team",
+        on_delete=models.CASCADE,
+        related_name="departures",
+        help_text="The team the rider left (for a graduate, the squad's team).",
+    )
+    rider = models.ForeignKey(
+        Rider,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="departures",
+        help_text="Null once the rider has been deleted by free-agent expiry.",
+    )
+    rider_name = models.CharField(max_length=100)
+    speciality = models.CharField(max_length=12, choices=Rider.Speciality.choices)
+    age = models.PositiveSmallIntegerField(help_text="The rider's age when they left.")
+    kind = models.CharField(max_length=10, choices=Kind.choices)
+    at = models.DateTimeField(help_text="Game time the rider left.")
+    buyer = models.ForeignKey(
+        "teams.Team",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Sold only: the team that bought the rider.",
+    )
+    fee = models.PositiveIntegerField(
+        null=True, blank=True, help_text="Sold only: the winning bid, whole credits.",
+    )
+
+    class Meta:
+        ordering = ["-at", "-id"]
+        indexes = [models.Index(fields=["team", "-at"])]
+
+    def __str__(self) -> str:
+        return f"{self.rider_name} left {self.team_id} ({self.kind}) @ {self.at}"

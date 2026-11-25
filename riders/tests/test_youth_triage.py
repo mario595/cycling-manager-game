@@ -172,7 +172,7 @@ def test_graduate_is_a_no_op_for_a_promoted_rider(team, squad, other_team):
 def test_release_graduates_stamps_unattached_since_and_clears_the_squad(squad):
     released = _graduate(squad)
 
-    assert release_graduates([released.pk], at=LATER) == [released.pk]
+    assert release_graduates([released.pk], at=LATER, record=False) == [released.pk]
 
     released.refresh_from_db()
     assert released.development_squad_id is None
@@ -184,7 +184,7 @@ def test_release_graduates_ignores_riders_still_in_the_squad(squad):
     and their spell are the manager's to end with a decision."""
     staying = _squad_rider(squad)
 
-    assert release_graduates([staying.pk], at=LATER) == []
+    assert release_graduates([staying.pk], at=LATER, record=False) == []
 
     staying.refresh_from_db()
     assert staying.development_squad_id == squad.pk
@@ -195,7 +195,7 @@ def test_release_graduates_ignores_a_rider_who_already_left(team, squad):
     promoted = _squad_rider(squad)
     promote(team, promoted.pk, at=LATER, roster_cap=30)
 
-    assert release_graduates([promoted.pk], at=LATER) == []
+    assert release_graduates([promoted.pk], at=LATER, record=False) == []
 
     promoted.refresh_from_db()
     assert promoted.team_id == team.pk
@@ -217,7 +217,7 @@ def test_release_graduates_works_with_no_transaction_of_its_own_to_join(squad):
 
     released = _graduate(squad)
 
-    assert release_graduates([released.pk], at=LATER) == [released.pk]
+    assert release_graduates([released.pk], at=LATER, record=False) == [released.pk]
 
     released.refresh_from_db()
     assert released.development_squad_id is None

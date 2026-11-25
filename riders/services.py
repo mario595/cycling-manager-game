@@ -10,12 +10,14 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+from django.db import transaction
 from django.db.models import F, Value
 from django.db.models.functions import Greatest
 
+from .departures import record_departures
 from .display import to_display_scale
 from .generation import PEAK_AGE_RANGE, SPECIALITY_PROFILES
-from .models import ENGINE_ATTRIBUTES, Rider, RiderAttributeSnapshot
+from .models import ENGINE_ATTRIBUTES, Departure, Rider, RiderAttributeSnapshot
 from .pricing import SALARY_REVIEW_THRESHOLD, weekly_salary_for
 
 #: Fraction of the remaining gap to its ceiling an attribute closes each
@@ -332,9 +334,26 @@ def retire_due_riders(*, at) -> list[int]:
         if rider.age >= retirement_age(rider)
     ]
     if due:
-        Rider.objects.filter(pk__in=due, retired_at__isnull=True).update(
-            team=None, development_squad=None, retired_at=at,
-        )
+        # One transaction for the read, the UPDATE and the record: the
+        # UPDATE clears `team`, so who each rider left is read first, and a
+        # departure must exist exactly when the retirement does (#158).
+        # Only roster riders are recorded; clearing a squad is the backstop
+        # described above, not a departure anyone can see.
+        with transaction.atomic():
+            leaving = list(
+                Rider.objects.select_for_update()
+                .filter(pk__in=due, retired_at__isnull=True, team__isnull=False)
+                .only("id", "name", "speciality", "age", "team_id")
+            )
+            Rider.objects.filter(pk__in=due, retired_at__isnull=True).update(
+                team=None, development_squad=None, retired_at=at,
+            )
+            record_departures(
+                leaving,
+                team_by_rider={rider.pk: rider.team_id for rider in leaving},
+                kind=Departure.Kind.RETIRED,
+                at=at,
+            )
     return due
 
 
