@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 
-import { getRiders, type Rider, type SalaryReview } from './api'
+import { getRiders, type RosterRider, type SalaryReview } from './api'
 
 interface RosterState {
-  riders: Rider[] | null
+  riders: RosterRider[] | null
   squadValue: number | null
   salaryReview: SalaryReview | null
   loading: boolean
@@ -23,7 +23,7 @@ interface RosterState {
  * instead of waiting up to 60s for the next poll.
  */
 export function useRoster(): RosterState {
-  const [riders, setRiders] = useState<Rider[] | null>(null)
+  const [riders, setRiders] = useState<RosterRider[] | null>(null)
   const [squadValue, setSquadValue] = useState<number | null>(null)
   const [salaryReview, setSalaryReview] = useState<SalaryReview | null>(null)
   const [loading, setLoading] = useState(true)

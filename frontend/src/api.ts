@@ -306,11 +306,31 @@ export interface SalaryReview {
   changes: SalaryChange[]
 }
 
+/** A roster rider's open auction (#152), so the Roster screen can mark the
+ * rider as listed and stop offering "List for auction". `id` is the
+ * auction's, which the Transfers screen's Sell section anchors on. Only a
+ * voluntary listing appears here: a forced sale (#27) takes the rider off
+ * the roster at listing. */
+export interface RosterAuction {
+  id: number
+  current_price: number
+  /** Game time. */
+  deadline: string
+  /** Live bids only: a withdrawn bid is not counted. */
+  bid_count: number
+}
+
+/** One rider on the caller's own roster: Rider plus their open auction, or
+ * null when they are not listed. */
+export interface RosterRider extends Rider {
+  auction: RosterAuction | null
+}
+
 /** The caller's own team's roster: every rider plus the squad's total
  * market value (#31) — a single response so the two can never disagree —
  * and the latest post-season salary review when one exists. */
 export interface Roster {
-  riders: Rider[]
+  riders: RosterRider[]
   squad_value: number
   salary_review: SalaryReview | null
 }

@@ -193,6 +193,35 @@ class SalaryReviewSerializer(serializers.Serializer):
     changes = SalaryChangeSerializer(many=True)
 
 
+class RosterAuctionSerializer(serializers.Serializer):
+    """A roster rider's open auction, as the Roster screen cues it (#152):
+    enough to say "on auction", what it stands at, how many live bids it has
+    and when it closes, plus the id the Transfers screen's Sell section is
+    keyed by. Only a voluntary listing can appear here — a forced sale (#27)
+    takes the rider off the roster at listing."""
+
+    id = serializers.IntegerField()
+    current_price = serializers.IntegerField()
+    deadline = serializers.DateTimeField()
+    bid_count = serializers.IntegerField()
+
+
+class RosterRiderSerializer(RiderSerializer):
+    """One roster rider: RiderSerializer unchanged plus `auction`, the
+    rider's open auction or null (#152). Kept off RiderSerializer itself,
+    which free agents, auction cards and the rider profile also ship, since
+    only the owner's roster needs it. The auctions are looked up once for
+    the whole roster by RiderListView and handed over in
+    `context["open_auctions"]`, keyed by rider id."""
+
+    auction = serializers.SerializerMethodField()
+
+    @extend_schema_field(RosterAuctionSerializer(allow_null=True))
+    def get_auction(self, instance):
+        auction = self.context.get("open_auctions", {}).get(instance.pk)
+        return None if auction is None else RosterAuctionSerializer(auction).data
+
+
 class RosterSerializer(serializers.Serializer):
     """The caller's own team's roster: every rider plus the squad's total
     market value, so the roster screen's header total and its per-rider
@@ -201,7 +230,7 @@ class RosterSerializer(serializers.Serializer):
     branches on one response (the same whole-payload rule
     TrainingSerializer follows)."""
 
-    riders = RiderSerializer(many=True)
+    riders = RosterRiderSerializer(many=True)
     squad_value = serializers.IntegerField()
     salary_review = serializers.SerializerMethodField()
 

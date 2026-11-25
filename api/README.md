@@ -87,6 +87,15 @@ Since #29 each rider also carries `release_cost`
   future second call site fails a test rather than 500ing in production.
    The weeks are counted by `_cooldown_weeks_opened` in `api/views.py`
    (0 for a never-claimed team) — the caller counts, never `transfers/`.
+   Since #152 each roster rider also carries **`auction`**: their open
+   auction as `{id, current_price, deadline, bid_count}`, or `null` when
+   they are not listed, so the Roster screen can cue a listing without
+   fetching the whole market. `bid_count` counts live bids only. It lives on
+   `RosterRiderSerializer`, a subclass used **only** by the roster: free
+   agents, auction cards and the rider profile keep plain `RiderSerializer`
+   and never ship it. `RiderListView` finds the roster's open listings in one
+   annotated query and hands them over as `context["open_auctions"]`, keyed
+   by rider id, rather than a query per rider.
    Every rider payload at every call site also carries **`final_season`**:
    `true` only while a season is open *and* the rider is active *and* past
    their hidden retirement age, i.e. the one season left where they can
@@ -187,7 +196,11 @@ Since #29 each rider also carries `release_cost`
   writes a `TRANSFER_FEE` row (description "Released X") **only when the
   fee is positive** — a $0 cooldown-exempt release moves no money and
   leaves the ledger untouched. A rider not on the caller's roster is a
-  409. Success is 204.
+  409. Success is 204. Since #152 the release and
+  `transfers.services.cancel_unowned_listings` share one transaction, so a
+  listed rider's auction is cancelled at once, with no money moving, rather
+  than staying biddable until its deadline (the squad close already does the
+  same for released graduates).
 - `GET /api/transfers/auctions/` (`AuctionMarketSerializer`,
   `AuctionMarketView`) — every open auction plus the caller's balance,
   the same both-keys shape `FreeAgentsView` uses. Each entry carries the

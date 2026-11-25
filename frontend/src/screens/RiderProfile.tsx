@@ -4,7 +4,7 @@ import type { RiderProfile as RiderProfileData, RiderRace, RiderRetired } from '
 import { AttributeHistoryChart } from '../components/AttributeHistoryChart'
 import { AttributeRadar } from '../components/AttributeRadar'
 import { Card, CardHeader, FinalSeasonTag, PageBody, PageHeading, StatTile } from '../components/primitives'
-import { formatMoney } from '../format'
+import { formatDate, formatMoney } from '../format'
 import { racePath } from '../navigation'
 import { formatGap, formatRaceTime } from '../raceTime'
 import { color, font } from '../theme'
@@ -146,7 +146,7 @@ function RaceHistory({ races }: { races: RiderRace[] }) {
               }}
             >
               <div style={{ width: 96, fontSize: 12.5, color: color.muted }}>
-                {row.race.starts_at ? new Date(row.race.starts_at).toLocaleDateString() : '—'}
+                {row.race.starts_at ? formatDate(row.race.starts_at) : '—'}
               </div>
               <div style={{ flex: 1, fontSize: 14, minWidth: 0 }}>
                 <Link to={racePath(row.race.id)} style={{ color: color.ink, textDecoration: 'none' }}>

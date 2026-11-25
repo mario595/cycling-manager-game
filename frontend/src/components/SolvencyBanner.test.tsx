@@ -54,7 +54,7 @@ describe('SolvencyBanner', () => {
 
     const alert = screen.getByRole('alert')
     expect(alert).toHaveTextContent('Cut $8,000 of weekly spending by')
-    expect(alert).toHaveTextContent(new Date('2027-03-22T00:00:00Z').toLocaleDateString())
+    expect(alert).toHaveTextContent('22/03/2027')
     expect(alert).toHaveTextContent('or you will lose the team')
     expect(alert).toHaveTextContent('Cut so far $2,000 of $10,000')
   })

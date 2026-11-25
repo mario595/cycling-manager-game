@@ -4,6 +4,7 @@ import type { Calendar as CalendarData, CalendarRace, CalendarWeek } from '../ap
 import { Card, PageBody, PageHeading, StatTile } from '../components/primitives'
 import { racePath } from '../navigation'
 import { raceStatusLabel, raceStatusTone } from '../raceStatus'
+import { formatMonth, formatShortDate, formatWeekday } from '../format'
 import { calendarAccent, color, font } from '../theme'
 import { useCalendar } from '../useCalendar'
 
@@ -166,7 +167,7 @@ function WeekTicks({ calendar }: { calendar: CalendarData }) {
 
 function WeekRow({ week, isCurrent, isFirst }: { week: CalendarWeek; isCurrent: boolean; isFirst: boolean }) {
   const dateLabel = week.races.length
-    ? new Date(week.races[0].starts_at ?? week.starts_at).toLocaleDateString(undefined, { month: 'short' }).toUpperCase()
+    ? formatMonth(week.races[0].starts_at ?? week.starts_at).toUpperCase()
     : '—'
 
   return (
@@ -254,9 +255,7 @@ function StageRaceGroup({ races }: { races: CalendarRace[] }) {
   const { name, stage_count } = races[0].stage_race!
   const dayRange =
     races[0].starts_at && races[races.length - 1].starts_at
-      ? `${new Date(races[0].starts_at).toLocaleDateString(undefined, { weekday: 'short' })}–${new Date(
-          races[races.length - 1].starts_at!,
-        ).toLocaleDateString(undefined, { weekday: 'short' })}`
+      ? `${formatWeekday(races[0].starts_at)}–${formatWeekday(races[races.length - 1].starts_at!)}`
       : null
 
   return (
@@ -290,7 +289,7 @@ function StageRaceGroup({ races }: { races: CalendarRace[] }) {
 
 function RaceRow({ race, stageLabel }: { race: CalendarRace; stageLabel?: string }) {
   const date = race.starts_at
-    ? new Date(race.starts_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+    ? formatShortDate(race.starts_at)
     : ''
   const hot = race.status === 'running'
 

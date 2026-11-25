@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { Me, Rider, Solvency } from '../api'
+import type { Me, RosterRider, Solvency } from '../api'
 import { forceSell, listForAuction, releaseRider } from '../api'
 import { useAuth } from '../useAuth'
 import { useRoster } from '../useRoster'
@@ -12,6 +12,9 @@ import { Roster } from './Roster'
 vi.mock('../useAuth', () => ({ useAuth: vi.fn() }))
 vi.mock('../useRoster', () => ({ useRoster: vi.fn() }))
 vi.mock('../useSolvency', () => ({ useSolvency: vi.fn() }))
+vi.mock('../useClock', () => ({
+  useClock: () => ({ now: new Date('2027-03-01T12:00:00Z'), loading: false, error: false }),
+}))
 vi.mock('../api', () => ({ releaseRider: vi.fn(), listForAuction: vi.fn(), forceSell: vi.fn() }))
 
 const mockUseAuth = vi.mocked(useAuth)
@@ -48,7 +51,7 @@ const manager: Me = {
   lost_team: null,
 }
 
-const riders: Rider[] = [
+const riders: RosterRider[] = [
   {
     id: 1,
     name: 'Alba Sanchez',
@@ -67,6 +70,7 @@ const riders: Rider[] = [
     market_value: 40000,
     release_cost: 12000,
     final_season: false,
+    auction: null,
   },
   {
     id: 2,
@@ -86,6 +90,7 @@ const riders: Rider[] = [
     market_value: 95000,
     release_cost: 3000,
     final_season: false,
+    auction: null,
   },
 ]
 
@@ -177,7 +182,7 @@ describe('Roster', () => {
   })
 
   it('tags a rider in their final season on the card and in the panel', () => {
-    const veteran: Rider = { ...riders[0], id: 3, name: 'Vera Old', final_season: true }
+    const veteran: RosterRider = { ...riders[0], id: 3, name: 'Vera Old', final_season: true }
     mockUseRoster.mockReturnValue({
       riders: [veteran, ...riders],
       squadValue: 135_000,
@@ -233,7 +238,7 @@ describe('Roster', () => {
   })
 
   it('notes when releasing a rider is free', () => {
-    const freeRider: Rider = { ...riders[0], id: 3, name: 'Carla Díaz', release_cost: 0 }
+    const freeRider: RosterRider = { ...riders[0], id: 3, name: 'Carla Díaz', release_cost: 0 }
     mockUseRoster.mockReturnValue({
       riders: [freeRider, ...riders],
       squadValue: 135_000,
@@ -409,5 +414,64 @@ describe('Roster', () => {
     renderRoster()
 
     expect(screen.queryByText('Season-end salary review')).not.toBeInTheDocument()
+  })
+
+  describe('a rider on auction (#152)', () => {
+    const listed: RosterRider = {
+      ...riders[0],
+      auction: {
+        id: 42,
+        current_price: 55_000,
+        deadline: '2027-03-03T14:30:00Z',
+        bid_count: 1,
+      },
+    }
+
+    beforeEach(() => {
+      mockUseRoster.mockReturnValue({
+        riders: [listed, riders[1]],
+        squadValue: 135_000,
+        salaryReview: null,
+        loading: false,
+        error: false,
+        refresh: vi.fn(),
+      })
+    })
+
+    it('marks the listed rider on the roster card, and only that rider', () => {
+      renderRoster()
+
+      expect(screen.getAllByText('ON AUCTION')).toHaveLength(1)
+    })
+
+    it('shows the price, bids and time left instead of List for auction', () => {
+      renderRoster()
+
+      fireEvent.click(screen.getByText('Alba Sanchez'))
+
+      expect(screen.queryByRole('button', { name: 'List for auction' })).not.toBeInTheDocument()
+      const status = screen.getByLabelText('Auction status')
+      expect(status).toHaveTextContent('$55,000')
+      expect(status).toHaveTextContent('1 bid')
+      expect(status).toHaveTextContent('ends in 02d 02h 30m 00s')
+      expect(screen.getByText('View on Transfers →')).toHaveAttribute('href', '/transfers#auction-42')
+    })
+
+    it('warns that releasing cancels the auction, and still allows it', () => {
+      renderRoster()
+
+      fireEvent.click(screen.getByText('Alba Sanchez'))
+
+      expect(screen.getByText(/Releasing cancels the auction/)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Release' })).toBeEnabled()
+    })
+
+    it('still offers List for auction to a rider who is not listed', () => {
+      renderRoster()
+
+      fireEvent.click(screen.getByText('Bruno Ruiz'))
+
+      expect(screen.getByRole('button', { name: 'List for auction' })).toBeInTheDocument()
+    })
   })
 })

@@ -8,6 +8,7 @@ import { SolvencyBanner } from '../components/SolvencyBanner'
 import { racePath } from '../navigation'
 import { nextRace } from '../nextRace'
 import { seasonLabel } from '../seasonLabel'
+import { formatShortDate } from '../format'
 import { color, font } from '../theme'
 import { useAuctions } from '../useAuctions'
 import { useAuth } from '../useAuth'
@@ -102,10 +103,7 @@ function NextRaceCard() {
           </Link>
           <div style={{ fontSize: 12.5, color: color.muted, fontFamily: font.mono }}>
             {race.starts_at
-              ? new Date(race.starts_at).toLocaleDateString(undefined, {
-                  month: 'short',
-                  day: 'numeric',
-                })
+              ? formatShortDate(race.starts_at)
               : 'unscheduled'}
           </div>
           {saved === true ? (

@@ -7,6 +7,7 @@ import { NAV_ITEMS, NAV_SECTIONS, racePath, replayPath, riderPath, titleForPath 
 const BUILT_SCREENS = new Set([
   '/',
   '/roster',
+  '/training',
   '/staff',
   '/development-squad',
   '/sponsors',

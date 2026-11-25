@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 
 import type { AuctionListing, Bid } from '../api'
 import { formatCountdown } from '../countdown'
@@ -18,8 +18,8 @@ const ATTR_KEYS: { key: AttrKey; label: string }[] = [
 
 /** One live auction: rider, price, a live countdown, a bid action (hidden
  * on the caller's own listing) and its collapsible bid history. Shared by
- * the Transfers screen's Auctions tab and the Dashboard's "My auctions"
- * card, so an auction reads identically wherever it appears.
+ * the Transfers screen's Sell and Buy sections and the Dashboard's "My
+ * auctions" card, so an auction reads identically wherever it appears.
  *
  * `gameNow` drives the countdown and comes from the caller's own
  * `useClock()` call, not from inside this component: `deadline` is a
@@ -33,12 +33,16 @@ export function AuctionCard({
   pending,
   gameNow,
   onBid,
+  tag,
 }: {
   auction: AuctionListing
   balance: number
   pending: boolean
   gameNow: Date | null
   onBid: (amount: number) => void
+  /** An optional marker under the rider's name — the Transfers screen's
+   * Buy list uses it to tell an auction from a free agent (#154). */
+  tag?: ReactNode
 }) {
   const [amount, setAmount] = useState(auction.min_next_bid)
   const rider = auction.rider
@@ -91,7 +95,12 @@ export function AuctionCard({
           <div style={{ fontSize: 11, color: color.mutedStrong, fontFamily: font.mono }}>
             {rider.speciality.toUpperCase()} · {rider.age} yrs
           </div>
-          {auction.forced ? <ForcedSaleTag /> : null}
+          {auction.forced || tag ? (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {tag}
+              {auction.forced ? <ForcedSaleTag /> : null}
+            </div>
+          ) : null}
         </div>
       </div>
 
