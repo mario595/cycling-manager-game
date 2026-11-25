@@ -609,6 +609,27 @@ so the average moves by about ±$8,000 from run to run. Three runs during #125,
 at rates 1,250, 1,150 and 1,100, measured +$28,159, +$26,228 and +$10,818. Do not
 tune to a single run near an edge of the band.
 
+**#156: claimed teams, not prices.** On staging in season 3 the AI field
+was on target (median about +$65,000), while every LLM tester team lost money:
+they earned $2,000–$10,000 of prize money against an AI median of about $80,000.
+A claim used to hand out a fresh, day-one roster, and by season 3 that ranked
+about 14th of 16 by squad strength. Since #156 a claimant keeps the team's
+riders and is given the free team nearest the middle of the field
+(`teams/README.md`, *Claiming a team*). The measurement now claims one team
+just before season 2 and prints its season next to the unmanaged field. Three
+runs gave −$61,116, −$24,580 and −$4,734 (5th to 8th of 16 by strength). The
+last of these ran with the course-aware squad pick for the claimed team as
+well, which suggests the course-blind default pick for a manager who does not
+choose costs part of the gap.
+
+**Wages outgrow income in a mature world.** A four-season AI-only run on the
+world calendar (`seasons/world.json`) measured average wages of $181k, $202k,
+$220k and $228k across seasons 1–4. Riders train and are repriced at every
+close, while income barely moves (sponsorship +9%, a fixed prize pot). The
+average net goes −$5k, +$4k, −$10k, −$14k, and by season 4 the median team
+loses about $70,000 a season while the top quarter makes +$219,000. This was
+found during #156 and is not fixed by it.
+
 **Prize money is a shared pot.** Each race pays a fixed table split by
 placing, so the average team's share falls as the field grows. The targets
 hold for a field of about sixteen teams. The pyramid will need its own pass.
