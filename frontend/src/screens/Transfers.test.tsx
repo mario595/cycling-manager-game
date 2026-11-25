@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -249,7 +249,7 @@ describe('Transfers', () => {
     fireEvent.click(screen.getByRole('button', { name: 'sprinter' }))
 
     expect(visibleNames()).toEqual(['Sprinter Three'])
-    expect(screen.getByText(/1 of 3 free agents/)).toBeInTheDocument()
+    expect(screen.getByText(/1 of 4 riders/)).toBeInTheDocument()
   })
 
   it('returns every rider when the All filter is back on', () => {
@@ -259,7 +259,7 @@ describe('Transfers', () => {
     fireEvent.click(screen.getByRole('button', { name: 'All' }))
 
     expect(visibleNames()).toEqual(['Helper Two', 'Sprinter Three', 'Coach One'])
-    expect(screen.getByText(/3 of 3 free agents/)).toBeInTheDocument()
+    expect(screen.getByText(/4 of 4 riders/)).toBeInTheDocument()
   })
 
   it('signs a rider and re-fetches the pool', async () => {
@@ -275,10 +275,9 @@ describe('Transfers', () => {
     await waitFor(() => expect(refresh).toHaveBeenCalled())
   })
 
-  it('switches to the auctions tab and shows a live listing', () => {
+  it('shows other teams\' auctions alongside free agents under Buy', () => {
     renderTransfers()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Auctions' }))
 
     expect(screen.getByText('For Sale Rider')).toBeInTheDocument()
     expect(screen.getByText('Current $60,000')).toBeInTheDocument()
@@ -291,12 +290,11 @@ describe('Transfers', () => {
     // later. The live tick itself is useClock's own responsibility, tested
     // there — this only proves Transfers wires its game-time value through.
     renderTransfers()
-    fireEvent.click(screen.getByRole('button', { name: 'Auctions' }))
 
     expect(screen.getByText('Ends in 03d 12h 00m 00s')).toBeInTheDocument()
   })
 
-  it('hides the bid action on the caller\'s own listing', () => {
+  it('puts the caller\'s own listing under Sell, with no bid action', () => {
     mockUseAuctions.mockReturnValue({
       market: { ...auctionMarket, auctions: [{ ...auctionMarket.auctions[0], is_own_listing: true }] },
       loading: false,
@@ -305,10 +303,12 @@ describe('Transfers', () => {
     })
 
     renderTransfers()
-    fireEvent.click(screen.getByRole('button', { name: 'Auctions' }))
 
-    expect(screen.getByText('Your listing.')).toBeInTheDocument()
+    const sell = screen.getByRole('region', { name: 'Sell' })
+    expect(within(sell).getByText('For Sale Rider')).toBeInTheDocument()
+    expect(within(sell).getByText('Your listing.')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Bid' })).not.toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Buy' })).queryByText('For Sale Rider')).toBeNull()
   })
 
   it('places a bid at the pre-filled minimum and refreshes the market', async () => {
@@ -319,7 +319,6 @@ describe('Transfers', () => {
     const bid = mockPlaceBid.mockResolvedValue(undefined)
 
     renderTransfers()
-    fireEvent.click(screen.getByRole('button', { name: 'Auctions' }))
     fireEvent.click(screen.getByRole('button', { name: 'Bid' }))
 
     await waitFor(() => expect(bid).toHaveBeenCalledWith(1, 63_000))
@@ -336,7 +335,6 @@ describe('Transfers', () => {
     })
 
     renderTransfers()
-    fireEvent.click(screen.getByRole('button', { name: 'Auctions' }))
 
     expect(screen.getByRole('button', { name: 'Bid' })).toBeDisabled()
     expect(screen.getByText('You cannot afford that bid.')).toBeInTheDocument()
@@ -345,7 +343,6 @@ describe('Transfers', () => {
   it('keeps the bid history collapsed until expanded', () => {
     renderTransfers()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Auctions' }))
 
     expect(screen.getByRole('button', { name: /BID HISTORY \(2\)/ })).toBeInTheDocument()
     expect(screen.queryByText('Rival Racing')).not.toBeInTheDocument()
@@ -378,5 +375,97 @@ describe('Transfers', () => {
     renderTransfers()
 
     expect(screen.getByText(/You've been outbid on For Sale Rider/)).toBeInTheDocument()
+  })
+
+  describe('Sell and Buy (#154)', () => {
+    it('keeps the outbid notice inside Buy', () => {
+      mockUseMyBids.mockReturnValue({
+        bids: [
+          {
+            auction_id: 1,
+            rider_name: 'For Sale Rider',
+            my_last_bid: 60_000,
+            current_price: 63_000,
+            is_high_bidder: false,
+            deadline: '2027-03-04T12:00:00Z',
+          },
+        ],
+        refresh: vi.fn(),
+      })
+
+      renderTransfers()
+
+      expect(
+        within(screen.getByRole('region', { name: 'Buy' })).getByText(/You've been outbid/),
+      ).toBeInTheDocument()
+    })
+
+    it('points an empty Sell section at the Roster', () => {
+      renderTransfers()
+
+      const sell = screen.getByRole('region', { name: 'Sell' })
+      expect(within(sell).getByText(/Nothing for sale/)).toBeInTheDocument()
+      expect(within(sell).getByRole('link', { name: 'Roster' })).toHaveAttribute('href', '/roster')
+    })
+
+    it('anchors each own listing so the Roster can link to it', () => {
+      mockUseAuctions.mockReturnValue({
+        market: { ...auctionMarket, auctions: [{ ...auctionMarket.auctions[0], is_own_listing: true }] },
+        loading: false,
+        error: false,
+        refresh: vi.fn(),
+      })
+
+      const { container } = renderTransfers()
+
+      expect(container.querySelector('#auction-1')).not.toBeNull()
+    })
+
+    it('tags each Buy card as a free agent or an auction', () => {
+      renderTransfers()
+
+      expect(screen.getAllByText('FREE AGENT · SIGN NOW')).toHaveLength(3)
+      expect(screen.getAllByText('AUCTION')).toHaveLength(1)
+    })
+
+    it('sorts free agents and auctions together by what acting on them costs', () => {
+      renderTransfers()
+
+      // Fees 20,000 / 34,000 / 46,800, then the auction's minimum next bid 63,000.
+      const names = screen
+        .getAllByText(/^(Coach One|Helper Two|Sprinter Three|For Sale Rider)$/)
+        .map((el) => el.textContent)
+      expect(names).toEqual(['Helper Two', 'Sprinter Three', 'Coach One', 'For Sale Rider'])
+    })
+
+    it('filters auctions by speciality along with free agents', () => {
+      renderTransfers()
+
+      fireEvent.click(screen.getByRole('button', { name: 'climber' }))
+
+      expect(screen.getByText('Coach One')).toBeInTheDocument()
+      expect(screen.getByText('For Sale Rider')).toBeInTheDocument()
+      expect(screen.queryByText('Helper Two')).toBeNull()
+    })
+
+    it('counts own listings as for sale and the rest as available', () => {
+      mockUseAuctions.mockReturnValue({
+        market: {
+          ...auctionMarket,
+          auctions: [
+            auctionMarket.auctions[0],
+            { ...auctionMarket.auctions[0], id: 2, is_own_listing: true, rider: { ...auctionMarket.auctions[0].rider, id: 22, name: 'Mine' } },
+          ],
+        },
+        loading: false,
+        error: false,
+        refresh: vi.fn(),
+      })
+
+      renderTransfers()
+
+      expect(screen.getByText('FOR SALE').parentElement).toHaveTextContent('1')
+      expect(screen.getByText('AVAILABLE').parentElement).toHaveTextContent('4')
+    })
   })
 })
