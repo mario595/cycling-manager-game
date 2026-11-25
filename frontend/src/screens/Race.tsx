@@ -10,7 +10,7 @@ import { raceStatusLabel, raceStatusTone } from '../raceStatus'
 import { color, font } from '../theme'
 import { useRaceDetail } from '../useRaceDetail'
 import { useSquad } from '../useSquad'
-import { formatMoney } from '../format'
+import { formatDate, formatMoney } from '../format'
 
 const SQUAD_SIZE = 4
 
@@ -63,7 +63,7 @@ export function Race() {
         <StatTile label="DISTANCE" value={`${race.distance_km.toFixed(1)} km`} minWidth={104} />
         <StatTile
           label="DATE"
-          value={race.starts_at ? new Date(race.starts_at).toLocaleDateString() : '—'}
+          value={race.starts_at ? formatDate(race.starts_at) : '—'}
           minWidth={104}
         />
         <StatTile label="STATUS" value={raceStatusLabel(race.status as CalendarRace['status'])} minWidth={104} />
@@ -116,7 +116,7 @@ function StageStrip({ stageRace, currentRaceId }: { stageRace: RaceDetailStageRa
 }
 
 function metaLine(race: RaceDetail): string {
-  const date = race.starts_at ? new Date(race.starts_at).toLocaleDateString() : 'unscheduled'
+  const date = race.starts_at ? formatDate(race.starts_at) : 'unscheduled'
   return `${date} · ${race.distance_km.toFixed(1)} km`
 }
 

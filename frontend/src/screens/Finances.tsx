@@ -1,15 +1,15 @@
 import { type LedgerEntry } from '../api'
 import { Card, CardHeader, PageBody, PageHeading, StatTile } from '../components/primitives'
 import { SolvencyBanner } from '../components/SolvencyBanner'
-import { formatMoney } from '../format'
+import { formatDate, formatMoney } from '../format'
 import { color, font } from '../theme'
 import { useAuth } from '../useAuth'
 import { useFinances } from '../useFinances'
 import { useSolvency } from '../useSolvency'
 
 /** `occurred_at` is an ISO game-time string; render it as a calendar date. */
-function formatDate(occurredAt: string | null): string {
-  return occurredAt ? new Date(occurredAt).toLocaleDateString() : '—'
+function formatEntryDate(occurredAt: string | null): string {
+  return occurredAt ? formatDate(occurredAt) : '—'
 }
 
 const KIND_LABELS: Record<LedgerEntry['kind'], string> = {
@@ -147,7 +147,7 @@ export function Finances() {
                   {entry.description || KIND_LABELS[entry.kind]}
                 </div>
                 <div style={{ fontSize: 11.5, color: color.mutedStrong, fontFamily: font.mono }}>
-                  {KIND_LABELS[entry.kind].toUpperCase()} · {formatDate(entry.occurred_at)}
+                  {KIND_LABELS[entry.kind].toUpperCase()} · {formatEntryDate(entry.occurred_at)}
                 </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>

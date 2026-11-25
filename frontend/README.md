@@ -133,7 +133,9 @@ from the other, and forgetting either fails differently and quietly — a path
 in `SCREENS` but not in `NAV_SECTIONS` registers no route at all, so it falls
 through to the catch-all and lands on the dashboard, while a nav item with no
 `SCREENS` entry renders `undefined` and throws at runtime rather than at
-build. `navigation.ts`'s comment is explicit that only built screens go in
+build. Training was lost exactly this way (#155), so `App.test.tsx` now asserts
+that `SCREENS` and `NAV_ITEMS` hold the same paths, and the build fails the
+test rather than the player finding a missing screen. `navigation.ts`'s comment is explicit that only built screens go in
 the rail: a feature that does not exist yet is not hinted at.
 
 The Development squad screen (#32) is the one where placement was a decision
@@ -237,6 +239,12 @@ npm --prefix frontend run build && .venv/bin/python manage.py runserver
   separates and prefixes `$` (the sign before the `$`), per `AGENTS.md`,
   *Displaying game money*. It is shared by `Finances.tsx` and `Staff.tsx`
   rather than reimplemented per screen.
+- **Dates go through `src/format.ts` too** (#153): `formatDate` (`25/11/2026`),
+  `formatShortDate` (`25 Nov`), `formatMonth` and `formatWeekday`, all pinned
+  to `DATE_LOCALE` (`en-GB`) so the day comes before the month whatever the
+  viewer's browser locale. Never call `toLocaleDateString()` or
+  `Intl.DateTimeFormat` with no locale; the Sidebar's game clock builds its
+  formatters from `DATE_LOCALE` and keeps its `Europe/Paris` time zone.
 - **`src/navigation.ts` is the single source of truth** for the sidebar and
   the router both. A nav item cannot exist without a route, and it owns every
   link builder — `riderPath`, `racePath`, `replayPath` — so no screen
