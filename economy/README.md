@@ -595,6 +595,17 @@ development squad prices and the starting balance were left alone. Most of the
 new money is sponsorship, which every team gets, so the gap between strong and
 weak teams widened only a little.
 
+**Wages priced against the field (#166).** Before #166 salaries were priced
+on absolute strength, so as riders trained the average wage bill grew
+season on season ($181k, $202k, $220k, $228k on a four-season world-calendar
+run, AI teams only) while income barely moved, and the average net slid to
+−$14k by season 4. With pricing against the field the same run paid $167k,
+$177k, $174k and $173k (field factor 0.93, 0.83, 0.76, 0.72 after each
+close), and the average net was +$7k, +$33k, +$44k and +$51k, median +$29k
+in season 4. The average now sits above target 1 from season 2 on and still
+creeps up with sponsorship, which follows fanbase; that is an income-side
+question and was left for a balance ticket.
+
 **The measurement.** `.venv/bin/python scripts/measure_economy.py` drops and
 recreates this checkout's dev database, seeds a world (16 unmanaged teams),
 plays seasons 1 and 2 a day at a time on the mock clock and prints every

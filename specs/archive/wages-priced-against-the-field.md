@@ -1,6 +1,6 @@
 # Wages priced against the field
 
-**Status:** approved
+**Status:** implemented
 **Domain(s):** `riders/` (salary), `transfers/` (market value), `economy/` (salary review), `world/` (season close), `api/`, `frontend/` (roster)
 **One-liner:** A rider is paid for how good he is compared with the rest of
 the world's riders, so wage bills stay level as the whole world gets stronger.
