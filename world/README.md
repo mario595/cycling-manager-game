@@ -142,7 +142,15 @@ reads `now()` once, then finds and processes whatever is due, in six steps:
    **after** ageing — next season's wage has to reflect the rider a manager
    will actually have, age included, not the rider they had — and it is
    exactly-once by the same rule retiring and ageing are: one `CLOSED`
-   transition ever, so no pass can run twice for one season. Then
+   transition ever, so no pass can run twice for one season.
+
+   **After every close in the tick has run**, `world.ai_management.
+   replenish_ai_rosters()` brings each unmanaged team back up to
+   `ROSTER_SIZE` with freshly generated young riders (#157; see *The AI
+   management (#45)*, *Replacement riders*). It runs after ageing and
+   repricing on purpose: a replacement is generated at the age it will race
+   at and priced by generation, so neither pass may touch it. The count
+   lands on `TickRun.ai_riders_added` (`world/migrations/0024`). Then
    `schedule.services.process_week_transitions(at)` records any week
    boundary opened at or before `now()` that hasn't been recorded yet (see
    `schedule/README.md`, *Week transitions*), and each recorded transition
@@ -603,6 +611,7 @@ squads are picked inside `simulate_race` (`racing/README.md`, *Squads*).
 | `sign_ai_sponsors(season, at)` | Right after the season-open offer round; again after the week loop, for the current season | Signs the **steady** offer (`AI_SPONSOR_PROFILE`) for every unmanaged team with no contract. Calls `ensure_offer_round` first, which gives a round back to a team a claim had cleared. |
 | `set_ai_focuses(week)` | Each crossed week, **before** `_apply_training_week` | For each staffed unmanaged team: one entry per rider, the dominant attribute of their speciality profile, in pk order; the week's focus is `entries[(week.number + team.pk) % len]`. Writes only on change. |
 | `hire_ai_trainers(at)` | After the week loop, on a tick that crossed a week | Each unstaffed unmanaged team, in pk order, takes the **cheapest** remaining pool trainer (hire fee, then pk), never the best. |
+| `replenish_ai_rosters()` | Once per tick that crossed a season close, after retiring, ageing and repricing | Tops every unmanaged team below `ROSTER_SIZE` back up to it with generated riders (#157). See *Replacement riders*. |
 
 **Affordability.** A team hires only if, after the fee, its balance still
 covers `AI_STAFF_RESERVE_WEEKS` (12, a season) of wages plus the trainer's
@@ -617,8 +626,34 @@ trainer-salary map once, before the loop, on the promise that nobody hires
 mid-tick. Hiring after it keeps that true; the new trainer's first salary is
 charged at the next boundary.
 
-**Deterministic and blind.** No randomness, so a re-run tick makes the same
-choices, and every step is idempotent: a team with a trainer does not hire,
+**Replacement riders (#157).** Nothing else ever puts a rider on an
+unmanaged team: the AI does not sign free agents, a fresh world has none to
+sign, and the AI only buys human listings. Without a replacement, every
+retirement shrank an unmanaged roster for good. Once a roster was down to
+`AI_MIN_ROSTER` the team could no longer list (*The AI market*, *Selling*),
+so by season 4 on staging the AI market had no sellers at all, and a few
+seasons later AI teams could not field a full squad. At each season close,
+after retirement, each unmanaged team below `ROSTER_SIZE` (12) gets one
+generated rider per missing place:
+
+- of the speciality the roster is then **thinnest** in
+  (`thinnest_speciality`, ties by the `Speciality` enum's order), so a
+  replacement fills the gap a retirement left;
+- aged `AI_REPLACEMENT_AGE_RANGE` (19–23), years from the retirement window,
+  with quality rolled like any generated rider's, so a replacement is a fresh
+  face rather than a guaranteed star;
+- **free**, like the roster a seeded team starts with: no ledger entry. The
+  wage is the one that rises, from the next payday;
+- with a baseline attribute snapshot, like every generated rider.
+
+A team at or above `ROSTER_SIZE` is left alone, and a managed team is never
+touched: a human replaces riders through the market and the development
+squad. Topping up only at the close, never after a sale, keeps a sale to a
+human from turning into a free rider for the AI.
+
+**Deterministic and blind.** No randomness except in generating a
+replacement rider, so a re-run tick makes the same choices, and every step
+is idempotent: a team with a trainer does not hire,
 a team with a contract does not sign, an unchanged focus is not written. Only
 visible things are read — a rider's speciality, a trainer's price.
 
