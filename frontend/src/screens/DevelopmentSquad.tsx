@@ -11,12 +11,16 @@ import {
   type DevelopmentSquadGraduate,
   type DevelopmentSquadRider,
 } from '../api'
+import { DepartureList } from '../components/DepartureList'
 import { Button, Card, CardHeader, LabelBar, PageBody, PageHeading } from '../components/primitives'
+import { graduateDeadline } from '../departures'
 import { formatMoney } from '../format'
 import { riderPath } from '../navigation'
 import { color, font } from '../theme'
 import { useAuth } from '../useAuth'
+import { useDepartures } from '../useDepartures'
 import { useDevelopmentSquad } from '../useDevelopmentSquad'
+import { useSeason } from '../useSeason'
 
 type AttrKey = 'climb' | 'sprint' | 'flat' | 'resistance' | 'positioning'
 
@@ -59,10 +63,18 @@ export function DevelopmentSquad() {
   const hasTeam = me?.team != null
 
   const { squad, loading, error, refresh } = useDevelopmentSquad()
+  // This season's graduate releases (#162): a released graduate otherwise
+  // just vanishes from the card below.
+  const { departures } = useDepartures()
+  const { position } = useSeason()
   const [actionError, setActionError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
 
   if (authLoading || loading) return null
+
+  const releasedThisSeason = (departures ?? []).filter(
+    (d) => d.kind === 'released' && position?.season != null && d.season === position.season,
+  )
 
   if (!hasTeam) {
     return (
@@ -518,7 +530,23 @@ export function DevelopmentSquad() {
                     textAlign: 'right',
                   }}
                 >
-                  <div>Decide within {rider.weeks_left} week{rider.weeks_left === 1 ? '' : 's'}</div>
+                  {/* What happens at zero, said every time (#162): the count
+                      alone read as a figure, not a deadline. A listed
+                      graduate has no deadline: the auction decides, and it
+                      can outlast the window, so a named week could already
+                      have started. */}
+                  {rider.listed ? (
+                    <div>On auction: the auction decides</div>
+                  ) : (
+                    <>
+                      <div style={{ color: rider.weeks_left === 1 ? color.accentInk : undefined }}>
+                        {graduateDeadline(rider)}
+                      </div>
+                      <div style={{ marginTop: 3 }}>
+                        If you do nothing, they're released to the free agents.
+                      </div>
+                    </>
+                  )}
                   <div style={{ marginTop: 3 }}>
                     Salary {formatMoney(rider.promotion_salary)} · Value{' '}
                     {formatMoney(rider.market_value)}
@@ -578,6 +606,13 @@ export function DevelopmentSquad() {
               </div>
             ))}
           </div>
+        </Card>
+      ) : null}
+
+      {releasedThisSeason.length > 0 ? (
+        <Card>
+          <CardHeader title="Released this season" />
+          <DepartureList departures={releasedThisSeason} />
         </Card>
       ) : null}
 

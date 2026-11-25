@@ -666,6 +666,31 @@ Since #29 each rider also carries `release_cost`
   `triage_note`, never anyone else's. Plain `IsAuthenticated`, so an API
   token (#130) works the same as a session. See `feedback/README.md`.
 
+### Departures and the graduate deadline (#158, #162)
+
+- `GET /api/riders/departures/`: the caller's team's departures, newest
+  first, and the whole history (a few rows a season, so no paging). Each one
+  has `kind` (`retired`, `released` or `sold`), `at`, `season`/`week`, the
+  rider snapshot `{id, name, speciality, age}` (`id` is null once the rider
+  no longer exists), and `buyer`/`fee` for a sale. `DeparturesView` resolves
+  `season`/`week` with `schedule.services.season_and_week_of`, which follows
+  `current_position`'s rule in two queries for the whole list. After a
+  season has ended, a time gets that season with `week: null`, and before
+  any season both are null. 403 without a team.
+  Registered **before** `riders/<int:rider_id>/` in `urls.py`. See
+  `riders/README.md`, *Departures*.
+- Each development squad graduate carries `decision_due: {season, week} |
+  null`. This is the week at whose start the tick releases them. `_decision_due`
+  takes the `GRADUATE_WINDOW_WEEKS`-th declared week opening after
+  `graduated_at`, the same count the tick's window step makes. It is null while
+  that week is undeclared, and `weeks_left` still counts down. The squad
+  screen shows neither for a **listed** graduate. An auction can outlast
+  the window, so a named week might already have started, and the screen
+  says "On auction: the auction decides" instead.
+- `GET /api/schedule/position/` carries `weeks_in_season`
+  (`schedule.models.SEASON_WEEKS`), so a client can tell the last weeks of a
+  season apart without hard-coding twelve.
+
 ## URL ordering
 
 `config/urls.py` includes `api/urls.py` **above** the SPA catch-all

@@ -20,7 +20,7 @@ import pytest
 
 from riders.development_squad import LEVELS
 from riders.display import to_display_scale
-from riders.models import ENGINE_ATTRIBUTES, DevelopmentSquad, Rider
+from riders.models import ENGINE_ATTRIBUTES, Departure, DevelopmentSquad, Rider
 from schedule.models import Season, Week
 from teams.models import Team
 from transfers.models import Auction
@@ -186,6 +186,12 @@ def test_a_graduates_window_closes_two_weeks_after_graduating(db, team):
         assert rider.team_id is None
         assert rider.unattached_since == closing.starts_at
     assert run.youth_graduates_released == 2
+    # And the manager is told (#162): one release each, dated to the boundary.
+    assert sorted(
+        Departure.objects.filter(team=team).values_list("rider_id", "kind", "at")
+    ) == sorted(
+        (rider.pk, Departure.Kind.RELEASED, closing.starts_at) for rider in batch
+    )
 
 
 def test_a_listed_graduate_is_not_pulled_out_from_under_their_auction(db, team, buyer):

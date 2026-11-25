@@ -6,6 +6,7 @@ import pytest
 
 from schedule.models import SEASON_WEEKS, Season, SeasonTransition, Week, WeekTransition
 from schedule.services import (
+    season_and_week_of,
     current_position,
     process_transitions,
     process_week_transitions,
@@ -188,3 +189,42 @@ def test_weeks_ago_cutoff_skips_the_off_season(db):
     assert weeks_ago_cutoff(second.starts_at, 2) == first.starts_at + timedelta(
         weeks=SEASON_WEEKS - 2,
     )
+
+
+# --- season_and_week_of (#158) ----------------------------------------------
+
+
+def _season(number, starts_at):
+    season = Season.objects.create(number=number, starts_at=starts_at)
+    for n in range(1, SEASON_WEEKS + 1):
+        start = starts_at + timedelta(weeks=n - 1)
+        Week.objects.create(season=season, number=n, starts_at=start, ends_at=start + timedelta(weeks=1))
+    return season
+
+
+@pytest.mark.django_db
+def test_season_and_week_of_matches_current_position_for_every_case():
+    start = datetime(2027, 3, 1, tzinfo=dt_timezone.utc)
+    first = _season(1, start)
+    _season(2, first.ends_at + timedelta(weeks=2))
+    moments = [
+        start - timedelta(days=1),                  # before any season
+        start + timedelta(weeks=2, days=1),         # season 1, week 3
+        first.ends_at + timedelta(days=3),          # the gap after season 1
+        first.ends_at + timedelta(weeks=2, hours=1),  # season 2, week 1
+        first.ends_at + timedelta(weeks=40),        # after the last season
+    ]
+
+    placed = season_and_week_of(moments)
+
+    assert placed == [(None, None), (1, 3), (1, None), (2, 1), (2, None)]
+    for at, (season, week) in zip(moments, placed):
+        position = current_position(at)
+        assert season == (position.season.number if position.season else None)
+        assert week == (position.week.number if position.week else None)
+
+
+@pytest.mark.django_db
+def test_season_and_week_of_nothing_asks_nothing(django_assert_num_queries):
+    with django_assert_num_queries(0):
+        assert season_and_week_of([]) == []

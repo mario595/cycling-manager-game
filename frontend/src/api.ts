@@ -83,6 +83,9 @@ export interface Position {
   season: number | null
   week: number | null
   week_ends_at: string | null
+  /** How many weeks every season has, so "the last two weeks" needs no
+   * hard-coded 12. */
+  weeks_in_season: number
 }
 
 export async function getPosition(): Promise<Position> {
@@ -350,6 +353,31 @@ export async function getRiders(): Promise<Roster> {
   const response = await fetch('/api/riders/')
   if (!response.ok) {
     throw new Error(`riders request failed: ${response.status}`)
+  }
+  return response.json()
+}
+
+/** A rider who left the team, or its development squad, without the
+ * manager acting in that moment (#158, #162): retired by age at a season
+ * close, a graduate released to the free agents, or sold at auction.
+ * `rider` is a snapshot of who they were when they left; its `id` is null
+ * once the rider no longer exists. `season`/`week` are null outside the
+ * calendar. `buyer` and `fee` are set for a sale only. */
+export interface Departure {
+  id: number
+  kind: 'retired' | 'released' | 'sold'
+  at: string
+  season: number | null
+  week: number | null
+  rider: { id: number | null; name: string; speciality: string; age: number }
+  buyer: { id: number; name: string; code: string } | null
+  fee: number | null
+}
+
+export async function getDepartures(): Promise<{ departures: Departure[] }> {
+  const response = await fetch('/api/riders/departures/')
+  if (!response.ok) {
+    throw new Error(`departures request failed: ${response.status}`)
   }
   return response.json()
 }
@@ -993,6 +1021,10 @@ export interface DevelopmentSquadRider {
 export interface DevelopmentSquadGraduate extends DevelopmentSquadRider {
   market_value: number
   listed: boolean
+  /** The week at whose start they are released to the free agents unless
+   * promoted, listed or discarded (#162). Null while that week is not in the
+   * calendar yet, when only `weeks_left` can be shown. */
+  decision_due: { season: number; week: number } | null
 }
 
 /** How often a squad's riders arrive, and when the next batch is due — the

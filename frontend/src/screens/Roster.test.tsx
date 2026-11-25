@@ -2,16 +2,20 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { Me, RosterRider, Solvency } from '../api'
+import type { Departure, Me, RosterRider, Solvency } from '../api'
 import { forceSell, listForAuction, releaseRider } from '../api'
 import { useAuth } from '../useAuth'
+import { useDepartures } from '../useDepartures'
 import { useRoster } from '../useRoster'
+import { useSeason } from '../useSeason'
 import { useSolvency } from '../useSolvency'
 import { Roster } from './Roster'
 
 vi.mock('../useAuth', () => ({ useAuth: vi.fn() }))
 vi.mock('../useRoster', () => ({ useRoster: vi.fn() }))
 vi.mock('../useSolvency', () => ({ useSolvency: vi.fn() }))
+vi.mock('../useDepartures', () => ({ useDepartures: vi.fn() }))
+vi.mock('../useSeason', () => ({ useSeason: vi.fn() }))
 vi.mock('../useClock', () => ({
   useClock: () => ({ now: new Date('2027-03-01T12:00:00Z'), loading: false, error: false }),
 }))
@@ -19,6 +23,8 @@ vi.mock('../api', () => ({ releaseRider: vi.fn(), listForAuction: vi.fn(), force
 
 const mockUseAuth = vi.mocked(useAuth)
 const mockUseRoster = vi.mocked(useRoster)
+const mockUseDepartures = vi.mocked(useDepartures)
+const mockUseSeason = vi.mocked(useSeason)
 const mockReleaseRider = vi.mocked(releaseRider)
 const mockListForAuction = vi.mocked(listForAuction)
 const mockForceSell = vi.mocked(forceSell)
@@ -115,6 +121,12 @@ function renderRoster() {
 
 beforeEach(() => {
   showSolvency(solvent)
+  mockUseDepartures.mockReturnValue({ departures: [], loading: false, error: false })
+  mockUseSeason.mockReturnValue({
+    position: { state: 'in_season', season: 4, week: 1, week_ends_at: null, weeks_in_season: 12 },
+    loading: false,
+    error: false,
+  })
   mockUseAuth.mockReturnValue({
     me: manager,
     loading: false,
@@ -136,6 +148,40 @@ beforeEach(() => {
 })
 
 describe('Roster', () => {
+  it("explains a shorter roster: this season's departures and the last close's retirements (#158)", () => {
+    const departure = (overrides: Partial<Departure>): Departure => ({
+      id: 1, kind: 'retired', at: '2027-01-01T00:00:00Z', season: 3, week: 12,
+      rider: { id: 9, name: 'Carlos Ruiz', speciality: 'climber', age: 36 },
+      buyer: null, fee: null, ...overrides,
+    })
+    mockUseDepartures.mockReturnValue({
+      departures: [
+        departure({
+          id: 2, kind: 'sold', season: 4, week: 1,
+          rider: { id: 10, name: 'Pablo Fernandez', speciality: 'rouleur', age: 24 },
+          buyer: { id: 3, name: 'Baleares Ciclismo', code: 'BLF' }, fee: 412_000,
+        }),
+        departure({}),
+        departure({
+          id: 3, kind: 'sold', season: 3, week: 4,
+          rider: { id: 11, name: 'Last Season Sale', speciality: 'rouleur', age: 24 },
+        }),
+      ],
+      loading: false,
+      error: false,
+    })
+
+    renderRoster()
+
+    expect(screen.getByText('Riders who left')).toBeInTheDocument()
+    expect(screen.getByText('retired at the end of Season 3')).toBeInTheDocument()
+    expect(screen.getByText('CLIMBER · 36 yrs')).toBeInTheDocument()
+    expect(
+      screen.getByText('was sold to Baleares Ciclismo for $412,000 in Season 4, Week 1'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Last Season Sale')).not.toBeInTheDocument()
+  })
+
   it('renders nothing while loading', () => {
     mockUseRoster.mockReturnValue({
       riders: null,

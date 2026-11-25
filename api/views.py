@@ -89,6 +89,7 @@ from riders.development_squad import (
 from riders.development_squad import InsufficientFunds as SquadInsufficientFunds
 from riders.models import (
     ENGINE_ATTRIBUTES,
+    Departure,
     DevelopmentSquad,
     Rider,
     RiderAttributeSnapshot,
@@ -108,7 +109,12 @@ from riders.youth_triage import (
     promote,
 )
 from schedule.models import SEASON_WEEKS, Week
-from schedule.services import current_position, weeks_ago_cutoff, weeks_opened_between
+from schedule.services import (
+    current_position,
+    season_and_week_of,
+    weeks_ago_cutoff,
+    weeks_opened_between,
+)
 from staff.pricing import hire_fee, weekly_salary
 from staff.services import (
     InsufficientFunds,
@@ -166,6 +172,7 @@ from .serializers import (
     ClaimTeamSerializer,
     ClockSerializer,
     DevelopmentSquadLevelChoiceSerializer,
+    DeparturesSerializer,
     DevelopmentSquadSerializer,
     FinancesSerializer,
     FreeAgentPoolSerializer,
@@ -269,7 +276,7 @@ class PositionView(APIView):
             'when that week ends), `off_season` (the season that just finished, no '
             'week), or `no_season` (no season has ever been declared). Weekly events '
             '— wages, training, youth intake, sponsor payments — happen when a week '
-            'ends.'
+            'ends. `weeks_in_season` is how many weeks every season has.'
         ),
         responses=PositionSerializer,
     )
@@ -280,6 +287,7 @@ class PositionView(APIView):
             "season": position.season.number if position.season else None,
             "week": position.week.number if position.week else None,
             "week_ends_at": position.week.ends_at if position.week else None,
+            "weeks_in_season": SEASON_WEEKS,
         }).data)
 
 
@@ -758,6 +766,69 @@ class RiderListView(APIView):
             "weeks_opened": _cooldown_weeks_opened(team, now()),
             "open_auctions": open_auctions,
         }).data)
+
+
+class DeparturesView(APIView):
+    """Every rider who left the caller's team or development squad without
+    the manager acting in that moment (#158, #162; riders/README.md,
+    *Departures*), newest first.
+
+    The whole history in one response: a team gains a few a season, so there
+    is nothing to page, and the screens filter it themselves (the dashboard
+    to the last two game weeks, the roster to this season and the last
+    close). The season and week come from `season_and_week_of`, which places
+    every row by `current_position`'s rule in two queries rather than three
+    per row.
+    """
+
+    @extend_schema(
+        operation_id="get_departures",
+        tags=["Riders"],
+        summary="Riders who left your team",
+        description=(
+            "Riders who left your team or development squad while you were not "
+            "acting: retired by age at a season close (dated to that season's last "
+            "week), a graduate released to the free agents when their two-week "
+            "decision window closed or their auction ended unsold, and riders sold "
+            "at auction (with the buyer and the fee). Newest first. Each carries the "
+            "rider's name, speciality and age when they left; `rider.id` is null if "
+            "the rider no longer exists. Releasing, discarding or promoting a rider "
+            "yourself is not listed."
+        ),
+        responses={200: DeparturesSerializer, **refused(r403=NO_TEAM)},
+    )
+    def get(self, request):
+        team = team_for(request.user)
+        if team is None:
+            return Response({"detail": "You do not manage a team."}, status=403)
+
+        departures = list(
+            Departure.objects.filter(team=team).select_related("buyer")
+        )
+        places = season_and_week_of([departure.at for departure in departures])
+
+        rows = []
+        for departure, (season, week) in zip(departures, places):
+            rows.append({
+                "id": departure.pk,
+                "kind": departure.kind,
+                "at": departure.at,
+                "season": season,
+                "week": week,
+                "rider": {
+                    "id": departure.rider_id,
+                    "name": departure.rider_name,
+                    "speciality": departure.speciality,
+                    "age": departure.age,
+                },
+                "buyer": (
+                    {"id": departure.buyer.pk, "name": departure.buyer.name,
+                     "code": departure.buyer.code}
+                    if departure.buyer_id else None
+                ),
+                "fee": departure.fee,
+            })
+        return Response(DeparturesSerializer({"departures": rows}).data)
 
 
 class RiderProfileView(APIView):
@@ -1833,7 +1904,11 @@ class DevelopmentSquadView(APIView):
             "riders in the squad (prospects aged 17–19, who arrive every four weeks "
             "and develop for 14 weeks) and the graduates. A graduate has two weeks: "
             "promote them to the roster or list them for auction, or they are "
-            "released to the free-agent pool. Includes your roster count and cap."
+            "released to the free-agent pool. A graduate's `decision_due` is the "
+            "season and week at whose start that release happens (null if that week "
+            "is not in the calendar yet), and `weeks_left` counts down to it. A "
+            "release is then listed in your departures. Includes your roster count "
+            "and cap."
         ),
         responses={200: DevelopmentSquadSerializer, **refused(r403=NO_TEAM)},
     )
@@ -1876,6 +1951,7 @@ class DevelopmentSquadView(APIView):
         # a squad screen ends up issuing thirty of them (#34).
         weeks_left = {}
         graduate_weeks_left = {}
+        decision_due = {}
         promotion_salaries = {}
         market_values = {}
         listed = {}
@@ -1894,6 +1970,7 @@ class DevelopmentSquadView(APIView):
                 )
                 promotion_salaries[rider.pk] = weekly_salary_for(rider)
                 market_values[rider.pk] = market_value_for(rider)
+            decision_due = _decision_due(finished)
             for rider in prospects:
                 promotion_salaries[rider.pk] = weekly_salary_for(rider)
             listed = {
@@ -1937,6 +2014,7 @@ class DevelopmentSquadView(APIView):
             "latest_intake_at": latest_intake_at,
             "weeks_left": weeks_left,
             "graduate_weeks_left": graduate_weeks_left,
+            "decision_due": decision_due,
             "promotion_salaries": promotion_salaries,
             "market_values": market_values,
             "listed": listed,
@@ -1957,6 +2035,36 @@ def _week_starts_since(started: list, at) -> list:
         .order_by("starts_at")
         .values_list("starts_at", flat=True)
     )
+
+
+def _decision_due(finished: list) -> dict:
+    """{rider id: {season, week}} for each graduate: the week at whose start
+    the tick releases them unless they are decided about (#162).
+
+    That is the GRADUATE_WINDOW_WEEKS-th declared week opening after
+    `graduated_at`, the same count `weeks_ago_cutoff` makes for the tick's
+    window step, so a window crossing a season boundary names the next
+    season's week. A graduate whose week is not declared yet is left out,
+    and the serializer shows null. One query for the whole squad.
+    """
+    known = [rider.graduated_at for rider in finished if rider.graduated_at is not None]
+    if not known:
+        return {}
+    weeks = list(
+        Week.objects.filter(starts_at__gt=min(known))
+        .order_by("starts_at")
+        .values_list("starts_at", "season__number", "number")
+    )
+    starts = [week[0] for week in weeks]
+    due = {}
+    for rider in finished:
+        if rider.graduated_at is None:
+            continue
+        index = bisect_right(starts, rider.graduated_at) + GRADUATE_WINDOW_WEEKS - 1
+        if index < len(weeks):
+            _, season, number = weeks[index]
+            due[rider.pk] = {"season": season, "week": number}
+    return due
 
 
 def _weeks_left(started_at, total: int, opened: list) -> int:

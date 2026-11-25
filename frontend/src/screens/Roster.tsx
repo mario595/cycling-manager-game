@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
-import { forceSell, listForAuction, releaseRider, type RosterAuction, type RosterRider, type SalaryReview } from '../api'
+import { forceSell, listForAuction, releaseRider, type Departure, type RosterAuction, type RosterRider, type SalaryReview } from '../api'
 import {
   Bar,
   Button,
@@ -17,12 +17,16 @@ import {
   StatTile,
 } from '../components/primitives'
 import { formatCountdown } from '../countdown'
+import { thisSeasonsDepartures } from '../departures'
 import { formatMoney } from '../format'
+import { DepartureList } from '../components/DepartureList'
 import { auctionPath, riderPath } from '../navigation'
 import { barColor, color, font } from '../theme'
 import { useAuth } from '../useAuth'
 import { useClock } from '../useClock'
+import { useDepartures } from '../useDepartures'
 import { useRoster } from '../useRoster'
+import { useSeason } from '../useSeason'
 import { useSolvency } from '../useSolvency'
 
 type AttrKey = 'climb' | 'sprint' | 'flat' | 'resistance' | 'positioning'
@@ -74,6 +78,10 @@ export function Roster() {
   // Game time, for a listed rider's countdown (#152): one poll per screen.
   const { now: gameNow } = useClock()
   const { solvency, refresh: refreshSolvency } = useSolvency()
+  // Who left this season, and at the last close (#158): the explanation for
+  // a roster that is shorter than the manager remembers.
+  const { departures } = useDepartures()
+  const { position } = useSeason()
   const [filter, setFilter] = useState<'All' | string>('All')
   const [sort, setSort] = useState<SortKey>('name')
   const [picked, setPicked] = useState<number | null>(null)
@@ -188,6 +196,8 @@ export function Roster() {
       {salaryReview && salaryReview.changes.length > 0 ? (
         <SalaryReviewCard review={salaryReview} />
       ) : null}
+
+      <DeparturesCard departures={departures ? thisSeasonsDepartures(departures, position) : []} />
 
       <Card style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '14px 16px' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
@@ -690,6 +700,18 @@ function AuctionStatus({ auction, now }: { auction: RosterAuction; now: Date | n
 function signedMoney(amount: number): string {
   if (amount > 0) return `+${formatMoney(amount)}`
   return formatMoney(amount)
+}
+
+/** This season's departures plus the last close's retirements (#158).
+ * Hidden when there are none, like the salary review. */
+function DeparturesCard({ departures }: { departures: Departure[] }) {
+  if (departures.length === 0) return null
+  return (
+    <Card>
+      <CardHeader title="Riders who left" />
+      <DepartureList departures={departures} />
+    </Card>
+  )
 }
 
 function SalaryReviewCard({ review }: { review: SalaryReview }) {

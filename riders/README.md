@@ -808,6 +808,47 @@ not at module scope: `youth_triage` imports `LEVELS` for `free_places`, so a
 top-level import between them is a cycle. The lazy import keeps the dependency
 real and breaks the loop, exactly as `teams/` does with `economy/`.
 
+## Departures
+
+`Departure` (`models.py`, written through `departures.py`) is the record of a
+rider who left a team, or its development squad, **without the manager acting
+in that moment** (#158, #162): retired by age at a season close (`retired`), a
+graduate released to the free agents (`released`), or a rider sold at auction
+(`sold`, with `buyer` and `fee`). It exists because all three happen between
+visits, and before it a returning manager found a shorter roster with no
+explanation. `GET /api/riders/departures/` serves it, and the dashboard, the
+roster and the squad screen show it (`api/README.md`, `frontend/README.md`).
+
+**It is written where the rider leaves, in the same transaction as the move**,
+never by a later pass, so a departure exists exactly when the move does:
+
+- `retire_due_riders` reads `(pk, team_id)` for the due roster riders under a
+  lock, runs its one UPDATE, then records them. The UPDATE clears `team`, so
+  reading first is the only way to know who they left. Free agents retiring,
+  and the squad backstop, record nothing.
+- `release_graduates(..., record=)` records against
+  `development_squad.team_id` **before** the unlink. `record` is keyword-only
+  with **no default**, so every caller says which it is: the tick's window
+  step and an unsold auction pass `True`; `close_squad` (the manager's own
+  act, or a claim's reset) passes `False`. Its row lock is
+  `select_for_update(of=("self",))` now that it joins the squad, since a
+  nullable join cannot be locked on Postgres.
+- `transfers.services.resolve_auction` calls `record_sale` on the SOLD path,
+  against `auction.seller_team` — not the rider's old team, because a forced
+  sale (#27) took the rider off the roster at listing.
+
+**Not recorded, on purpose:** releasing a rider, discarding or promoting a
+squad rider, closing the squad. The manager was there.
+
+**The rider is a snapshot plus a `SET_NULL` FK.** `rider_name`, `speciality`
+and `age` are copied when the rider leaves, because free-agent expiry deletes
+never-raced riders (a released graduate among them) and the record should
+still say who it was. `at` is game time; the season and week are worked out
+when read, by `api/`, since this app may not reference `schedule/`. A
+retirement's `at` is the closing season's final week, so it reads as "the end
+of Season N". Unmanaged teams get records too: it costs nothing, and a manager
+who later claims the team inherits its history.
+
 ## Generation
 
 `generation.generate_rider()` builds one unsaved, internally consistent

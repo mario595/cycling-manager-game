@@ -33,8 +33,9 @@ from dataclasses import dataclass
 from django.db import transaction
 from django.db.models import QuerySet
 
+from .departures import record_departures
 from .development_squad import LEVELS
-from .models import ENGINE_ATTRIBUTES, DevelopmentSquad, Rider
+from .models import ENGINE_ATTRIBUTES, Departure, DevelopmentSquad, Rider
 from .pricing import weekly_salary_for
 from .services import attribute_ceilings, mark_team_change, weekly_deltas
 
@@ -229,7 +230,7 @@ def graduate(rider_ids: Iterable[int], *, at) -> int:
     ).update(graduated_at=at)
 
 
-def release_graduates(rider_ids: Iterable[int], *, at) -> list[int]:
+def release_graduates(rider_ids: Iterable[int], *, at, record: bool) -> list[int]:
     """Send the graduates among `rider_ids` to the free-agent pool. Returns
     the ids actually released.
 
@@ -254,10 +255,18 @@ def release_graduates(rider_ids: Iterable[int], *, at) -> list[int]:
     with it. It also puts the stamp and the unlink in one transaction, so no
     reader can see a released graduate still pointing at a squad — or the
     reverse, a pool rider with no stamp, which the expiry rule never reclaims.
+
+    **`record` has no default, on purpose** (#162): the window closing and an
+    unsold auction happen while the manager is away, so they pass `True` and
+    each released graduate gets a `released` departure against the squad's
+    team; closing the squad is the manager's own act and passes `False`.
+    Making every caller say which keeps a future one from recording, or
+    staying silent, by accident.
     """
     with transaction.atomic():
         released = list(
-            Rider.objects.select_for_update()
+            Rider.objects.select_for_update(of=("self",))
+            .select_related("development_squad")
             .filter(
                 pk__in=list(rider_ids),
                 development_squad__isnull=False,
@@ -266,6 +275,16 @@ def release_graduates(rider_ids: Iterable[int], *, at) -> list[int]:
         )
         if not released:
             return []
+        if record:
+            # Before the unlink: afterwards nothing says whose squad it was.
+            record_departures(
+                released,
+                team_by_rider={
+                    rider.pk: rider.development_squad.team_id for rider in released
+                },
+                kind=Departure.Kind.RELEASED,
+                at=at,
+            )
         mark_team_change(released, team_now=None, at=at)
         Rider.objects.filter(pk__in=[rider.pk for rider in released]).update(
             development_squad=None,
