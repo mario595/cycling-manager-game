@@ -23,6 +23,9 @@ class PositionSerializer(serializers.Serializer):
     season = serializers.IntegerField(allow_null=True)
     week = serializers.IntegerField(allow_null=True)
     week_ends_at = serializers.DateTimeField(allow_null=True)
+    weeks_in_season = serializers.IntegerField(
+        help_text="How many weeks every season has, so 'the last two weeks' needs no guess.",
+    )
 
 
 class StageRaceRefSerializer(serializers.Serializer):
@@ -883,6 +886,11 @@ class DevelopmentSquadRiderSerializer(serializers.Serializer):
         return self.context["promotion_salaries"][instance.pk]
 
 
+class SeasonWeekSerializer(serializers.Serializer):
+    season = serializers.IntegerField()
+    week = serializers.IntegerField()
+
+
 class DevelopmentSquadGraduateSerializer(DevelopmentSquadRiderSerializer):
     """A rider who has finished their spell and is waiting to be decided
     about (#34).
@@ -896,6 +904,13 @@ class DevelopmentSquadGraduateSerializer(DevelopmentSquadRiderSerializer):
 
     market_value = serializers.SerializerMethodField()
     listed = serializers.SerializerMethodField()
+    decision_due = serializers.SerializerMethodField()
+
+    @extend_schema_field(SeasonWeekSerializer(allow_null=True))
+    def get_decision_due(self, instance):
+        # The week at whose start the graduate is released unless decided
+        # about (#162); null while that week is not in the calendar yet.
+        return self.context["decision_due"].get(instance.pk)
 
     def get_weeks_left(self, instance) -> int:
         # The decision window, not the rest of a spell: the count down to
@@ -1079,3 +1094,43 @@ class ReportCreateSerializer(serializers.Serializer):
     category = serializers.ChoiceField(choices=Report.Category.choices)
     text = serializers.CharField(max_length=4000)
     location = serializers.CharField(max_length=300, required=False, allow_blank=True, default="")
+
+
+class DepartureRiderSerializer(serializers.Serializer):
+    """The rider as they were when they left. `id` is null once the rider has
+    been deleted (a never-raced free agent expires that way), and the name,
+    speciality and age still say who it was."""
+
+    id = serializers.IntegerField(allow_null=True)
+    name = serializers.CharField()
+    speciality = serializers.CharField()
+    age = serializers.IntegerField()
+
+
+class DepartureSerializer(serializers.Serializer):
+    """One rider who left the caller's team or development squad without the
+    manager acting in that moment (#158, #162; riders/README.md,
+    *Departures*). `season` and `week` are where `at` falls in the calendar,
+    resolved by DeparturesView; a retirement is dated to the closing season's
+    final week."""
+
+    id = serializers.IntegerField()
+    kind = serializers.ChoiceField(
+        choices=["retired", "released", "sold"],
+        help_text=(
+            "`retired`: retired by age at a season close. `released`: a "
+            "development squad graduate released to the free agents, because "
+            "their decision window closed or their auction ended unsold. "
+            "`sold`: sold at auction."
+        ),
+    )
+    at = serializers.DateTimeField()
+    season = serializers.IntegerField(allow_null=True)
+    week = serializers.IntegerField(allow_null=True)
+    rider = DepartureRiderSerializer()
+    buyer = MeTeamSerializer(allow_null=True, help_text="Sold only: who bought the rider.")
+    fee = serializers.IntegerField(allow_null=True, help_text="Sold only: the winning bid.")
+
+
+class DeparturesSerializer(serializers.Serializer):
+    departures = DepartureSerializer(many=True)

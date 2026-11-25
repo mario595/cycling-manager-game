@@ -29,7 +29,7 @@ from racing.models import (
 from racing.services import SquadError, set_squad
 from riders.development_squad import LEVELS, close_squad, open_squad
 from riders.display import to_display_scale
-from riders.models import DISPLAY_MAX, DevelopmentSquad, Rider, RiderAttributeSnapshot
+from riders.models import DISPLAY_MAX, Departure, DevelopmentSquad, Rider, RiderAttributeSnapshot
 from riders.youth_intake import run_intake
 from schedule.models import SEASON_WEEKS, Season, Week
 from staff.models import Trainer, TrainingWeekReport
@@ -81,6 +81,7 @@ def test_position_endpoint_reports_the_current_week(db):
         assert response.data["state"] == "in_season"
         assert response.data["season"] == 1
         assert response.data["week"] == 1
+        assert response.data["weeks_in_season"] == SEASON_WEEKS
     finally:
         world_services._clock = None
 
@@ -4901,3 +4902,121 @@ def test_auction_market_reports_forced(broke_client, broke_team, insolvent_week)
     response = broke_client.get("/api/transfers/auctions/")
 
     assert [a["forced"] for a in response.data["auctions"]] == [True]
+
+
+# --- Graduate deadline and departures (#158, #162) --------------------------
+
+
+def test_a_graduate_carries_the_week_their_release_happens(
+    dev_squad_client, dev_squad_team, squad_season,
+):
+    """Graduated at week 1's boundary, released at week 3's: the deadline is
+    the week the tick releases them in, as a season and week."""
+    clock, season_start = squad_season
+    _open_squad(dev_squad_team, 1)
+    run_intake(at=season_start)
+    _graduate(_first_prospect(dev_squad_team))
+    _a_day_into_week_one(clock, season_start)
+
+    row = dev_squad_client.get("/api/development-squad/").data["graduates"][0]
+
+    assert row["decision_due"] == {"season": 1, "week": 3}
+    assert row["weeks_left"] == 2
+
+
+def test_a_deadline_crosses_into_the_next_season(
+    dev_squad_client, dev_squad_team, squad_season,
+):
+    clock, season_start = squad_season
+    week_twelve = Week.objects.get(season__number=1, number=12)
+    next_season = Season.objects.create(number=2, starts_at=week_twelve.ends_at)
+    for number in (1, 2):
+        start = next_season.starts_at + timedelta(weeks=number - 1)
+        Week.objects.create(
+            season=next_season, number=number,
+            starts_at=start, ends_at=start + timedelta(weeks=1),
+        )
+    _open_squad(dev_squad_team, 1)
+    clock.set(week_twelve.starts_at)
+    run_intake(at=week_twelve.starts_at)
+    _graduate(_first_prospect(dev_squad_team))
+    clock.set(week_twelve.starts_at + timedelta(days=1))
+
+    row = dev_squad_client.get("/api/development-squad/").data["graduates"][0]
+
+    # Week 12 + two boundaries: the next season's week 2.
+    assert row["decision_due"] == {"season": 2, "week": 2}
+
+
+def test_a_deadline_not_yet_in_the_calendar_is_null(
+    dev_squad_client, dev_squad_team, squad_season,
+):
+    clock, season_start = squad_season
+    week_twelve = Week.objects.get(season__number=1, number=12)
+    _open_squad(dev_squad_team, 1)
+    clock.set(week_twelve.starts_at)
+    run_intake(at=week_twelve.starts_at)
+    _graduate(_first_prospect(dev_squad_team))
+
+    row = dev_squad_client.get("/api/development-squad/").data["graduates"][0]
+
+    assert row["decision_due"] is None
+    assert row["weeks_left"] == 2
+
+
+def _departure(team, *, name="Gone", kind=Departure.Kind.RETIRED, at, **extra):
+    return Departure.objects.create(
+        team=team, rider_name=name, speciality=Rider.Speciality.CLIMBER,
+        age=36, kind=kind, at=at, **extra,
+    )
+
+
+def test_departures_require_a_team(db):
+    client = APIClient()
+    assert client.get("/api/riders/departures/").status_code == 403
+    user = User.objects.create_user(email="no-team@example.com", password="s0meth1ng-good")
+    client.force_authenticate(user=user)
+    assert client.get("/api/riders/departures/").status_code == 403
+
+
+def test_departures_are_the_callers_own_newest_first_with_season_and_week(
+    dev_squad_client, dev_squad_team, squad_season,
+):
+    clock, season_start = squad_season
+    other = Team.objects.create(name="Rivals", code="RIV")
+    week_twelve = Week.objects.get(season__number=1, number=12)
+    week_three = Week.objects.get(season__number=1, number=3)
+    rider = Rider.objects.create(
+        name="Sold One", climb=40, sprint=40, flat=40, resistance=40,
+        positioning=40, team=other,
+    )
+    _departure(dev_squad_team, name="Retiree", at=week_twelve.starts_at)
+    _departure(
+        dev_squad_team, name="Sold One", kind=Departure.Kind.SOLD,
+        at=week_three.starts_at + timedelta(days=2), rider=rider, buyer=other,
+        fee=120_000,
+    )
+    _departure(other, name="Not Mine", at=week_three.starts_at)
+
+    response = dev_squad_client.get("/api/riders/departures/")
+
+    assert response.status_code == 200
+    rows = response.data["departures"]
+    assert [row["rider"]["name"] for row in rows] == ["Retiree", "Sold One"]
+    retiree, sale = rows
+    assert (retiree["kind"], retiree["season"], retiree["week"]) == ("retired", 1, 12)
+    assert retiree["rider"]["id"] is None
+    assert retiree["rider"]["age"] == 36
+    assert retiree["buyer"] is None and retiree["fee"] is None
+    assert (sale["kind"], sale["season"], sale["week"]) == ("sold", 1, 3)
+    assert sale["rider"]["id"] == rider.pk
+    assert sale["buyer"] == {"id": other.pk, "name": "Rivals", "code": "RIV"}
+    assert sale["fee"] == 120_000
+
+
+def test_a_departure_outside_any_season_has_no_week(dev_squad_client, dev_squad_team):
+    _departure(dev_squad_team, at=datetime(2020, 1, 1, tzinfo=dt_timezone.utc))
+
+    row = dev_squad_client.get("/api/riders/departures/").data["departures"][0]
+
+    assert (row["season"], row["week"]) == (None, None)
