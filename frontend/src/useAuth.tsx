@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 
 import {
@@ -19,7 +19,12 @@ interface AuthState {
   logout: () => Promise<void>
   claim: (name: string, code: string) => Promise<void>
   acknowledgeLostTeam: (spellId: number) => Promise<void>
+  /** Re-read `me` now, e.g. right after signing a sponsor (#161). */
+  refresh: () => void
 }
+
+/** How often `me` is re-read, the same cadence as useSponsors and useSolvency. */
+const POLL_MS = 60_000
 
 const AuthContext = createContext<AuthState | null>(null)
 
@@ -37,43 +42,63 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [me, setMe] = useState<Me | null>(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    let cancelled = false
+  // The last answer, as JSON: a poll that brings back the same `me` must not
+  // hand every consumer a new object and re-render the whole app.
+  const lastRef = useRef<string | null>(null)
+  const cancelledRef = useRef(false)
 
+  const accept = (data: Me) => {
+    const json = JSON.stringify(data)
+    if (json === lastRef.current) return
+    lastRef.current = json
+    setMe(data)
+  }
+
+  const refresh = () => {
     getMe()
       .then((data) => {
-        if (cancelled) return
-        setMe(data)
+        if (cancelledRef.current) return
+        accept(data)
         setLoading(false)
       })
       .catch(() => {
-        if (cancelled) return
+        if (cancelledRef.current) return
         setLoading(false)
       })
+  }
+
+  // `me` is polled, not read once, because part of it moves with the game:
+  // `team.sponsor_missing` turns true when a season opens (#161), and an
+  // open tab should show that without a reload.
+  useEffect(() => {
+    cancelledRef.current = false
+    refresh()
+    const pollInterval = setInterval(refresh, POLL_MS)
 
     return () => {
-      cancelled = true
+      cancelledRef.current = true
+      clearInterval(pollInterval)
     }
   }, [])
 
   const register = async (email: string, password: string, displayName: string) => {
     await apiRegister(email, password, displayName)
-    setMe(await getMe())
+    accept(await getMe())
   }
 
   const login = async (email: string, password: string) => {
     await apiLogin(email, password)
-    setMe(await getMe())
+    accept(await getMe())
   }
 
   const logout = async () => {
     await apiLogout()
-    setMe({ authenticated: false, display_name: null, team: null, lost_team: null })
+    accept({ authenticated: false, display_name: null, team: null, lost_team: null })
   }
 
   const claim = async (name: string, code: string) => {
     await apiClaimTeam(name, code)
-    setMe(await getMe())
+    accept(await getMe())
   }
 
   const acknowledgeLostTeam = async (spellId: number) => {
@@ -83,7 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ me, loading, register, login, logout, claim, acknowledgeLostTeam }}
+      value={{ me, loading, register, login, logout, claim, acknowledgeLostTeam, refresh }}
     >
       {children}
     </AuthContext.Provider>

@@ -41,6 +41,37 @@ def current_position(at: datetime) -> Position:
     return Position(state="no_season", season=None, week=None)
 
 
+def season_and_week_of(moments: list[datetime]) -> list[tuple[int | None, int | None]]:
+    """`(season number, week number)` for each of `moments`, by the same rule
+    as `current_position`, in two queries however many there are.
+
+    In a season, both numbers, with the week None only if the season's weeks
+    leave a gap. After a season has ended and before the next starts, that
+    season with no week, which is `current_position`'s `off_season`. Before
+    any season, `(None, None)`. For a reader that places many timestamps at
+    once (a team's departures, #158) where `current_position` would cost
+    three queries per row.
+    """
+    if not moments:
+        return []
+    seasons = list(Season.objects.prefetch_related("weeks").order_by("starts_at"))
+    placed = []
+    for at in moments:
+        current = next((s for s in seasons if s.starts_at <= at < s.ends_at), None)
+        if current is not None:
+            week = next(
+                (w for w in current.weeks.all() if w.starts_at <= at < w.ends_at), None,
+            )
+            placed.append((current.number, week.number if week else None))
+            continue
+        finished = [s for s in seasons if s.ends_at <= at]
+        if finished:
+            placed.append((max(finished, key=lambda s: s.ends_at).number, None))
+        else:
+            placed.append((None, None))
+    return placed
+
+
 def process_transitions(at: datetime) -> list[SeasonTransition]:
     """Record every season boundary crossed at or before `at` that has not
     been recorded yet, oldest first.

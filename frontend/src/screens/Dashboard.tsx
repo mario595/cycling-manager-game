@@ -3,8 +3,11 @@ import { Link } from 'react-router-dom'
 
 import { placeBid, type AuctionListing } from '../api'
 import { AuctionCard } from '../components/AuctionCard'
+import { DepartureList } from '../components/DepartureList'
 import { Card, CardHeader, PageBody, PageHeading } from '../components/primitives'
 import { SolvencyBanner } from '../components/SolvencyBanner'
+import { SponsorBanner } from '../components/SponsorBanner'
+import { inFinalWeeks, isRecent } from '../departures'
 import { racePath } from '../navigation'
 import { nextRace } from '../nextRace'
 import { seasonLabel } from '../seasonLabel'
@@ -14,8 +17,11 @@ import { useAuctions } from '../useAuctions'
 import { useAuth } from '../useAuth'
 import { useCalendar } from '../useCalendar'
 import { useClock } from '../useClock'
+import { useDepartures } from '../useDepartures'
+import { useDevelopmentSquad } from '../useDevelopmentSquad'
 import { useMyBids } from '../useMyBids'
 import { useNextRaceSquad } from '../useNextRaceSquad'
+import { useRoster } from '../useRoster'
 import { useSeason } from '../useSeason'
 import { useStandings } from '../useStandings'
 
@@ -33,12 +39,94 @@ export function Dashboard() {
 
       <SolvencyBanner />
 
+      <SponsorBanner />
+
+      <GraduatesCue />
+
+      <RetirementCue />
+
+      <RecentDeparturesCard />
+
       <StandingsSection />
 
       <NextRaceCard />
 
       <MyAuctionsSection />
     </PageBody>
+  )
+}
+
+/** A one-line cue linking to the screen where it can be acted on. */
+function Cue({ to, urgent, children }: { to: string; urgent?: boolean; children: string }) {
+  return (
+    <Card style={{ padding: '13px 18px', borderColor: urgent ? color.accentInk : undefined }}>
+      <Link
+        to={to}
+        style={{
+          fontSize: 13.5,
+          fontWeight: 600,
+          color: urgent ? color.accentInk : color.ink,
+          textDecoration: 'none',
+        }}
+      >
+        {children} →
+      </Link>
+    </Card>
+  )
+}
+
+/** Graduates waiting for a decision (#162). Shown whenever there are any —
+ * the window is only two weeks, so "due this week or next" is always — and
+ * urgent once one is in their last week. A listed graduate is not waiting:
+ * the auction decides. */
+function GraduatesCue() {
+  const { squad } = useDevelopmentSquad()
+  const waiting = (squad?.graduates ?? []).filter((g) => !g.listed)
+  if (waiting.length === 0) return null
+
+  const lastWeek = waiting.filter((g) => g.weeks_left <= 1).length
+  const count = (n: number) => (n === 1 ? '1 graduate' : `${n} graduates`)
+  if (lastWeek > 0) {
+    return (
+      <Cue to="/development-squad" urgent>
+        {`${count(lastWeek)} ${lastWeek === 1 ? 'is' : 'are'} released to the free agents at the start of next week unless you decide`}
+      </Cue>
+    )
+  }
+  return (
+    <Cue to="/development-squad">
+      {`${count(waiting.length)} ${waiting.length === 1 ? 'is' : 'are'} waiting for your decision`}
+    </Cue>
+  )
+}
+
+/** In the last two weeks of a season, how many riders retire at its close
+ * (#158). Earlier it would be noise all season; the roster's tags say who. */
+function RetirementCue() {
+  const { position } = useSeason()
+  const { riders } = useRoster()
+  if (!inFinalWeeks(position) || !riders) return null
+  const leaving = riders.filter((r) => r.final_season).length
+  if (leaving === 0) return null
+  return (
+    <Cue to="/roster">
+      {`${leaving === 1 ? '1 rider retires' : `${leaving} riders retire`} at the end of this season`}
+    </Cue>
+  )
+}
+
+/** Riders who left in the last two game weeks (#158, #162). */
+function RecentDeparturesCard() {
+  const { departures } = useDepartures()
+  const { now: gameNow } = useClock()
+  if (!departures || !gameNow) return null
+  const recent = departures.filter((d) => isRecent(d, gameNow))
+  if (recent.length === 0) return null
+  return (
+    <Card>
+      <CardHeader title="Riders who left" />
+      <DepartureList departures={recent} />
+    </Card>
   )
 }
 

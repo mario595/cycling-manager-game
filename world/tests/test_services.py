@@ -9,7 +9,7 @@ from accounts.models import User
 from competitions.models import RacePoints
 from economy.models import SalaryReviewReport
 from racing.models import Race, RaceResult
-from riders.models import Rider, RiderAttributeSnapshot
+from riders.models import Departure, Rider, RiderAttributeSnapshot
 from riders.pricing import weekly_salary_for
 from schedule.models import SEASON_WEEKS, Season, SeasonTransition, Week
 from staff.generation import TRAINERS_PER_SEASON_BOUNDARY
@@ -640,6 +640,24 @@ def test_retired_rider_is_stamped_with_final_week_start(db, team):
     rider.refresh_from_db()
 
     assert rider.retired_at == final_week.starts_at
+
+
+def test_a_season_close_retirement_is_a_departure_dated_to_the_final_week(db, team):
+    """#158: the manager comes back to a shorter roster, and this is the
+    record that says why — at the age the rider last showed, since retiring
+    runs before ageing."""
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now())
+    final_week = season.weeks.get(number=SEASON_WEEKS)
+    rider = _veteran("Due", age=38, team=team)
+    clock.set(season.ends_at + timedelta(hours=1))
+
+    tick()
+
+    departure = Departure.objects.get(team=team)
+    assert (departure.rider_id, departure.kind, departure.at, departure.age) == (
+        rider.pk, Departure.Kind.RETIRED, final_week.starts_at, 38,
+    )
 
 
 def test_retired_rider_leaves_salary_review(db, managed_team):

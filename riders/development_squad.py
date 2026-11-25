@@ -360,6 +360,9 @@ def close_squad(team, *, at) -> "SquadClosure | None":
             return None
         released = release_graduates(
             graduates(squad).values_list("pk", flat=True), at=at,
+            # Closing is the manager's own act (or a claim's reset): no
+            # departure to report (#162).
+            record=False,
         )
         _, discarded_by_model = in_squad(squad).delete()
         squad.delete()

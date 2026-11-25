@@ -22,6 +22,7 @@ Fly machine (shared-cpu-1x, 512 MB, region ams, never stopped)
 │   ├── gunicorn             :8000, 2 workers  ← Fly proxy (TLS) ← velodra.fly.dev
 │   └── supercronic          deploy/crontab
 │       ├── tick.sh          TICK_SCHEDULE (staging: every 5 min): manage.py tick, then ping healthchecks.io
+│       ├── beta_agents      minute 5 of every hour: start the LLM testers' workflow if one is due (staging only, beta_agents/README.md)
 │       └── backup.py        03:30 UTC: pg_dump + race logs → Cloudflare R2
 └── volume "data" → /data    database + race logs (/data/media)
 ```
@@ -86,6 +87,7 @@ template `deploy/env.example`. `deploy/tests/test_fly_config.py` checks
 | `BACKUP_S3_BUCKET`, `BACKUP_S3_ENDPOINT`, `BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_SECRET_ACCESS_KEY` | no | R2 for backups. With no bucket, backups are off and the log says so. |
 | `BACKUP_S3_PREFIX` | no | Key prefix, default `backups` |
 | `WEB_CONCURRENCY` | no | gunicorn workers, default 2 |
+| `BETA_DISPATCH_TOKEN` | staging only | A fine-grained GitHub token that lets the hourly `python -m beta_agents dispatch` start the LLM testers' workflow (#160). Without it that job does nothing. Setup is in `beta_agents/README.md`, *The workflow*. Never set it in production. |
 
 The image sets `POSTGRES_HOST=127.0.0.1`, `PGDATA=/data/postgres` and
 `DJANGO_MEDIA_ROOT=/data/media`.

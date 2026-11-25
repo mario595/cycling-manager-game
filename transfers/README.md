@@ -479,3 +479,14 @@ The Roster screen shows `market_value_for` directly (`api/README.md`,
 `frontend/README.md`); inside this app the free-agent signing/severance
 fees and the auction reserve/increment are the arithmetic that builds on
 it.
+
+## Departures on resolution (#158, #162)
+
+`resolve_auction` writes a `riders.Departure` when it sells a rider
+(`record_sale`, against `auction.seller_team`, with the buyer and the fee), and
+`_resolve_unsold` releases an unsold graduate with `record=True`, so a
+manager who was away learns what their auction did. An unsold roster rider
+has not left and records nothing. The record is written in the auction's own
+transaction, so a sale rolled back by a failed `charge_buyer` leaves no
+record. See `riders/README.md`, *Departures*.
+

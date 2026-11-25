@@ -58,7 +58,11 @@ out on rider wages, the trainer, the development squad, and transfers.
 **Sponsors.** Each season you are offered three sponsor deals sized to your
 fanbase, ranging from steady to performance-heavy. You sign one, once a
 season, and you cannot change it. It pays every week within its promised
-range, more when results are good.
+range, more when results are good. **Sign one as soon as a new season
+opens:** every week without a sponsor pays nothing from sponsorship, and
+weeks missed are not paid back. While a season is running and you have not
+signed, `GET /api/accounts/me/` says so with `team.sponsor_missing: true`,
+and `team.guaranteed_weekly` is how much a week signing can guarantee.
 
 **Insolvency.** If your balance is negative after a payday, the team is
 **insolvent**. Transfers into the team are blocked, and you must cut the
@@ -98,7 +102,13 @@ Closing the squad discards the riders in it, and a reopened squad starts at
 the bottom again. Every four weeks the squad receives **two riders aged
 17–19**. They develop for **14 weeks** and then **graduate**. A graduate has
 **two weeks** to be promoted to your roster or listed for auction. Otherwise
-they are released to the free-agent pool.
+they are released to the free-agent pool. Each graduate's `decision_due` is
+the season and week at whose start that release happens.
+
+Riders who leave your team while you are away are listed in your
+**departures** (`GET /api/riders/departures/`): who retired at a season close,
+which graduates were released to the free agents, and who was sold at auction,
+to whom and for how much.
 
 ## Managing
 

@@ -20,7 +20,7 @@ const anonymous: Me = { authenticated: false, display_name: null, team: null, lo
 const manager: Me = {
   authenticated: true,
   display_name: 'Mario',
-  team: { id: 1, name: 'Squad Team', code: 'SQD' },
+  team: { id: 1, name: 'Squad Team', code: 'SQD', sponsor_missing: false, guaranteed_weekly: null },
   lost_team: null,
 }
 
@@ -55,6 +55,7 @@ function mockAuth(me: Me | null, loading: boolean) {
     logout: vi.fn(),
     claim: vi.fn(),
     acknowledgeLostTeam: vi.fn(),
+    refresh: vi.fn(),
   })
 }
 
@@ -96,6 +97,22 @@ describe('Layout', () => {
     renderLayout('/register')
 
     expect(screen.getByTestId('register')).toBeInTheDocument()
+  })
+
+  it('marks the Sponsors entry while the team has no sponsor this season', () => {
+    mockAuth({ ...manager, team: { ...manager.team!, sponsor_missing: true, guaranteed_weekly: 9_640 } }, false)
+
+    renderLayout('/roster')
+
+    expect(screen.getAllByLabelText('No sponsor this season').length).toBeGreaterThan(0)
+  })
+
+  it('does not mark the Sponsors entry once a sponsor is signed', () => {
+    mockAuth(manager, false)
+
+    renderLayout('/roster')
+
+    expect(screen.queryByLabelText('No sponsor this season')).toBeNull()
   })
 
   it('redirects a team-less manager to /claim', () => {

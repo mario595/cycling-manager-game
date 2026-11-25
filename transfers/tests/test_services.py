@@ -6,7 +6,7 @@ from unittest.mock import Mock, call
 import pytest
 
 from riders.development_squad import close_squad
-from riders.models import DevelopmentSquad, Rider
+from riders.models import Departure, DevelopmentSquad, Rider
 from riders.youth_triage import promote
 from teams.models import Team
 from transfers.models import Auction, Bid
@@ -1126,3 +1126,81 @@ def test_forced_sale_floor_matches_racing_squad_size():
     from racing.models import SQUAD_SIZE
 
     assert FORCED_SALE_ROSTER_FLOOR == SQUAD_SIZE
+
+
+# --- Departures (#158, #162) ----------------------------------------------
+# A sale and an unsold graduate's release happen while the seller is away, so
+# both leave a departure behind; an unsold roster rider has not left at all.
+
+
+def test_a_sale_records_a_departure_with_buyer_and_fee(db, claimed_at):
+    seller = Team.objects.create(name="Team Alpha", code="ALP")
+    bidder = Team.objects.create(name="Team Bravo", code="BRA")
+    rider = _rider(name="For Sale", team=seller)
+    auction = list_for_auction(seller, rider.pk, at=claimed_at)
+    place_bid(auction.pk, bidder, auction.reserve_price, at=claimed_at)
+
+    resolve_auction(auction, at=auction.deadline)
+
+    departure = Departure.objects.get()
+    assert departure.team == seller
+    assert departure.kind == Departure.Kind.SOLD
+    assert departure.buyer == bidder
+    assert departure.fee == auction.reserve_price
+    assert departure.at == auction.deadline
+
+
+def test_a_forced_sale_records_against_the_seller(db, claimed_at):
+    """The rider left the roster at listing (#27), so the seller is the
+    auction's, not the rider's team."""
+    seller = Team.objects.create(name="Team Alpha", code="ALP")
+    bidder = Team.objects.create(name="Team Bravo", code="BRA")
+    riders = _roster(seller, 6)
+    auction = force_list_for_auction(seller, riders[0].pk, at=claimed_at)
+    place_bid(auction.pk, bidder, auction.reserve_price, at=claimed_at)
+
+    resolve_auction(auction, at=auction.deadline)
+
+    departure = Departure.objects.get()
+    assert (departure.team, departure.buyer, departure.kind) == (
+        seller, bidder, Departure.Kind.SOLD,
+    )
+
+
+def test_an_unsold_graduate_is_recorded_as_released(db, claimed_at):
+    seller = Team.objects.create(name="Team Alpha", code="ALP")
+    graduate = _graduate(seller, at=claimed_at)
+    auction = list_for_auction(seller, graduate.pk, at=claimed_at)
+
+    resolve_auction(auction, at=auction.deadline)
+
+    departure = Departure.objects.get()
+    assert (departure.team, departure.rider, departure.kind) == (
+        seller, graduate, Departure.Kind.RELEASED,
+    )
+
+
+def test_an_unsold_roster_rider_records_nothing(db, claimed_at):
+    seller = Team.objects.create(name="Team Alpha", code="ALP")
+    rider = _rider(name="For Sale", team=seller)
+    auction = list_for_auction(seller, rider.pk, at=claimed_at)
+
+    resolve_auction(auction, at=auction.deadline)
+
+    assert not Departure.objects.exists()
+
+
+def test_a_sale_that_rolls_back_records_nothing(db, claimed_at):
+    seller = Team.objects.create(name="Team Alpha", code="ALP")
+    bidder = Team.objects.create(name="Team Bravo", code="BRA")
+    rider = _rider(name="For Sale", team=seller)
+    auction = list_for_auction(seller, rider.pk, at=claimed_at)
+    place_bid(auction.pk, bidder, auction.reserve_price, at=claimed_at)
+
+    def pay_seller(team, amount):
+        raise RuntimeError("ledger down")
+
+    with pytest.raises(RuntimeError):
+        resolve_auction(auction, at=auction.deadline, pay_seller=pay_seller)
+
+    assert not Departure.objects.exists()

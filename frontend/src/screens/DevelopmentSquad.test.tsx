@@ -10,7 +10,9 @@ import type {
 } from '../api'
 import { discardSquadRider, listForAuction } from '../api'
 import { useAuth } from '../useAuth'
+import { useDepartures } from '../useDepartures'
 import { useDevelopmentSquad } from '../useDevelopmentSquad'
+import { useSeason } from '../useSeason'
 import { DevelopmentSquad } from './DevelopmentSquad'
 
 vi.mock('../api', async (importOriginal) => ({
@@ -20,14 +22,18 @@ vi.mock('../api', async (importOriginal) => ({
 }))
 vi.mock('../useAuth', () => ({ useAuth: vi.fn() }))
 vi.mock('../useDevelopmentSquad', () => ({ useDevelopmentSquad: vi.fn() }))
+vi.mock('../useDepartures', () => ({ useDepartures: vi.fn() }))
+vi.mock('../useSeason', () => ({ useSeason: vi.fn() }))
 
 const mockUseAuth = vi.mocked(useAuth)
 const mockUseDevelopmentSquad = vi.mocked(useDevelopmentSquad)
+const mockUseDepartures = vi.mocked(useDepartures)
+const mockUseSeason = vi.mocked(useSeason)
 
 const manager: Me = {
   authenticated: true,
   display_name: 'Mario',
-  team: { id: 1, name: 'Youth Team', code: 'YTH' },
+  team: { id: 1, name: 'Youth Team', code: 'YTH', sponsor_missing: false, guaranteed_weekly: null },
   lost_team: null,
 }
 
@@ -69,6 +75,7 @@ function developmentSquadGraduate(
     ...developmentSquadRider({ id: 2, name: 'Graduated Rider', weeks_left: 2 }),
     market_value: 52_000,
     listed: false,
+    decision_due: null,
     ...overrides,
   }
 }
@@ -150,6 +157,12 @@ function mockSquad(squad: SquadPayload) {
 }
 
 beforeEach(() => {
+  mockUseDepartures.mockReturnValue({ departures: [], loading: false, error: false })
+  mockUseSeason.mockReturnValue({
+    position: { state: 'in_season', season: 4, week: 5, week_ends_at: null, weeks_in_season: 12 },
+    loading: false,
+    error: false,
+  })
   vi.mocked(discardSquadRider).mockReset()
   vi.mocked(listForAuction).mockReset()
   mockUseAuth.mockReturnValue({
@@ -160,6 +173,7 @@ beforeEach(() => {
     logout: vi.fn(),
     claim: vi.fn(),
     acknowledgeLostTeam: vi.fn(),
+    refresh: vi.fn(),
   })
   mockSquad(closed)
 })
@@ -557,6 +571,69 @@ describe('DevelopmentSquad', () => {
       expect(screen.getByText('Decide within 2 weeks')).toBeInTheDocument()
     })
 
+  it('names the release week and says what happens if nothing is done (#162)', () => {
+    mockSquad(
+      payload(1, 500_000, {
+        graduates: [
+          developmentSquadGraduate({
+            id: 5, name: 'Graduate', weeks_left: 2, decision_due: { season: 4, week: 6 },
+          }),
+        ],
+      }),
+    )
+
+    renderScreen()
+
+    expect(screen.getByText('Decide before Season 4, Week 6 (2 weeks left)')).toBeInTheDocument()
+    expect(
+      screen.getByText("If you do nothing, they're released to the free agents."),
+    ).toBeInTheDocument()
+  })
+
+  it('shows no deadline for a listed graduate: the auction decides (#162)', () => {
+    mockSquad(
+      payload(1, 500_000, {
+        graduates: [
+          developmentSquadGraduate({
+            id: 5, name: 'Graduate', weeks_left: 1, listed: true,
+            decision_due: { season: 4, week: 6 },
+          }),
+        ],
+      }),
+    )
+
+    renderScreen()
+
+    expect(screen.getByText('On auction: the auction decides')).toBeInTheDocument()
+    expect(screen.queryByText(/Decide before/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/If you do nothing/)).not.toBeInTheDocument()
+  })
+
+  it("lists this season's graduate releases, and only those (#162)", () => {
+    mockSquad(payload(1, 500_000))
+    const departure = (id: number, name: string, kind: 'released' | 'retired', season: number) => ({
+      id, kind, at: '2027-08-16T00:00:00Z', season, week: 6,
+      rider: { id, name, speciality: 'sprinter', age: 19 }, buyer: null, fee: null,
+    })
+    mockUseDepartures.mockReturnValue({
+      departures: [
+        departure(1, 'Luis Garcia', 'released', 4),
+        departure(2, 'Old Release', 'released', 3),
+        departure(3, 'A Retiree', 'retired', 4),
+      ],
+      loading: false,
+      error: false,
+    })
+
+    renderScreen()
+
+    expect(screen.getByText('Released this season')).toBeInTheDocument()
+    expect(screen.getByText('Luis Garcia')).toBeInTheDocument()
+    expect(screen.getByText('was released to the free agents in Season 4, Week 6')).toBeInTheDocument()
+    expect(screen.queryByText('Old Release')).not.toBeInTheDocument()
+    expect(screen.queryByText('A Retiree')).not.toBeInTheDocument()
+  })
+
   it('hides the graduates card when there are none', () => {
     mockSquad(payload(1, 500_000, { graduates: [] }))
 
@@ -625,6 +702,7 @@ describe('DevelopmentSquad', () => {
       logout: vi.fn(),
       claim: vi.fn(),
       acknowledgeLostTeam: vi.fn(),
+      refresh: vi.fn(),
     })
 
     renderScreen()

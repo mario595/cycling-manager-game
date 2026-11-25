@@ -54,3 +54,11 @@ def test_names_and_secrets():
 def test_unknown_tester():
     with pytest.raises(KeyError):
         testers.get("nobody")
+
+
+def test_regular_testers_probe_and_must_look_around_and_casual_does_neither():
+    for slug in ("youth", "trader", "money", "racer"):
+        tester = testers.get(slug)
+        assert tester.probes and tester.min_tool_calls == 12
+    casual = testers.get("casual")
+    assert not casual.probes and casual.min_tool_calls == 0

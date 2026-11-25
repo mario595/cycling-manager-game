@@ -24,6 +24,13 @@ advances; `tick()` only processes what has *become* due. A stored pointer
 would be a cache of `current_position()` with no reliable event to
 invalidate it on.
 
+`season_and_week_of(moments)` applies the same rule to many timestamps at
+once: `(season, week)` numbers for each, `(season, None)` once that season
+has ended, and `(None, None)` before any season. It costs two queries for the
+whole list, where `current_position` would cost up to three per row. `api/`
+uses it to date a team's departures (#158). A test checks it against
+`current_position` case by case, so the two cannot drift apart.
+
 ## The week boundary
 
 A season's `starts_at` must be a Monday at 00:00:00 UTC. This is an

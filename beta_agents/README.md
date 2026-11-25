@@ -18,19 +18,55 @@ standard library, so it needs no install step.
    operation into a tool named by its `operationId` (`tools.py`). It leaves
    out `login`, `logout`, `register` and `get_race_log`. If the server or the
    key is unusable, the visit is skipped here and the diary is left alone.
-2. Gives the model the tester's instructions (`prompt.py`): its role as a beta
+2. **Reads the team itself** (`snapshot.py`, #159): the season and week,
+   balance, wage bill, fanbase, roster and league position, with five GETs
+   and no model call. A part the game won't give is recorded as an error,
+   and the visit goes on.
+3. Gives the model the tester's instructions (`prompt.py`): its role as a beta
    tester whose job is finding problems, its persona, how to report,
    `PLAYERS_GUIDE.md`, and `world/STAGING_BRIEFING.md` (everything after
-   its `---` rule). The model also gets the tester's last five diary entries.
-3. Runs the tool loop (`visit.py`). A game error, such as a 4xx or 5xx, goes
+   its `---` rule). The opening message holds the tester's last five diary
+   entries, the **changes since the last visit's reading** (the balance moved by
+   so much, these riders joined or left), which it is told to account for and
+   report when it can't, and a regular tester's **focus area** for the visit.
+4. Runs the tool loop (`visit.py`). A game error, such as a 4xx or 5xx, goes
    back to the model as the tool's result. A wrong answer may be exactly what
    should be reported.
    Each tool call goes back into the history with every field the provider
    sent: Gemini 3 attaches a thought signature to its calls and answers 400
    to a history that drops it.
-4. Ends when the model calls `finish_visit(diary_entry)`, which appends a
+5. Ends when the model calls `finish_visit(diary_entry)`, which appends a
    `## <real UTC time>` section to `diaries/<tester>.md` with a line of visit
-   stats.
+   stats (tool calls, reports, the focus area and the hours since the last
+   visit) and the reading, as a hidden `<!-- reading: {...} -->` line the next
+   visit compares with. A visit cut short saves no reading.
+
+**Why the harness pushes (#159).** In their first week the testers made 75
+visits, used 5 to 21 tool calls out of 30, and filed no reports. One wrote
+"the ledger checks out perfectly" on every visit while its balance fell by
+$96,000. So:
+
+- **The changes are laid out for them.** They wrote numbers down but never
+  compared them. Only the immediately previous entry's reading is compared,
+  and a change of team skips the comparison.
+- **A focus area per visit**, rotating through finances, roster, market,
+  racing, development and staff and sponsors, counted by the diary's entries
+  (`FOCUS_AREAS` in `prompt.py`). The casual tester gets none.
+- **One pushback on a thin visit.** A `finish_visit` before 12 tool calls
+  answers "not saved, keep going" once (`min_tool_calls` in `testers.py`, 0 for
+  casual). The second call always saves.
+- **One pushback without a critical observation.** An entry with no line
+  `Critical observation:` is sent back once, for every tester.
+- **Never on the last step.** A `finish_visit` on the visit's final model call
+  always saves, or the entry would be lost to the step cap.
+- **A reading whose team could not be read is not saved,** and the visit is
+  told so rather than that it lost its team.
+- **The reporting bar is stated plainly.** A dismissed report costs nothing,
+  `looks_wrong` is for what they can't explain, and three visits without a
+  report means they aren't looking.
+
+The harness never files reports itself and sets no report quota. Whether a
+change is wrong is the tester's call (`specs/archive/beta-tester-reliability.md`).
 
 The limits hold whatever the model does:
 
@@ -38,6 +74,7 @@ The limits hold whatever the model does:
 |---|---|---|
 | Model calls per visit | 30 (`BETA_MAX_STEPS`) | `visit.py`. When the cap is hit, the harness writes the diary entry itself and says so. |
 | Reports per visit | 3 | `visit.py`. A fourth call gets a tool error and never reaches the server. |
+| Tool calls before `finish_visit` saves | 12, pushed back once (casual 0) | `testers.py`, `visit.py` |
 | Tool result size | 8,000 characters, with a note when cut | `tools.py` |
 | Gap between model calls | 6 s (`BETA_LLM_MIN_INTERVAL`) | `llm.py` |
 | 429s waited out | 3 times, using `Retry-After` | `game_api.py` and `llm.py` |
@@ -83,7 +120,39 @@ then a tester loses its team and claims a new one.
 
 ## The workflow
 
-`.github/workflows/beta-agents.yml` runs at minute 17 of every hour. It runs
+**What starts a run (#160).** GitHub's hourly schedule turned out to fire
+about one hour in eight: 20 of about 170 between 18 and 25 November. A tester
+due at 7½ hours then often waited for the run after next, so visits came
+10½ hours apart on average and up to 15. So **the staging machine starts the
+runs**: at minute 5 of every hour its scheduler (`deploy/crontab`) runs
+`python -m beta_agents dispatch` (`dispatch.py`), which reads each diary from
+the `beta-diaries` branch through GitHub's API, applies the same rule as
+`due`, and, only if someone is due, dispatches the workflow with
+`tester: due`. An hour with nobody due starts nothing, which matters because
+Actions minutes are limited on a private repository. GitHub's own schedule
+stays on as the backup. If both fire, the `concurrency` group queues one
+behind the other, and the second finds nobody due.
+
+The dispatcher does nothing without the Fly secret `BETA_DISPATCH_TOKEN`. To
+set it up:
+
+1. On GitHub, *Settings → Developer settings → Fine-grained tokens → Generate
+   new token*. Resource owner `mario595`, repository access *Only select
+   repositories* → `cycling-manager`, permissions **Actions: Read and write**
+   and **Contents: Read-only**. Set an expiry and note it.
+2. `fly secrets set --app velodra BETA_DISPATCH_TOKEN=<the token>`. This
+   restarts the machine.
+3. Check: `fly ssh console --app velodra -C "su app -s /bin/sh -c 'cd /app && python -m beta_agents dispatch'"`
+   prints who is due, and either "Nobody is due." or "Dispatched".
+
+A failed dispatch exits non-zero, which supercronic logs (and reports to
+Sentry where it is set). A 404 on the diary branch means the token can't read
+contents, and nothing is dispatched. `BETA_DISPATCH_REPO` and
+`BETA_DISPATCH_REF` override the repository and the branch the run starts
+from (defaults `mario595/cycling-manager` and `master`).
+
+**The run.** `.github/workflows/beta-agents.yml` runs at minute 17 of every
+hour as well, when GitHub gets to it. It runs
 `python -m beta_agents due --diary-dir diary`, visits each due tester in turn, then commits
 `diaries/` to the **`beta-diaries`** branch, creating the branch on its
 first run. That branch is never merged, and pushes to it trigger neither CI
@@ -94,10 +163,12 @@ run's log.
 Scheduled workflows only run from the default branch, so the schedule starts
 once this is on master.
 
-**Pausing.** The scheduled job runs only while the repository variable
-`BETA_AGENTS_ENABLED` is `true`. Set it to anything else to pause every tester.
-A manual run (*Actions → Beta testers → Run workflow*, choosing a tester) works
-even while paused, which makes it the way to try one visit. A pause longer than
+**Pausing.** Scheduled runs and the machine's `due` dispatches run only while
+the repository variable `BETA_AGENTS_ENABLED` is `true`. Set it to anything
+else to pause every tester. The machine keeps dispatching while paused, and
+each of those runs is skipped, which costs no minutes. A manual run (*Actions →
+Beta testers → Run workflow*, choosing a tester rather than `due`) works even
+while paused, which makes it the way to try one visit. A pause longer than
 about three real days costs the testers their teams through the inactivity
 release. Freeze the staging clock for a long pause (`deploy/README.md`).
 
