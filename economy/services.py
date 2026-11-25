@@ -368,6 +368,25 @@ def active_contract(team, season) -> SponsorContract | None:
     ).first()
 
 
+def sponsor_gap(team, season) -> int | None:
+    """Whether `team` is missing a sponsor for `season` (#161).
+
+    None when the team has an active contract for that season. Otherwise
+    the highest `floor_amount` among its waiting offers, the most a week
+    that signing can guarantee, or 0 when no round exists yet. The floor,
+    not `weekly_base`: the base is the payment formula's anchor, not a
+    promise, and the Sponsors screen never shows it on its own
+    (frontend/README.md). Today the highest floor is the steady offer's,
+    which is also its flat weekly payment. The caller
+    decides which season counts as "this one": economy/ does not read the
+    clock (see *What `economy/` may import*).
+    """
+    if active_contract(team, season) is not None:
+        return None
+    best = offers_for(team, season).order_by("-floor_amount").first()
+    return best.floor_amount if best is not None else 0
+
+
 def ensure_offer_round(team, season, *, at, rng=None) -> list[SponsorOffer]:
     """Generate one offer per profile for (team, season), once.
 

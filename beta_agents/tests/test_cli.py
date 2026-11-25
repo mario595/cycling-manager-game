@@ -66,3 +66,83 @@ def test_register_failure(monkeypatch, capsys):
     transport = lambda *a: Response(400, {"email": ["taken"]}, {})
     monkeypatch.setattr(cli.GameAPI.__init__, "__defaults__", (transport,) + cli.GameAPI.__init__.__defaults__[1:])
     assert cli.main(["--base-url", "http://g", "register", "trader"], env={}) == 1
+
+
+class FakeGitHub:
+    def __init__(self, diaries=None, branch=200, dispatch=204):
+        self.diaries = diaries or {}
+        self.branch = branch
+        self.dispatch_status = dispatch
+        self.requests = []
+
+    def __call__(self, method, url, headers, data, timeout):
+        self.requests.append((method, url, headers, data))
+        assert headers["Authorization"] == "Bearer t"
+        path = url.split("/repos/mario595/cycling-manager", 1)[1]
+        if path == "/branches/beta-diaries":
+            return Response(self.branch, {}, {})
+        if path.startswith("/contents/diaries/"):
+            slug = path.split("/")[-1].split(".md")[0]
+            if slug not in self.diaries:
+                return Response(404, {"message": "Not Found"}, {})
+            return Response(200, f"# {slug}: diary\n\n## {self.diaries[slug]} UTC\n\nvisited\n", {})
+        if path == "/actions/workflows/beta-agents.yml/dispatches":
+            return Response(self.dispatch_status, None if self.dispatch_status == 204 else {"message": "nope"}, {})
+        raise AssertionError(path)
+
+    def dispatched(self):
+        return [json.loads(d) for m, u, _, d in self.requests if m == "POST"]
+
+
+def run_dispatch(github, now="2026-11-25T15:05", env=None):
+    from beta_agents.dispatch import dispatch
+
+    out = []
+    code = dispatch(dict({"BETA_DISPATCH_TOKEN": "t"}, **(env or {})), datetime.fromisoformat(now).replace(tzinfo=timezone.utc), transport=github, echo=out.append)
+    return code, out
+
+
+FRESH = {"youth": "2026-11-25 12:00", "trader": "2026-11-25 12:01", "money": "2026-11-25 12:02", "racer": "2026-11-25 12:03", "casual": "2026-11-25 01:00"}
+
+
+def test_dispatch_without_a_token_does_nothing(capsys):
+    assert cli.main(["dispatch"], env={}) == 0
+    assert "No BETA_DISPATCH_TOKEN" in capsys.readouterr().out
+
+
+def test_dispatch_with_nobody_due_asks_github_for_nothing():
+    github = FakeGitHub(FRESH)
+    assert run_dispatch(github) == (0, ["Nobody is due."])
+    assert github.dispatched() == []
+
+
+def test_dispatch_starts_a_due_run_when_someone_is_due():
+    github = FakeGitHub(dict(FRESH, racer="2026-11-25 07:00"))
+    code, out = run_dispatch(github)
+    assert code == 0 and out[0] == "Due: racer"
+    assert github.dispatched() == [{"ref": "master", "inputs": {"tester": "due"}}]
+    assert github.requests[-1][1] == "https://api.github.com/repos/mario595/cycling-manager/actions/workflows/beta-agents.yml/dispatches"
+
+
+def test_a_tester_with_no_diary_is_due():
+    github = FakeGitHub({k: v for k, v in FRESH.items() if k != "youth"})
+    assert run_dispatch(github, env={"BETA_DISPATCH_REF": "main"})[1][0] == "Due: youth"
+    assert github.dispatched() == [{"ref": "main", "inputs": {"tester": "due"}}]
+
+
+def test_an_unreadable_diary_branch_dispatches_nothing():
+    github = FakeGitHub(branch=404)
+    code, out = run_dispatch(github)
+    assert code == 1 and "contents" in out[-1]
+    assert github.dispatched() == []
+
+
+def test_a_refused_dispatch_fails():
+    github = FakeGitHub({}, dispatch=403)
+    code, out = run_dispatch(github)
+    assert code == 1 and "answered 403" in out[-1]
+
+
+def test_now_with_an_offset_is_converted_to_utc():
+    assert cli._parse_now("2026-11-25T16:05+01:00") == datetime(2026, 11, 25, 15, 5, tzinfo=timezone.utc)
+    assert cli._parse_now("2026-11-25T15:05") == datetime(2026, 11, 25, 15, 5, tzinfo=timezone.utc)

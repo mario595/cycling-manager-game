@@ -373,6 +373,21 @@ class MeTeamSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     name = serializers.CharField()
     code = serializers.CharField()
+    sponsor_missing = serializers.BooleanField(
+        help_text=(
+            "True while a season is running and your team has not signed a sponsor "
+            "for it. Every week without one pays nothing from sponsorship. Sign an "
+            "offer from `GET /api/economy/sponsors/`."
+        ),
+    )
+    guaranteed_weekly = serializers.IntegerField(
+        allow_null=True,
+        help_text=(
+            "While `sponsor_missing` is true, the most a week that signing one of "
+            "the waiting offers can guarantee: the highest floor among them. Null "
+            "otherwise."
+        ),
+    )
 
 
 class ClaimTeamSerializer(serializers.Serializer):
@@ -1107,6 +1122,15 @@ class DepartureRiderSerializer(serializers.Serializer):
     age = serializers.IntegerField()
 
 
+class DepartureBuyerSerializer(serializers.Serializer):
+    """The team a sold rider went to. Its own shape rather than
+    MeTeamSerializer's, which describes the caller's team and grows with it."""
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    code = serializers.CharField()
+
+
 class DepartureSerializer(serializers.Serializer):
     """One rider who left the caller's team or development squad without the
     manager acting in that moment (#158, #162; riders/README.md,
@@ -1128,7 +1152,7 @@ class DepartureSerializer(serializers.Serializer):
     season = serializers.IntegerField(allow_null=True)
     week = serializers.IntegerField(allow_null=True)
     rider = DepartureRiderSerializer()
-    buyer = MeTeamSerializer(allow_null=True, help_text="Sold only: who bought the rider.")
+    buyer = DepartureBuyerSerializer(allow_null=True, help_text="Sold only: who bought the rider.")
     fee = serializers.IntegerField(allow_null=True, help_text="Sold only: the winning bid.")
 
 

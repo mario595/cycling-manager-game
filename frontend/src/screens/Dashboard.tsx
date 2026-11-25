@@ -6,6 +6,7 @@ import { AuctionCard } from '../components/AuctionCard'
 import { DepartureList } from '../components/DepartureList'
 import { Card, CardHeader, PageBody, PageHeading } from '../components/primitives'
 import { SolvencyBanner } from '../components/SolvencyBanner'
+import { SponsorBanner } from '../components/SponsorBanner'
 import { inFinalWeeks, isRecent } from '../departures'
 import { racePath } from '../navigation'
 import { nextRace } from '../nextRace'
@@ -37,6 +38,8 @@ export function Dashboard() {
       />
 
       <SolvencyBanner />
+
+      <SponsorBanner />
 
       <GraduatesCue />
 

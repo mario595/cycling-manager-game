@@ -33,7 +33,7 @@ const mockUseSeason = vi.mocked(useSeason)
 const manager: Me = {
   authenticated: true,
   display_name: 'Mario',
-  team: { id: 1, name: 'Youth Team', code: 'YTH' },
+  team: { id: 1, name: 'Youth Team', code: 'YTH', sponsor_missing: false, guaranteed_weekly: null },
   lost_team: null,
 }
 
@@ -173,6 +173,7 @@ beforeEach(() => {
     logout: vi.fn(),
     claim: vi.fn(),
     acknowledgeLostTeam: vi.fn(),
+    refresh: vi.fn(),
   })
   mockSquad(closed)
 })
@@ -701,6 +702,7 @@ describe('DevelopmentSquad', () => {
       logout: vi.fn(),
       claim: vi.fn(),
       acknowledgeLostTeam: vi.fn(),
+      refresh: vi.fn(),
     })
 
     renderScreen()

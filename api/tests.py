@@ -16,6 +16,7 @@ from competitions.models import RacePoints
 from competitions.scoring import gc_points_for, gc_prize_for, points_for, prize_for, stage_points_for
 from competitions.services import score_general_classification, score_mountains, score_race, score_sprints
 from economy.models import STARTING_BALANCE, LedgerEntry, SalaryReviewReport
+from economy.services import ensure_starting_fanbase
 from racing.models import (
     MarkerCrossing,
     Race,
@@ -2793,6 +2794,51 @@ def test_sponsors_returns_the_contract_once_signed(sponsors_client, sponsors_tea
 
     assert response.data["offers"] == []
     assert response.data["contract"]["sponsor_name"] == first.data["offers"][0]["sponsor_name"]
+
+
+def test_me_warns_when_no_sponsor_is_signed(sponsors_client, sponsors_team, sponsors_season):
+    """#161: a team with no contract this season is told so on `me`, with
+    the most a week signing can guarantee, the best waiting floor. The round is made on this read,
+    so a freshly claimed team need not open Sponsors first."""
+    ensure_starting_fanbase(sponsors_team, at=sponsors_season.starts_at)  # offers are sized to fanbase
+    response = sponsors_client.get("/api/accounts/me/")
+
+    team = response.data["team"]
+    assert team["sponsor_missing"] is True
+    offers = sponsors_client.get("/api/economy/sponsors/").data["offers"]
+    assert team["guaranteed_weekly"] == max(o["floor_amount"] for o in offers)
+
+
+def test_me_stops_warning_once_signed(sponsors_client, sponsors_team, sponsors_season):
+    offer_id = sponsors_client.get("/api/economy/sponsors/").data["offers"][0]["id"]
+    sponsors_client.post("/api/economy/sponsors/sign/", {"offer_id": offer_id})
+
+    team = sponsors_client.get("/api/accounts/me/").data["team"]
+
+    assert team["sponsor_missing"] is False
+    assert team["guaranteed_weekly"] is None
+
+
+def test_me_does_not_warn_off_season(sponsors_client, sponsors_team, sponsors_season):
+    """Past the season's last week the position is off season: nothing to
+    sign until the next one opens."""
+    world_services.get_clock().set(sponsors_season.ends_at + timedelta(days=1))
+
+    team = sponsors_client.get("/api/accounts/me/").data["team"]
+
+    assert team["sponsor_missing"] is False
+    assert team["guaranteed_weekly"] is None
+
+
+@override_settings(GAME_CLOCK_CLASS="world.clocks.MockClock")
+def test_me_does_not_warn_before_any_season(db, sponsors_client, sponsors_team):
+    world_services._clock = None
+    try:
+        team = sponsors_client.get("/api/accounts/me/").data["team"]
+    finally:
+        world_services._clock = None
+
+    assert team["sponsor_missing"] is False
 
 
 def test_sign_creates_the_contract(sponsors_client, sponsors_team, sponsors_season):
