@@ -1,19 +1,29 @@
 from __future__ import annotations
 
+import statistics
+from collections import defaultdict
+
 from django.db import transaction
 
 from riders.development_squad import close_squad
 from riders.generation import generate_roster
-from riders.models import Rider
+from riders.models import ENGINE_ATTRIBUTES, Rider
+from riders.pricing import strength
 from riders.services import mark_team_change, record_initial_snapshots
 
 from .models import ManagerialSpell, Team
 
-#: Riders generated for a newly claimed team, matching
+#: The size a newly claimed team's roster is topped up to, matching
 #: riders/management/commands/reset_riders.py's DEFAULT_RIDERS_PER_TEAM. Not
 #: imported from there — a management command is an entry point, not a
 #: library.
 ROSTER_SIZE = 12
+
+#: How many of a team's best riders its squad strength averages: two squads'
+#: worth, enough to cover a rotation and a stage race's fatigue. Missing places
+#: count as zero, so a stripped roster ranks as weak (#156,
+#: specs/archive/claimed-team-keeps-its-riders-plan.md, Design decision 1).
+SQUAD_STRENGTH_DEPTH = 8
 
 
 class ClaimError(Exception):
@@ -32,10 +42,46 @@ class ReleaseError(Exception):
     """Base class for a release that cannot proceed."""
 
 
+def squad_strength(riders: list[Rider]) -> float:
+    """The mean strength (riders.pricing.strength) of the best
+    SQUAD_STRENGTH_DEPTH riders in `riders`, a missing place counting as 0.
+
+    Pure over a list, so it needs no database. This is how a claim judges
+    "the middle of the field" (#156)."""
+    best = sorted((strength(r) for r in riders), reverse=True)[:SQUAD_STRENGTH_DEPTH]
+    return sum(best) / SQUAD_STRENGTH_DEPTH
+
+
+def _claim_candidates() -> list[int]:
+    """Unmanaged team pks, nearest the field's median squad strength first,
+    pk breaking ties. The field is every team, managed or not. Reads only;
+    locks nothing: claim_team locks the first candidate it can.
+
+    One query for every team's riders, grouped here, rather than one per
+    team."""
+    teams = list(Team.objects.values_list("pk", "manager_id"))
+    if not teams:
+        return []
+    by_team: dict[int, list[Rider]] = defaultdict(list)
+    for rider in Rider.objects.filter(team__isnull=False).only(
+        "team_id", "speciality", *ENGINE_ATTRIBUTES,
+    ):
+        by_team[rider.team_id].append(rider)
+    scores = {pk: squad_strength(by_team[pk]) for pk, _ in teams}
+    middle = statistics.median(scores.values())
+    unmanaged = [pk for pk, manager_id in teams if manager_id is None]
+    return sorted(unmanaged, key=lambda pk: (abs(scores[pk] - middle), pk))
+
+
 def claim_team(user, *, name: str, code: str, roster_size: int = ROSTER_SIZE, at) -> Team:
-    """Assign an unmanaged team to `user`, rename it, release its riders and
-    give it a freshly generated roster. One transaction: a half-claimed team
-    (renamed but with no roster) must never be observable.
+    """Assign an unmanaged team to `user`, rename it and keep its riders,
+    topping a roster under `roster_size` up with generated riders. One
+    transaction: a half-claimed team must never be observable.
+
+    The team handed over is the unmanaged one whose squad strength is
+    nearest the middle of the whole field (#156), not the lowest pk: a
+    claimant takes over the "average team" the economy is tuned for. Ties
+    go to the lower pk.
 
     Does not check whether `user` already manages a team — Team.manager is a
     OneToOneField, so a second claim raises IntegrityError, and the caller
@@ -49,12 +95,20 @@ def claim_team(user, *, name: str, code: str, roster_size: int = ROSTER_SIZE, at
     way schedule/services.py's callers do.
     """
     with transaction.atomic():
-        team = (
-            Team.objects.select_for_update(skip_locked=True)
-            .filter(manager__isnull=True)
-            .order_by("pk")
-            .first()
-        )
+        # Rank without a lock, then lock the first candidate still free.
+        # skip_locked means a concurrent claimer moves on to the next one
+        # instead of blocking, and the manager filter refuses a team claimed
+        # since the ranking was read. Locking every unmanaged team up front
+        # would serialise claims; locking the lowest pk was the old rule.
+        team = None
+        for pk in _claim_candidates():
+            team = (
+                Team.objects.select_for_update(skip_locked=True)
+                .filter(pk=pk, manager__isnull=True)
+                .first()
+            )
+            if team is not None:
+                break
         if team is None:
             raise NoTeamAvailable("There are no teams available to claim.")
 
@@ -65,16 +119,22 @@ def claim_team(user, *, name: str, code: str, roster_size: int = ROSTER_SIZE, at
         team.full_clean(exclude=["manager"])
         team.save(update_fields=["manager", "managed_since", "name", "code", "updated_at"])
 
-        # Stamp unattached_since while the released roster still identifies its
-        # rows — the update below is what clears .team.
-        released_riders = list(team.riders.all())
-        mark_team_change(released_riders, team_now=None, at=at)
-        team.riders.update(team=None)
-        new_roster = Rider.objects.bulk_create(generate_roster(roster_size, team=team))
-        mark_team_change(new_roster, team_now=team, at=at)
-        record_initial_snapshots(new_roster)
+        # The squad comes with the team (#156). Re-stamp joined_team_at to the
+        # claim instant anyway: the claim cooldown's free release
+        # (transfers._claim_cooldown_exempt) recognises the claimed roster by
+        # joined_team_at == managed_since. No new baseline snapshots: these
+        # riders already have their history.
+        kept = list(team.riders.all())
+        mark_team_change(kept, team_now=team, at=at)
 
-        # After the new roster is written, before the lazy economy import
+        # Fill only the gap. A roster above roster_size is never trimmed.
+        missing = max(0, roster_size - len(kept))
+        if missing:
+            top_up = Rider.objects.bulk_create(generate_roster(missing, team=team))
+            mark_team_change(top_up, team_now=team, at=at)
+            record_initial_snapshots(top_up)
+
+        # After the roster write, before the lazy economy import
         # below. A claim is a takeover, and what the last manager left behind
         # does not carry over — a new manager must open their own squad and
         # pay their own opening fee. Closing is a row delete, so there is

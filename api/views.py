@@ -592,7 +592,7 @@ class SquadView(APIView):
 
 class ClaimTeamView(APIView):
     """Assign the caller an unmanaged team, renamed and recoded to their
-    choosing, with a fresh roster. Falls back to the project default,
+    choosing, keeping its riders (topped up to twelve if short, #156). Falls back to the project default,
     IsAuthenticated — do not re-add AllowAny.
 
     The claim, the withdrawal of the team's standing bids and the cancellation
@@ -610,10 +610,13 @@ class ClaimTeamView(APIView):
         summary="Claim an unmanaged team",
         description=(
             "Take over one of the teams nobody manages, renamed to `name` and recoded "
-            "to the three-letter `code` you choose. The team's balance and fanbase "
-            "are reset to the starting values, and any bids or auction listings it "
-            "had are cancelled. For a short cooldown after claiming, releasing an "
-            "inherited rider costs no severance. You can manage only one team."
+            "to the three-letter `code` you choose. You are given the free team whose "
+            "squad strength is nearest the middle of the field. It comes with its "
+            "riders, its trainer and its standings; a roster under twelve is topped up "
+            "with new riders. The team's balance and fanbase are reset to the starting "
+            "values, its sponsor deal ends, and any bids or auction listings it had are "
+            "cancelled. For a short cooldown after claiming, releasing an inherited "
+            "rider costs no severance. You can manage only one team."
         ),
         request=ClaimTeamSerializer,
         responses={201: MeTeamSerializer, **refused(r400="The name or code is malformed, or the name is taken.", r409="You already manage a team, or no unmanaged team is left.")},

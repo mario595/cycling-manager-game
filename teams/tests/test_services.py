@@ -24,7 +24,15 @@ from schedule.models import Season
 from staff.models import Trainer
 from staff.services import focus_for, hire_trainer, set_focus, trainer_for
 from teams.models import ManagerialSpell, Team
-from teams.services import ROSTER_SIZE, NoTeamAvailable, claim_team, release_team
+from teams.services import (
+    ROSTER_SIZE,
+    SQUAD_STRENGTH_DEPTH,
+    NoTeamAvailable,
+    _claim_candidates,
+    claim_team,
+    release_team,
+    squad_strength,
+)
 
 #: Game time the takeover entries under test are stamped with. claim_team
 #: requires it so library code never reads the clock itself (AGENTS.md) —
@@ -46,7 +54,7 @@ def race(db) -> Race:
     )
 
 
-def test_claim_assigns_lowest_pk_unmanaged_team(db, user):
+def test_claim_breaks_a_strength_tie_by_lowest_pk(db, user):
     first = Team.objects.create(name="Team Alpha", code="ALP")
     Team.objects.create(name="Team Beta", code="BET")
 
@@ -64,14 +72,6 @@ def test_claim_renames_and_recodes(db, user, team):
     assert claimed.manager_id == user.pk
 
 
-def test_claim_releases_old_riders_without_deleting(db, user, team, rider):
-    claim_team(user, name="Mountain Goats", code="MGO", at=AT)
-
-    rider.refresh_from_db()
-    assert rider.team_id is None
-    assert Rider.objects.filter(pk=rider.pk).exists()
-
-
 def test_claim_gives_every_new_rider_a_baseline_snapshot(db, user, team):
     claimed = claim_team(user, name="Mountain Goats", code="MGO", at=AT)
 
@@ -79,14 +79,6 @@ def test_claim_gives_every_new_rider_a_baseline_snapshot(db, user, team):
     assert len(riders) == ROSTER_SIZE
     for rider in riders:
         assert rider.attribute_snapshots.filter(week=None).count() == 1
-
-
-def test_claim_generates_a_full_roster(db, user, team, rider):
-    claimed = claim_team(user, name="Mountain Goats", code="MGO", at=AT)
-
-    new_roster = claimed.riders.all()
-    assert new_roster.count() == ROSTER_SIZE
-    assert rider.pk not in set(new_roster.values_list("pk", flat=True))
 
 
 def test_claim_raises_when_no_team_available(db, user):
@@ -208,14 +200,6 @@ def test_claim_team_stamps_managed_since(db, user, team):
     claimed = claim_team(user, name="Mountain Goats", code="MGO", at=AT)
 
     assert claimed.managed_since == AT
-
-
-def test_claim_stamps_joined_and_unattached_timing(db, user, team, rider):
-    claimed = claim_team(user, name="Mountain Goats", code="MGO", at=AT)
-
-    rider.refresh_from_db()
-    assert rider.unattached_since == AT
-    assert all(r.joined_team_at == AT for r in claimed.riders.all())
 
 
 def test_release_team_clears_manager_and_records_spell(db, user, team):
@@ -374,3 +358,129 @@ def test_release_keeps_trainer_focus_and_sponsor(db, user, team, season):
     assert trainer_for(team) == trainer
     assert focus_for(team) == "sprint"
     assert active_contract(team, season) == contract
+
+
+# --- #156: a claimed team keeps its riders --------------------------------
+
+
+def _riders(team, n, level):
+    """`n` saved rouleurs on `team`, every attribute at `level`."""
+    return [
+        Rider.objects.create(
+            name=f"{team.code} {level} {i}", team=team,
+            climb=level, sprint=level, flat=level, resistance=level, positioning=level,
+        )
+        for i in range(n)
+    ]
+
+
+def _unsaved(levels):
+    return [
+        Rider(climb=lv, sprint=lv, flat=lv, resistance=lv, positioning=lv)
+        for lv in levels
+    ]
+
+
+def test_squad_strength_means_the_best_eight():
+    riders = _unsaved([50] * 8 + [10, 10])
+    assert squad_strength(riders) == pytest.approx(50)
+
+
+def test_squad_strength_counts_missing_places_as_zero():
+    riders = _unsaved([40, 40, 40])
+    assert squad_strength(riders) == pytest.approx(40 * 3 / SQUAD_STRENGTH_DEPTH)
+
+
+def test_claim_candidates_rank_by_distance_from_field_median(db, user):
+    weak = Team.objects.create(name="Weak", code="WEK")
+    middle = Team.objects.create(name="Middle", code="MID")
+    strong = Team.objects.create(name="Strong", code="STR")
+    managed = Team.objects.create(name="Managed", code="MAN", manager=user)
+    _riders(weak, 8, 20)
+    _riders(middle, 8, 50)
+    _riders(strong, 8, 90)
+    _riders(managed, 8, 70)  # median of 20, 50, 70, 90 is 60
+
+    assert _claim_candidates() == [middle.pk, strong.pk, weak.pk]
+
+
+def test_claim_candidates_break_ties_by_pk(db):
+    first = Team.objects.create(name="First", code="FST")
+    second = Team.objects.create(name="Second", code="SND")
+    _riders(first, 8, 50)
+    _riders(second, 8, 50)
+
+    assert _claim_candidates() == [first.pk, second.pk]
+
+
+def test_claim_hands_over_the_team_nearest_the_median(db, user):
+    weak = Team.objects.create(name="Weak", code="WEK")
+    middle = Team.objects.create(name="Middle", code="MID")
+    strong = Team.objects.create(name="Strong", code="STR")
+    _riders(weak, 12, 20)
+    _riders(middle, 12, 50)
+    _riders(strong, 12, 90)
+
+    claimed = claim_team(user, name="Mountain Goats", code="MGO", at=AT)
+
+    assert claimed.pk == middle.pk
+
+
+def test_claim_skips_a_candidate_claimed_since_the_ranking(db, user, monkeypatch):
+    taken = Team.objects.create(name="Taken", code="TKN")
+    free = Team.objects.create(name="Free", code="FRE")
+    other = User.objects.create_user(email="o@b.com", password="x", display_name="O")
+    # The ranking was read while `taken` was free; it has been claimed since.
+    monkeypatch.setattr("teams.services._claim_candidates", lambda: [taken.pk, free.pk])
+    Team.objects.filter(pk=taken.pk).update(manager=other)
+
+    claimed = claim_team(user, name="Mountain Goats", code="MGO", at=AT)
+
+    assert claimed.pk == free.pk
+
+
+def test_claim_keeps_the_teams_riders(db, user, team):
+    originals = _riders(team, ROSTER_SIZE, 50)
+
+    claimed = claim_team(user, name="Mountain Goats", code="MGO", at=AT)
+
+    assert set(claimed.riders.values_list("pk", flat=True)) == {r.pk for r in originals}
+
+
+def test_claim_tops_a_short_roster_up_to_twelve(db, user, team):
+    originals = _riders(team, 3, 50)
+
+    claimed = claim_team(user, name="Mountain Goats", code="MGO", at=AT)
+
+    pks = set(claimed.riders.values_list("pk", flat=True))
+    assert len(pks) == ROSTER_SIZE
+    assert {r.pk for r in originals} <= pks
+
+
+def test_claim_does_not_trim_a_large_roster(db, user, team):
+    _riders(team, 14, 50)
+
+    claimed = claim_team(user, name="Mountain Goats", code="MGO", at=AT)
+
+    assert claimed.riders.count() == 14
+
+
+def test_only_top_up_riders_get_a_baseline_snapshot(db, user, team):
+    from riders.services import record_initial_snapshots
+
+    originals = _riders(team, 3, 50)
+    record_initial_snapshots(originals)
+
+    claimed = claim_team(user, name="Mountain Goats", code="MGO", at=AT)
+
+    for rider in claimed.riders.all():
+        assert rider.attribute_snapshots.filter(week=None).count() == 1
+
+
+def test_claim_stamps_inherited_riders_joined_team_at(db, user, team, rider):
+    claimed = claim_team(user, name="Mountain Goats", code="MGO", at=AT)
+
+    rider.refresh_from_db()
+    assert rider.team_id == claimed.pk
+    assert rider.unattached_since is None
+    assert all(r.joined_team_at == claimed.managed_since == AT for r in claimed.riders.all())
