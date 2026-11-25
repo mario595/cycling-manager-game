@@ -28,6 +28,7 @@ export const NAV_SECTIONS: NavSection[] = [
     label: 'TEAM',
     items: [
       { path: '/roster', name: 'Roster' },
+      { path: '/training', name: 'Training' },
       { path: '/staff', name: 'Staff' },
       { path: '/development-squad', name: 'Development squad' },
       { path: '/sponsors', name: 'Sponsors' },
