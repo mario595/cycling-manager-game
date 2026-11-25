@@ -19,14 +19,20 @@ from datetime import timedelta
 
 from django.db.models import Exists, OuterRef
 
-from economy.services import balance_for
+from economy.services import balance_for, charge_transfer_fee
 from riders.models import Rider
 from riders.pricing import strength
 from teams.models import Team
 from teams.services import ROSTER_SIZE
 from transfers.models import Auction, Bid
-from transfers.pricing import reserve_price_for
-from transfers.services import TransferError, list_for_auction, place_bid
+from transfers.pricing import reserve_price_for, signing_fee_for
+from transfers.services import (
+    TransferError,
+    free_agents,
+    list_for_auction,
+    place_bid,
+    sign_free_agent,
+)
 
 #: Two and a half 4-rider squads, so freshness can rotate at one race a week.
 AI_MIN_ROSTER = 10
@@ -111,6 +117,30 @@ def pick_listing(roster: list[Rider], candidates: list[Rider]) -> Rider | None:
     if not qualifying:
         return None
     return min(qualifying, key=lambda r: (-r.age, strength(r), r.pk))
+
+
+def pick_free_agent(roster: list[Rider], candidates: list[Rider], budget: int) -> Rider | None:
+    """The free agent a roster below `ROSTER_SIZE` should sign, or `None`.
+
+    Only riders under `AI_AGEING_AGE` whose signing fee fits `budget`.
+    Among those, the speciality the roster has fewest of comes first, so a
+    retired climber tends to be replaced by a climber; then the strongest by
+    visible attributes, then pk. Judged by `strength`, never a hidden trait,
+    like every other AI decision.
+    """
+    if len(roster) >= ROSTER_SIZE:
+        return None
+    affordable = [
+        rider
+        for rider in candidates
+        if rider.age < AI_AGEING_AGE and signing_fee_for(rider) <= budget
+    ]
+    if not affordable:
+        return None
+    return min(
+        affordable,
+        key=lambda r: (len(_same_speciality(roster, r)), -strength(r), r.pk),
+    )
 
 
 def headroom(balance: int, committed: int) -> int:
@@ -266,3 +296,52 @@ def list_ai_riders(week, at) -> tuple[int, str]:
             error += f"ai listing for team {team.pk}:\n{traceback.format_exc()}\n"
 
     return listed, error
+
+
+def sign_ai_free_agents(week, at) -> tuple[int, str]:
+    """One pass of the AI over the free-agent pool (#157): every unmanaged
+    team below `ROSTER_SIZE` signs at most one free agent, thinnest roster
+    first, then pk, so the outcome is deterministic.
+
+    Called on a tick that crossed a week, with the last week crossed. Only
+    riders already unattached before that week opened are considered, so a
+    rider who joined the pool this week (an intake, a release) is a human's
+    to sign for a full week before the AI can take them. The fee comes out
+    of the same headroom as the AI's auction bids: half the balance, less
+    what its winning bids already promise. Returns (signings, error text).
+    """
+    signed = 0
+    error = ""
+    buyers = _buyers()
+    pool = [
+        rider
+        for rider in free_agents()
+        if rider.unattached_since is None or rider.unattached_since < week.starts_at
+    ]
+
+    for buyer in sorted(buyers.values(), key=lambda b: (len(b.roster), b.team.pk)):
+        rider = pick_free_agent(
+            buyer.roster, pool, headroom(buyer.balance, buyer.committed),
+        )
+        if rider is None:
+            continue
+
+        def charge(picked, fee, team=buyer.team):
+            charge_transfer_fee(
+                team, amount=-fee, at=at, description=f"Signed {picked.name}",
+            )
+
+        try:
+            sign_free_agent(buyer.team, rider.pk, at=at, charge=charge)
+        except TransferError:
+            # Signed by a human since the pool was read, or the roster is
+            # full. A normal outcome; the next team tries the next rider.
+            pool.remove(rider)
+            continue
+        except Exception:
+            error += f"ai free-agent signing for team {buyer.team.pk}:\n{traceback.format_exc()}\n"
+            continue
+        pool.remove(rider)
+        signed += 1
+
+    return signed, error

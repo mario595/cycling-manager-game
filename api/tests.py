@@ -768,6 +768,46 @@ def test_roster_includes_salary_review_when_one_exists(roster_team, roster_clien
     }]
 
 
+def test_roster_rider_not_listed_has_no_auction(roster_rider, roster_client):
+    response = roster_client.get("/api/riders/")
+
+    assert response.data["riders"][0]["auction"] is None
+
+
+def test_roster_rider_on_auction_carries_its_open_auction(roster_team, roster_rider, roster_client):
+    # #152: the Roster screen cues a listed rider from this, not by fetching
+    # the whole market and matching on is_own_listing.
+    auction = Auction.objects.create(
+        rider=roster_rider, seller_team=roster_team,
+        reserve_price=50_000, current_price=55_000, min_increment=2_500,
+        deadline=now() + timedelta(days=3), listed_at=now(),
+    )
+    bidder_team = Team.objects.create(name="Bidder", code="BDR")
+    Bid.objects.create(auction=auction, bidder_team=bidder_team, amount=52_500, placed_at=now())
+    Bid.objects.create(auction=auction, bidder_team=bidder_team, amount=55_000, placed_at=now())
+    Bid.objects.create(
+        auction=auction, bidder_team=bidder_team, amount=50_000,
+        placed_at=now(), withdrawn_at=now(),
+    )
+
+    data = roster_client.get("/api/riders/").data["riders"][0]["auction"]
+
+    assert data["id"] == auction.pk
+    assert data["current_price"] == 55_000
+    assert data["bid_count"] == 2  # the withdrawn bid is not counted
+    assert data["deadline"]
+
+
+def test_roster_rider_ignores_a_closed_auction(roster_team, roster_rider, roster_client):
+    Auction.objects.create(
+        rider=roster_rider, seller_team=roster_team, status=Auction.Status.UNSOLD,
+        reserve_price=50_000, current_price=50_000, min_increment=2_500,
+        deadline=now(), listed_at=now(),
+    )
+
+    assert roster_client.get("/api/riders/").data["riders"][0]["auction"] is None
+
+
 def test_roster_salary_review_is_null_without_one(roster_team, roster_client):
     response = roster_client.get("/api/riders/")
 
@@ -2928,6 +2968,25 @@ def test_release_rider_is_free_within_claim_cooldown(market_client, market_team)
     assert not LedgerEntry.objects.filter(team=market_team, kind="transfer_fee").exists()
 
 
+def test_release_cancels_the_riders_open_auction(market_client, market_team, bidder_team):
+    # #152: the Roster's note says releasing cancels the auction, so it must,
+    # at once rather than at the deadline.
+    rider = _market_rider(name="Listed", team=market_team)
+    kept = _market_rider(name="Still Listed", team=market_team)
+    auction = list_for_auction(market_team, rider.pk, at=now())
+    other = list_for_auction(market_team, kept.pk, at=now())
+    Bid.objects.create(auction=auction, bidder_team=bidder_team, amount=auction.reserve_price, placed_at=now())
+
+    response = market_client.post("/api/transfers/riders/release/", {"rider_id": rider.pk})
+
+    assert response.status_code == 204
+    auction.refresh_from_db()
+    other.refresh_from_db()
+    assert auction.status == Auction.Status.CANCELLED
+    assert other.status == Auction.Status.OPEN
+    assert not LedgerEntry.objects.filter(team=bidder_team, kind="transfer_fee").exists()
+
+
 def test_release_rider_charges_severance_after_cooldown(market_client, market_team):
     # One in-season Week opened since the claim, so the cooldown has run
     # out and the release costs severance (Design decision 2).
@@ -3404,7 +3463,8 @@ def test_rider_profile_identity_matches_roster_payload(profile_rider, profile_ow
     response = profile_owner_client.get(f"/api/riders/{profile_rider.pk}/")
 
     for key, value in roster_rider.items():
-        if key == "release_cost":
+        # release_cost and auction (#152) are the owner's roster's own keys.
+        if key in ("release_cost", "auction"):
             continue
         assert response.data[key] == value, key
 

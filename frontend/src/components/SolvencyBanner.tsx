@@ -1,5 +1,5 @@
 import { Card } from './primitives'
-import { formatMoney } from '../format'
+import { formatDate, formatMoney } from '../format'
 import { color } from '../theme'
 import { useSolvency } from '../useSolvency'
 
@@ -19,7 +19,7 @@ export function SolvencyBanner() {
 
   const owing = solvency.shortfall > 0
   const when = solvency.deadline
-    ? `by ${new Date(solvency.deadline).toLocaleDateString()}`
+    ? `by ${formatDate(solvency.deadline)}`
     : `within ${solvency.paydays_left} ${solvency.paydays_left === 1 ? 'payday' : 'paydays'}`
 
   return (

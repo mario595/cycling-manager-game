@@ -16,7 +16,8 @@ from riders.models import Rider
 from schedule.models import Season, Week
 from teams.models import Team
 from transfers.models import Auction, Bid
-from transfers.pricing import reserve_price_for
+from teams.services import ROSTER_SIZE
+from transfers.pricing import reserve_price_for, signing_fee_for
 from transfers.services import cancel_listings, list_for_auction, place_bid, withdraw_bids
 from world.ai_market import (
     AI_LISTING_EVERY_WEEKS,
@@ -24,8 +25,11 @@ from world.ai_market import (
     buyer_rank,
     headroom,
     list_ai_riders,
+    AI_AGEING_AGE,
+    pick_free_agent,
     pick_listing,
     place_ai_bids,
+    sign_ai_free_agents,
     wants_rider,
 )
 from world.clocks import MockClock
@@ -560,3 +564,124 @@ def test_managed_team_is_never_listed_for(db):
 
     assert (listed, error) == (0, "")
     assert Auction.objects.exists() is False
+
+
+# --- Signing free agents (#157) ----------------------------------------------
+
+
+def test_pick_free_agent_fills_the_thinnest_speciality_first():
+    roster = _roster_of(ROSTER_SIZE - 1, speciality=Rider.Speciality.DOMESTIQUE)
+    stronger_domestique = _rider("Domestique", 80, speciality=Rider.Speciality.DOMESTIQUE)
+    climber = _rider("Climber", 40, speciality=Rider.Speciality.CLIMBER)
+
+    assert pick_free_agent(roster, [stronger_domestique, climber], budget=10**9) is climber
+
+
+def test_pick_free_agent_takes_the_strongest_of_the_same_need():
+    roster = _roster_of(ROSTER_SIZE - 1)
+    weak = _rider("Weak", 40)
+    strong = _rider("Strong", 60)
+
+    assert pick_free_agent(roster, [weak, strong], budget=10**9) is strong
+
+
+def test_pick_free_agent_skips_ageing_and_unaffordable_riders():
+    roster = _roster_of(ROSTER_SIZE - 1)
+    veteran = _rider("Veteran", 60, age=AI_AGEING_AGE)
+    pricey = _rider("Pricey", 80)
+    cheap = _rider("Cheap", 30)
+
+    picked = pick_free_agent(roster, [veteran, pricey, cheap], budget=signing_fee_for(cheap))
+
+    assert picked is cheap
+
+
+def test_a_full_roster_signs_nobody():
+    assert pick_free_agent(_roster_of(ROSTER_SIZE), [_rider("Free", 60)], budget=10**9) is None
+
+
+def _free_agent(name: str, *, unattached_since, level: int = 50, speciality=Rider.Speciality.ROULEUR) -> Rider:
+    return Rider.objects.create(
+        name=name, team=None, speciality=speciality, age=24, unattached_since=unattached_since,
+        climb=level, sprint=level, flat=level, resistance=level, positioning=level,
+    )
+
+
+def test_a_short_ai_team_signs_a_free_agent_and_pays_the_fee(db):
+    week = _week(3, _season())
+    ai = _ai_team("AI Alpha", "AIA")
+    _ai_roster(ai, ROSTER_SIZE - 2)
+    agent = _free_agent("Free", unattached_since=week.starts_at - timedelta(days=3))
+
+    signed, error = sign_ai_free_agents(week, at=now())
+
+    assert (signed, error) == (1, "")
+    agent.refresh_from_db()
+    assert agent.team == ai
+    fee = LedgerEntry.objects.get(team=ai, kind=LedgerEntry.Kind.TRANSFER_FEE)
+    assert fee.amount == -signing_fee_for(agent)
+    assert fee.description == "Signed Free"
+
+
+def test_one_signing_per_team_per_pass(db):
+    week = _week(3, _season())
+    ai = _ai_team("AI Alpha", "AIA")
+    _ai_roster(ai, ROSTER_SIZE - 3)
+    for i in range(3):
+        _free_agent(f"Free {i}", unattached_since=week.starts_at - timedelta(days=3))
+
+    signed, _ = sign_ai_free_agents(week, at=now())
+
+    assert signed == 1
+    assert ai.riders.count() == ROSTER_SIZE - 2
+
+
+def test_the_thinnest_team_signs_first(db):
+    week = _week(3, _season())
+    fuller = _ai_team("AI Fuller", "AIF")
+    _ai_roster(fuller, ROSTER_SIZE - 1)
+    thinner = _ai_team("AI Thinner", "AIT")
+    _ai_roster(thinner, ROSTER_SIZE - 4)
+    agent = _free_agent("Only One", unattached_since=week.starts_at - timedelta(days=3))
+
+    sign_ai_free_agents(week, at=now())
+
+    agent.refresh_from_db()
+    assert agent.team == thinner
+
+
+def test_a_rider_who_joined_the_pool_this_week_is_left_for_humans(db):
+    week = _week(3, _season())
+    ai = _ai_team("AI Alpha", "AIA")
+    _ai_roster(ai, ROSTER_SIZE - 2)
+    newcomer = _free_agent("Newcomer", unattached_since=week.starts_at)
+
+    signed, _ = sign_ai_free_agents(week, at=now())
+
+    assert signed == 0
+    newcomer.refresh_from_db()
+    assert newcomer.team is None
+
+
+def test_managed_and_full_teams_sign_nobody(db):
+    week = _week(3, _season())
+    human = _seller("HUM")
+    _ai_roster(human, 4)
+    full = _ai_team("AI Full", "AIF")
+    _ai_roster(full, ROSTER_SIZE)
+    _free_agent("Free", unattached_since=week.starts_at - timedelta(days=3))
+
+    signed, _ = sign_ai_free_agents(week, at=now())
+
+    assert signed == 0
+
+
+def test_a_broke_ai_team_signs_nobody(db):
+    week = _week(3, _season())
+    ai = _ai_team("AI Broke", "AIB", balance=0)
+    _ai_roster(ai, ROSTER_SIZE - 2)
+    _free_agent("Free", unattached_since=week.starts_at - timedelta(days=3))
+
+    signed, _ = sign_ai_free_agents(week, at=now())
+
+    assert signed == 0

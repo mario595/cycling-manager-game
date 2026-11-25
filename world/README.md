@@ -326,6 +326,12 @@ count of teams released lands on `TickRun.teams_released`.
      cutoff is computed fresh each pass, and a pool too small for a real
      bottom quintile expires nobody. A rider with null `unattached_since`
      (pre-migration free agents) is exempt, never treated as long-lost.
+     **Then, on weeks 2, 4, ..., 12**, `riders.free_agent_intake.
+     run_free_agent_intake(at=week.starts_at)` adds six generated riders to
+     the pool (#157; `riders/README.md`, *Free-agent intake*), counted on
+     `TickRun.free_agents_generated`. After expiry, so a batch is never
+     weighed against the pool it is only just joining; its eight weeks
+     count from this boundary.
      Ageing runs before growth, so a rider who turned 33 at this same
      boundary is evaluated against the new age immediately. None of this
      touches a race row, so it runs outside the claim transaction below, the
@@ -369,9 +375,13 @@ count of teams released lands on `TickRun.teams_released`.
    never sees an auction this same tick is about to close, and listing runs
    before bidding. Bidding runs on every tick because auction deadlines are
    wall-clock; listing is week-keyed and uses the **last** week crossed, so a
-   tick catching up three weeks lists once, not three times. Counts land on
-   `TickRun.ai_bids_placed` / `ai_listings_created`
-   (`world/migrations/0015`). See *The AI market (#30)*.
+   tick catching up three weeks lists once, not three times. On those same
+   ticks `world.ai_market.sign_ai_free_agents(last_crossed_week, at)` runs
+   **first** (#157), so a team a signing takes back above `AI_MIN_ROSTER`
+   can list in the same pass. Counts land on `TickRun.ai_bids_placed` /
+   `ai_listings_created` (`world/migrations/0015`) and
+   `ai_free_agents_signed` (`world/migrations/0024`). See *The AI market
+   (#30)*.
 5. **Execute** — outside any transaction: simulate each claimed race,
    record its result, then score it (`competitions.services.score_race`),
    then score its marker points (`competitions.services.score_sprints`, then
@@ -535,6 +545,21 @@ when all of these hold:
   goes to the lowest `buyer_rank`: thin rosters first, then the team with
   fewest riders of that speciality, then pk. Deterministic, and a tick
   re-run gives the same answer.
+
+**Signing free agents** (`sign_ai_free_agents`, #157) — on a tick that
+crosses a week, every unmanaged team below `ROSTER_SIZE` (12) signs at most
+one free agent, thinnest roster first, then pk. It is the AI's only way to
+replace a retired rider, and why free-agent intake exists: before it, a
+fresh world's pool was empty, AI rosters only shrank, and by season 4 on
+staging no AI team was above `AI_MIN_ROSTER`, so none could list (#157).
+`pick_free_agent` takes, from riders under `AI_AGEING_AGE` whose signing fee
+fits the auction **headroom** (half the balance, less pending wins), the one
+of the speciality the roster has fewest of, then the strongest by
+`strength`, then pk. Only riders unattached **before** the crossed week
+opened are considered, so a new intake or a fresh release is a human's to
+sign for a full week before the AI can take them. The fee goes through
+`sign_free_agent`'s `charge` callback as a `TRANSFER_FEE` entry, the same
+path a human's signing takes.
 
 **Selling** (`list_ai_riders`) — on a tick that crosses a week, an unmanaged
 team lists at most one rider, and only on the weeks

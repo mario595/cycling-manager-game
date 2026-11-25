@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
 
 import type { Me } from './api'
-import { App } from './App'
+import { App, SCREENS } from './App'
+import { NAV_ITEMS } from './navigation'
 import { useAuth } from './useAuth'
 
 vi.mock('./useAuth', () => ({
@@ -15,6 +16,7 @@ vi.mock('./useAuth', () => ({
 // not what individual screens render. The screens' own tests cover them.
 vi.mock('./screens/Dashboard', () => ({ Dashboard: () => <div data-testid="dashboard" /> }))
 vi.mock('./screens/Roster', () => ({ Roster: () => <div data-testid="roster" /> }))
+vi.mock('./screens/Training', () => ({ Training: () => <div data-testid="training" /> }))
 vi.mock('./screens/Staff', () => ({ Staff: () => <div data-testid="staff" /> }))
 vi.mock('./screens/Calendar', () => ({ Calendar: () => <div data-testid="calendar" /> }))
 vi.mock('./screens/Transfers', () => ({ Transfers: () => <div data-testid="transfers" /> }))
@@ -80,5 +82,21 @@ describe('App routing', () => {
     renderAppAt('/transfers')
 
     expect(screen.getByTestId('transfers')).toBeInTheDocument()
+  })
+
+  it('routes a logged-in manager to the Training screen (#155)', () => {
+    mockAuth(manager, false)
+
+    renderAppAt('/training')
+
+    expect(screen.getByTestId('training')).toBeInTheDocument()
+    expect(screen.queryByTestId('dashboard')).toBeNull()
+  })
+
+  // A screen in SCREENS with no nav item registers no route at all, and a nav
+  // item with no screen renders undefined. Either way a built screen silently
+  // drops off the router, which is how Training went missing (#155).
+  it('every built screen has a nav item, and every nav item a screen', () => {
+    expect(Object.keys(SCREENS).sort()).toEqual(NAV_ITEMS.map((item) => item.path).sort())
   })
 })

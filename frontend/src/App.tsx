@@ -26,7 +26,7 @@ import { AuthProvider } from './useAuth'
  * the bridge between the two: every nav item must resolve here, and an
  * unknown path falls through to the catch-all below.
  */
-const SCREENS: Record<string, React.ComponentType> = {
+export const SCREENS: Record<string, React.ComponentType> = {
   '/': Dashboard,
   '/roster': Roster,
   '/training': Training,

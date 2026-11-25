@@ -9,7 +9,8 @@ of hidden traits. Generation (`generation.py`), the display mapping
 management command, a team's **development squad** — which level it runs
 at and what that costs (`development_squad.py`) — and **youth intake**
 (`youth_intake.py`, #33) — the batches of young riders a squad periodically
-receives. Not race-day squads or results (`racing/`), not the race
+receives — and **free-agent intake** (`free_agent_intake.py`, #157), the
+riders that join the free-agent pool every other week. Not race-day squads or results (`racing/`), not the race
 simulation itself (`race_engine/`).
 
 ## Visible vs hidden
@@ -707,6 +708,28 @@ the *following* week's boundary, because intake in the tick runs **after**
 that week's growth, training and charges — otherwise a rider's baseline
 snapshot and their first week of growth would land at the same instant, and
 the attribute history would open with a jump that never happened.
+
+## Free-agent intake
+
+`free_agent_intake.py` (#157). Every other week (`FREE_AGENT_INTAKE_INTERVAL_WEEKS`
+= 2: weeks 2, 4, ..., 12), `run_free_agent_intake(at=week.starts_at)` adds
+`FREE_AGENT_INTAKE_SIZE` (6) generated riders to the free-agent pool: any
+speciality, quality rolled like any generated rider, aged
+`FREE_AGENT_AGE_RANGE` (19–28), `team` and `development_squad` both null,
+`unattached_since = at`, with a baseline attribute snapshot. That is 36 a
+season, about twice what retirement takes from a 16-team world.
+
+Before it, the pool filled only when a rider left a team, and a fresh world
+has nobody leaving. Retirement took about one rider a season from every team
+and nothing came back, so unmanaged teams, which only sign from the pool,
+shrank until they could no longer sell at auction (#157).
+
+`world/` decides when: it calls this from its week loop, after free-agent
+expiry, and the loop's `WeekTransition` is the exactly-once guarantee, as
+for youth intake. Nothing here removes riders: expiry
+(`transfers/README.md`, *Free agents*) already retires or deletes the weakest
+riders nobody signs within `EXPIRY_WEEKS`, so the pool turns over rather than
+growing without limit.
 
 ## Youth triage
 

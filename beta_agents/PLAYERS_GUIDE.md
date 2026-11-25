@@ -70,7 +70,10 @@ as the **training focus**. Without a trainer, your riders don't train.
 ## Transfers
 
 - **Free agents** are riders with no team. Signing one costs **60% of their
-  market value**, plus their salary from then on.
+  market value**, plus their salary from then on. Six new riders, aged 19 to
+  28, join the free agents every other week (weeks 2, 4, 6, 8, 10 and 12), so
+  check the pool regularly. Teams nobody manages sign free agents too, but
+  only riders who have been in the pool for at least a week.
 - **Releasing** a rider sends them to the free-agent pool and costs
   **severance of 30% of their market value**. Riders who came with a team you
   have just claimed can be released for free for a short while.

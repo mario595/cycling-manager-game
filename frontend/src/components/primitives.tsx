@@ -320,6 +320,29 @@ export function FinalSeasonTag() {
   )
 }
 
+/** The pill that marks one of the manager's own riders who is listed for
+ * auction (#152), on the roster card and the roster panel, so a listed rider
+ * is told apart without opening the Transfers screen. */
+export function OnAuctionTag() {
+  return (
+    <span
+      title="Listed for auction"
+      style={{
+        fontSize: 10.5,
+        letterSpacing: '1px',
+        fontFamily: font.mono,
+        color: color.accentInk,
+        background: color.accentWash,
+        borderRadius: 6,
+        padding: '2px 7px',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      ON AUCTION
+    </span>
+  )
+}
+
 /** The pill that marks an auction a team is running under insolvency (#27):
  * the seller's rider is gone whether or not anyone bids, which a bidder is
  * owed knowing — it explains an unusually keen reserve. */

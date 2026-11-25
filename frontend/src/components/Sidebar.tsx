@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom'
 
+import { DATE_LOCALE } from '../format'
 import { NAV_SECTIONS } from '../navigation'
 import { color, font } from '../theme'
 import { useAuth } from '../useAuth'
@@ -10,14 +11,14 @@ import { useClock } from '../useClock'
 // passed to formatGameDate instead of a hardcoded default.
 const DEFAULT_TIMEZONE = 'Europe/Paris'
 
-const gameDateFormatter = new Intl.DateTimeFormat(undefined, {
+const gameDateFormatter = new Intl.DateTimeFormat(DATE_LOCALE, {
   timeZone: DEFAULT_TIMEZONE,
   year: 'numeric',
   month: 'short',
   day: 'numeric',
 })
 
-const gameTimeFormatter = new Intl.DateTimeFormat(undefined, {
+const gameTimeFormatter = new Intl.DateTimeFormat(DATE_LOCALE, {
   timeZone: DEFAULT_TIMEZONE,
   hour: '2-digit',
   minute: '2-digit',

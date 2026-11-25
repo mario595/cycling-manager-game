@@ -1,12 +1,27 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
-import { forceSell, listForAuction, releaseRider, type Rider, type SalaryReview } from '../api'
-import { Bar, Button, Card, CardHeader, Chip, ChipLabel, FinalSeasonTag, LabelBar, PageBody, PageHeading, StatTile } from '../components/primitives'
+import { forceSell, listForAuction, releaseRider, type RosterAuction, type RosterRider, type SalaryReview } from '../api'
+import {
+  Bar,
+  Button,
+  Card,
+  CardHeader,
+  Chip,
+  ChipLabel,
+  FinalSeasonTag,
+  LabelBar,
+  OnAuctionTag,
+  PageBody,
+  PageHeading,
+  StatTile,
+} from '../components/primitives'
+import { formatCountdown } from '../countdown'
 import { formatMoney } from '../format'
-import { riderPath } from '../navigation'
+import { auctionPath, riderPath } from '../navigation'
 import { barColor, color, font } from '../theme'
 import { useAuth } from '../useAuth'
+import { useClock } from '../useClock'
 import { useRoster } from '../useRoster'
 import { useSolvency } from '../useSolvency'
 
@@ -55,7 +70,9 @@ export function Roster() {
   const { me, loading: authLoading } = useAuth()
   const hasTeam = me?.team != null
 
-const { riders, squadValue, salaryReview, loading, error, refresh } = useRoster()
+  const { riders, squadValue, salaryReview, loading, error, refresh } = useRoster()
+  // Game time, for a listed rider's countdown (#152): one poll per screen.
+  const { now: gameNow } = useClock()
   const { solvency, refresh: refreshSolvency } = useSolvency()
   const [filter, setFilter] = useState<'All' | string>('All')
   const [sort, setSort] = useState<SortKey>('name')
@@ -104,7 +121,7 @@ const { riders, squadValue, salaryReview, loading, error, refresh } = useRoster(
 
   const selected = picked !== null ? (riders.find((r) => r.id === picked) ?? null) : null
 
-  const handleRelease = async (rider: Rider) => {
+  const handleRelease = async (rider: RosterRider) => {
     setPending(true)
     setActionError(null)
     try {
@@ -118,7 +135,7 @@ const { riders, squadValue, salaryReview, loading, error, refresh } = useRoster(
     }
   }
 
-  const handleListForAuction = async (rider: Rider) => {
+  const handleListForAuction = async (rider: RosterRider) => {
     setPending(true)
     setActionError(null)
     try {
@@ -132,7 +149,7 @@ const { riders, squadValue, salaryReview, loading, error, refresh } = useRoster(
     }
   }
 
-  const handleForceSell = async (rider: Rider) => {
+  const handleForceSell = async (rider: RosterRider) => {
     setPending(true)
     setActionError(null)
     try {
@@ -228,6 +245,7 @@ const { riders, squadValue, salaryReview, loading, error, refresh } = useRoster(
             onClose={() => setPicked(null)}
             onRelease={() => handleRelease(selected)}
             onListForAuction={() => handleListForAuction(selected)}
+            now={gameNow}
             forceSale={solvency?.insolvent ? solvency : null}
             onForceSell={() => handleForceSell(selected)}
           />
@@ -242,7 +260,7 @@ function RiderCard({
   selected,
   onPick,
 }: {
-  rider: Rider
+  rider: RosterRider
   selected: boolean
   onPick: () => void
 }) {
@@ -301,7 +319,10 @@ function RiderCard({
             {rider.speciality.toUpperCase()} · {rider.age} yrs
           </div>
         </div>
-        {rider.final_season ? <FinalSeasonTag /> : null}
+        <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+          {rider.auction ? <OnAuctionTag /> : null}
+          {rider.final_season ? <FinalSeasonTag /> : null}
+        </span>
       </div>
 
       {/* rider[key] and rider.freshness are the 0-10 display scale (see
@@ -351,8 +372,9 @@ function RiderPanel({
   onListForAuction,
   forceSale,
   onForceSell,
+  now,
 }: {
-  rider: Rider
+  rider: RosterRider
   pending: boolean
   onClose: () => void
   onRelease: () => void
@@ -361,6 +383,8 @@ function RiderPanel({
    * button needs to know whether a sale would take the team below the floor. */
   forceSale: { roster_size: number; roster_floor: number } | null
   onForceSell: () => void
+  /** Game time, for the auction countdown; null until the clock loads. */
+  now: Date | null
 }) {
   const [confirmingForceSale, setConfirmingForceSale] = useState(false)
   const atFloor = forceSale !== null && forceSale.roster_size <= forceSale.roster_floor
@@ -400,6 +424,7 @@ function RiderPanel({
             }}
           >
             {rider.name}
+            {rider.auction ? <OnAuctionTag /> : null}
             {rider.final_season ? <FinalSeasonTag /> : null}
           </div>
           <div style={{ fontSize: 11, color: color.mutedStrong, fontFamily: font.mono }}>
@@ -554,21 +579,32 @@ function RiderPanel({
             Free while the claim cooldown shields them.
           </div>
         ) : null}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 10,
-          }}
-        >
-          <span style={{ fontSize: 12, color: color.mutedStrong, fontFamily: font.mono }}>
-            Auction this rider
-          </span>
-          <Button onClick={onListForAuction} disabled={pending} style={{ opacity: pending ? 0.6 : 1 }}>
-            List for auction
-          </Button>
-        </div>
+        {rider.auction ? (
+          <>
+            {/* A release moves the rider first, and the auction is then
+                cancelled with no money moving (transfers/README.md). */}
+            <div style={{ fontSize: 11.5, color: color.muted }}>
+              Releasing cancels the auction: no money changes hands.
+            </div>
+            <AuctionStatus auction={rider.auction} now={now} />
+          </>
+        ) : (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 10,
+            }}
+          >
+            <span style={{ fontSize: 12, color: color.mutedStrong, fontFamily: font.mono }}>
+              Auction this rider
+            </span>
+            <Button onClick={onListForAuction} disabled={pending} style={{ opacity: pending ? 0.6 : 1 }}>
+              List for auction
+            </Button>
+          </div>
+        )}
         {forceSale ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div
@@ -609,6 +645,44 @@ function RiderPanel({
           </div>
         ) : null}
       </div>
+    </div>
+  )
+}
+
+/** What a listed rider's auction stands at (#152), in place of the "List
+ * for auction" button the server would refuse while it is open. */
+function AuctionStatus({ auction, now }: { auction: RosterAuction; now: Date | null }) {
+  const bids = `${auction.bid_count} ${auction.bid_count === 1 ? 'bid' : 'bids'}`
+  return (
+    <div
+      aria-label="Auction status"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 6,
+        padding: '10px 12px',
+        borderRadius: 10,
+        background: color.accentWash,
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: color.accentInk }}>On auction</span>
+        <span style={{ fontSize: 12, fontFamily: font.mono, color: color.ink }}>
+          {formatMoney(auction.current_price)}
+        </span>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+        <span style={{ fontSize: 11, fontFamily: font.mono, color: color.mutedStrong }}>{bids}</span>
+        <span style={{ fontSize: 11, fontFamily: font.mono, color: color.mutedStrong }}>
+          {now ? `ends in ${formatCountdown(auction.deadline, now.getTime())}` : ''}
+        </span>
+      </div>
+      <Link
+        to={auctionPath(auction.id)}
+        style={{ fontSize: 11.5, color: color.accentInk, fontWeight: 600, textDecoration: 'none' }}
+      >
+        View on Transfers →
+      </Link>
     </div>
   )
 }

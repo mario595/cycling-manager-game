@@ -8,8 +8,18 @@ from riders.models import Rider
 from riders.services import retire_riders
 from racing.models import Race, RaceResult
 from schedule.models import SEASON_WEEKS, Season, Week
+import world.services as world_services
 from world.clocks import MockClock
 from world.services import get_clock, now, tick
+
+
+@pytest.fixture(autouse=True)
+def _no_free_agent_intake(monkeypatch):
+    """These tests build an exact pool to put a known rider in its bottom
+    quintile. Free-agent intake (#157) adds riders to the pool every other
+    week, which would move that cutoff, so it is switched off here; its own
+    tests are in test_free_agent_intake.py."""
+    monkeypatch.setattr(world_services, "run_free_agent_intake", lambda **kwargs: [])
 
 
 def make_season_with_weeks(number: int, starts_at) -> Season:
