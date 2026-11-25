@@ -117,8 +117,8 @@ inverse, and deliberately so — it clears `Team.manager` and
 sponsorship, and not the development squad. A released team must be
 indistinguishable from a team that was never managed, because #44's default
 squad selection has to pick it up exactly as it would any other unmanaged
-team. All of the *resetting* — fresh roster, balance, fanbase, voided
-sponsorship, and closing any development squad — happens on the *next*
+team. All of the *resetting* — topping up a short roster, balance, fanbase,
+voided sponsorship, and closing any development squad — happens on the *next*
 claim, the same as it always has; release does none of it. The trainer,
 training focus and sponsor the manager left behind also stay, and the AI
 (`world/README.md`, *The AI management (#45)*) carries on from them: at the

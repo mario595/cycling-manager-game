@@ -616,11 +616,15 @@ A claim used to hand out a fresh, day-one roster, and by season 3 that ranked
 about 14th of 16 by squad strength. Since #156 a claimant keeps the team's
 riders and is given the free team nearest the middle of the field
 (`teams/README.md`, *Claiming a team*). The measurement now claims one team
-just before season 2 and prints its season next to the unmanaged field. Three
-runs gave −$61,116, −$24,580 and −$4,734 (5th to 8th of 16 by strength). The
-last of these ran with the course-aware squad pick for the claimed team as
-well, which suggests the course-blind default pick for a manager who does not
-choose costs part of the gap.
+just before season 2 and prints its season next to the unmanaged field. Two
+runs of the shipped code claimed the 8th and 9th of 16 by squad strength, and
+their season-2 nets were −$61,116 and −$24,580 (ahead of 3 and 5 of 15
+unmanaged teams).
+
+One experiment, not shipped, gave the claimed team the AI's course-aware squad
+pick instead of the course-blind default that a manager who does not choose
+gets. That team (8th of 16) made −$4,734, ahead of 7 of 15. This suggests the
+default pick costs a passive manager part of the gap.
 
 **Wages outgrow income in a mature world.** A four-season AI-only run on the
 world calendar (`seasons/world.json`) measured average wages of $181k, $202k,

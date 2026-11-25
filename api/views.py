@@ -592,7 +592,7 @@ class SquadView(APIView):
 
 class ClaimTeamView(APIView):
     """Assign the caller an unmanaged team, renamed and recoded to their
-    choosing, with a fresh roster. Falls back to the project default,
+    choosing, keeping its riders (topped up to twelve if short, #156). Falls back to the project default,
     IsAuthenticated — do not re-add AllowAny.
 
     The claim, the withdrawal of the team's standing bids and the cancellation

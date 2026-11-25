@@ -54,7 +54,7 @@ def race(db) -> Race:
     )
 
 
-def test_claim_assigns_lowest_pk_unmanaged_team(db, user):
+def test_claim_breaks_a_strength_tie_by_lowest_pk(db, user):
     first = Team.objects.create(name="Team Alpha", code="ALP")
     Team.objects.create(name="Team Beta", code="BET")
 

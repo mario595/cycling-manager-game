@@ -7,7 +7,7 @@ from django.db import transaction
 
 from riders.development_squad import close_squad
 from riders.generation import generate_roster
-from riders.models import Rider
+from riders.models import ENGINE_ATTRIBUTES, Rider
 from riders.pricing import strength
 from riders.services import mark_team_change, record_initial_snapshots
 
@@ -64,7 +64,7 @@ def _claim_candidates() -> list[int]:
         return []
     by_team: dict[int, list[Rider]] = defaultdict(list)
     for rider in Rider.objects.filter(team__isnull=False).only(
-        "team_id", "speciality", "climb", "sprint", "flat", "resistance", "positioning",
+        "team_id", "speciality", *ENGINE_ATTRIBUTES,
     ):
         by_team[rider.team_id].append(rider)
     scores = {pk: squad_strength(by_team[pk]) for pk, _ in teams}

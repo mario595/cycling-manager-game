@@ -43,7 +43,7 @@ export function ClaimTeam() {
       <PageHeading
         eyebrow="NEW MANAGER"
         title="Claim a team"
-        subtitle="Pick a name and a code for the team you're taking over."
+        subtitle="Pick a name and a code for the team you're taking over. Its riders, trainer and place in the standings come with it, and a roster under twelve is topped up with new riders."
         titleSize={29}
       />
 
