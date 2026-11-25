@@ -1,6 +1,6 @@
 # Beta testers that probe, report and visit on time
 
-**Status:** proposed
+**Status:** implemented
 **Issues:** #159, #160
 **Domain(s):** `beta_agents/`, `deploy/` (the staging machine's schedule)
 **One-liner:** the five LLM beta testers visit staging every eight hours as promised, notice what changed since their last visit, dig into one part of the game each time, and report what they can't explain.

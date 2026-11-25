@@ -1,6 +1,6 @@
 # Beta testers that probe, report and visit on time: implementation plan
 
-**Spec:** `specs/beta-tester-reliability.md` · **Issues:** #159, #160 · **Status:** proposed
+**Spec:** `specs/archive/beta-tester-reliability.md` · **Issues:** #159, #160 · **Status:** implemented
 **Apps touched:** `beta_agents/` (not a Django app), `deploy/crontab`, `.github/workflows/beta-agents.yml`
 
 ## Context you need
