@@ -5,6 +5,7 @@ import { placeBid, type AuctionListing } from '../api'
 import { AuctionCard } from '../components/AuctionCard'
 import { Card, CardHeader, PageBody, PageHeading } from '../components/primitives'
 import { SolvencyBanner } from '../components/SolvencyBanner'
+import { SponsorBanner } from '../components/SponsorBanner'
 import { racePath } from '../navigation'
 import { nextRace } from '../nextRace'
 import { seasonLabel } from '../seasonLabel'
@@ -32,6 +33,8 @@ export function Dashboard() {
       />
 
       <SolvencyBanner />
+
+      <SponsorBanner />
 
       <StandingsSection />
 

@@ -22,7 +22,7 @@ const mockSignOffer = vi.mocked(signOffer)
 const manager: Me = {
   authenticated: true,
   display_name: 'Mario',
-  team: { id: 1, name: 'Squad Team', code: 'SQD' },
+  team: { id: 1, name: 'Squad Team', code: 'SQD', sponsor_missing: false, smallest_offer_weekly: null },
   lost_team: null,
 }
 
@@ -62,6 +62,7 @@ beforeEach(() => {
     logout: vi.fn(),
     claim: vi.fn(),
     acknowledgeLostTeam: vi.fn(),
+    refresh: vi.fn(),
   })
   mockUseSponsors.mockReturnValue({
     sponsors: { contract: null, offers }, loading: false, error: false, refresh: vi.fn(),
@@ -107,6 +108,8 @@ describe('Sponsors', () => {
     await screen.findByText('Velocore')  // wait for the click's microtask to settle
     expect(mockSignOffer).toHaveBeenCalledWith(1)
     expect(refresh).toHaveBeenCalled()
+    // `me` too, so the dashboard banner and the sidebar dot go at once (#161).
+    expect(mockUseAuth.mock.results[0].value.refresh).toHaveBeenCalled()
   })
 
   it('shows the signed contract instead of the pool', () => {

@@ -8,7 +8,7 @@ import { useAuth } from '../useAuth'
 import { useSponsors } from '../useSponsors'
 
 export function Sponsors() {
-  const { me, loading: authLoading } = useAuth()
+  const { me, loading: authLoading, refresh: refreshMe } = useAuth()
   const hasTeam = me?.team != null
 
   const { sponsors, loading, error, refresh } = useSponsors()
@@ -45,6 +45,8 @@ export function Sponsors() {
     try {
       await signOffer(offerId)
       refresh()
+      // Clears the dashboard banner and the sidebar dot at once (#161).
+      refreshMe()
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Could not sign that offer.')
     } finally {

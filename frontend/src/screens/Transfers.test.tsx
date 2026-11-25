@@ -28,7 +28,7 @@ const mockPlaceBid = vi.mocked(placeBid)
 const manager: Me = {
   authenticated: true,
   display_name: 'Mario',
-  team: { id: 1, name: 'Squad Team', code: 'SQD' },
+  team: { id: 1, name: 'Squad Team', code: 'SQD', sponsor_missing: false, smallest_offer_weekly: null },
   lost_team: null,
 }
 
@@ -157,6 +157,7 @@ beforeEach(() => {
     logout: vi.fn(),
     claim: vi.fn(),
     acknowledgeLostTeam: vi.fn(),
+    refresh: vi.fn(),
   })
   mockUseFreeAgents.mockReturnValue({ pool, loading: false, error: false, refresh: vi.fn() })
   mockUseAuctions.mockReturnValue({ market: auctionMarket, loading: false, error: false, refresh: vi.fn() })

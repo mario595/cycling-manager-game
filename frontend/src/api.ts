@@ -138,6 +138,13 @@ export interface MeTeam {
   id: number
   name: string
   code: string
+  /**
+   * True while a season is running and the team has not signed a sponsor
+   * for it (#161). Drives the dashboard's SponsorBanner and the sidebar dot.
+   */
+  sponsor_missing: boolean
+  /** The smallest waiting offer's weekly base while `sponsor_missing`, else null. */
+  smallest_offer_weekly: number | null
 }
 
 export interface LostTeam {
