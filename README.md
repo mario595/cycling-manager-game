@@ -15,11 +15,6 @@ like a TV broadcast.
 |---|---|
 | ![A stage's profile, its categorised climbs and points, and the link to watch the race](docs/screenshots/race-result.png) | ![Season 4's calendar: one-day classics and a three-stage tour, week by week](docs/screenshots/calendar.png) |
 
-> **Status: in beta.** A player can register, claim a team, pick a squad each
-> week, train riders, buy and sell on the transfer market, balance the books, and
-> follow the races and the standings on a calendar. A staging world runs at
-> <https://velodra.fly.dev> on an accelerated clock, and it can be wiped at any
-> time.
 
 ## Why I built it
 
