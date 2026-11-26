@@ -9,6 +9,12 @@ second by second — drafting, fatigue, terrain, wind and team tactics all
 resolved per rider, per tick — and a **race player** that visualises the result
 like a TV broadcast.
 
+![Race replay: the stage profile with riders on the final climb, playback controls and the wind](docs/screenshots/race-replay.png)
+
+| Race result | Season calendar |
+|---|---|
+| ![A stage's profile, its categorised climbs and points, and the link to watch the race](docs/screenshots/race-result.png) | ![Season 4's calendar: one-day classics and a three-stage tour, week by week](docs/screenshots/calendar.png) |
+
 > **Status: in beta.** A player can register, claim a team, pick a squad each
 > week, train riders, buy and sell on the transfer market, balance the books, and
 > follow the races and the standings on a calendar. A staging world runs at
