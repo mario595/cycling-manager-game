@@ -25,11 +25,11 @@ You are given a ticket — `/code-review #6`, a URL, or "review the game clock".
 
 ```bash
 # the ticket
-gh issue view <N> --repo mario595/cycling-manager \
+gh issue view <N> --repo mario595/cycling-manager-game \
   --json number,title,state,body,labels,url
 
 # its PR
-gh pr list --repo mario595/cycling-manager --state all --search "#<N>" \
+gh pr list --repo mario595/cycling-manager-game --state all --search "#<N>" \
   --json number,title,headRefName,url,isDraft,state
 ```
 
@@ -64,7 +64,7 @@ Read the evidence instead:
   result, and it ran on a clean machine rather than someone's laptop:
 
   ```bash
-  gh pr checks <n> --repo mario595/cycling-manager
+  gh pr checks <n> --repo mario595/cycling-manager-game
   ```
 
   **A failing or pending check is blocking.** Do not review around a red CI run
@@ -104,7 +104,7 @@ doubt to settle, not as a matter of routine.
 ## Step 3 — Read the diff
 
 ```bash
-gh pr diff <n> --repo mario595/cycling-manager
+gh pr diff <n> --repo mario595/cycling-manager-game
 ```
 
 Read every changed file. For anything you do not understand, open the
@@ -360,10 +360,10 @@ Then post it:
 
 ```bash
 # no blocking findings
-gh pr review <n> --repo mario595/cycling-manager --approve --body-file <file>
+gh pr review <n> --repo mario595/cycling-manager-game --approve --body-file <file>
 
 # blocking findings
-gh pr review <n> --repo mario595/cycling-manager --request-changes --body-file <file>
+gh pr review <n> --repo mario595/cycling-manager-game --request-changes --body-file <file>
 ```
 
 If `gh pr review` hits the Projects-classic error, use the REST fallback in
@@ -377,7 +377,7 @@ own PR; there is no flag or fallback that gets around this, because it is not a
 `gh` bug, it is the platform rule. Post the same body as a plain comment instead:
 
 ```bash
-gh pr comment <n> --repo mario595/cycling-manager --body-file <file>
+gh pr comment <n> --repo mario595/cycling-manager-game --body-file <file>
 ```
 
 The verdict in the comment body (`Approved` / `Changes requested`) is still

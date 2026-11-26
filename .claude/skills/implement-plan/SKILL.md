@@ -333,7 +333,7 @@ are the ones that get broken:
    ticket open:
 
    ```bash
-   gh pr view <n> --repo mario595/cycling-manager --json closingIssuesReferences
+   gh pr view <n> --repo mario595/cycling-manager-game --json closingIssuesReferences
    ```
 
    That must list issue `<N>`. If it comes back empty, the keyword did not take
@@ -346,7 +346,7 @@ are the ones that get broken:
    must report `MERGEABLE` (not `CONFLICTING`), and `mergeStateStatus` `CLEAN`:
 
    ```bash
-   gh pr view <n> --repo mario595/cycling-manager --json mergeable,mergeStateStatus
+   gh pr view <n> --repo mario595/cycling-manager-game --json mergeable,mergeStateStatus
    ```
 
    If it comes back `CONFLICTING`, merge the new master in, re-run the suite and

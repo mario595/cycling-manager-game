@@ -85,7 +85,7 @@ def test_triage_saves_the_outcome_link_and_note_but_not_the_text(staff_client, r
         f"{CHANGELIST}{report.pk}/change/",
         {
             "status": "triaged",
-            "github_issue_url": "https://github.com/mario595/cycling-manager/issues/999",
+            "github_issue_url": "https://github.com/mario595/cycling-manager-game/issues/999",
             "triage_note": "Same as the deficit reports.",
             "text": "rewritten by staff",
         },

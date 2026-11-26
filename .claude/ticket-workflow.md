@@ -14,7 +14,7 @@ point here so there is one place to fix when the board changes.
 All four work in **the ticket's worktree**, described below. `/product-spec`
 creates it; the rest reuse it.
 
-Repo: `mario595/cycling-manager`.
+Repo: `mario595/cycling-manager-game`.
 
 ---
 
@@ -105,11 +105,11 @@ it fail, and then improvise** — use these, which never request that field:
 
 ```bash
 # the issue itself
-gh issue view <N> --repo mario595/cycling-manager \
+gh issue view <N> --repo mario595/cycling-manager-game \
   --json number,title,state,body,labels,url
 
 # its comments
-gh issue view <N> --repo mario595/cycling-manager --json comments
+gh issue view <N> --repo mario595/cycling-manager-game --json comments
 ```
 
 Naming the fields is what avoids the error: `projectCards` is only fetched when
@@ -118,8 +118,8 @@ you ask for it by name.
 If those fail too, use the REST API, which does not go through GraphQL at all:
 
 ```bash
-gh api repos/mario595/cycling-manager/issues/<N>
-gh api repos/mario595/cycling-manager/issues/<N>/comments
+gh api repos/mario595/cycling-manager-game/issues/<N>
+gh api repos/mario595/cycling-manager-game/issues/<N>/comments
 ```
 
 The root cause is an out-of-date `gh`, and upgrading it fixes this properly. Do
@@ -169,7 +169,7 @@ source of truth; this comment is a snapshot for convenience.
 ```
 
 ```bash
-gh issue comment <N> --repo mario595/cycling-manager --body-file <scratch-file>
+gh issue comment <N> --repo mario595/cycling-manager-game --body-file <scratch-file>
 ```
 
 Before posting, check whether the file is committed and pushed. If it is not, the
@@ -184,7 +184,7 @@ a worktree made by the `EnterWorktree` tool names its branch itself.
 
 ```bash
 git push -u origin "$(git branch --show-current)"
-gh pr create --repo mario595/cycling-manager \
+gh pr create --repo mario595/cycling-manager-game \
   --base master \
   --title "<Feature>" \
   --body-file <scratch-file>
@@ -224,7 +224,7 @@ last step, which closes it.
 **Verify the link after creating the PR.** A wrong issue number fails silently:
 
 ```bash
-gh pr view <n> --repo mario595/cycling-manager --json closingIssuesReferences
+gh pr view <n> --repo mario595/cycling-manager-game --json closingIssuesReferences
 ```
 
 It must list issue `<N>`. Empty means the keyword did not take — repair the body
@@ -244,7 +244,7 @@ when it approves; the review body format is in that skill.
 error described above. If they do, use the REST API instead — it does not go through GraphQL:
 
 ```bash
-gh api repos/mario595/cycling-manager/pulls \
+gh api repos/mario595/cycling-manager-game/pulls \
   -f title="<Feature>" -f head="<branch>" -f base=master \
   -f body="$(cat <scratch-file>)"
 ```

@@ -28,8 +28,8 @@ The tick also records season and week boundaries as they're crossed, via
 transition is and why it's a row rather than an action — and, off the back
 of those, advances every rider's age at a season close and applies each
 week's growth plus the team's weekly training
-([#58](https://github.com/mario595/cycling-manager/issues/58),
-[#36](https://github.com/mario595/cycling-manager/issues/36); see
+([#58](https://github.com/mario595/cycling-manager-game/issues/58),
+[#36](https://github.com/mario595/cycling-manager-game/issues/36); see
 `riders/README.md`, *The age curve* and *Weekly training*).
 
 ## The clock discipline rule
@@ -113,7 +113,7 @@ reads `now()` once, then finds and processes whatever is due, in six steps:
    `riders.services.advance_ages()` → `riders.services.reprice_all()` →
    `economy.services.write_salary_reviews(transition.season, changes)`.
 
-   **Retiring first** ([#42](https://github.com/mario595/cycling-manager/issues/42))
+   **Retiring first** ([#42](https://github.com/mario595/cycling-manager-game/issues/42))
    is what guarantees a full season's warning: the reverse order would age a
    rider into their retirement window and retire them in the same breath, and
    no season would ever have flagged them. It also keeps retirees out of the
@@ -162,12 +162,12 @@ reads `now()` once, then finds and processes whatever is due, in six steps:
    for each rider named in that same return value
    (`riders.services.record_week_snapshots`, reusing the records
    `apply_weekly_growth` already returns rather than re-reading the table —
-   see [#95](https://github.com/mario595/cycling-manager/issues/95) and
+   see [#95](https://github.com/mario595/cycling-manager-game/issues/95) and
    `riders/README.md`, *Attribute history*), and then settles freshness:
    `riders.services.apply_weekly_recovery(exclude_ids=started)` — where
    `started = racing.services.riders_who_started(raced_week)` — restores
    one week's recovery to every rider who did **not start** a race in the
-   week being settled ([#59](https://github.com/mario595/cycling-manager/issues/59);
+   week being settled ([#59](https://github.com/mario595/cycling-manager-game/issues/59);
    see `riders/README.md`, *Freshness*). `started` is a superset of `raced`
    (the training reader, `riders_who_raced`, above): a rider cut by the race
    engine's time limit (the broom wagon) started but didn't finish, so they
@@ -176,11 +176,11 @@ reads `now()` once, then finds and processes whatever is due, in six steps:
    Recovery follows the same per-week
    shape as training — one pass per `CLOSED` transition, never collapsed for
    a late tick — because whether a rider raced differs week to week.
-   [#58](https://github.com/mario595/cycling-manager/issues/58)'s single
+   [#58](https://github.com/mario595/cycling-manager-game/issues/58)'s single
    `apply_weekly_growth(weeks=len(weeks))` call is gone, deliberately:
    training cannot collapse to a count, because each week has its own focus
    and its own races — a tick that runs three weeks late must apply three
-   *different* training weeks ([#36](https://github.com/mario595/cycling-manager/issues/36),
+   *different* training weeks ([#36](https://github.com/mario595/cycling-manager-game/issues/36),
    the plan's Design decision 3; see `staff/README.md`, *Weekly training*).
    The same per-transition loop charges every team its wages for the week
    just closed — `economy.services.charge_weekly_wages(week)`, one combined
@@ -289,7 +289,7 @@ reads `now()` once, then finds and processes whatever is due, in six steps:
    manager who has gone `INACTIVITY_WEEKS` (ten) in-season game-weeks
    without logging in, via `teams.services.release_team(team,
    reason=ManagerialSpell.Reason.INACTIVITY, at=week.starts_at)`
-   ([#63](https://github.com/mario595/cycling-manager/issues/63); see
+   ([#63](https://github.com/mario595/cycling-manager-game/issues/63); see
    `teams/README.md`, *Releasing a team*). "Ten weeks" is counted by
    `schedule.services.weeks_opened_between`, which counts `schedule.Week`
    rows

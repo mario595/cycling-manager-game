@@ -125,7 +125,7 @@ nothing else on the account.
 
 ```bash
 fly tokens create deploy --app velodra --name github-actions --expiry 8760h \
-    | gh secret set FLY_API_TOKEN --repo mario595/cycling-manager
+    | gh secret set FLY_API_TOKEN --repo mario595/cycling-manager-game
 ```
 
 (Or paste the token into GitHub, *Settings* → *Secrets and variables* →

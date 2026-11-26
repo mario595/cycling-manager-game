@@ -29,9 +29,9 @@ Read it with these two commands, and **not** with `gh issue view <N> --comments`
 which fails on this repo with a Projects-classic GraphQL error:
 
 ```bash
-gh issue view <N> --repo mario595/cycling-manager \
+gh issue view <N> --repo mario595/cycling-manager-game \
   --json number,title,state,body,labels,url
-gh issue view <N> --repo mario595/cycling-manager --json comments
+gh issue view <N> --repo mario595/cycling-manager-game --json comments
 ```
 
 **Work from `specs/<slug>.md` in the repo** — that is the authoritative copy; the

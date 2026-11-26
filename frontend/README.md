@@ -264,7 +264,7 @@ npm --prefix frontend run build && .venv/bin/python manage.py runserver
 - **A rider's status label is a `primitives.tsx` tag, not per-screen
   markup.** `FinalSeasonTag` renders `LAST SEASON` from the API's
   `final_season` boolean
-  ([#42](https://github.com/mario595/cycling-manager/issues/42)) and is used
+  ([#42](https://github.com/mario595/cycling-manager-game/issues/42)) and is used
   in three places, all the ones where a manager decides whether to keep
   paying a rider: the roster **card** and the roster **panel** (so it stays
   visible after the rider is opened, where the release button lives), and
@@ -355,7 +355,7 @@ Each candidate row additionally shows a `FIT` meter alongside the five
 attribute bars — the rider's freshness on the same 0-10 display scale,
 clipped apart from the engine attributes so it reads as a status marker
 rather than a sixth skill
-([#59](https://github.com/mario595/cycling-manager/issues/59); see
+([#59](https://github.com/mario595/cycling-manager-game/issues/59); see
 `api/README.md`). `Roster.tsx`'s cards draw the same readout — attributes
 and freshness through the single `LabelBar` primitive, each with its printed
 0-10 value — so a rider reads identically on both screens.

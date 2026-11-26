@@ -97,7 +97,7 @@ spells*), because `accounts/` imports nothing.
 is **not** `django.contrib.auth`'s `last_login`. `last_login` is stamped
 with real, wall-clock time; `last_seen_at` is stamped with **game** time —
 the same clock `teams.Team.managed_since` and every `schedule.Week` boundary
-use ([#63](https://github.com/mario595/cycling-manager/issues/63)). Under
+use ([#63](https://github.com/mario595/cycling-manager-game/issues/63)). Under
 production's `RealClock` the two coincide and the distinction is invisible;
 under `MockClock` (dev and the test suite) they can be arbitrarily far
 apart, because `MockClock.now()` returns whatever a developer last set it
@@ -117,7 +117,7 @@ would put real time in a game-time column.
 ## API tokens
 
 For clients that are not a browser, which today means the LLM beta managers
-([#130](https://github.com/mario595/cycling-manager/issues/130), used by #132).
+([#130](https://github.com/mario595/cycling-manager-game/issues/130), used by #132).
 A token lets an account play through exactly the same endpoints and rules as
 the SPA, with no session and no CSRF dance.
 

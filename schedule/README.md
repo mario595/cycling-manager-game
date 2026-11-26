@@ -74,7 +74,7 @@ from full.
 exactly-once record that a `Week` has opened, written by
 `process_week_transitions()` and read by `world.services.tick()` to drive
 weekly rider growth and decline
-([#58](https://github.com/mario595/cycling-manager/issues/58)). A week has
+([#58](https://github.com/mario595/cycling-manager-game/issues/58)). A week has
 only one kind of boundary — it opens; nothing closes it — so the unique
 constraint is on `week` alone, not `(week, kind)` the way
 `SeasonTransition` needs for two kinds.
