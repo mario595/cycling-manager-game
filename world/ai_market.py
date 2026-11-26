@@ -51,6 +51,12 @@ AI_CUSHION_FRACTION = 0.5
 #: Listing is staggered: roughly a quarter of the unmanaged teams list each
 #: week, so the market gets a trickle of AI sellers rather than a flood.
 AI_LISTING_EVERY_WEEKS = 4
+#: Inside its turn week, each team lists on its own day (#172), so AI
+#: listings open across the whole week rather than all on its first day.
+#: Teams sharing a turn week have pks 4 apart, so consecutive `pk // 4`; a
+#: stride coprime with 7 walks them through days 0, 3, 6, 2, 5, 1, 4.
+AI_LISTING_DAY_STRIDE = 3
+DAYS_PER_WEEK = 7
 #: Stops the same unsold veteran reappearing every month.
 AI_RELIST_COOLDOWN = timedelta(weeks=4)
 
@@ -104,20 +110,33 @@ def pick_listing(roster: list[Rider], candidates: list[Rider]) -> Rider | None:
     A roster above `ROSTER_SIZE` is in surplus and sells its weakest
     candidate. Otherwise it sells its oldest ageing rider who is not one of
     the `AI_NEED_RANK` strongest of their speciality — the veterans worth
-    keeping are exactly the ones not for sale.
+    keeping are exactly the ones not for sale. Failing that, it sells its
+    weakest **depth** rider (#172): one outside the `AI_NEED_RANK` strongest
+    of a speciality, which needs at least three of it on the roster. The
+    buying side never wants such a rider, so the AI never sells what it
+    would buy back.
     """
     if not candidates:
         return None
     if len(roster) > ROSTER_SIZE:
         return min(candidates, key=lambda r: (strength(r), -r.age, r.pk))
-    qualifying = [
-        rider
-        for rider in candidates
-        if rider.age >= AI_AGEING_AGE and not _is_top_of_speciality(roster, rider)
-    ]
-    if not qualifying:
-        return None
-    return min(qualifying, key=lambda r: (-r.age, strength(r), r.pk))
+    depth = [rider for rider in candidates if not _is_top_of_speciality(roster, rider)]
+    ageing = [rider for rider in depth if rider.age >= AI_AGEING_AGE]
+    if ageing:
+        return min(ageing, key=lambda r: (-r.age, strength(r), r.pk))
+    if depth:
+        return min(depth, key=lambda r: (strength(r), -r.age, r.pk))
+    return None
+
+
+def listing_day(team_pk: int) -> int:
+    """The day of its turn week, 0 to 6, on which this team lists (#172)."""
+    return (team_pk // AI_LISTING_EVERY_WEEKS * AI_LISTING_DAY_STRIDE) % DAYS_PER_WEEK
+
+
+def listing_moment(team_pk: int, week):
+    """When, in game time, this team may list in `week`."""
+    return week.starts_at + timedelta(days=listing_day(team_pk))
 
 
 def pick_free_agent(
@@ -251,8 +270,13 @@ def list_ai_riders(week, at) -> tuple[int, str]:
     unmanaged team lists at most one rider, only on the weeks the stagger
     picks for it, and never while it already has an open listing.
 
-    `week` is the last week the tick crossed, so a tick catching up three
-    weeks lists once rather than three times. Returns (listings, error text).
+    Runs on every tick (#172) with `week`, the week the clock is in. Inside
+    its turn week a team waits for its own `listing_moment`, then lists once:
+    an auction it opened since that moment, in any status, is the record that
+    it already has. A team with nothing to sell at its moment is retried on
+    later ticks of the same week. A tick that jumps past the moment lists
+    once; one that jumps past the whole week lists nothing for that team.
+    Returns (listings, error text).
     """
     listed = 0
     error = ""
@@ -262,13 +286,17 @@ def list_ai_riders(week, at) -> tuple[int, str]:
     for team in Team.objects.filter(manager__isnull=True).order_by("pk"):
         if (week.number + team.pk) % AI_LISTING_EVERY_WEEKS:
             continue
+        moment = listing_moment(team.pk, week)
+        if at < moment:
+            continue
         try:
+            if Auction.objects.filter(seller_team=team, listed_at__gte=moment).exists():
+                continue
             roster = list(team.riders.all())
             if len(roster) - 1 < AI_MIN_ROSTER:
                 continue
-            # One open listing per team at a time, so a second pass inside the
-            # same window cannot put a second rider up for sale. Reached only
-            # if a listing outlives its auction, since the stagger is four
+            # One open listing per team at a time. Reached only if a listing
+            # from the previous turn is still open, since the stagger is four
             # weeks and an auction resolves in three days.
             if Auction.objects.filter(
                 seller_team=team, status=Auction.Status.OPEN,

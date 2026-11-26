@@ -29,7 +29,7 @@ from teams.services import release_team
 from transfers.models import Auction
 from transfers.services import list_for_auction
 from world.ai_management import focus_for_week
-from world.ai_market import AI_LISTING_EVERY_WEEKS
+from world.ai_market import AI_LISTING_EVERY_WEEKS, listing_moment
 from world.clocks import MockClock
 from world.services import get_clock, now, tick
 
@@ -1092,13 +1092,44 @@ def test_tick_lists_ai_riders_once_when_catching_up_several_weeks(db):
         )
     rider_for("Surplus", ai, level=30)
     season = make_season_with_weeks(1, now() - timedelta(weeks=2))
-    clock.set(season.weeks.get(number=3).starts_at + timedelta(hours=1))
+    week_three = season.weeks.get(number=3)
+    clock.set(listing_moment(ai.pk, week_three) + timedelta(hours=1))
 
     run = tick()
 
     assert run.weeks_processed == 3
     assert run.ai_listings_created == 1
     assert Auction.objects.get(seller_team=ai, status=Auction.Status.OPEN).rider.name == "Surplus"
+
+
+def test_tick_lists_ai_riders_on_their_own_day_without_a_week_transition(db):
+    # #172: listing is keyed to each team's day of its turn week, so a tick
+    # that crosses no week still lists once that day arrives, and only once.
+    clock: MockClock = get_clock()
+    season = make_season_with_weeks(1, now() - timedelta(days=1))
+    week_one = season.weeks.get(number=1)
+    ai = None
+    filler = 0
+    while ai is None:
+        team = Team.objects.create(name=f"AI {filler}", code=f"A{filler:02d}")
+        filler += 1
+        if (1 + team.pk) % AI_LISTING_EVERY_WEEKS == 0 and listing_moment(team.pk, week_one) > now():
+            ai = team
+    for i in range(12):
+        Rider.objects.create(
+            name=f"{ai.code} Domestique {i}", team=ai, age=27,
+            climb=40, sprint=40, flat=40, resistance=40, positioning=40,
+        )
+    rider_for("Surplus", ai, level=30)
+    tick()  # settles week 1, before this team's day
+    assert not Auction.objects.filter(seller_team=ai).exists()
+
+    clock.set(listing_moment(ai.pk, week_one) + timedelta(minutes=30))
+    run = tick()
+
+    assert run.weeks_processed == 0
+    assert run.ai_listings_created == 1
+    assert tick().ai_listings_created == 0
 
 
 def test_tick_resolves_before_ai_bids(db):
