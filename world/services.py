@@ -859,10 +859,11 @@ def tick() -> TickRun:
     auctions_sold, auctions_unsold, auction_error = _resolve_expired_auctions(at)
 
     # The AI market, after resolution, so the AI never sees an auction this
-    # same tick is about to close (Design decision 12). Listing first, and
-    # only on a tick that crossed a week, using the LAST week crossed — a
-    # tick catching up three weeks lists once, not three times. Bidding runs
-    # every tick, because auction deadlines are wall-clock, not week-bound.
+    # same tick is about to close (Design decision 12). Free-agent signing
+    # only on a tick that crossed a week, using the LAST week crossed; then
+    # listing and bidding on every tick, listing first. Listing is keyed to
+    # each team's own day of its turn week (#172), bidding to auction
+    # deadlines.
     #
     # The guard is wider than the per-auction and per-team ones inside
     # ai_market: building the buyer table reads every unmanaged team's ledger,
@@ -877,7 +878,11 @@ def tick() -> TickRun:
             # Signing before listing: a team a signing brings back above
             # AI_MIN_ROSTER can list this same pass (#157).
             ai_free_agents_signed, ai_market_error = sign_ai_free_agents(weeks[-1].week, at)
-            ai_listings_created, listing_error = list_ai_riders(weeks[-1].week, at)
+        # Listing runs on every tick, against the week the clock is in now,
+        # because each team's listing moment falls on its own day (#172).
+        current_week = current_position(at).week
+        if current_week is not None:
+            ai_listings_created, listing_error = list_ai_riders(current_week, at)
             ai_market_error += listing_error
         ai_bids_placed, bid_error = place_ai_bids(at)
         ai_market_error += bid_error
