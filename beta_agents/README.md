@@ -138,7 +138,7 @@ set it up:
 
 1. On GitHub, *Settings → Developer settings → Fine-grained tokens → Generate
    new token*. Resource owner `mario595`, repository access *Only select
-   repositories* → `cycling-manager`, permissions **Actions: Read and write**
+   repositories* → `cycling-manager-game`, permissions **Actions: Read and write**
    and **Contents: Read-only**. Set an expiry and note it.
 2. `fly secrets set --app velodra BETA_DISPATCH_TOKEN=<the token>`. This
    restarts the machine.
