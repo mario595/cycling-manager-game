@@ -360,7 +360,9 @@ embargoed.
 - **`resolve_auction` has one forced branch.** "Still available" means
   `team IS NULL and not retired`, instead of "still on the seller's roster".
   Sold, the buyer is charged, the seller paid, and the rider moves; unsold
-  (no bid, or the winner at `ROSTER_CAP`) touches no rider.
+  (no bid, or the winner at `ROSTER_CAP`) touches no rider, but records an
+  `unsold` departure against the seller (#170, `riders/README.md`,
+  *Departures*), since that is when the rider becomes a free agent.
 - **No severance, and no way back.** There is no charge callback at all, and
   the listing cannot be withdrawn. This is the point: an unsold rider is a
   sale at zero, so a desperate manager always has a lever, and one cannot list

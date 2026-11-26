@@ -5061,6 +5061,21 @@ def test_departures_are_the_callers_own_newest_first_with_season_and_week(
     assert sale["fee"] == 120_000
 
 
+def test_an_unsold_forced_sale_is_served_with_no_buyer_or_fee(
+    dev_squad_client, dev_squad_team, squad_season,
+):
+    week_three = Week.objects.get(season__number=1, number=3)
+    _departure(
+        dev_squad_team, name="No Buyer", kind=Departure.Kind.UNSOLD,
+        at=week_three.starts_at + timedelta(days=1),
+    )
+
+    row = dev_squad_client.get("/api/riders/departures/").data["departures"][0]
+
+    assert (row["kind"], row["season"], row["week"]) == ("unsold", 1, 3)
+    assert (row["buyer"], row["fee"]) == (None, None)
+
+
 def test_a_departure_outside_any_season_has_no_week(dev_squad_client, dev_squad_team):
     _departure(dev_squad_team, at=datetime(2020, 1, 1, tzinfo=dt_timezone.utc))
 

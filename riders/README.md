@@ -836,8 +836,9 @@ real and breaks the loop, exactly as `teams/` does with `economy/`.
 `Departure` (`models.py`, written through `departures.py`) is the record of a
 rider who left a team, or its development squad, **without the manager acting
 in that moment** (#158, #162): retired by age at a season close (`retired`), a
-graduate released to the free agents (`released`), or a rider sold at auction
-(`sold`, with `buyer` and `fee`). It exists because all three happen between
+graduate released to the free agents (`released`), a rider sold at auction
+(`sold`, with `buyer` and `fee`), or a forced sale (#27) that ended with no
+buyer (`unsold`, #170). It exists because all three happen between
 visits, and before it a returning manager found a shorter roster with no
 explanation. `GET /api/riders/departures/` serves it, and the dashboard, the
 roster and the squad screen show it (`api/README.md`, `frontend/README.md`).
@@ -858,7 +859,12 @@ never by a later pass, so a departure exists exactly when the move does:
   nullable join cannot be locked on Postgres.
 - `transfers.services.resolve_auction` calls `record_sale` on the SOLD path,
   against `auction.seller_team` — not the rider's old team, because a forced
-  sale (#27) took the rider off the roster at listing.
+  sale (#27) took the rider off the roster at listing. Its UNSOLD path calls
+  `record_unsold_forced_sale` for a forced sale, again against the seller,
+  dated to when the auction resolved (#170): the listing was the manager's
+  click, but the outcome, the rider becoming a free agent, may land while
+  they are away. A voluntary roster listing that goes unsold records
+  nothing, since the rider never left.
 
 **Not recorded, on purpose:** releasing a rider, discarding or promoting a
 squad rider, closing the squad. The manager was there.

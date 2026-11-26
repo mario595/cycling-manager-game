@@ -1180,6 +1180,48 @@ def test_an_unsold_graduate_is_recorded_as_released(db, claimed_at):
     )
 
 
+def test_an_unsold_forced_sale_records_a_departure(db, claimed_at):
+    """The rider left the roster at listing (#27); the auction ending with no
+    buyer is when they become a free agent, and the seller may be away (#170)."""
+    seller = Team.objects.create(name="Team Alpha", code="ALP")
+    riders = _roster(seller, 6)
+    auction = force_list_for_auction(seller, riders[0].pk, at=claimed_at)
+
+    resolve_auction(auction, at=auction.deadline)
+
+    departure = Departure.objects.get()
+    assert (departure.team, departure.rider, departure.kind, departure.at) == (
+        seller, riders[0], Departure.Kind.UNSOLD, auction.deadline,
+    )
+    assert (departure.buyer, departure.fee) == (None, None)
+
+
+def test_a_forced_sale_unsold_at_the_winners_cap_records_a_departure(db, claimed_at):
+    seller = Team.objects.create(name="Team Alpha", code="ALP")
+    bidder = Team.objects.create(name="Team Bravo", code="BRA")
+    riders = _roster(seller, 6)
+    auction = force_list_for_auction(seller, riders[0].pk, at=claimed_at)
+    place_bid(auction.pk, bidder, auction.reserve_price, at=claimed_at)
+    _roster(bidder, ROSTER_CAP)
+
+    resolve_auction(auction, at=auction.deadline)
+
+    assert list(Departure.objects.values_list("team", "kind")) == [
+        (seller.pk, Departure.Kind.UNSOLD),
+    ]
+
+
+def test_listing_a_forced_sale_records_nothing(db, claimed_at):
+    """The listing is the manager's own click, so only its outcome is a
+    departure."""
+    seller = Team.objects.create(name="Team Alpha", code="ALP")
+    riders = _roster(seller, 6)
+
+    force_list_for_auction(seller, riders[0].pk, at=claimed_at)
+
+    assert not Departure.objects.exists()
+
+
 def test_an_unsold_roster_rider_records_nothing(db, claimed_at):
     seller = Team.objects.create(name="Team Alpha", code="ALP")
     rider = _rider(name="For Sale", team=seller)

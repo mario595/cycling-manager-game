@@ -56,3 +56,19 @@ def record_sale(rider: Rider, *, seller, buyer, fee: int, at) -> Departure:
         buyer=buyer,
         fee=fee,
     )
+
+
+def record_unsold_forced_sale(rider: Rider, *, seller, at) -> Departure:
+    """Write the departure for `rider`, whose forced sale (#27) by `seller`
+    ended with no buyer (#170). The listing was the manager's click and is
+    not recorded; the rider left the roster then, but the auction ends while
+    the manager may be away, and that is when they become a free agent."""
+    return Departure.objects.create(
+        team=seller,
+        rider=rider,
+        rider_name=rider.name,
+        speciality=rider.speciality,
+        age=rider.age,
+        kind=Departure.Kind.UNSOLD,
+        at=at,
+    )

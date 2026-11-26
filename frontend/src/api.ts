@@ -363,13 +363,14 @@ export async function getRiders(): Promise<Roster> {
 
 /** A rider who left the team, or its development squad, without the
  * manager acting in that moment (#158, #162): retired by age at a season
- * close, a graduate released to the free agents, or sold at auction.
+ * close, a graduate released to the free agents, sold at auction, or a
+ * forced sale that ended with no buyer (`unsold`, #170).
  * `rider` is a snapshot of who they were when they left; its `id` is null
  * once the rider no longer exists. `season`/`week` are null outside the
  * calendar. `buyer` and `fee` are set for a sale only. */
 export interface Departure {
   id: number
-  kind: 'retired' | 'released' | 'sold'
+  kind: 'retired' | 'released' | 'sold' | 'unsold'
   at: string
   season: number | null
   week: number | null
