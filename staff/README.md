@@ -8,12 +8,12 @@ generation (`generation.py`), and the season-boundary top-up
 (`services.top_up_pool`). Plus the trainer's day job once hired: the team's
 weekly training focus and its rollover record — `TrainingFocus` and
 `TrainingWeekReport`, the heart of
-[#36](https://github.com/mario595/cycling-manager/issues/36); see *Weekly
+[#36](https://github.com/mario595/cycling-manager-game/issues/36); see *Weekly
 training*, below. What a trainer *costs* — the hire fee and the weekly
 salary — is derived from their speciality in `pricing.py`, never stored; see
 *What a trainer costs*, below. Not the physio or scout roles the original
 brief also names — both wait on their own dependencies
-([#41](https://github.com/mario595/cycling-manager/issues/41) for physio,
+([#41](https://github.com/mario595/cycling-manager-game/issues/41) for physio,
 transfers/youth intake for scout).
 
 ## The one-slot rule
@@ -136,7 +136,7 @@ never zero, so no trainer skill is ever generated near the bottom of the
 
 ## Weekly training
 
-Once hired, a trainer earns their keep ([#36](https://github.com/mario595/cycling-manager/issues/36)):
+Once hired, a trainer earns their keep ([#36](https://github.com/mario595/cycling-manager-game/issues/36)):
 the tick applies the team's training focus every time a `WeekTransition`
 crosses, and writes what visibly changed to a `TrainingWeekReport` (one per
 team per week). The physics live in `riders/` — `riders.services.training_deltas`,
@@ -211,7 +211,7 @@ needs a balance and `staff/` may not import `economy/`. See `world/README.md`,
 
 ## Future work / possible improvements
 
-- **Physio slot** — once [#41](https://github.com/mario595/cycling-manager/issues/41)
+- **Physio slot** — once [#41](https://github.com/mario595/cycling-manager-game/issues/41)
   (injuries) gives it something to affect.
 - **Scout slot** — once transfers/youth intake give it something to narrow.
 - **Poaching, contract renewal, a trainer quality curve over time** — no

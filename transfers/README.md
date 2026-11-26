@@ -10,7 +10,7 @@ auctions.
   whole credits. **No models, no migrations, no stored field.** Value is a
   pure function of a rider's visible attributes and age, recomputed on every
   read, never persisted. This is deliberate, not an early-stage gap: the
-  spec ([#31](https://github.com/mario595/cycling-manager/issues/31))
+  spec ([#31](https://github.com/mario595/cycling-manager-game/issues/31))
   requires value to move the instant a rider's attributes move, and a stored
   column would be a cache that drifts from the arithmetic it summarizes.
 - **Fees** — `pricing.signing_fee_for` / `pricing.severance_fee_for`, the
@@ -19,7 +19,7 @@ auctions.
 - **The free agent market** — `services.free_agents()`, the pool,
   `services.release_cost_for()` and the two locked write paths
   `sign_free_agent` / `release_rider`.
-- **Rider auctions** ([#28](https://github.com/mario595/cycling-manager/issues/28))
+- **Rider auctions** ([#28](https://github.com/mario595/cycling-manager-game/issues/28))
   — `models.Auction` / `models.Bid`, `services.list_for_auction`,
   `services.place_bid`, `services.resolve_auction`,
   `services.withdraw_bids` and `services.cancel_listings`. See *Auctions* and
@@ -231,7 +231,7 @@ rule doing the work rather than a new check.
   loop. See `world/README.md`.
 - **Cancellation** (`cancel_open_auctions`) — the other way an auction can
   end, and the one that needs no buyer
-  ([#42](https://github.com/mario595/cycling-manager/issues/42)). It flips
+  ([#42](https://github.com/mario595/cycling-manager-game/issues/42)). It flips
   every `OPEN` auction of the given rider ids to `CANCELLED` in one UPDATE,
   stamping `resolved_at` and **moving no money**: a bid was never
   escrowed (see *Bidding* above — affordability is checked at bid time, not
@@ -256,7 +256,7 @@ rule doing the work rather than a new check.
 - **`cancel_unowned_listings(seller_team, *, at)`** — cancellation for the
   case where the team can no longer sell what it listed, rather than where the
   *rider* has gone
-  ([#34](https://github.com/mario595/cycling-manager/issues/34)). It cancels
+  ([#34](https://github.com/mario595/cycling-manager-game/issues/34)). It cancels
   every `OPEN` auction the team is selling whose rider no longer passes
   `belongs_to` for that team, and nothing else: a listing of a rider the team
   still owns is left alone.
@@ -275,7 +275,7 @@ rule doing the work rather than a new check.
   A **claim** does not come here. It cancels every listing the team holds —
   graduates', roster riders' and forced sales alike — through
   `cancel_listings`, which keys on `seller_team` alone
-  ([#114](https://github.com/mario595/cycling-manager/issues/114); see
+  ([#114](https://github.com/mario595/cycling-manager-game/issues/114); see
   *Withdrawal and cancellation on claim* below). #34 originally fixed #114 a
   second time, by calling `cancel_unowned_listings` from the claim too; the
   two fixes met in the merge with master and the claim kept `cancel_listings`,
@@ -296,7 +296,7 @@ A team that nobody manages can hold live bids from when it was managed (or
 before). When a manager claims that team they must not inherit an
 in-progress purchase, so the claim withdraws them —
 `withdraw_bids(team, *, at)`,
-[#30](https://github.com/mario595/cycling-manager/issues/30):
+[#30](https://github.com/mario595/cycling-manager-game/issues/30):
 
 - It withdraws **every** live bid the team holds on an `OPEN` auction, not
   just the leading one, and whoever placed it. A non-top bid can never win
@@ -317,7 +317,7 @@ in-progress purchase, so the claim withdraws them —
 
 The other half of the same sentence — a new manager must not inherit an
 auction the team was running — is `cancel_listings(team, *, at)`,
-[#114](https://github.com/mario595/cycling-manager/issues/114): every `OPEN`
+[#114](https://github.com/mario595/cycling-manager-game/issues/114): every `OPEN`
 auction `team` is selling becomes `CANCELLED` with `resolved_at = at`, and no
 money moves, on the same reasoning as `cancel_open_auctions` above.
 
@@ -401,7 +401,7 @@ the two share one input but not their shape:
 **Never express value as a multiple of salary** (`weekly_salary_for(rider)
 × k`). That would inherit salary's wrong-shaped age curve and couple the
 two prices together, so a future salary retune
-([#26](https://github.com/mario595/cycling-manager/issues/26)) would
+([#26](https://github.com/mario595/cycling-manager-game/issues/26)) would
 silently move every valuation. Keep two formulas over the same `strength()`,
 not one wrapping the other.
 
@@ -474,7 +474,7 @@ second to land, after free agents, and AI bidding (#30) the third:
 - **Forced sales under insolvency.** **Done** — see *Forced sales* above
   (#27). They run as auctions with the ordinary reserve, so no separate price
   was needed.
-- **Season-boundary salary renegotiation.** [#26](https://github.com/mario595/cycling-manager/issues/26)
+- **Season-boundary salary renegotiation.** [#26](https://github.com/mario595/cycling-manager-game/issues/26)
   needs a value to renegotiate a rider's salary against.
 
 The Roster screen shows `market_value_for` directly (`api/README.md`,

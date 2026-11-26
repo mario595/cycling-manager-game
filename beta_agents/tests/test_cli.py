@@ -78,7 +78,7 @@ class FakeGitHub:
     def __call__(self, method, url, headers, data, timeout):
         self.requests.append((method, url, headers, data))
         assert headers["Authorization"] == "Bearer t"
-        path = url.split("/repos/mario595/cycling-manager", 1)[1]
+        path = url.split("/repos/mario595/cycling-manager-game", 1)[1]
         if path == "/branches/beta-diaries":
             return Response(self.branch, {}, {})
         if path.startswith("/contents/diaries/"):
@@ -121,7 +121,7 @@ def test_dispatch_starts_a_due_run_when_someone_is_due():
     code, out = run_dispatch(github)
     assert code == 0 and out[0] == "Due: racer"
     assert github.dispatched() == [{"ref": "master", "inputs": {"tester": "due"}}]
-    assert github.requests[-1][1] == "https://api.github.com/repos/mario595/cycling-manager/actions/workflows/beta-agents.yml/dispatches"
+    assert github.requests[-1][1] == "https://api.github.com/repos/mario595/cycling-manager-game/actions/workflows/beta-agents.yml/dispatches"
 
 
 def test_a_tester_with_no_diary_is_due():

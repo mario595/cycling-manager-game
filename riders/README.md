@@ -38,11 +38,11 @@ them every week to grow or decline a rider's attributes, and `age`
 advances once per season — see *The age curve*, below.
 `training_affinity` is live too: `services.training_deltas` reads it each
 week to scale the trainer's focused training
-([#36](https://github.com/mario595/cycling-manager/issues/36); see *Weekly
+([#36](https://github.com/mario595/cycling-manager-game/issues/36); see *Weekly
 training*, below) — and it is **still never serialized**: the Training
 screen ships only the display-scale before/after, never the trait behind
 them. `injury_proneness` remains inert, waiting on injuries
-([#41](https://github.com/mario595/cycling-manager/issues/41)): the
+([#41](https://github.com/mario595/cycling-manager-game/issues/41)): the
 training pass skips injured riders through `services.is_injured()`, a
 placeholder that returns `False` for everyone until #41 gives it a real
 answer. `growth_debt` is an implementation detail of the age curve,
@@ -98,7 +98,7 @@ second mapping. See `staff/README.md`, *Stored 1-100, displayed 0-10*.
 `services.py` moves every rider's five attributes a little each week, along
 a curve individual to that rider — driven entirely by their existing
 `potential`, `peak_age` and `decline_rate`, with no new hidden trait
-([#58](https://github.com/mario595/cycling-manager/issues/58)). No new API
+([#58](https://github.com/mario595/cycling-manager-game/issues/58)). No new API
 field or frontend surface exists for this: the player only ever sees the
 changed numbers, never a report of what moved.
 
@@ -186,9 +186,9 @@ would be fake precision on a 0-10 scale and is deliberately not offered.
 ## Attribute history
 
 `RiderAttributeSnapshot` records a rider's five attributes over time, so a
-future screen ([#96](https://github.com/mario595/cycling-manager/issues/96))
+future screen ([#96](https://github.com/mario595/cycling-manager-game/issues/96))
 can eventually plot a career arc — see
-[#95](https://github.com/mario595/cycling-manager/issues/95) and
+[#95](https://github.com/mario595/cycling-manager-game/issues/95) and
 `specs/archive/rider-attribute-history.md`. A row holds all five attributes even when
 only one moved: the consumer plots five lines on one graph and needs a value
 for every attribute at every recorded moment, not just the one that changed.
@@ -236,7 +236,7 @@ mapped onto the 0-10 display scale for the player. `recovery_rate` (default
 50, hidden) is how much of that ground a rested week wins back. The two
 fields follow the same stored-1-100 / shown-0-10 convention as the engine
 attributes; the recovery rate is a *rate of change*, so it has no display
-scale and is never serialized ([#59](https://github.com/mario595/cycling-manager/issues/59)).
+scale and is never serialized ([#59](https://github.com/mario595/cycling-manager-game/issues/59)).
 
 **Cost and recovery are fixed constants in `services.py`, not field-tuned.**
 `RACE_FRESHNESS_COST` (25 stored points) is deducted from every **starter**
@@ -293,7 +293,7 @@ the caller lives.
 
 `weekly_salary` is a rider's weekly wage, stored in whole credits, visible
 on the roster and never mapped through `to_display_scale` — it is money,
-not a 0-100 attribute ([#25](https://github.com/mario595/cycling-manager/issues/25)).
+not a 0-100 attribute ([#25](https://github.com/mario595/cycling-manager-game/issues/25)).
 `pricing.weekly_salary_for(rider)` is the single formula that computes it,
 from two inputs only:
 
@@ -330,7 +330,7 @@ write, so a stored salary can never drift from the formula on behalf of a
 quiet rounding step.
 
 **Priced against the field, not in absolute terms
-([#166](https://github.com/mario595/cycling-manager/issues/166)).** Riders
+([#166](https://github.com/mario595/cycling-manager-game/issues/166)).** Riders
 train every week, so a world gets stronger every season while income
 stays flat; priced on absolute strength, the average wage bill grew about
 $15k a season and median teams went into the red by season 4. So
@@ -364,7 +364,7 @@ WEEKLY_WAGE_PER_RIDER`. Retuning the formula means re-running those tests
 until they pass again, not eyeballing the constants.
 
 **A second price exists in `transfers/`** — market value
-([#31](https://github.com/mario595/cycling-manager/issues/31)), what a
+([#31](https://github.com/mario595/cycling-manager-game/issues/31)), what a
 rider is worth rather than what they cost to keep. It reuses `strength()`
 unchanged but defines its own age curve rather than reusing
 `age_multiplier`: salary's curve is a mild, symmetric penalty around a
@@ -423,7 +423,7 @@ rows whose `unattached_since` is null).
 is active, and a non-null value is the permanent moment they left the game. It
 is never cleared. A timestamp is deliberately used instead of a status enum so
 it can answer when the rider retired and can later be shared with age-driven
-retirement ([#42](https://github.com/mario595/cycling-manager/issues/42))
+retirement ([#42](https://github.com/mario595/cycling-manager-game/issues/42))
 without adding a week foreign key to this app.
 
 A retired rider must have no team. The database constraint
@@ -447,7 +447,7 @@ age*, below.
 A rider leaves the game at a **hidden age between 33 and 38**
 (`RETIREMENT_AGE_MIN` + `RETIREMENT_AGE_SPAN` in `services.py`), with a full
 season's warning first
-([#42](https://github.com/mario595/cycling-manager/issues/42)). Every active
+([#42](https://github.com/mario595/cycling-manager-game/issues/42)). Every active
 rider is affected — rostered or a free agent, managed team or unmanaged. The
 window is a band, not a number: no rider retires young, and every rider
 eventually does, but *where* in the band is the rider's own.

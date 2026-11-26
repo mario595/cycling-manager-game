@@ -29,7 +29,7 @@ from .game_api import Response, Transport, urllib_transport
 API = "https://api.github.com"
 WORKFLOW = "beta-agents.yml"
 DIARY_BRANCH = "beta-diaries"
-DEFAULT_REPO = "mario595/cycling-manager"
+DEFAULT_REPO = "mario595/cycling-manager-game"
 DEFAULT_REF = "master"
 
 

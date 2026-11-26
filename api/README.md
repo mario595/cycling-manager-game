@@ -76,7 +76,7 @@ DRF routers and serializers that aggregate other apps' data for the SPA.
   credits, computed fresh on every request — never stored), and
   `squad_value` is that same function summed over the response's own
   riders in Python, not a separate query, so the two numbers can never
-  disagree (`transfers/README.md`, [#31](https://github.com/mario595/cycling-manager/issues/31)).
+  disagree (`transfers/README.md`, [#31](https://github.com/mario595/cycling-manager-game/issues/31)).
 Since #29 each rider also carries `release_cost`
   (`transfers.services.release_cost_for`, exact credits): 0 while the
   claim cooldown shields a rider inherited from the team's most recent
@@ -100,7 +100,7 @@ Since #29 each rider also carries `release_cost`
    `true` only while a season is open *and* the rider is active *and* past
    their hidden retirement age, i.e. the one season left where they can
    still race for the team
-   ([#42](https://github.com/mario595/cycling-manager/issues/42); see
+   ([#42](https://github.com/mario595/cycling-manager-game/issues/42); see
    `riders/README.md`, *Retiring by age*). It is a `SerializerMethodField`
    reading `riders.services.is_due_to_retire`, so the age behind it — and
    the `peak_age`/`decline_rate` it is derived from — is never shipped.

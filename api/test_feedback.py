@@ -158,7 +158,7 @@ def test_the_list_is_the_callers_own_reports_without_the_triage_note(db):
     _client(other).post(URL, {"category": "bug", "text": "theirs"}, format="json")
     Report.objects.filter(text="mine").update(
         status=Report.Status.TRIAGED,
-        github_issue_url="https://github.com/mario595/cycling-manager/issues/1",
+        github_issue_url="https://github.com/mario595/cycling-manager-game/issues/1",
         triage_note="Private.",
     )
 

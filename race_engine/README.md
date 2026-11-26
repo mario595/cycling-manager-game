@@ -471,7 +471,7 @@ issue's own reproduction, below) never went past ratio 1.44 across 13 seeds
 field size, 5 default seeds) topped out at 1.376 with **zero** time-cut
 DNFs. 0.5 clears all of that with room to spare, while still cutting a
 genuine spiral meaningfully rather than just technically:
-[#102](https://github.com/mario595/cycling-manager/issues/102)'s own spike
+[#102](https://github.com/mario595/cycling-manager-game/issues/102)'s own spike
 reproduction recorded a winner at tick 21,915 and a last finisher dragged
 to tick 40,955 — ratio 1.868, nearly double. At `TIME_CUT_MARGIN = 0.5`
 that run's last finisher would be cut at tick 32,873 instead — a ~20% tick

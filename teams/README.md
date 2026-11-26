@@ -198,7 +198,7 @@ three-letter code means asking a new player to guess which of ~17,576
 combinations are free, for a field whose only job is being a short label
 next to a name.
 
-**The cost of this decision is [#56](https://github.com/mario595/cycling-manager/issues/56)**,
+**The cost of this decision is [#56](https://github.com/mario595/cycling-manager-game/issues/56)**,
 not yet built: two teams sharing a code in the same Group is confusing in a
 classification table or a race startlist. The fix belongs at *display* time —
 whatever renders a clashing pair of codes disambiguates them (`MGO-A`,
@@ -291,7 +291,7 @@ command is an entry point, and `teams/`'s library code (`models.py`,
 
 ## Future work / possible improvements
 
-- **Team-code disambiguation.** [#56](https://github.com/mario595/cycling-manager/issues/56),
+- **Team-code disambiguation.** [#56](https://github.com/mario595/cycling-manager-game/issues/56),
   see *Codes are not unique* above.
 - **Resetting a claimed team's money to a fixed starting amount.** **Done** —
   claiming writes a `takeover` ledger entry that brings the balance back to

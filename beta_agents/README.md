@@ -149,7 +149,7 @@ A failed dispatch exits non-zero, which supercronic logs (and reports to
 Sentry where it is set). A 404 on the diary branch means the token can't read
 contents, and nothing is dispatched. `BETA_DISPATCH_REPO` and
 `BETA_DISPATCH_REF` override the repository and the branch the run starts
-from (defaults `mario595/cycling-manager` and `master`).
+from (defaults `mario595/cycling-manager-game` and `master`).
 
 **The run.** `.github/workflows/beta-agents.yml` runs at minute 17 of every
 hour as well, when GitHub gets to it. It runs

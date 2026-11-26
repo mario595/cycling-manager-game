@@ -105,7 +105,7 @@ does not change, so nothing in `race_player/` or `frontend/` has to know.
 
 ### The slimmed, compressed format (#88)
 
-Tracked as [#88](https://github.com/mario595/cycling-manager/issues/88). One
+Tracked as [#88](https://github.com/mario595/cycling-manager-game/issues/88). One
 header line, then sampled positional arrays, brotli-compressed. The full spec is
 in `race_engine/README.md`; the short version:
 
@@ -311,7 +311,7 @@ guarded off when a course has no markers (D7 in the plan).
 
 ## The weekly-training readers
 
-Weekly training ([#36](https://github.com/mario595/cycling-manager/issues/36))
+Weekly training ([#36](https://github.com/mario595/cycling-manager-game/issues/36))
 needs one thing only this app can answer: what a race *rewarded*. That answer
 lives in `services.py`, computed entirely from the stored `Race.course` JSON,
 in two functions:
@@ -410,8 +410,8 @@ selected by any team's squad simply does not appear in the log, the replay,
 or the results.
 
 **A squad member whose rider has since left that team is dropped before
-racing, not raced anyway.** A rider can be sold at auction ([#28](https://github.com/mario595/cycling-manager/issues/28))
-or released to the free agent pool ([#29](https://github.com/mario595/cycling-manager/issues/29))
+racing, not raced anyway.** A rider can be sold at auction ([#28](https://github.com/mario595/cycling-manager-game/issues/28))
+or released to the free agent pool ([#29](https://github.com/mario595/cycling-manager-game/issues/29))
 while still sitting in a team's saved squad for a race that has not run
 yet — both let a listed/released rider keep racing until the move
 actually happens, so a manager leaving them in a squad is the normal

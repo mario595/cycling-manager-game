@@ -6,9 +6,9 @@
 derived from. The balance itself is never stored: it is the sum of a team's
 `LedgerEntry.amount` values, computed on demand. This app owns the game's
 recurring money moves: the weekly wage bill — since
-[#25](https://github.com/mario595/cycling-manager/issues/25), the sum of
+[#25](https://github.com/mario595/cycling-manager-game/issues/25), the sum of
 each rider's own `weekly_salary`, never a flat per-head rate — and, since
-[#69](https://github.com/mario595/cycling-manager/issues/69), the weekly
+[#69](https://github.com/mario595/cycling-manager-game/issues/69), the weekly
 trainer salary — each charged once per team per crossed week boundary — and
 the weekly **merchandise payout** derived from a team's fanbase, its first
 income since #21. #69 also adds the one-off `trainer_fee` row written when a
@@ -107,7 +107,7 @@ team with no riders gets a real entry at `amount = 0`, not a skipped one, so
 the history has no silent gaps.
 
 **The charge is a sum of each rider's own `weekly_salary`
-([#25](https://github.com/mario595/cycling-manager/issues/25)), not a head
+([#25](https://github.com/mario595/cycling-manager-game/issues/25)), not a head
 count times `WEEKLY_WAGE_PER_RIDER`.** That constant still exists — it is
 now only the average a generated rider's salary is calibrated to land near,
 never charged directly; see `riders/README.md`, *Salary*. Because the sum
