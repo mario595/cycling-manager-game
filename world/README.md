@@ -372,16 +372,17 @@ count of teams released lands on `TickRun.teams_released`.
    before `TickRun` is created, so a won auction's roster change cannot
    interfere with a squad already locked in for this tick's races.
    `TickRun.auctions_sold` / `auctions_unsold` count the outcomes.
-4. **The AI market** (#30) — `world.ai_market.place_ai_bids(at)`, and on a
-   tick that crossed at least one week `world.ai_market.list_ai_riders(
-   last_crossed_week, at)` before it. Both run **after** step 3, so the AI
-   never sees an auction this same tick is about to close, and listing runs
-   before bidding. Bidding runs on every tick because auction deadlines are
-   wall-clock; listing is week-keyed and uses the **last** week crossed, so a
-   tick catching up three weeks lists once, not three times. On those same
-   ticks `world.ai_market.sign_ai_free_agents(last_crossed_week, at)` runs
-   **first** (#157), so a team a signing takes back above `AI_MIN_ROSTER`
-   can list in the same pass. Counts land on `TickRun.ai_bids_placed` /
+4. **The AI market** (#30) — on a tick that crossed at least one week,
+   `world.ai_market.sign_ai_free_agents(last_crossed_week, at)` (#157); then,
+   on **every** tick, `world.ai_market.list_ai_riders(current_week, at)` when a
+   week is current (#172), then `world.ai_market.place_ai_bids(at)`. All run
+   **after** step 3, so the AI never sees an auction this same tick is about
+   to close. Signing comes first so a team a signing takes back above
+   `AI_MIN_ROSTER` can list in the same pass, and listing before bidding.
+   Listing runs on every tick because each team lists on its own day of its
+   turn week, against the week the clock is in now; bidding runs on every
+   tick because auction deadlines are game-time moments, not week-bound.
+   Counts land on `TickRun.ai_bids_placed` /
    `ai_listings_created` (`world/migrations/0015`) and
    `ai_free_agents_signed` (`world/migrations/0024`). See *The AI market
    (#30)*.
@@ -564,19 +565,38 @@ sign for a full week before the AI can take them. The fee goes through
 `sign_free_agent`'s `charge` callback as a `TRANSFER_FEE` entry, the same
 path a human's signing takes.
 
-**Selling** (`list_ai_riders`) — on a tick that crosses a week, an unmanaged
-team lists at most one rider, and only on the weeks
-`(week.number + team.pk) % AI_LISTING_EVERY_WEEKS == 0` picks for it, so
-roughly a quarter of them list each week. It never has an open listing of
-its own, and never shrinks below `AI_MIN_ROSTER` — a team must stay a racing
-team. From the riders that have no open auction, no `UNSOLD` one within
-`AI_RELIST_COOLDOWN` (4 weeks, so the same unsold veteran does not reappear
-every month) and a reserve above zero, it lists:
+**Selling** (`list_ai_riders`) — an unmanaged team lists at most one rider
+per **turn**: the weeks `(week.number + team.pk) % AI_LISTING_EVERY_WEEKS == 0`
+picks for it, so roughly a quarter of the teams have a turn each week. Inside
+its turn week it waits for its own **listing moment** (#172),
+`week.starts_at + listing_day(team.pk)` days, where `listing_day` is
+`(pk // AI_LISTING_EVERY_WEEKS * AI_LISTING_DAY_STRIDE) % 7`. Teams sharing a
+turn have pks four apart, so a stride of 3 (coprime with 7) gives them days
+0, 3, 6, 2, 5, 1, 4: AI listings open on every day of the week instead of all
+on its first, which on staging's 24× clock left the market with no AI rider
+for four hours in every seven. From its moment on, the team is tried on every
+tick of that week until it lists; an auction it opened at or after the moment,
+in **any** status, is the record that it already has, so no field is stored.
+A tick that jumps past the moment lists once; one that jumps past the whole
+turn week lists nothing for that team.
+
+It never has an open listing of its own, and never shrinks below
+`AI_MIN_ROSTER` — a team must stay a racing team. From the riders that have
+no open auction, no `UNSOLD` one within `AI_RELIST_COOLDOWN` (4 weeks, so the
+same unsold veteran does not reappear every month) and a reserve above zero,
+it lists:
 
 - its **weakest** candidate, if the roster is above `ROSTER_SIZE` (surplus);
 - otherwise its **oldest ageing** candidate that is **not** among the
   `AI_NEED_RANK` strongest of their speciality — the veterans worth keeping
   are exactly the ones not for sale;
+- otherwise its **weakest depth** candidate (#172): any age, outside the
+  `AI_NEED_RANK` strongest of their speciality, which takes at least three of
+  that speciality on the roster. Without it, AI rosters held at twelve by
+  free-agent signing (#157) offered only veterans, and a team whose turn came
+  often had nobody to sell. The buying side never wants a non-top-two rider,
+  so the AI never sells what it would buy back; a sale leaves the team below
+  twelve, and it signs a free agent the following week;
 - otherwise nothing.
 
 | Constant | Value | Why |
@@ -587,6 +607,7 @@ every month) and a reserve above zero, it lists:
 | `AI_AGEING_AGE` | 33 | About 20% of generated riders; value's career horizon has already fallen well below 1.0. |
 | `AI_CUSHION_FRACTION` | 0.5 | An AI team spends at most half its balance. |
 | `AI_LISTING_EVERY_WEEKS` | 4 | A trickle of AI sellers, not a flood. |
+| `AI_LISTING_DAY_STRIDE` | 3 | Spreads the teams sharing a turn week over distinct days (#172). |
 | `AI_RELIST_COOLDOWN` | 4 weeks | Stops the same unsold rider reappearing monthly. |
 
 **Claiming a team stops the bidding.** `api/`'s claim endpoint withdraws
