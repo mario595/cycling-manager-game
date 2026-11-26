@@ -207,3 +207,12 @@ def test_generated_roster_value_spans_wider_than_salary():
         return p95 / p5
 
     assert spread(values) > spread(salaries)
+
+
+def test_market_value_scales_with_the_field_factor():
+    # #166: value, and with it every fee, is priced against the field.
+    rider = _rider(climb=70)
+
+    assert market_value_for(rider, 1.0) == market_value_for(rider)
+    assert market_value_for(rider, 1.1) > market_value_for(rider)
+    assert signing_fee_for(rider, 0.9) < signing_fee_for(rider)

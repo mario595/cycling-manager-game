@@ -23,6 +23,7 @@ import random
 
 from django.db import transaction
 
+from .field_level import current_field_factor
 from .generation import generate_rider
 from .models import Rider
 from .services import record_initial_snapshots
@@ -48,7 +49,9 @@ def is_free_agent_intake_week(week_number: int) -> bool:
 def generate_free_agent(*, rng: random.Random) -> Rider:
     """One unsaved intake rider: any speciality, rolled quality, aged
     within FREE_AGENT_AGE_RANGE."""
-    return generate_rider(age=rng.randint(*FREE_AGENT_AGE_RANGE), rng=rng)
+    return generate_rider(
+        age=rng.randint(*FREE_AGENT_AGE_RANGE), rng=rng, field_factor=current_field_factor(),
+    )
 
 
 def run_free_agent_intake(*, at, rng: random.Random | None = None) -> list[Rider]:

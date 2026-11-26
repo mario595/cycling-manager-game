@@ -9,7 +9,7 @@ import { useDepartures } from '../useDepartures'
 import { useRoster } from '../useRoster'
 import { useSeason } from '../useSeason'
 import { useSolvency } from '../useSolvency'
-import { Roster } from './Roster'
+import { Roster, fieldChangeNote } from './Roster'
 
 vi.mock('../useAuth', () => ({ useAuth: vi.fn() }))
 vi.mock('../useRoster', () => ({ useRoster: vi.fn() }))
@@ -408,6 +408,7 @@ describe('Roster', () => {
         season_number: 9,
         payroll_before: 2300,
         payroll_after: 2400,
+        field_change_percent: 6,
         // Bruno first in the payload: the panel must sort by absolute
         // delta descending, so Alba's bigger raise leads.
         changes: [
@@ -435,6 +436,17 @@ describe('Roster', () => {
     expect(screen.getAllByText('Bruno Ruiz')).toHaveLength(2)
     const deltas = screen.getAllByText(/^[+−]/).map((element) => element.textContent)
     expect(deltas).toEqual(['+$100', '+$600', '−$400'])
+    // The field moved, so the panel says so (#166).
+    expect(
+      screen.getByText('The field got 6% stronger this season, and wages are set against it.'),
+    ).toBeInTheDocument()
+  })
+
+  it('words the field note for a stronger, weaker or unchanged field', () => {
+    expect(fieldChangeNote(6)).toBe('The field got 6% stronger this season, and wages are set against it.')
+    expect(fieldChangeNote(-3)).toBe('The field got 3% weaker this season, and wages are set against it.')
+    expect(fieldChangeNote(0)).toBeNull()
+    expect(fieldChangeNote(null)).toBeNull()
   })
 
   it('renders nothing when salary_review is null', () => {
@@ -451,6 +463,7 @@ describe('Roster', () => {
         season_number: 5,
         payroll_before: 4000,
         payroll_after: 4000,
+        field_change_percent: null,
         changes: [],
       },
       loading: false,

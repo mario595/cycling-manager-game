@@ -3,6 +3,7 @@ from __future__ import annotations
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
+from riders.field_level import current_field_factor
 from riders.generation import generate_roster
 from riders.models import Rider
 from riders.services import record_initial_snapshots
@@ -159,7 +160,9 @@ class Command(BaseCommand):
                     name=name, code=code,
                     primary_colour=primary, secondary_colour=secondary,
                 )
-                roster = generate_roster(per_team, team=team)
+                roster = generate_roster(
+                    per_team, team=team, field_factor=current_field_factor(),
+                )
                 created = Rider.objects.bulk_create(roster)
                 record_initial_snapshots(created)
                 created_teams += 1

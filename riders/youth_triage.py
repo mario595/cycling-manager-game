@@ -35,6 +35,7 @@ from django.db.models import QuerySet
 
 from .departures import record_departures
 from .development_squad import LEVELS
+from .field_level import current_field_factor
 from .models import ENGINE_ATTRIBUTES, Departure, DevelopmentSquad, Rider
 from .pricing import weekly_salary_for
 from .services import attribute_ceilings, mark_team_change, weekly_deltas
@@ -324,7 +325,7 @@ def promote(team, rider_id: int, *, at, roster_cap: int) -> Rider:
 
         rider.team = team
         rider.development_squad = None
-        rider.weekly_salary = weekly_salary_for(rider)
+        rider.weekly_salary = weekly_salary_for(rider, current_field_factor())
         mark_team_change([rider], team_now=team, at=at)
         rider.save(
             update_fields=[

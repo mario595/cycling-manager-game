@@ -403,6 +403,14 @@ two prices together, so a future salary retune
 silently move every valuation. Keep two formulas over the same `strength()`,
 not one wrapping the other.
 
+**Both prices read the same field factor (#166).** `market_value_for(rider,
+field_factor)` scales `strength()` by the factor `riders.field_level.
+current_field_factor()` returns, exactly as salary does, so signing fees,
+severance and auction reserves keep their meaning as the world gets
+stronger. Live callers (`transfers/services.py`, `world/ai_market.py`, the
+expiry pass in `world/services.py`, `api/`) pass it in; the pure functions
+default to 1.0. That is the same input, not value expressed through salary.
+
 Rounding also differs: salary rounds to the nearest 50 (right for a weekly
 figure in the hundreds); value rounds to the nearest 1,000 (`_round_to_nearest_1000`,
 local to this app — a capital sum in the hundreds of thousands rounded to 50

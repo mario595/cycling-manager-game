@@ -190,8 +190,13 @@ def generate_rider(
     age: int | None = None,
     potential: int | None = None,
     rng: random.Random | None = None,
+    field_factor: float = 1.0,
 ) -> Rider:
     """Build an unsaved, internally consistent Rider.
+
+    `field_factor` prices the rider's salary against the field (#166): a
+    caller adding riders to a live world passes
+    riders.field_level.current_field_factor(); 1.0 is a fresh world.
 
     `quality` is 1-100 and sets the overall level the five attributes are
     drawn around. All arguments are optional; anything omitted is rolled.
@@ -241,7 +246,7 @@ def generate_rider(
     # would be circular. See specs/rider-salaries-plan.md, generation.py
     # section.
     from .pricing import weekly_salary_for
-    rider.weekly_salary = weekly_salary_for(rider)
+    rider.weekly_salary = weekly_salary_for(rider, field_factor)
     return rider
 
 
@@ -250,6 +255,7 @@ def generate_roster(
     *,
     team=None,
     rng: random.Random | None = None,
+    field_factor: float = 1.0,
 ) -> list[Rider]:
     """A squad-sized group with a deliberate spread of quality.
 
@@ -258,7 +264,7 @@ def generate_roster(
     property #46 depends on.
     """
     rng = rng or random.Random()
-    riders = [generate_rider(rng=rng) for _ in range(size)]
+    riders = [generate_rider(rng=rng, field_factor=field_factor) for _ in range(size)]
     if team is not None:
         for rider in riders:
             rider.team = team

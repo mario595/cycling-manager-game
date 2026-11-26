@@ -83,10 +83,57 @@ def age_multiplier(age: int) -> float:
     return 1.0 - _AGE_PENALTY_MAX * fraction
 
 
-def weekly_salary_for(rider) -> int:
+#: What the average rider in a freshly generated world is paid per week —
+#: the level solve_field_factor holds the field to at every season close
+#: (#166). Matches economy.models.WEEKLY_WAGE_PER_RIDER, duplicated because
+#: riders/ may not import economy/; test_pricing pins both to the sampled
+#: generated average.
+FIELD_AVERAGE_SALARY = 1_200
+
+#: Bounds on the field factor, so one odd season close (a tiny or
+#: freakish field) can never produce absurd prices (spec, *Rules and edge
+#: cases*). 0.5 is a field twice as strong as a generated one.
+FIELD_FACTOR_MIN = 0.5
+FIELD_FACTOR_MAX = 2.0
+
+
+def weekly_salary_for(rider, field_factor: float = 1.0) -> int:
     """This rider's weekly salary in whole credits. Pure: no database
-    access, safe on an unsaved Rider."""
-    scaled = max(0.0, min(1.0, strength(rider) / 100)) ** _STRENGTH_EXPONENT
+    access, safe on an unsaved Rider.
+
+    `field_factor` scales the rider's strength against the field (#166):
+    live callers pass riders.field_level.current_field_factor(). The
+    default, 1.0, is a freshly generated world — the price before #166."""
+    scaled = max(0.0, min(1.0, strength(rider) * field_factor / 100)) ** _STRENGTH_EXPONENT
     base = SALARY_AT_MIN_STRENGTH + (SALARY_AT_MAX_STRENGTH - SALARY_AT_MIN_STRENGTH) * scaled
     base *= age_multiplier(rider.age)
     return max(SALARY_AT_MIN_STRENGTH, _round_to_nearest_50(base))
+
+
+def solve_field_factor(riders) -> float:
+    """The field factor at which `riders` average FIELD_AVERAGE_SALARY a
+    week, clamped to FIELD_FACTOR_MIN..FIELD_FACTOR_MAX. Pure.
+
+    Bisection: the average salary never falls as the factor rises, so 40
+    halvings pin it far below a rounding step. Too few riders to say
+    anything (none) returns 1.0, the unmeasured level.
+    """
+    riders = list(riders)
+    if not riders:
+        return 1.0
+
+    def average(factor: float) -> float:
+        return sum(weekly_salary_for(r, factor) for r in riders) / len(riders)
+
+    low, high = FIELD_FACTOR_MIN, FIELD_FACTOR_MAX
+    if average(low) >= FIELD_AVERAGE_SALARY:
+        return low
+    if average(high) <= FIELD_AVERAGE_SALARY:
+        return high
+    for _ in range(40):
+        mid = (low + high) / 2
+        if average(mid) < FIELD_AVERAGE_SALARY:
+            low = mid
+        else:
+            high = mid
+    return (low + high) / 2

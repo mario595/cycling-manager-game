@@ -695,7 +695,7 @@ def pay_transfer_income(team, *, amount: int, at, description: str) -> LedgerEnt
     )
 
 
-def write_salary_reviews(season, changes: list[dict]) -> int:
+def write_salary_reviews(season, changes: list[dict], *, field_change_percent: int | None = None) -> int:
     """One SalaryReviewReport per managed team for a closed season.
 
     `changes` is riders.services.reprice_all()'s return, already filtered
@@ -703,6 +703,10 @@ def write_salary_reviews(season, changes: list[dict]) -> int:
     with IntegrityError caught — the same per-row shape
     process_transitions() uses, and for the same reason: an
     IntegrityError poisons an enclosing transaction (plan D6).
+
+    `field_change_percent` is how much stronger the field got at this close
+    (#166), the same for every team, worked out by world/ from the field
+    factor before and after repricing.
 
     A managed team with no qualifying changes still gets a report, with an
     empty `changes` list and payroll_before == payroll_after. Returns how
@@ -735,6 +739,7 @@ def write_salary_reviews(season, changes: list[dict]) -> int:
                         for c in team_changes
                     ],
                     payroll_before=before, payroll_after=after,
+                    field_change_percent=field_change_percent,
                 )
                 written += 1
             except IntegrityError:

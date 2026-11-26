@@ -756,7 +756,7 @@ def test_roster_includes_salary_review_when_one_exists(roster_team, roster_clien
     SalaryReviewReport.objects.create(
         team=roster_team, season=season,
         changes=[{"rider_id": 7, "rider_name": "Star", "from": 1900, "to": 2400}],
-        payroll_before=1900, payroll_after=2400,
+        payroll_before=1900, payroll_after=2400, field_change_percent=6,
     )
 
     response = roster_client.get("/api/riders/")
@@ -765,6 +765,7 @@ def test_roster_includes_salary_review_when_one_exists(roster_team, roster_clien
     assert review["season_number"] == 4
     assert review["payroll_before"] == 1900
     assert review["payroll_after"] == 2400
+    assert review["field_change_percent"] == 6
     assert review["changes"] == [{
         "rider_id": 7, "rider_name": "Star", "from_value": 1900, "to_value": 2400,
     }]

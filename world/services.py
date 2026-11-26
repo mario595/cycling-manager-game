@@ -46,6 +46,7 @@ from economy.solvency import assess_solvency
 from racing.models import Race, RaceResult, StageRace
 from racing.services import riders_who_raced, riders_who_started, simulate_race
 from riders.development_squad import LEVELS, weekly_cost
+from riders.field_level import current_field_factor
 from riders.models import DevelopmentSquad, Rider
 from riders.services import (
     advance_ages,
@@ -104,6 +105,14 @@ _clock: Clock | None = None
 #: raised temporarily during an incident; this one does not.
 INACTIVITY_WEEKS = 10
 
+
+
+def field_change_percent(before: float, after: float) -> int:
+    """How much stronger the field got, in whole percent, from the field
+    factor before and after a season close's repricing (#166). The factor
+    is inverse to the field's strength: a factor that falls from 1.0 to
+    0.9 means a field about 11% stronger."""
+    return round((before / after - 1) * 100)
 
 def get_clock() -> Clock:
     """The process-wide clock, resolved from `settings.GAME_CLOCK_CLASS` and
@@ -406,7 +415,8 @@ def _expire_free_agents(week) -> tuple[int, int]:
     bottom_count = int(len(pool) * EXPIRY_VALUE_PERCENTILE)
     if bottom_count == 0:
         return 0, 0
-    value_by_rider = {rider.pk: market_value_for(rider) for rider in pool}
+    factor = current_field_factor()
+    value_by_rider = {rider.pk: market_value_for(rider, factor) for rider in pool}
     values = sorted(value_by_rider.values())
     cutoff = values[bottom_count - 1]
 
@@ -665,9 +675,17 @@ def tick() -> TickRun:
         # Repricing AFTER ageing: next season's wage must reflect the rider a
         # manager will actually have, age included (spec, *Ordering at the
         # boundary*).
+        # Wages are priced against the field (#166): reprice_all measures it
+        # first, so the factor before and after says how much stronger the
+        # field got, which the salary review tells each manager.
+        factor_before = current_field_factor()
         changes = reprice_all()
+        factor_after = current_field_factor()
         riders_repriced += len(changes)
-        salary_reviews += write_salary_reviews(transition.season, changes)
+        salary_reviews += write_salary_reviews(
+            transition.season, changes,
+            field_change_percent=field_change_percent(factor_before, factor_after),
+        )
 
     # One offer round per team per crossed season open — ensure_offer_round
     # is idempotent per (team, season) itself (economy/README.md, D8), so a

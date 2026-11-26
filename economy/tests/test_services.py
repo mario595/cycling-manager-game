@@ -336,3 +336,21 @@ def test_latest_salary_review_returns_newest_season(db, managed_team):
     )
 
     assert latest_salary_review(managed_team).season == second
+
+
+def test_write_salary_reviews_records_how_far_the_field_moved(db, managed_team, season):
+    _rider(managed_team, name="Rostered", salary=1000)
+
+    write_salary_reviews(season, [], field_change_percent=6)
+
+    report = SalaryReviewReport.objects.get(team=managed_team, season=season)
+    assert report.field_change_percent == 6
+
+
+def test_write_salary_reviews_field_change_defaults_to_unknown(db, managed_team, season):
+    _rider(managed_team, name="Rostered", salary=1000)
+
+    write_salary_reviews(season, [])
+
+    report = SalaryReviewReport.objects.get(team=managed_team, season=season)
+    assert report.field_change_percent is None

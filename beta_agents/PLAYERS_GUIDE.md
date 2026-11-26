@@ -12,7 +12,12 @@ twelve weeks. Weekly events happen at each **week boundary** (payday): wages
 and other weekly costs are paid, sponsorship and merchandise income come in,
 riders train, rider freshness recovers, and youth riders develop. When a
 season closes, the next one opens. At each season close, every rider's
-**salary is repriced** from their current strength, and riders who have
+**salary is repriced** from their current strength compared with the
+rest of the world's riders on a team, so the average wage stays level as
+the whole world gets stronger: a rider who improved less than the field
+can earn slightly less, and the season-end salary review says how much the
+field moved. Market value, and with it signing fees, severance and auction
+reserves, follows the same rule. At the same close, riders who have
 reached the end of their career **retire**. A rider retires at the close of
 the season marked as their `final_season`, so you always get a full season's
 warning.

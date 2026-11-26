@@ -406,6 +406,15 @@ class SalaryReviewReport(TimeStampedModel):
     payroll_after = models.PositiveIntegerField(
         help_text="Team's total weekly wage bill after re-pricing.",
     )
+    field_change_percent = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "How much stronger (positive) or weaker the field got at this "
+            "close, as wages are priced against it (#166). Null on reviews "
+            "written before #166."
+        ),
+    )
 
     class Meta:
         constraints = [

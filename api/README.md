@@ -119,14 +119,20 @@ Since #29 each rider also carries `release_cost`
   season-end salary review or `null` when there isn't one (#26).
   `economy.services.latest_salary_review` picks the newest by
   `season__starts_at`, and the payload is `{season_number, payroll_before,
-  payroll_after, changes: [{rider_id, rider_name, from_value, to_value}]}`
+  payroll_after, field_change_percent, changes: [{rider_id, rider_name,
+  from_value, to_value}]}`
   — the wage-bill numbers are exact whole credits, and `changes` lists only
   the riders whose salary moved by at least the threshold
   (`riders.pricing.SALARY_REVIEW_THRESHOLD`); see
   `economy/README.md`, *Salary review*. The change keys are exposed as
   `from_value`/`to_value` because the stored document names them `from`/
   `to` — a Python keyword that cannot be a serializer field name, hence
-  DRF's `source="from"` mapping.
+  DRF's `source="from"` mapping. `field_change_percent` (#166) is how much
+  stronger the field got that close, negative if weaker, `null` on reviews
+  older than #166. Every market value, signing fee and release cost on
+  these screens is priced at `riders.field_level.current_field_factor()`,
+  read once per request and handed to the serializers through
+  `context["field_factor"]`.
   This response shape changed with #31: it was previously a bare array.
 - `GET /api/riders/<rider_id>/` (`RiderProfileSerializer`, `RiderProfileView`)
   — one rider's full profile, readable by **any** authenticated manager

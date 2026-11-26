@@ -151,6 +151,17 @@ enclosing transaction in Django, so catching it inside a shared one fails
 the next statement with `TransactionManagementError`. Copy the
 `process_transitions()` shape, never one `atomic()` around the whole loop.
 
+**How far the field moved (#166).** Salaries are priced against the
+field's level (`riders/README.md`, *Salary*), so a rider who improved less
+than everyone else can see a pay cut. `write_salary_reviews` therefore
+takes `field_change_percent`, how much stronger (positive) or weaker the
+rostered field got that close, worked out in `world.services.
+field_change_percent(before, after)` from the factor before and after
+repricing, and stores it on every report of that season. The roster screen
+shows it as one line ("The field got 6% stronger this season, and wages are
+set against it."). It is null for reports written before #166 and is 0
+when the level did not move, and neither shows a line.
+
 **Free agents are repriced but generate no report.** `reprice_all()`
 covers every rider; `write_salary_reviews` iterates managed teams only, so
 an unrostered rider's salary move is silent. A managed team with no
@@ -595,6 +606,17 @@ offer at the starting fanbase pays $9,350 a week — and all three prize tables
 development squad prices and the starting balance were left alone. Most of the
 new money is sponsorship, which every team gets, so the gap between strong and
 weak teams widened only a little.
+
+**Wages priced against the field (#166).** Before #166 salaries were priced
+on absolute strength, so as riders trained the average wage bill grew
+season on season ($181k, $202k, $220k, $228k on a four-season world-calendar
+run, AI teams only) while income barely moved, and the average net slid to
+−$14k by season 4. With pricing against the field the same run paid $167k,
+$177k, $174k and $173k (field factor 0.93, 0.83, 0.76, 0.72 after each
+close), and the average net was +$7k, +$33k, +$44k and +$51k, median +$29k
+in season 4. The average now sits above target 1 from season 2 on and still
+creeps up with sponsorship, which follows fanbase; that is an income-side
+question and was left for a balance ticket.
 
 **The measurement.** `.venv/bin/python scripts/measure_economy.py` drops and
 recreates this checkout's dev database, seeds a world (16 unmanaged teams),

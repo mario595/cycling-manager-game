@@ -20,6 +20,7 @@ from datetime import timedelta
 from django.db.models import Exists, OuterRef
 
 from economy.services import balance_for, charge_transfer_fee
+from riders.field_level import current_field_factor
 from riders.models import Rider
 from riders.pricing import strength
 from teams.models import Team
@@ -119,21 +120,24 @@ def pick_listing(roster: list[Rider], candidates: list[Rider]) -> Rider | None:
     return min(qualifying, key=lambda r: (-r.age, strength(r), r.pk))
 
 
-def pick_free_agent(roster: list[Rider], candidates: list[Rider], budget: int) -> Rider | None:
+def pick_free_agent(
+    roster: list[Rider], candidates: list[Rider], budget: int, *, field_factor: float = 1.0,
+) -> Rider | None:
     """The free agent a roster below `ROSTER_SIZE` should sign, or `None`.
 
     Only riders under `AI_AGEING_AGE` whose signing fee fits `budget`.
     Among those, the speciality the roster has fewest of comes first, so a
     retired climber tends to be replaced by a climber; then the strongest by
     visible attributes, then pk. Judged by `strength`, never a hidden trait,
-    like every other AI decision.
+    like every other AI decision. Fees are priced at `field_factor`, the
+    caller's `current_field_factor()` (#166).
     """
     if len(roster) >= ROSTER_SIZE:
         return None
     affordable = [
         rider
         for rider in candidates
-        if rider.age < AI_AGEING_AGE and signing_fee_for(rider) <= budget
+        if rider.age < AI_AGEING_AGE and signing_fee_for(rider, field_factor) <= budget
     ]
     if not affordable:
         return None
@@ -253,6 +257,7 @@ def list_ai_riders(week, at) -> tuple[int, str]:
     listed = 0
     error = ""
     cooldown_from = at - AI_RELIST_COOLDOWN
+    factor = current_field_factor()
 
     for team in Team.objects.filter(manager__isnull=True).order_by("pk"):
         if (week.number + team.pk) % AI_LISTING_EVERY_WEEKS:
@@ -282,7 +287,7 @@ def list_ai_riders(week, at) -> tuple[int, str]:
             candidates = [
                 rider
                 for rider in roster
-                if rider.pk not in blocked and reserve_price_for(rider) > 0
+                if rider.pk not in blocked and reserve_price_for(rider, factor) > 0
             ]
             rider = pick_listing(roster, candidates)
             if rider is None:
@@ -319,9 +324,10 @@ def sign_ai_free_agents(week, at) -> tuple[int, str]:
         if rider.unattached_since is None or rider.unattached_since < week.starts_at
     ]
 
+    factor = current_field_factor()
     for buyer in sorted(buyers.values(), key=lambda b: (len(b.roster), b.team.pk)):
         rider = pick_free_agent(
-            buyer.roster, pool, headroom(buyer.balance, buyer.committed),
+            buyer.roster, pool, headroom(buyer.balance, buyer.committed), field_factor=factor,
         )
         if rider is None:
             continue

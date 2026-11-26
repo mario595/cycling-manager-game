@@ -136,8 +136,11 @@ reads `now()` once, then finds and processes whatever is due, in six steps:
    (`riders.services.advance_ages()`). **Immediately after ageing, and only
    for a `CLOSED` transition**, every rider's salary is repriced:
    `riders.services.reprice_all()` recomputes each `weekly_salary` from the
-   pricing formula, and `economy.services.write_salary_reviews(transition.
-   season, changes)` writes one `SalaryReviewReport` per managed team
+   pricing formula against the field's level, which it measures first
+   from every rostered rider (#166; `riders/README.md`, *Salary*), and
+   `economy.services.write_salary_reviews(transition.season, changes,
+   field_change_percent=...)`, with the level's move from
+   `field_change_percent(before, after)`, writes one `SalaryReviewReport` per managed team
    (#26; see `economy/README.md`, *Salary review*). Repricing must run
    **after** ageing — next season's wage has to reflect the rider a manager
    will actually have, age included, not the rider they had — and it is
