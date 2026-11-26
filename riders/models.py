@@ -422,7 +422,8 @@ class Departure(TimeStampedModel):
     """A rider who left a team, or its development squad, without the
     manager acting in that moment (#158, #162; riders/README.md,
     *Departures*): retired by age at a season close, a graduate released to
-    the free agents, or a rider sold at auction.
+    the free agents, a rider sold at auction, or a forced sale (#27) that
+    ended with no buyer (#170).
 
     Written where the rider leaves, in the same transaction as the move, so
     the record and the move stand or fall together. Departures a manager
@@ -441,6 +442,7 @@ class Departure(TimeStampedModel):
         RETIRED = "retired", "Retired"
         RELEASED = "released", "Released to the free agents"
         SOLD = "sold", "Sold at auction"
+        UNSOLD = "unsold", "Forced sale found no buyer"
 
     team = models.ForeignKey(
         "teams.Team",

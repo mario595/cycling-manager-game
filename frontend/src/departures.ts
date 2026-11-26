@@ -29,6 +29,10 @@ export function departureText(departure: Departure): string {
       const fee = departure.fee !== null ? ` for ${formatMoney(departure.fee)}` : ''
       return `was sold${buyer}${fee}${when ? ` in ${when}` : ''}`
     }
+    case 'unsold':
+      return when
+        ? `found no buyer at a forced sale and joined the free agents in ${when}`
+        : 'found no buyer at a forced sale and joined the free agents'
   }
 }
 

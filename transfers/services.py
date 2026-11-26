@@ -21,7 +21,7 @@ from datetime import timedelta
 from django.db import IntegrityError, transaction
 from django.db.models import Exists, OuterRef, QuerySet
 
-from riders.departures import record_sale
+from riders.departures import record_sale, record_unsold_forced_sale
 from riders.field_level import current_field_factor
 from riders.models import Rider
 from riders.services import mark_team_change
@@ -521,8 +521,15 @@ def _resolve_unsold(auction, rider, at) -> None:
     idempotent call `close_squad` makes — rather than repeating the
     bookkeeping, and it runs before the auction is saved so a failure
     leaves the auction OPEN for the next tick to retry.
+
+    A forced sale's rider left the roster at listing (#27) and is now an
+    ordinary free agent, which the seller learns of after the fact, so it
+    is a departure against the seller (#170). A voluntary roster listing
+    that goes unsold records nothing: the rider never left.
     """
-    if rider.team_id is None and rider.development_squad_id is not None:
+    if auction.forced:
+        record_unsold_forced_sale(rider, seller=auction.seller_team, at=at)
+    elif rider.team_id is None and rider.development_squad_id is not None:
         release_graduates([rider.pk], at=at, record=True)
     auction.status = Auction.Status.UNSOLD
     auction.resolved_at = at

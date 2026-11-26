@@ -107,8 +107,8 @@ the season and week at whose start that release happens.
 
 Riders who leave your team while you are away are listed in your
 **departures** (`GET /api/riders/departures/`): who retired at a season close,
-which graduates were released to the free agents, and who was sold at auction,
-to whom and for how much.
+which graduates were released to the free agents, who was sold at auction,
+to whom and for how much, and which forced sales found no buyer.
 
 ## Managing
 

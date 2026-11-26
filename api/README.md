@@ -676,7 +676,8 @@ Since #29 each rider also carries `release_cost`
 
 - `GET /api/riders/departures/`: the caller's team's departures, newest
   first, and the whole history (a few rows a season, so no paging). Each one
-  has `kind` (`retired`, `released` or `sold`), `at`, `season`/`week`, the
+  has `kind` (`retired`, `released`, `sold`, or `unsold` for a forced sale
+  that found no buyer, #170), `at`, `season`/`week`, the
   rider snapshot `{id, name, speciality, age}` (`id` is null once the rider
   no longer exists), and `buyer`/`fee` for a sale. `DeparturesView` resolves
   `season`/`week` with `schedule.services.season_and_week_of`, which follows

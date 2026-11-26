@@ -1158,12 +1158,14 @@ class DepartureSerializer(serializers.Serializer):
 
     id = serializers.IntegerField()
     kind = serializers.ChoiceField(
-        choices=["retired", "released", "sold"],
+        choices=["retired", "released", "sold", "unsold"],
         help_text=(
             "`retired`: retired by age at a season close. `released`: a "
             "development squad graduate released to the free agents, because "
             "their decision window closed or their auction ended unsold. "
-            "`sold`: sold at auction."
+            "`sold`: sold at auction. `unsold`: a forced sale (under "
+            "insolvency) ended with no buyer, so the rider, already off the "
+            "roster since listing, is now a free agent."
         ),
     )
     at = serializers.DateTimeField()
