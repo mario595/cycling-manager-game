@@ -16,7 +16,10 @@ psycopg2-binary>=2.9
 # Production serving and operations — see deploy/README.md.
 gunicorn>=23
 # Error reporting; off unless SENTRY_DSN is set (config/settings/prod.py).
-sentry-sdk>=2.0
+# Held below 3: 3.0 removed `send_default_pii`, which prod.py passes, and
+# an unknown option makes sentry_sdk.init raise at settings import, so the
+# container never starts. Lift the cap only with a port to 3.x's options.
+sentry-sdk>=2.0,<3
 # Nightly backups to Cloudflare R2, which speaks S3 (deploy/backup.py).
 boto3>=1.34
 
